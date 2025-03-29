@@ -10,6 +10,7 @@ import ProtectedRoute from './components/auth/ProtectedRoute';
 // Lazy load components
 const Dashboard = React.lazy(() => import('./components/dashboard/Dashboard'));
 const Projects = React.lazy(() => import('./components/projects/Projects'));
+const ProjectSetupWizard = React.lazy(() => import('./components/projects/ProjectSetupWizard'));
 const Expenses = React.lazy(() => import('./components/expenses/ExpensesList'));
 const ExpenseForm = React.lazy(() => import('./components/expenses/ExpenseForm'));
 const ExpenseDetails = React.lazy(() => import('./components/expenses/ExpenseDetails'));
@@ -49,7 +50,7 @@ const App: React.FC = () => {
                   <Route path="dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
                   <Route path="projects">
                     <Route index element={<ProtectedRoute><ProjectsList /></ProtectedRoute>} />
-                    <Route path="new" element={<ProtectedRoute><ProjectForm /></ProtectedRoute>} />
+                    <Route path="new" element={<ProtectedRoute><ProjectSetupWizard /></ProtectedRoute>} />
                     <Route path=":id" element={<ProtectedRoute><ProjectDetails /></ProtectedRoute>} />
                     <Route path=":id/edit" element={<ProtectedRoute><ProjectForm /></ProtectedRoute>} />
                   </Route>

@@ -20,6 +20,7 @@ import {
   Search as SearchIcon,
   MoreVert as MoreVertIcon,
   FilterList as FilterListIcon,
+  Build as BuildIcon,
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 
@@ -67,19 +68,18 @@ const ProjectsList: React.FC = () => {
   const [selectedProject, setSelectedProject] = useState<string | null>(null);
 
   // Menu handlers
-  const handleMenuOpen = (event: React.MouseEvent<HTMLElement>, projectId: string) => {
+  const handleMenuOpen = (event: React.MouseEvent<HTMLElement>) => {
     setAnchorEl(event.currentTarget);
-    setSelectedProject(projectId);
   };
 
   const handleMenuClose = () => {
     setAnchorEl(null);
-    setSelectedProject(null);
   };
 
   // Project actions
   const handleCreateProject = () => {
     navigate('/projects/new');
+    handleMenuClose();
   };
 
   const handleEditProject = (projectId: string) => {
@@ -117,17 +117,23 @@ const ProjectsList: React.FC = () => {
 
   return (
     <Box sx={{ p: 3 }}>
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 3 }}>
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
         <Typography variant="h4" component="h1">
           Projects
         </Typography>
-        <Button
-          variant="contained"
-          startIcon={<AddIcon />}
-          onClick={handleCreateProject}
-        >
-          New Project
-        </Button>
+        <Box>
+          <Button
+            variant="contained"
+            startIcon={<BuildIcon />}
+            onClick={handleCreateProject}
+            sx={{ mr: 2 }}
+          >
+            New Project
+          </Button>
+          <IconButton onClick={handleMenuOpen}>
+            <MoreVertIcon />
+          </IconButton>
+        </Box>
       </Box>
 
       <Box sx={{ mb: 3 }}>
@@ -169,7 +175,7 @@ const ProjectsList: React.FC = () => {
                   </Typography>
                   <IconButton
                     size="small"
-                    onClick={(e) => handleMenuOpen(e, project.id)}
+                    onClick={(e) => handleMenuOpen(e)}
                   >
                     <MoreVertIcon />
                   </IconButton>
@@ -234,6 +240,9 @@ const ProjectsList: React.FC = () => {
         </MenuItem>
         <MenuItem onClick={() => selectedProject && handleDeleteProject(selectedProject)}>
           Delete
+        </MenuItem>
+        <MenuItem onClick={handleCreateProject}>
+          <AddIcon sx={{ mr: 1 }} /> New Project
         </MenuItem>
       </Menu>
     </Box>
