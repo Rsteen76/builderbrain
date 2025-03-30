@@ -13,11 +13,16 @@ const Dashboard = lazy(() => import('./components/dashboard/Dashboard'));
 const Projects = lazy(() => import('./components/projects/Projects'));
 const ProjectDetails = lazy(() => import('./components/projects/ProjectDetails'));
 const ProjectSetupWizard = lazy(() => import('./components/projects/ProjectSetupWizard'));
+const ProjectForm = lazy(() => import('./components/projects/ProjectForm'));
 const Tasks = lazy(() => import('./components/tasks/Tasks'));
 const Expenses = lazy(() => import('./components/expenses/Expenses'));
 const Documents = lazy(() => import('./components/documents/Documents'));
 const Bids = lazy(() => import('./components/bids/Bids'));
+const BidDetails = lazy(() => import('./components/bids/BidDetails'));
+const BidForm = lazy(() => import('./components/bids/BidForm'));
 const Subcontractors = lazy(() => import('./components/subcontractors/Subcontractors'));
+const SubcontractorForm = lazy(() => import('./components/subcontractors/SubcontractorForm'));
+const SubcontractorDetails = lazy(() => import('./components/subcontractors/SubcontractorDetails'));
 const Settings = lazy(() => import('./components/settings/Settings'));
 const Login = lazy(() => import('./components/auth/Login'));
 const SignUp = lazy(() => import('./components/auth/SignUp'));
@@ -66,12 +71,19 @@ const App: React.FC = () => {
                   <Route path="projects" element={<ProtectedRoute><Projects /></ProtectedRoute>} />
                   <Route path="projects/new" element={<ProtectedRoute><ProjectSetupWizard /></ProtectedRoute>} />
                   <Route path="projects/:id" element={<ProtectedRoute><ProjectDetails /></ProtectedRoute>} />
+                  <Route path="projects/:id/edit" element={<ProtectedRoute><ProjectForm /></ProtectedRoute>} />
                   <Route path="tasks" element={<ProtectedRoute><Tasks /></ProtectedRoute>} />
                   <Route path="expenses" element={<ProtectedRoute><Expenses /></ProtectedRoute>} />
                   <Route path="documents" element={<ProtectedRoute><Documents /></ProtectedRoute>} />
                   <Route path="bids" element={<ProtectedRoute><Bids /></ProtectedRoute>} />
+                  <Route path="bids/new" element={<ProtectedRoute><BidForm /></ProtectedRoute>} />
+                  <Route path="bids/:id" element={<ProtectedRoute><BidDetails /></ProtectedRoute>} />
+                  <Route path="bids/:id/edit" element={<ProtectedRoute><BidForm /></ProtectedRoute>} />
                   <Route path="payments" element={<ProtectedRoute><Payments /></ProtectedRoute>} />
                   <Route path="subcontractors" element={<ProtectedRoute><Subcontractors /></ProtectedRoute>} />
+                  <Route path="subcontractors/new" element={<ProtectedRoute><SubcontractorForm /></ProtectedRoute>} />
+                  <Route path="subcontractors/:id" element={<ProtectedRoute><SubcontractorDetails /></ProtectedRoute>} />
+                  <Route path="subcontractors/:id/edit" element={<ProtectedRoute><SubcontractorForm /></ProtectedRoute>} />
                   <Route path="settings" element={<ProtectedRoute><Settings /></ProtectedRoute>} />
                 </Route>
               </Routes>

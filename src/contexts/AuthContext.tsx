@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import {
-  User,
+  User as FirebaseUser,
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
   signOut,
@@ -9,17 +9,20 @@ import {
   signInWithPopup,
 } from 'firebase/auth';
 import { auth } from '../config/firebase';
+import { UserService, User, UserRole } from '../services/user';
 
 interface AuthContextType {
-  user: User | null;
+  user: FirebaseUser | null;
+  userData: User | null;
   loading: boolean;
   error: string | null;
   isAuthenticated: boolean;
-  role: string;
+  role: UserRole;
   signIn: (email: string, password: string) => Promise<void>;
-  signUp: (email: string, password: string) => Promise<void>;
+  signUp: (email: string, password: string, displayName?: string) => Promise<void>;
   signInWithGoogle: () => Promise<void>;
   logout: () => Promise<void>;
+  updateUserProfile: (data: Partial<User>) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -33,20 +36,35 @@ export const useAuth = () => {
 };
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [user, setUser] = useState<User | null>(null);
+  const [user, setUser] = useState<FirebaseUser | null>(null);
+  const [userData, setUserData] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [role, setRole] = useState<string>('user');
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (user) => {
-      setUser(user);
-      setLoading(false);
-      // You can fetch the user's role from your database here
-      if (user) {
-        // For now, we'll set a default role
-        setRole('user');
+    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
+      setUser(firebaseUser);
+      
+      if (firebaseUser) {
+        try {
+          // Fetch user data from Firestore
+          let userDoc = await UserService.getUser(firebaseUser.uid);
+          
+          // If user document doesn't exist in Firestore yet, create it
+          if (!userDoc) {
+            userDoc = await UserService.createUser(firebaseUser);
+          }
+          
+          setUserData(userDoc);
+        } catch (err) {
+          console.error('Error fetching user data:', err);
+          // Continue without Firestore data, but at least we have Firebase Auth data
+        }
+      } else {
+        setUserData(null);
       }
+      
+      setLoading(false);
     });
 
     return unsubscribe;
@@ -62,10 +80,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
-  const signUp = async (email: string, password: string) => {
+  const signUp = async (email: string, password: string, displayName?: string) => {
     try {
       setError(null);
-      await createUserWithEmailAndPassword(auth, email, password);
+      const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+      
+      // Create user document in Firestore
+      await UserService.createUser(userCredential.user, { 
+        displayName: displayName || email.split('@')[0],
+        role: 'team_member' 
+      });
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to sign up');
       throw err;
@@ -76,7 +100,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     try {
       setError(null);
       const provider = new GoogleAuthProvider();
-      await signInWithPopup(auth, provider);
+      const userCredential = await signInWithPopup(auth, provider);
+      
+      // Check if user exists, if not create a document
+      const existingUser = await UserService.getUser(userCredential.user.uid);
+      if (!existingUser) {
+        await UserService.createUser(userCredential.user);
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to sign in with Google');
       throw err;
@@ -92,17 +122,36 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       throw err;
     }
   };
+  
+  const updateUserProfile = async (data: Partial<User>) => {
+    try {
+      if (!user) throw new Error('No user is authenticated');
+      
+      await UserService.updateUser(user.uid, data);
+      
+      // Refresh user data
+      const updatedUserData = await UserService.getUser(user.uid);
+      if (updatedUserData) {
+        setUserData(updatedUserData);
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to update profile');
+      throw err;
+    }
+  };
 
   const value = {
     user,
+    userData,
     loading,
     error,
     isAuthenticated: !!user,
-    role,
+    role: userData?.role || 'team_member',
     signIn,
     signUp,
     signInWithGoogle,
     logout,
+    updateUserProfile,
   };
 
   return (

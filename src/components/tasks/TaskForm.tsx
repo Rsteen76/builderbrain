@@ -247,6 +247,7 @@ const TaskForm: React.FC = () => {
                   options={mockTeamMembers}
                   getOptionLabel={(option) => typeof option === 'string' ? option : option.name}
                   value={mockTeamMembers.filter((member) => task.assignedTo.includes(member.id))}
+                  isOptionEqualToValue={(option, value) => option.id === value.id}
                   onChange={(_, newValue) => {
                     setTask({
                       ...task,

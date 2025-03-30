@@ -109,6 +109,8 @@ interface ProjectCardProps {
   dueDate: string;
   budget: string;
   team: number;
+  projectId?: string;
+  onClick?: () => void;
 }
 
 const ProjectCard: React.FC<ProjectCardProps> = ({
@@ -118,6 +120,8 @@ const ProjectCard: React.FC<ProjectCardProps> = ({
   dueDate,
   budget,
   team,
+  projectId,
+  onClick
 }) => {
   const theme = useTheme();
   const statusColors = {
@@ -131,11 +135,13 @@ const ProjectCard: React.FC<ProjectCardProps> = ({
       sx={{
         height: '100%',
         transition: 'all 0.3s ease',
+        cursor: 'pointer',
         '&:hover': {
           transform: 'translateY(-4px)',
           boxShadow: theme.shadows[4],
         },
       }}
+      onClick={onClick}
     >
       <CardContent>
         <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 2 }}>
@@ -369,6 +375,8 @@ const Dashboard: React.FC = () => {
       }) : 'No due date',
       budget: `$${(project.budget || 0).toLocaleString()}`,
       team: project.team?.length || 0,
+      projectId: project.id,
+      onClick: () => navigate(`/projects/${project.id}`),
     };
   };
 
@@ -474,10 +482,12 @@ const Dashboard: React.FC = () => {
                       gap: 2,
                       p: 1,
                       borderRadius: 1,
+                      cursor: 'pointer',
                       '&:hover': {
                         backgroundColor: alpha(theme.palette.primary.main, 0.05),
                       },
                     }}
+                    onClick={() => navigate(`/projects/${project.id}`)}
                   >
                     <Box
                       sx={{
@@ -544,10 +554,12 @@ const Dashboard: React.FC = () => {
                         gap: 2,
                         p: 1,
                         borderRadius: 1,
+                        cursor: 'pointer',
                         '&:hover': {
                           backgroundColor: alpha(theme.palette.primary.main, 0.05),
                         },
                       }}
+                      onClick={() => navigate(`/projects/${project.id}`)}
                     >
                       <Box
                         sx={{

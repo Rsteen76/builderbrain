@@ -481,6 +481,7 @@ const BidManager: React.FC = () => {
               <Autocomplete
                 options={projectTypes}
                 getOptionLabel={(option) => option.name}
+                isOptionEqualToValue={(option, value) => option.id === value.id}
                 renderInput={(params) => (
                   <TextField
                     {...params}

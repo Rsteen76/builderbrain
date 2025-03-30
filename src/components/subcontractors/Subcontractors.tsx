@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   Box,
   Grid,
@@ -22,6 +22,9 @@ import {
   Button,
   Menu,
   MenuItem,
+  CircularProgress,
+  Alert,
+  AlertTitle,
 } from '@mui/material';
 import {
   Search as SearchIcon,
@@ -33,17 +36,26 @@ import {
   Work as WorkIcon,
   Star as StarIcon,
   Sort as SortIcon,
+  MoreVert as MoreVertIcon,
+  CloudUpload as UploadIcon,
+  CloudDownload as DownloadIcon,
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
+import { SubcontractorService, Subcontractor } from '../../services/subcontractor';
+import { formatCurrency } from '../../utils/formatters';
+import { exportSubcontractorsToCSV, importSubcontractorsFromCSV, downloadFile } from '../../utils/importExport';
 
-// Reuse the SubcontractorCard component from Dashboard
 interface SubcontractorCardProps {
+  id: string;
   name: string;
   specialty: string;
   rating: number;
   totalProjects: number;
-  lastBid: string;
-  lastBidAmount: string;
+  lastBid?: {
+    date: Date;
+    amount: number;
+    projectId?: string;
+  };
   contact: {
     phone: string;
     email: string;
@@ -54,170 +66,179 @@ interface SubcontractorCardProps {
     quality: number;
     communication: number;
   };
+  onEdit: (id: string) => void;
+  onDelete: (id: string) => void;
 }
 
 const SubcontractorCard: React.FC<SubcontractorCardProps> = ({
+  id,
   name,
   specialty,
   rating,
   totalProjects,
   lastBid,
-  lastBidAmount,
   contact,
   performance,
+  onEdit,
+  onDelete,
 }) => {
   const theme = useTheme();
   const navigate = useNavigate();
+  const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
+  const open = Boolean(anchorEl);
+
+  const handleClick = (event: React.MouseEvent<HTMLButtonElement>) => {
+    setAnchorEl(event.currentTarget);
+  };
+
+  const handleClose = () => {
+    setAnchorEl(null);
+  };
+
+  const handleCardClick = () => {
+    navigate(`/subcontractors/${id}`);
+  };
 
   return (
     <Card
       sx={{
         height: '100%',
-        transition: 'all 0.3s ease',
+        display: 'flex',
+        flexDirection: 'column',
+        cursor: 'pointer',
+        transition: 'all 0.2s ease',
         '&:hover': {
           transform: 'translateY(-4px)',
-          boxShadow: theme.shadows[4],
-        },
+          boxShadow: 3
+        }
       }}
+      onClick={handleCardClick}
     >
-      <CardContent>
-        <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
-          <Avatar
-            sx={{
-              width: 48,
-              height: 48,
-              bgcolor: theme.palette.primary.main,
-              mr: 2,
-            }}
-          >
-            {name[0]}
-          </Avatar>
-          <Box sx={{ flex: 1 }}>
-            <Typography variant="h6" component="div">
-              {name}
-            </Typography>
-            <Typography variant="body2" color="text.secondary">
-              {specialty}
-            </Typography>
-          </Box>
-          <Rating value={rating} readOnly precision={0.5} />
-        </Box>
-
-        <Box sx={{ mb: 2 }}>
-          <Typography variant="body2" color="text.secondary" gutterBottom>
-            Performance Metrics
-          </Typography>
-          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+      <CardContent sx={{ flexGrow: 1 }}>
+        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 2 }}>
+          <Box sx={{ display: 'flex', alignItems: 'center' }}>
+            <Avatar
+              sx={{
+                bgcolor: theme.palette.primary.main,
+                width: 56,
+                height: 56,
+                mr: 2,
+              }}
+            >
+              {name.substring(0, 1)}
+            </Avatar>
             <Box>
-              <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
-                <Typography variant="caption" color="text.secondary">
-                  On-Time Delivery
-                </Typography>
-                <Typography variant="caption" color="text.secondary">
-                  {performance.onTime}%
-                </Typography>
-              </Box>
-              <LinearProgress
-                variant="determinate"
-                value={performance.onTime}
-                sx={{
-                  height: 4,
-                  borderRadius: 2,
-                  backgroundColor: alpha(theme.palette.success.main, 0.1),
-                  '& .MuiLinearProgress-bar': {
-                    borderRadius: 2,
-                    backgroundColor: theme.palette.success.main,
-                  },
-                }}
-              />
-            </Box>
-            <Box>
-              <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
-                <Typography variant="caption" color="text.secondary">
-                  Quality Rating
-                </Typography>
-                <Typography variant="caption" color="text.secondary">
-                  {performance.quality}%
-                </Typography>
-              </Box>
-              <LinearProgress
-                variant="determinate"
-                value={performance.quality}
-                sx={{
-                  height: 4,
-                  borderRadius: 2,
-                  backgroundColor: alpha(theme.palette.primary.main, 0.1),
-                  '& .MuiLinearProgress-bar': {
-                    borderRadius: 2,
-                    backgroundColor: theme.palette.primary.main,
-                  },
-                }}
-              />
-            </Box>
-            <Box>
-              <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
-                <Typography variant="caption" color="text.secondary">
-                  Communication
-                </Typography>
-                <Typography variant="caption" color="text.secondary">
-                  {performance.communication}%
-                </Typography>
-              </Box>
-              <LinearProgress
-                variant="determinate"
-                value={performance.communication}
-                sx={{
-                  height: 4,
-                  borderRadius: 2,
-                  backgroundColor: alpha(theme.palette.info.main, 0.1),
-                  '& .MuiLinearProgress-bar': {
-                    borderRadius: 2,
-                    backgroundColor: theme.palette.info.main,
-                  },
-                }}
-              />
+              <Typography variant="h6" component="div">
+                {name}
+              </Typography>
+              <Chip label={specialty} size="small" color="primary" />
             </Box>
           </Box>
-        </Box>
-
-        <Divider sx={{ my: 2 }} />
-
-        <Box sx={{ mb: 2 }}>
-          <Typography variant="body2" color="text.secondary" gutterBottom>
-            Contact Information
-          </Typography>
-          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-              <PhoneIcon sx={{ fontSize: 16, color: 'text.secondary' }} />
-              <Typography variant="body2">{contact.phone}</Typography>
-            </Box>
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-              <EmailIcon sx={{ fontSize: 16, color: 'text.secondary' }} />
-              <Typography variant="body2">{contact.email}</Typography>
-            </Box>
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-              <LocationIcon sx={{ fontSize: 16, color: 'text.secondary' }} />
-              <Typography variant="body2">{contact.location}</Typography>
-            </Box>
-          </Box>
-        </Box>
-
-        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <Box>
-            <Typography variant="body2" color="text.secondary">
-              Last Bid: {lastBid}
-            </Typography>
-            <Typography variant="body2" color="text.secondary">
-              Amount: {lastBidAmount}
+            <IconButton 
+              onClick={(e) => {
+                e.stopPropagation();
+                handleClick(e as React.MouseEvent<HTMLButtonElement>);
+              }}
+            >
+              <MoreVertIcon />
+            </IconButton>
+            <Menu
+              anchorEl={anchorEl}
+              open={open}
+              onClose={handleClose}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <MenuItem onClick={() => { onEdit(id); handleClose(); }}>Edit</MenuItem>
+              <MenuItem onClick={() => { onDelete(id); handleClose(); }}>Delete</MenuItem>
+            </Menu>
+          </Box>
+        </Box>
+
+        <Box sx={{ mb: 2 }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
+            <Rating value={rating} precision={0.5} readOnly size="small" />
+            <Typography variant="body2" sx={{ ml: 1 }}>
+              {rating.toFixed(1)}
             </Typography>
           </Box>
-          <Chip
-            label={`${totalProjects} Projects`}
-            size="small"
-            icon={<WorkIcon />}
-            onClick={() => navigate(`/subcontractors/${name}`)}
-            sx={{ cursor: 'pointer' }}
-          />
+          <Typography variant="body2" color="text.secondary">
+            {totalProjects} completed projects
+          </Typography>
+        </Box>
+
+        {lastBid && (
+          <Box sx={{ mb: 2 }}>
+            <Typography variant="subtitle2">Last Bid</Typography>
+            <Typography variant="body2">
+              {formatCurrency(lastBid.amount)} ({new Date(lastBid.date).toLocaleDateString()})
+            </Typography>
+          </Box>
+        )}
+
+        <Box sx={{ mb: 2 }}>
+          <Typography variant="subtitle2" sx={{ mb: 1 }}>Performance</Typography>
+          <Grid container spacing={1}>
+            <Grid item xs={12}>
+              <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                <Typography variant="body2" sx={{ minWidth: 100 }}>On Time</Typography>
+                <LinearProgress
+                  variant="determinate"
+                  value={performance.onTime}
+                  sx={{ flexGrow: 1, mr: 1 }}
+                />
+                <Typography variant="body2">{performance.onTime}%</Typography>
+              </Box>
+            </Grid>
+            <Grid item xs={12}>
+              <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                <Typography variant="body2" sx={{ minWidth: 100 }}>Quality</Typography>
+                <LinearProgress
+                  variant="determinate"
+                  value={performance.quality}
+                  sx={{ flexGrow: 1, mr: 1 }}
+                  color="success"
+                />
+                <Typography variant="body2">{performance.quality}%</Typography>
+              </Box>
+            </Grid>
+            <Grid item xs={12}>
+              <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                <Typography variant="body2" sx={{ minWidth: 100 }}>Communication</Typography>
+                <LinearProgress
+                  variant="determinate"
+                  value={performance.communication}
+                  sx={{ flexGrow: 1, mr: 1 }}
+                  color="info"
+                />
+                <Typography variant="body2">{performance.communication}%</Typography>
+              </Box>
+            </Grid>
+          </Grid>
+        </Box>
+
+        <Box>
+          <Typography variant="subtitle2" sx={{ mb: 1 }}>Contact</Typography>
+          <Grid container spacing={1}>
+            <Grid item xs={12}>
+              <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                <PhoneIcon fontSize="small" sx={{ mr: 1, color: 'text.secondary' }} />
+                <Typography variant="body2">{contact.phone}</Typography>
+              </Box>
+            </Grid>
+            <Grid item xs={12}>
+              <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                <EmailIcon fontSize="small" sx={{ mr: 1, color: 'text.secondary' }} />
+                <Typography variant="body2">{contact.email}</Typography>
+              </Box>
+            </Grid>
+            <Grid item xs={12}>
+              <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                <LocationIcon fontSize="small" sx={{ mr: 1, color: 'text.secondary' }} />
+                <Typography variant="body2">{contact.location}</Typography>
+              </Box>
+            </Grid>
+          </Grid>
         </Box>
       </CardContent>
     </Card>
@@ -225,158 +246,325 @@ const SubcontractorCard: React.FC<SubcontractorCardProps> = ({
 };
 
 const Subcontractors: React.FC = () => {
-  const theme = useTheme();
+  const [subcontractors, setSubcontractors] = useState<Subcontractor[]>([]);
+  const [loading, setLoading] = useState<boolean>(true);
+  const [error, setError] = useState<string | null>(null);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [tabValue, setTabValue] = useState(0);
+  const [specialtyFilter, setSpecialtyFilter] = useState<string | null>(null);
+  const [importResult, setImportResult] = useState<{
+    success: number;
+    failed: number;
+    errors: string[];
+  } | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const navigate = useNavigate();
-  const [searchQuery, setSearchQuery] = useState('');
-  const [selectedTab, setSelectedTab] = useState(0);
-  const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
+
+  useEffect(() => {
+    const fetchSubcontractors = async () => {
+      try {
+        setLoading(true);
+        const filters: {specialty?: string} = {};
+        
+        if (specialtyFilter) {
+          filters.specialty = specialtyFilter;
+        }
+        
+        const data = await SubcontractorService.getSubcontractors(filters);
+        setSubcontractors(data);
+        setError(null);
+      } catch (err) {
+        console.error("Error fetching subcontractors:", err);
+        setError("Failed to load subcontractors. Please try again.");
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchSubcontractors();
+  }, [specialtyFilter]);
 
   const handleTabChange = (event: React.SyntheticEvent, newValue: number) => {
-    setSelectedTab(newValue);
+    setTabValue(newValue);
+    
+    // Update specialty filter based on tab
+    switch(newValue) {
+      case 0: // All
+        setSpecialtyFilter(null);
+        break;
+      case 1: // Electrical
+        setSpecialtyFilter('Electrical');
+        break;
+      case 2: // Plumbing
+        setSpecialtyFilter('Plumbing');
+        break;
+      case 3: // HVAC
+        setSpecialtyFilter('HVAC');
+        break;
+      case 4: // Carpentry
+        setSpecialtyFilter('Carpentry');
+        break;
+      default:
+        setSpecialtyFilter(null);
+    }
   };
 
-  const handleFilterClick = (event: React.MouseEvent<HTMLElement>) => {
-    setAnchorEl(event.currentTarget);
+  const handleAddSubcontractor = () => {
+    navigate('/subcontractors/new');
   };
 
-  const handleFilterClose = () => {
-    setAnchorEl(null);
+  const handleEditSubcontractor = (id: string) => {
+    navigate(`/subcontractors/${id}/edit`);
   };
 
-  const subcontractors = [
-    {
-      name: 'Elite Electrical',
-      specialty: 'Electrical Systems',
-      rating: 4.5,
-      totalProjects: 8,
-      lastBid: 'Mar 15, 2024',
-      lastBidAmount: '$45,000',
-      contact: {
-        phone: '(555) 123-4567',
-        email: 'contact@eliteelectrical.com',
-        location: 'New York, NY',
-      },
-      performance: {
-        onTime: 95,
-        quality: 92,
-        communication: 88,
-      },
-    },
-    {
-      name: 'Premier Plumbing',
-      specialty: 'Plumbing & HVAC',
-      rating: 4.8,
-      totalProjects: 12,
-      lastBid: 'Mar 20, 2024',
-      lastBidAmount: '$78,000',
-      contact: {
-        phone: '(555) 234-5678',
-        email: 'info@premierplumbing.com',
-        location: 'Brooklyn, NY',
-      },
-      performance: {
-        onTime: 98,
-        quality: 95,
-        communication: 92,
-      },
-    },
-    {
-      name: 'Quality Concrete',
-      specialty: 'Concrete & Foundation',
-      rating: 4.2,
-      totalProjects: 15,
-      lastBid: 'Mar 25, 2024',
-      lastBidAmount: '$120,000',
-      contact: {
-        phone: '(555) 345-6789',
-        email: 'bids@qualityconcrete.com',
-        location: 'Queens, NY',
-      },
-      performance: {
-        onTime: 90,
-        quality: 88,
-        communication: 85,
-      },
-    },
-  ];
+  const handleDeleteSubcontractor = async (id: string) => {
+    if (window.confirm('Are you sure you want to delete this subcontractor?')) {
+      try {
+        await SubcontractorService.deleteSubcontractor(id);
+        setSubcontractors(subcontractors.filter(s => s.id !== id));
+      } catch (err) {
+        console.error("Error deleting subcontractor:", err);
+        setError("Failed to delete subcontractor. Please try again.");
+      }
+    }
+  };
+
+  const handleExportCSV = async () => {
+    try {
+      // Get all subcontractors for export (without filters)
+      const allSubcontractors = await SubcontractorService.getSubcontractors();
+      
+      if (allSubcontractors.length === 0) {
+        setError("No subcontractors to export.");
+        return;
+      }
+      
+      // Generate CSV and download it
+      const csvContent = exportSubcontractorsToCSV(allSubcontractors);
+      const fileName = `subcontractors-${new Date().toISOString().split('T')[0]}.csv`;
+      
+      downloadFile(csvContent, fileName, 'text/csv');
+    } catch (err) {
+      console.error("Error exporting subcontractors:", err);
+      setError("Failed to export subcontractors. Please try again.");
+    }
+  };
+
+  const handleImportClick = () => {
+    if (fileInputRef.current) {
+      fileInputRef.current.click();
+    }
+  };
+
+  const handleFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    
+    try {
+      setLoading(true);
+      const reader = new FileReader();
+      
+      reader.onload = async (e) => {
+        try {
+          const csvText = e.target?.result as string;
+          const result = await importSubcontractorsFromCSV(csvText);
+          
+          setImportResult(result);
+          
+          // Reload subcontractors after import
+          const data = await SubcontractorService.getSubcontractors();
+          setSubcontractors(data);
+          
+          // Reset file input
+          if (fileInputRef.current) {
+            fileInputRef.current.value = '';
+          }
+        } catch (err) {
+          console.error("Error importing subcontractors:", err);
+          setError("Failed to import subcontractors. Please check your CSV format.");
+        } finally {
+          setLoading(false);
+        }
+      };
+      
+      reader.readAsText(file);
+    } catch (err) {
+      console.error("Error reading file:", err);
+      setError("Failed to read file. Please try again.");
+      setLoading(false);
+    }
+  };
+
+  const clearImportResult = () => {
+    setImportResult(null);
+  };
+
+  const filteredSubcontractors = subcontractors.filter(sub => 
+    sub.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
+    sub.specialty.toLowerCase().includes(searchTerm.toLowerCase())
+  );
 
   return (
-    <Box sx={{ p: 3 }}>
-      <Box sx={{ mb: 4 }}>
-        <Typography variant="h4" component="h1" gutterBottom>
-          Subcontractors
-        </Typography>
-        <Typography variant="body1" color="text.secondary">
-          Manage and track your subcontractor relationships
-        </Typography>
+    <Box sx={{ py: 3 }}>
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
+        <Typography variant="h4" component="h1">Subcontractors</Typography>
+        <Box sx={{ display: 'flex' }}>
+          <Button 
+            variant="outlined" 
+            startIcon={<DownloadIcon />}
+            onClick={handleExportCSV}
+            sx={{ mr: 1 }}
+          >
+            Export
+          </Button>
+          <Button 
+            variant="outlined" 
+            startIcon={<UploadIcon />}
+            onClick={handleImportClick}
+            sx={{ mr: 1 }}
+          >
+            Import
+          </Button>
+          <Button 
+            variant="contained" 
+            startIcon={<AddIcon />}
+            onClick={handleAddSubcontractor}
+          >
+            Add Subcontractor
+          </Button>
+          <input
+            type="file"
+            accept=".csv"
+            ref={fileInputRef}
+            style={{ display: 'none' }}
+            onChange={handleFileChange}
+          />
+        </Box>
       </Box>
-
-      <Paper sx={{ p: 3, mb: 3 }}>
-        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
+      
+      {importResult && (
+        <Alert 
+          severity={importResult.failed > 0 ? "warning" : "success"} 
+          sx={{ mb: 3 }}
+          onClose={clearImportResult}
+        >
+          <AlertTitle>Import Results</AlertTitle>
+          Successfully imported {importResult.success} subcontractors.
+          {importResult.failed > 0 && (
+            <>
+              <br />Failed to import {importResult.failed} subcontractors.
+              {importResult.errors.length > 0 && (
+                <Box sx={{ mt: 1 }}>
+                  <Typography variant="body2" fontWeight="bold">Errors:</Typography>
+                  <ul style={{ margin: 0, paddingLeft: 20 }}>
+                    {importResult.errors.slice(0, 5).map((error, index) => (
+                      <li key={index}><Typography variant="body2">{error}</Typography></li>
+                    ))}
+                    {importResult.errors.length > 5 && (
+                      <li><Typography variant="body2">And {importResult.errors.length - 5} more errors...</Typography></li>
+                    )}
+                  </ul>
+                </Box>
+              )}
+            </>
+          )}
+        </Alert>
+      )}
+      
+      <Box sx={{ mb: 3 }}>
+        <Box sx={{ display: 'flex', mb: 2 }}>
           <TextField
             placeholder="Search subcontractors..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
+            variant="outlined"
+            size="small"
+            fullWidth
             InputProps={{
-              startAdornment: (
-                <InputAdornment position="start">
-                  <SearchIcon />
-                </InputAdornment>
-              ),
+              startAdornment: <SearchIcon sx={{ mr: 1, color: 'text.secondary' }} />,
             }}
-            sx={{ width: 300 }}
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            sx={{ mr: 2 }}
           />
-          <Box sx={{ display: 'flex', gap: 2 }}>
-            <Button
-              variant="outlined"
-              startIcon={<FilterIcon />}
-              onClick={handleFilterClick}
-            >
-              Filter
-            </Button>
-            <Button
-              variant="contained"
-              startIcon={<AddIcon />}
-              onClick={() => navigate('/subcontractors/new')}
-            >
-              Add Subcontractor
-            </Button>
-          </Box>
+          <Button 
+            variant="outlined" 
+            startIcon={<FilterIcon />}
+            sx={{ minWidth: 120 }}
+          >
+            Filter
+          </Button>
+          <Button 
+            variant="outlined" 
+            startIcon={<SortIcon />}
+            sx={{ ml: 2, minWidth: 120 }}
+          >
+            Sort
+          </Button>
         </Box>
-
-        <Tabs
-          value={selectedTab}
+        
+        <Tabs 
+          value={tabValue} 
           onChange={handleTabChange}
-          sx={{ borderBottom: 1, borderColor: 'divider', mb: 3 }}
+          variant="scrollable"
+          scrollButtons="auto"
         >
           <Tab label="All" />
           <Tab label="Electrical" />
           <Tab label="Plumbing" />
-          <Tab label="Concrete" />
           <Tab label="HVAC" />
+          <Tab label="Carpentry" />
         </Tabs>
-
+      </Box>
+      
+      {loading ? (
+        <Box sx={{ display: 'flex', justifyContent: 'center', my: 4 }}>
+          <CircularProgress />
+        </Box>
+      ) : error ? (
+        <Box sx={{ my: 4, textAlign: 'center' }}>
+          <Typography color="error">{error}</Typography>
+          <Button 
+            variant="contained" 
+            sx={{ mt: 2 }}
+            onClick={() => window.location.reload()}
+          >
+            Retry
+          </Button>
+        </Box>
+      ) : filteredSubcontractors.length === 0 ? (
+        <Box sx={{ my: 4, textAlign: 'center' }}>
+          <Typography variant="h6">No subcontractors found</Typography>
+          <Typography color="text.secondary" sx={{ mt: 1 }}>
+            Add your first subcontractor to get started
+          </Typography>
+          <Button 
+            variant="contained" 
+            startIcon={<AddIcon />}
+            sx={{ mt: 2 }}
+            onClick={handleAddSubcontractor}
+          >
+            Add Subcontractor
+          </Button>
+        </Box>
+      ) : (
         <Grid container spacing={3}>
-          {subcontractors.map((subcontractor, index) => (
-            <Grid item xs={12} md={4} key={index}>
-              <SubcontractorCard {...subcontractor} />
+          {filteredSubcontractors.map((subcontractor) => (
+            <Grid item xs={12} sm={6} md={4} key={subcontractor.id}>
+              <SubcontractorCard
+                id={subcontractor.id!}
+                name={subcontractor.name}
+                specialty={subcontractor.specialty}
+                rating={subcontractor.rating}
+                totalProjects={subcontractor.totalProjects}
+                lastBid={subcontractor.lastBid}
+                contact={subcontractor.contact}
+                performance={subcontractor.performance}
+                onEdit={handleEditSubcontractor}
+                onDelete={handleDeleteSubcontractor}
+              />
             </Grid>
           ))}
         </Grid>
-      </Paper>
-
-      <Menu
-        anchorEl={anchorEl}
-        open={Boolean(anchorEl)}
-        onClose={handleFilterClose}
-      >
-        <MenuItem onClick={handleFilterClose}>Rating: High to Low</MenuItem>
-        <MenuItem onClick={handleFilterClose}>Rating: Low to High</MenuItem>
-        <MenuItem onClick={handleFilterClose}>Projects: Most to Least</MenuItem>
-        <MenuItem onClick={handleFilterClose}>Projects: Least to Most</MenuItem>
-        <MenuItem onClick={handleFilterClose}>On-Time Delivery: High to Low</MenuItem>
-        <MenuItem onClick={handleFilterClose}>On-Time Delivery: Low to High</MenuItem>
-      </Menu>
+      )}
     </Box>
   );
 };

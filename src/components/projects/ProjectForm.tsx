@@ -15,24 +15,15 @@ import {
   FormHelperText,
   InputAdornment,
   Autocomplete,
+  CircularProgress,
+  Alert,
 } from '@mui/material';
 import { DatePicker } from '@mui/x-date-pickers/DatePicker';
 import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
 import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns';
+import { ProjectService, Project as ProjectType } from '../../services/project';
 
 // Types
-interface Project {
-  id?: string;
-  name: string;
-  description: string;
-  status: 'planning' | 'in_progress' | 'completed' | 'on_hold';
-  startDate: Date | null;
-  endDate: Date | null;
-  budget: number;
-  clientId: string;
-  team: string[];
-}
-
 interface FormErrors {
   name?: string;
   description?: string;
@@ -57,50 +48,70 @@ const mockTeamMembers = [
   { id: 'user4', name: 'Alice Brown' },
 ];
 
-const initialProject: Project = {
+const initialProject: Partial<ProjectType> = {
   name: '',
   description: '',
   status: 'planning',
-  startDate: null,
-  endDate: null,
+  startDate: new Date(),
+  endDate: new Date(new Date().setMonth(new Date().getMonth() + 3)), // 3 months in the future
   budget: 0,
   clientId: '',
   team: [],
+  location: '',
+  projectType: '',
+  estimatedDuration: '',
+  phases: [],
+  keyMilestones: [],
+  requirements: {
+    permits: [],
+    inspections: [],
+    documents: [],
+  },
 };
 
 const ProjectForm: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const [project, setProject] = useState<Project>(initialProject);
+  const [project, setProject] = useState<Partial<ProjectType>>(initialProject);
   const [errors, setErrors] = useState<FormErrors>({});
   const [loading, setLoading] = useState(false);
+  const [fetchLoading, setFetchLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
   useEffect(() => {
-    if (id) {
-      // Load project data if editing
-      // Replace with actual API call
-      setProject({
-        id: '1',
-        name: 'Office Renovation',
-        description: 'Complete renovation of main office space',
-        status: 'in_progress',
-        startDate: new Date('2024-01-01'),
-        endDate: new Date('2024-06-30'),
-        budget: 150000,
-        clientId: 'client1',
-        team: ['user1', 'user2'],
-      });
-    }
+    const fetchProject = async () => {
+      if (!id) return;
+      
+      setFetchLoading(true);
+      setError(null);
+      
+      try {
+        const projectData = await ProjectService.getProject(id);
+        if (projectData) {
+          setProject(projectData);
+        } else {
+          setError(`Project with ID ${id} not found`);
+        }
+      } catch (err) {
+        console.error('Error fetching project:', err);
+        setError('Failed to load project data. Please try again.');
+      } finally {
+        setFetchLoading(false);
+      }
+    };
+    
+    fetchProject();
   }, [id]);
 
   const validateForm = (): boolean => {
     const newErrors: FormErrors = {};
 
-    if (!project.name.trim()) {
+    if (!project.name?.trim()) {
       newErrors.name = 'Project name is required';
     }
 
-    if (!project.description.trim()) {
+    if (!project.description?.trim()) {
       newErrors.description = 'Description is required';
     }
 
@@ -116,7 +127,7 @@ const ProjectForm: React.FC = () => {
       newErrors.endDate = 'End date must be after start date';
     }
 
-    if (project.budget <= 0) {
+    if (!project.budget || project.budget <= 0) {
       newErrors.budget = 'Budget must be greater than 0';
     }
 
@@ -136,13 +147,27 @@ const ProjectForm: React.FC = () => {
     }
 
     setLoading(true);
+    setError(null);
+    setSuccessMessage(null);
+    
     try {
-      // Replace with actual API call
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      navigate('/projects');
-    } catch (error) {
-      console.error('Error saving project:', error);
-      // Handle error (show error message)
+      if (id) {
+        // Update existing project
+        await ProjectService.updateProject(id, project);
+        setSuccessMessage('Project updated successfully');
+      } else {
+        // Create new project
+        await ProjectService.createProject(project as Omit<ProjectType, 'id' | 'createdAt' | 'updatedAt'>);
+        setSuccessMessage('Project created successfully');
+      }
+      
+      // Navigate after a short delay to show success message
+      setTimeout(() => {
+        navigate('/projects');
+      }, 1500);
+    } catch (err) {
+      console.error('Error saving project:', err);
+      setError(err instanceof Error ? err.message : 'Failed to save project');
     } finally {
       setLoading(false);
     }
@@ -152,11 +177,31 @@ const ProjectForm: React.FC = () => {
     navigate('/projects');
   };
 
+  if (fetchLoading) {
+    return (
+      <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '50vh' }}>
+        <CircularProgress />
+      </Box>
+    );
+  }
+
   return (
     <Box sx={{ p: 3 }}>
       <Typography variant="h4" component="h1" gutterBottom>
         {id ? 'Edit Project' : 'New Project'}
       </Typography>
+      
+      {error && (
+        <Alert severity="error" sx={{ mb: 3 }}>
+          {error}
+        </Alert>
+      )}
+      
+      {successMessage && (
+        <Alert severity="success" sx={{ mb: 3 }}>
+          {successMessage}
+        </Alert>
+      )}
 
       <form onSubmit={handleSubmit}>
         <Card>
@@ -166,7 +211,7 @@ const ProjectForm: React.FC = () => {
                 <TextField
                   fullWidth
                   label="Project Name"
-                  value={project.name}
+                  value={project.name || ''}
                   onChange={(e) => setProject({ ...project, name: e.target.value })}
                   error={!!errors.name}
                   helperText={errors.name}
@@ -178,7 +223,7 @@ const ProjectForm: React.FC = () => {
                 <TextField
                   fullWidth
                   label="Description"
-                  value={project.description}
+                  value={project.description || ''}
                   onChange={(e) => setProject({ ...project, description: e.target.value })}
                   error={!!errors.description}
                   helperText={errors.description}
@@ -192,9 +237,9 @@ const ProjectForm: React.FC = () => {
                 <FormControl fullWidth error={!!errors.status}>
                   <InputLabel>Status</InputLabel>
                   <Select
-                    value={project.status}
+                    value={project.status || 'planning'}
                     label="Status"
-                    onChange={(e) => setProject({ ...project, status: e.target.value as Project['status'] })}
+                    onChange={(e) => setProject({ ...project, status: e.target.value as ProjectType['status'] })}
                   >
                     <MenuItem value="planning">Planning</MenuItem>
                     <MenuItem value="in_progress">In Progress</MenuItem>
@@ -209,10 +254,9 @@ const ProjectForm: React.FC = () => {
                 <FormControl fullWidth error={!!errors.clientId}>
                   <InputLabel>Client</InputLabel>
                   <Select
-                    value={project.clientId}
+                    value={project.clientId || ''}
                     label="Client"
                     onChange={(e) => setProject({ ...project, clientId: e.target.value })}
-                    required
                   >
                     {mockClients.map((client) => (
                       <MenuItem key={client.id} value={client.id}>
@@ -229,11 +273,13 @@ const ProjectForm: React.FC = () => {
                   <DatePicker
                     label="Start Date"
                     value={project.startDate}
-                    onChange={(date) => setProject({ ...project, startDate: date })}
+                    onChange={(date) => setProject({ 
+                      ...project, 
+                      startDate: date || undefined 
+                    })}
                     slotProps={{
                       textField: {
                         fullWidth: true,
-                        required: true,
                         error: !!errors.startDate,
                         helperText: errors.startDate,
                       },
@@ -247,11 +293,13 @@ const ProjectForm: React.FC = () => {
                   <DatePicker
                     label="End Date"
                     value={project.endDate}
-                    onChange={(date) => setProject({ ...project, endDate: date })}
+                    onChange={(date) => setProject({ 
+                      ...project, 
+                      endDate: date || undefined 
+                    })}
                     slotProps={{
                       textField: {
                         fullWidth: true,
-                        required: true,
                         error: !!errors.endDate,
                         helperText: errors.endDate,
                       },
@@ -265,14 +313,22 @@ const ProjectForm: React.FC = () => {
                   fullWidth
                   label="Budget"
                   type="number"
-                  value={project.budget}
-                  onChange={(e) => setProject({ ...project, budget: Number(e.target.value) })}
+                  value={project.budget || ''}
+                  onChange={(e) => setProject({ ...project, budget: parseFloat(e.target.value) })}
                   error={!!errors.budget}
                   helperText={errors.budget}
                   InputProps={{
                     startAdornment: <InputAdornment position="start">$</InputAdornment>,
                   }}
-                  required
+                />
+              </Grid>
+
+              <Grid item xs={12} md={6}>
+                <TextField
+                  fullWidth
+                  label="Location"
+                  value={project.location || ''}
+                  onChange={(e) => setProject({ ...project, location: e.target.value })}
                 />
               </Grid>
 
@@ -281,13 +337,13 @@ const ProjectForm: React.FC = () => {
                   multiple
                   options={mockTeamMembers}
                   getOptionLabel={(option) => typeof option === 'string' ? option : option.name}
-                  value={mockTeamMembers.filter((member) => project.team.includes(member.id))}
-                  onChange={(_, newValue) => {
-                    setProject({
-                      ...project,
-                      team: newValue.map((item) => typeof item === 'string' ? item : item.id),
-                    });
-                  }}
+                  value={project.team?.map(memberId => 
+                    mockTeamMembers.find(m => m.id === memberId) || { id: memberId, name: memberId }
+                  ) || []}
+                  isOptionEqualToValue={(option, value) => option.id === value.id}
+                  onChange={(_, newValue) => 
+                    setProject({ ...project, team: newValue.map(v => typeof v === 'string' ? v : v.id) })
+                  }
                   renderInput={(params) => (
                     <TextField
                       {...params}
@@ -302,19 +358,16 @@ const ProjectForm: React.FC = () => {
         </Card>
 
         <Box sx={{ mt: 3, display: 'flex', justifyContent: 'flex-end', gap: 2 }}>
-          <Button
-            variant="outlined"
-            onClick={handleCancel}
-            disabled={loading}
-          >
+          <Button variant="outlined" onClick={handleCancel} disabled={loading}>
             Cancel
           </Button>
           <Button
             type="submit"
             variant="contained"
             disabled={loading}
+            startIcon={loading ? <CircularProgress size={20} /> : null}
           >
-            {loading ? 'Saving...' : (id ? 'Update Project' : 'Create Project')}
+            {id ? 'Update Project' : 'Create Project'}
           </Button>
         </Box>
       </form>
