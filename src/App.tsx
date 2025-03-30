@@ -21,6 +21,7 @@ const Subcontractors = lazy(() => import('./components/subcontractors/Subcontrac
 const Settings = lazy(() => import('./components/settings/Settings'));
 const Login = lazy(() => import('./components/auth/Login'));
 const SignUp = lazy(() => import('./components/auth/SignUp'));
+const Payments = lazy(() => import('./components/payments/Payments'));
 
 const App: React.FC = () => {
   return (
@@ -61,6 +62,7 @@ const App: React.FC = () => {
                 <Route path="/signup" element={<SignUp />} />
                 <Route path="/" element={<MainLayout />}>
                   <Route index element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
+                  <Route path="dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
                   <Route path="projects" element={<ProtectedRoute><Projects /></ProtectedRoute>} />
                   <Route path="projects/new" element={<ProtectedRoute><ProjectSetupWizard /></ProtectedRoute>} />
                   <Route path="projects/:id" element={<ProtectedRoute><ProjectDetails /></ProtectedRoute>} />
@@ -68,6 +70,7 @@ const App: React.FC = () => {
                   <Route path="expenses" element={<ProtectedRoute><Expenses /></ProtectedRoute>} />
                   <Route path="documents" element={<ProtectedRoute><Documents /></ProtectedRoute>} />
                   <Route path="bids" element={<ProtectedRoute><Bids /></ProtectedRoute>} />
+                  <Route path="payments" element={<ProtectedRoute><Payments /></ProtectedRoute>} />
                   <Route path="subcontractors" element={<ProtectedRoute><Subcontractors /></ProtectedRoute>} />
                   <Route path="settings" element={<ProtectedRoute><Settings /></ProtectedRoute>} />
                 </Route>

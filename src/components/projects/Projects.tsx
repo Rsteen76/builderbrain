@@ -20,14 +20,6 @@ import {
   Avatar,
   Menu,
   MenuItem,
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  DialogActions,
-  Stepper,
-  Step,
-  StepLabel,
-  Badge,
   Divider,
   Fade,
 } from '@mui/material';
@@ -296,7 +288,6 @@ const Projects: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedTab, setSelectedTab] = useState(0);
   const [filterAnchorEl, setFilterAnchorEl] = useState<null | HTMLElement>(null);
-  const [openNewProject, setOpenNewProject] = useState(false);
 
   const handleTabChange = (event: React.SyntheticEvent, newValue: number) => {
     setSelectedTab(newValue);
@@ -419,7 +410,7 @@ const Projects: React.FC = () => {
             <Button
               variant="contained"
               startIcon={<AddIcon />}
-              onClick={() => setOpenNewProject(true)}
+              onClick={() => navigate('/projects/new')}
             >
               New Project
             </Button>
@@ -466,35 +457,6 @@ const Projects: React.FC = () => {
         <MenuItem onClick={handleFilterClose}>Due Date: Soonest</MenuItem>
         <MenuItem onClick={handleFilterClose}>Due Date: Latest</MenuItem>
       </Menu>
-
-      <Dialog
-        open={openNewProject}
-        onClose={() => setOpenNewProject(false)}
-        maxWidth="md"
-        fullWidth
-      >
-        <DialogTitle>Create New Project</DialogTitle>
-        <DialogContent>
-          <Stepper activeStep={0} sx={{ mb: 3 }}>
-            <Step>
-              <StepLabel>Basic Information</StepLabel>
-            </Step>
-            <Step>
-              <StepLabel>Budget & Timeline</StepLabel>
-            </Step>
-            <Step>
-              <StepLabel>Team & Resources</StepLabel>
-            </Step>
-          </Stepper>
-          {/* Add form fields here */}
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setOpenNewProject(false)}>Cancel</Button>
-          <Button variant="contained" onClick={() => setOpenNewProject(false)}>
-            Create Project
-          </Button>
-        </DialogActions>
-      </Dialog>
     </Box>
   );
 };

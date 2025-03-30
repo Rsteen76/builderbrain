@@ -1,19 +1,25 @@
 import { createTheme, alpha } from '@mui/material/styles';
 
+// Define our color constants first
+const colors = {
+  primary: {
+    main: '#2C5282', // Deep blue - represents trust and professionalism
+    light: '#4299E1',
+    dark: '#1A365D',
+    contrastText: '#FFFFFF',
+  },
+  secondary: {
+    main: '#C53030', // Deep red - represents urgency and attention
+    light: '#FC8181',
+    dark: '#9B2C2C',
+    contrastText: '#FFFFFF',
+  },
+};
+
 const theme = createTheme({
   palette: {
-    primary: {
-      main: '#2C5282', // Deep blue - represents trust and professionalism
-      light: '#4299E1',
-      dark: '#1A365D',
-      contrastText: '#FFFFFF',
-    },
-    secondary: {
-      main: '#C53030', // Deep red - represents urgency and attention
-      light: '#FC8181',
-      dark: '#9B2C2C',
-      contrastText: '#FFFFFF',
-    },
+    primary: colors.primary,
+    secondary: colors.secondary,
     background: {
       default: '#F7FAFC',
       paper: '#FFFFFF',
@@ -205,15 +211,17 @@ const theme = createTheme({
     },
     MuiStepLabel: {
       styleOverrides: {
+        root: {
+          "&.Mui-completed": {
+            color: '#48BB78'
+          },
+          "&.Mui-active": {
+            color: colors.primary.main
+          }
+        },
         label: {
-          fontWeight: 500,
-        },
-        active: {
-          color: '#2C5282',
-        },
-        completed: {
-          color: '#48BB78',
-        },
+          fontWeight: 500
+        }
       },
     },
   },

@@ -70,7 +70,7 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
   };
 
   const menuItems = [
-    { text: 'Dashboard', icon: <DashboardIcon />, path: '/dashboard' },
+    { text: 'Dashboard', icon: <DashboardIcon />, path: '/' },
     { text: 'Projects', icon: <BusinessIcon />, path: '/projects' },
     { text: 'Subcontractors', icon: <GroupIcon />, path: '/subcontractors' },
     { text: 'Expenses', icon: <ReceiptIcon />, path: '/expenses' },
