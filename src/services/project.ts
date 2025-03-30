@@ -116,7 +116,10 @@ export class ProjectService {
     }
 
     const data = projectDoc.data() as FirestoreProject;
-    return this.convertFirestoreData(data);
+    return {
+      ...this.convertFirestoreData(data),
+      id: projectDoc.id
+    };
   }
 
   static async getProjects(filters?: {
@@ -146,7 +149,13 @@ export class ProjectService {
     q = query(q, orderBy('createdAt', 'desc'));
 
     const querySnapshot = await getDocs(q);
-    return querySnapshot.docs.map(doc => this.convertFirestoreData(doc.data() as FirestoreProject));
+    return querySnapshot.docs.map(doc => {
+      const data = doc.data() as FirestoreProject;
+      return {
+        ...this.convertFirestoreData(data),
+        id: doc.id
+      };
+    });
   }
 
   private static convertFirestoreData(data: FirestoreProject): Project {

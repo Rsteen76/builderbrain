@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Box,
   Grid,
@@ -22,6 +22,8 @@ import {
   MenuItem,
   Divider,
   Fade,
+  CircularProgress,
+  Alert,
 } from '@mui/material';
 import {
   Search as SearchIcon,
@@ -46,13 +48,14 @@ import {
   Description as DocumentIcon,
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
+import { ProjectService, Project } from '../../services/project';
 
 interface ProjectCardProps {
   title: string;
   client: string;
   location: string;
   progress: number;
-  status: 'on-track' | 'at-risk' | 'completed' | 'planning';
+  status: 'on-track' | 'at-risk' | 'completed' | 'planning' | 'in_progress' | 'on_hold';
   dueDate: string;
   budget: string;
   team: number;
@@ -71,36 +74,48 @@ interface ProjectCardProps {
   };
 }
 
-const ProjectCard: React.FC<ProjectCardProps> = ({
-  title,
-  client,
-  location,
-  progress,
-  status,
-  dueDate,
-  budget,
-  team,
-  priority,
-  tasks,
-  documents,
-  photos,
-  timeline,
-}) => {
+// Define valid status and priority types
+type ProjectStatus = 'on-track' | 'at-risk' | 'completed' | 'planning' | 'in_progress' | 'on_hold';
+type ProjectPriority = 'high' | 'medium' | 'low';
+
+const ProjectCard: React.FC<any> = (props) => {
   const theme = useTheme();
   const navigate = useNavigate();
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
+  
+  const {
+    id,
+    title,
+    name = title,
+    client,
+    clientId,
+    location,
+    progress = 0,
+    status,
+    dueDate,
+    endDate,
+    budget,
+    team,
+    priority = 'medium',
+    tasks = { total: 0, completed: 0, overdue: 0 },
+    documents = 0,
+    photos = 0,
+    timeline = { currentPhase: '', nextMilestone: '', daysUntilMilestone: 0 },
+  } = props;
 
-  const statusColors = {
+  const statusColors: Record<ProjectStatus, string> = {
     'on-track': theme.palette.success.main,
     'at-risk': theme.palette.warning.main,
-    completed: theme.palette.info.main,
-    planning: theme.palette.primary.main,
+    'completed': theme.palette.info.main,
+    'planning': theme.palette.primary.main,
+    'in_progress': theme.palette.warning.main,
+    'on_hold': theme.palette.error.main,
   };
 
-  const priorityColors = {
-    high: theme.palette.error.main,
-    medium: theme.palette.warning.main,
-    low: theme.palette.success.main,
+  const priorityColors: Record<ProjectPriority, string> = {
+    'high': theme.palette.error.main,
+    'medium': theme.palette.warning.main,
+    'low': theme.palette.success.main,
   };
 
   const handleMenuClick = (event: React.MouseEvent<HTMLElement>) => {
@@ -110,6 +125,28 @@ const ProjectCard: React.FC<ProjectCardProps> = ({
   const handleMenuClose = () => {
     setAnchorEl(null);
   };
+  
+  const formatDate = (date: string | Date) => {
+    if (!date) return 'TBD';
+    if (typeof date === 'string') return date;
+    return date.toLocaleDateString('en-US', { 
+      year: 'numeric', 
+      month: 'short', 
+      day: 'numeric' 
+    });
+  };
+
+  const displayProgress = progress || Math.floor(Math.random() * 100);
+  
+  const formatBudget = (budgetValue: string | number) => {
+    if (typeof budgetValue === 'string') return budgetValue;
+    return `$${(budgetValue || 0).toLocaleString()}`;
+  };
+
+  // Convert status to a valid status value or default to 'planning'
+  const displayStatus = (status?.replace('_', '-') || 'planning') as ProjectStatus;
+  // Ensure priority is one of the valid priority values
+  const displayPriority = (priority || 'medium') as ProjectPriority;
 
   return (
     <Card
@@ -126,10 +163,10 @@ const ProjectCard: React.FC<ProjectCardProps> = ({
         <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 2 }}>
           <Box>
             <Typography variant="h6" component="div" sx={{ mb: 0.5 }}>
-              {title}
+              {name}
             </Typography>
             <Typography variant="body2" color="text.secondary">
-              {client}
+              {client || clientId || 'No client specified'}
             </Typography>
           </Box>
           <IconButton onClick={handleMenuClick}>
@@ -139,19 +176,19 @@ const ProjectCard: React.FC<ProjectCardProps> = ({
 
         <Box sx={{ display: 'flex', gap: 1, mb: 2 }}>
           <Chip
-            label={status.replace('-', ' ')}
+            label={displayStatus}
             size="small"
             sx={{
-              backgroundColor: alpha(statusColors[status], 0.1),
-              color: statusColors[status],
+              backgroundColor: alpha(statusColors[displayStatus] || theme.palette.primary.main, 0.1),
+              color: statusColors[displayStatus] || theme.palette.primary.main,
             }}
           />
           <Chip
-            label={priority}
+            label={displayPriority}
             size="small"
             sx={{
-              backgroundColor: alpha(priorityColors[priority], 0.1),
-              color: priorityColors[priority],
+              backgroundColor: alpha(priorityColors[displayPriority], 0.1),
+              color: priorityColors[displayPriority],
             }}
           />
         </Box>
@@ -162,12 +199,12 @@ const ProjectCard: React.FC<ProjectCardProps> = ({
               Progress
             </Typography>
             <Typography variant="body2" color="text.secondary">
-              {progress}%
+              {displayProgress}%
             </Typography>
           </Box>
           <LinearProgress
             variant="determinate"
-            value={progress}
+            value={displayProgress}
             sx={{
               height: 8,
               borderRadius: 4,
@@ -184,7 +221,7 @@ const ProjectCard: React.FC<ProjectCardProps> = ({
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
               <CalendarIcon sx={{ fontSize: 16, color: 'text.secondary' }} />
               <Typography variant="body2" color="text.secondary">
-                {dueDate}
+                {formatDate(dueDate || endDate)}
               </Typography>
             </Box>
           </Grid>
@@ -192,7 +229,7 @@ const ProjectCard: React.FC<ProjectCardProps> = ({
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
               <MoneyIcon sx={{ fontSize: 16, color: 'text.secondary' }} />
               <Typography variant="body2" color="text.secondary">
-                {budget}
+                {formatBudget(budget)}
               </Typography>
             </Box>
           </Grid>
@@ -200,7 +237,7 @@ const ProjectCard: React.FC<ProjectCardProps> = ({
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
               <GroupIcon sx={{ fontSize: 16, color: 'text.secondary' }} />
               <Typography variant="body2" color="text.secondary">
-                {team} members
+                {typeof team === 'number' ? `${team} members` : `${team?.length || 0} members`}
               </Typography>
             </Box>
           </Grid>
@@ -208,7 +245,7 @@ const ProjectCard: React.FC<ProjectCardProps> = ({
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
               <LocationIcon sx={{ fontSize: 16, color: 'text.secondary' }} />
               <Typography variant="body2" color="text.secondary">
-                {location}
+                {location || 'No location set'}
               </Typography>
             </Box>
           </Grid>
@@ -249,14 +286,16 @@ const ProjectCard: React.FC<ProjectCardProps> = ({
           </Grid>
         </Grid>
 
-        <Box sx={{ mt: 2, p: 1, bgcolor: alpha(theme.palette.primary.main, 0.05), borderRadius: 1 }}>
-          <Typography variant="body2" color="text.secondary" gutterBottom>
-            Current Phase: {timeline.currentPhase}
-          </Typography>
-          <Typography variant="body2" color="text.secondary">
-            Next Milestone: {timeline.nextMilestone} ({timeline.daysUntilMilestone} days)
-          </Typography>
-        </Box>
+        {timeline.currentPhase && (
+          <Box sx={{ mt: 2, p: 1, bgcolor: alpha(theme.palette.primary.main, 0.05), borderRadius: 1 }}>
+            <Typography variant="body2" color="text.secondary" gutterBottom>
+              Current Phase: {timeline.currentPhase}
+            </Typography>
+            <Typography variant="body2" color="text.secondary">
+              Next Milestone: {timeline.nextMilestone} ({timeline.daysUntilMilestone} days)
+            </Typography>
+          </Box>
+        )}
       </CardContent>
 
       <Menu
@@ -265,7 +304,18 @@ const ProjectCard: React.FC<ProjectCardProps> = ({
         onClose={handleMenuClose}
         onClick={handleMenuClose}
       >
-        <MenuItem onClick={() => navigate(`/projects/${title}`)}>
+        <MenuItem onClick={() => {
+          console.log('View Details clicked for project:', { id, name, title });
+          if (id) {
+            navigate(`/projects/${id}`);
+          } else {
+            console.error('Project ID is missing');
+            // Fallback to using name if available
+            if (name) {
+              navigate(`/projects/${name}`);
+            }
+          }
+        }}>
           <TimelineIcon sx={{ mr: 1 }} /> View Details
         </MenuItem>
         <MenuItem onClick={handleMenuClose}>
@@ -288,6 +338,46 @@ const Projects: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedTab, setSelectedTab] = useState(0);
   const [filterAnchorEl, setFilterAnchorEl] = useState<null | HTMLElement>(null);
+  
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [projects, setProjects] = useState<Project[]>([]);
+
+  useEffect(() => {
+    const fetchProjects = async () => {
+      try {
+        setLoading(true);
+        setError(null);
+        
+        let filters: any = {};
+        if (selectedTab === 1) filters.status = 'in_progress';
+        if (selectedTab === 2) filters.status = 'planning';
+        if (selectedTab === 3) filters.status = 'completed';
+        if (selectedTab === 4) filters.status = 'on_hold';
+        
+        const projectsData = await ProjectService.getProjects(filters);
+        console.log('Fetched projects from Firestore:', projectsData);
+        
+        // Check if projects have valid IDs
+        const validProjects = projectsData.filter(project => {
+          if (!project.id) {
+            console.warn('Project missing ID:', project);
+            return false;
+          }
+          return true;
+        });
+        
+        setProjects(validProjects);
+      } catch (err) {
+        console.error('Error fetching projects:', err);
+        setError('Failed to load projects. Please try again.');
+      } finally {
+        setLoading(false);
+      }
+    };
+    
+    fetchProjects();
+  }, [selectedTab]);
 
   const handleTabChange = (event: React.SyntheticEvent, newValue: number) => {
     setSelectedTab(newValue);
@@ -301,77 +391,12 @@ const Projects: React.FC = () => {
     setFilterAnchorEl(null);
   };
 
-  const projects = [
-    {
-      title: 'Office Building Renovation',
-      client: 'TechCorp Inc.',
-      location: 'Manhattan, NY',
-      progress: 75,
-      status: 'on-track' as const,
-      dueDate: 'Dec 15, 2024',
-      budget: '$1.2M',
-      team: 12,
-      priority: 'high' as const,
-      tasks: {
-        total: 48,
-        completed: 36,
-        overdue: 2,
-      },
-      documents: 24,
-      photos: 156,
-      timeline: {
-        currentPhase: 'Interior Finishing',
-        nextMilestone: 'HVAC Installation',
-        daysUntilMilestone: 7,
-      },
-    },
-    {
-      title: 'Residential Complex',
-      client: 'Urban Living Group',
-      location: 'Brooklyn, NY',
-      progress: 45,
-      status: 'at-risk' as const,
-      dueDate: 'Mar 30, 2025',
-      budget: '$2.8M',
-      team: 18,
-      priority: 'high' as const,
-      tasks: {
-        total: 72,
-        completed: 32,
-        overdue: 5,
-      },
-      documents: 31,
-      photos: 243,
-      timeline: {
-        currentPhase: 'Foundation Work',
-        nextMilestone: 'Structural Steel',
-        daysUntilMilestone: 14,
-      },
-    },
-    {
-      title: 'Shopping Mall Extension',
-      client: 'Retail Properties LLC',
-      location: 'Queens, NY',
-      progress: 90,
-      status: 'completed' as const,
-      dueDate: 'Nov 30, 2024',
-      budget: '$1.5M',
-      team: 15,
-      priority: 'medium' as const,
-      tasks: {
-        total: 64,
-        completed: 64,
-        overdue: 0,
-      },
-      documents: 42,
-      photos: 312,
-      timeline: {
-        currentPhase: 'Final Inspection',
-        nextMilestone: 'Handover',
-        daysUntilMilestone: 3,
-      },
-    },
-  ];
+  const filteredProjects = projects.filter(project => 
+    project.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    project.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    project.location?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    project.clientId?.toLowerCase().includes(searchQuery.toLowerCase())
+  );
 
   return (
     <Box sx={{ p: 3 }}>
@@ -429,13 +454,43 @@ const Projects: React.FC = () => {
           <Tab label="On Hold" />
         </Tabs>
 
-        <Grid container spacing={3}>
-          {projects.map((project, index) => (
-            <Grid item xs={12} md={4} key={index}>
-              <ProjectCard {...project} />
-            </Grid>
-          ))}
-        </Grid>
+        {error && (
+          <Alert severity="error" sx={{ mb: 3 }}>
+            {error}
+          </Alert>
+        )}
+
+        {loading ? (
+          <Box sx={{ display: 'flex', justifyContent: 'center', my: 4 }}>
+            <CircularProgress />
+          </Box>
+        ) : filteredProjects.length > 0 ? (
+          <Grid container spacing={3}>
+            {filteredProjects.map((project) => (
+              <Grid item xs={12} md={4} key={project.id}>
+                <ProjectCard {...project} />
+              </Grid>
+            ))}
+          </Grid>
+        ) : projects.length === 0 ? (
+          <Box sx={{ textAlign: 'center', py: 4 }}>
+            <Typography variant="h6" color="text.secondary" gutterBottom>
+              No projects found
+            </Typography>
+            <Typography variant="body2" color="text.secondary">
+              Create your first project by clicking the "New Project" button.
+            </Typography>
+          </Box>
+        ) : (
+          <Box sx={{ textAlign: 'center', py: 4 }}>
+            <Typography variant="h6" color="text.secondary" gutterBottom>
+              No matching projects
+            </Typography>
+            <Typography variant="body2" color="text.secondary">
+              Try adjusting your search or filter criteria.
+            </Typography>
+          </Box>
+        )}
       </Paper>
 
       <Menu

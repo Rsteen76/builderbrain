@@ -18,22 +18,15 @@ import {
   List,
   ListItem,
   ListItemText,
-  ListItemIcon,
   IconButton,
   Chip,
   Alert,
-  Autocomplete,
-  Tooltip,
   Divider,
   CircularProgress,
 } from '@mui/material';
 import {
   Add as AddIcon,
   Delete as DeleteIcon,
-  Check as CheckIcon,
-  Warning as WarningIcon,
-  Info as InfoIcon,
-  Help as HelpIcon,
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 import { ProjectService, Project } from '../../services/project';
