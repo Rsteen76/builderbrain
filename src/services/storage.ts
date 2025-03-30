@@ -1,0 +1,135 @@
+import { storage } from '../config/firebase';
+import {
+  ref,
+  uploadBytes,
+  getDownloadURL,
+  deleteObject,
+  listAll,
+  StorageReference,
+} from 'firebase/storage';
+
+export interface UploadProgress {
+  progress: number;
+  state: 'running' | 'paused' | 'success' | 'error';
+  downloadURL?: string;
+}
+
+export class StorageService {
+  // Project Documents
+  static async uploadProjectDocument(
+    projectId: string,
+    file: File,
+    onProgress?: (progress: UploadProgress) => void
+  ): Promise<string> {
+    const fileRef = ref(storage, `projects/${projectId}/documents/${file.name}`);
+    return this.uploadFile(fileRef, file, onProgress);
+  }
+
+  static async getProjectDocuments(projectId: string): Promise<string[]> {
+    const folderRef = ref(storage, `projects/${projectId}/documents`);
+    return this.listFiles(folderRef);
+  }
+
+  // Project Photos
+  static async uploadProjectPhoto(
+    projectId: string,
+    file: File,
+    onProgress?: (progress: UploadProgress) => void
+  ): Promise<string> {
+    const fileRef = ref(storage, `projects/${projectId}/photos/${file.name}`);
+    return this.uploadFile(fileRef, file, onProgress);
+  }
+
+  static async getProjectPhotos(projectId: string): Promise<string[]> {
+    const folderRef = ref(storage, `projects/${projectId}/photos`);
+    return this.listFiles(folderRef);
+  }
+
+  // User Avatars
+  static async uploadUserAvatar(
+    userId: string,
+    file: File,
+    onProgress?: (progress: UploadProgress) => void
+  ): Promise<string> {
+    const fileRef = ref(storage, `users/${userId}/avatar.jpg`);
+    return this.uploadFile(fileRef, file, onProgress);
+  }
+
+  // Company Logos
+  static async uploadCompanyLogo(
+    companyId: string,
+    file: File,
+    onProgress?: (progress: UploadProgress) => void
+  ): Promise<string> {
+    const fileRef = ref(storage, `companies/${companyId}/logo.jpg`);
+    return this.uploadFile(fileRef, file, onProgress);
+  }
+
+  // Bid Attachments
+  static async uploadBidAttachment(
+    bidId: string,
+    file: File,
+    onProgress?: (progress: UploadProgress) => void
+  ): Promise<string> {
+    const fileRef = ref(storage, `bids/${bidId}/attachments/${file.name}`);
+    return this.uploadFile(fileRef, file, onProgress);
+  }
+
+  static async getBidAttachments(bidId: string): Promise<string[]> {
+    const folderRef = ref(storage, `bids/${bidId}/attachments`);
+    return this.listFiles(folderRef);
+  }
+
+  // Generic file operations
+  private static async uploadFile(
+    fileRef: StorageReference,
+    file: File,
+    onProgress?: (progress: UploadProgress) => void
+  ): Promise<string> {
+    try {
+      const snapshot = await uploadBytes(fileRef, file);
+      const downloadURL = await getDownloadURL(snapshot.ref);
+      
+      if (onProgress) {
+        onProgress({
+          progress: 100,
+          state: 'success',
+          downloadURL,
+        });
+      }
+
+      return downloadURL;
+    } catch (error) {
+      if (onProgress) {
+        onProgress({
+          progress: 0,
+          state: 'error',
+        });
+      }
+      throw error;
+    }
+  }
+
+  private static async listFiles(folderRef: StorageReference): Promise<string[]> {
+    try {
+      const result = await listAll(folderRef);
+      const downloadURLs = await Promise.all(
+        result.items.map((item) => getDownloadURL(item))
+      );
+      return downloadURLs;
+    } catch (error) {
+      console.error('Error listing files:', error);
+      return [];
+    }
+  }
+
+  static async deleteFile(path: string): Promise<void> {
+    try {
+      const fileRef = ref(storage, path);
+      await deleteObject(fileRef);
+    } catch (error) {
+      console.error('Error deleting file:', error);
+      throw error;
+    }
+  }
+} 

@@ -1,84 +1,113 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
-
-interface User {
-  email: string;
-  role: string;
-  // Add other user properties as needed
-}
+import React, { createContext, useContext, useEffect, useState } from 'react';
+import {
+  User,
+  signInWithEmailAndPassword,
+  createUserWithEmailAndPassword,
+  signOut,
+  onAuthStateChanged,
+  GoogleAuthProvider,
+  signInWithPopup,
+} from 'firebase/auth';
+import { auth } from '../config/firebase';
 
 interface AuthContextType {
   user: User | null;
-  login: (email: string, password: string) => Promise<void>;
-  logout: () => Promise<void>;
+  loading: boolean;
+  error: string | null;
   isAuthenticated: boolean;
+  role: string;
+  signIn: (email: string, password: string) => Promise<void>;
+  signUp: (email: string, password: string) => Promise<void>;
+  signInWithGoogle: () => Promise<void>;
+  logout: () => Promise<void>;
 }
 
-const AuthContext = createContext<AuthContextType>({
-  user: null,
-  login: async () => {},
-  logout: async () => {},
-  isAuthenticated: false,
-});
+const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-export const useAuth = () => useContext(AuthContext);
+export const useAuth = () => {
+  const context = useContext(AuthContext);
+  if (context === undefined) {
+    throw new Error('useAuth must be used within an AuthProvider');
+  }
+  return context;
+};
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [role, setRole] = useState<string>('user');
 
   useEffect(() => {
-    // Check for existing session
-    const checkAuth = async () => {
-      try {
-        // Add your authentication check logic here
-        // For now, we'll use a mock user
-        const mockUser = {
-          email: 'user@example.com',
-          role: 'admin',
-        };
-        setUser(mockUser);
-        setIsAuthenticated(true);
-      } catch (error) {
-        console.error('Auth check failed:', error);
+    const unsubscribe = onAuthStateChanged(auth, (user) => {
+      setUser(user);
+      setLoading(false);
+      // You can fetch the user's role from your database here
+      if (user) {
+        // For now, we'll set a default role
+        setRole('user');
       }
-    };
+    });
 
-    checkAuth();
+    return unsubscribe;
   }, []);
 
-  const login = async (email: string, password: string) => {
+  const signIn = async (email: string, password: string) => {
     try {
-      // Add your login logic here
-      // For now, we'll use a mock user
-      const mockUser = {
-        email,
-        role: 'admin',
-      };
-      setUser(mockUser);
-      setIsAuthenticated(true);
-    } catch (error) {
-      console.error('Login failed:', error);
-      throw error;
+      setError(null);
+      await signInWithEmailAndPassword(auth, email, password);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to sign in');
+      throw err;
+    }
+  };
+
+  const signUp = async (email: string, password: string) => {
+    try {
+      setError(null);
+      await createUserWithEmailAndPassword(auth, email, password);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to sign up');
+      throw err;
+    }
+  };
+
+  const signInWithGoogle = async () => {
+    try {
+      setError(null);
+      const provider = new GoogleAuthProvider();
+      await signInWithPopup(auth, provider);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to sign in with Google');
+      throw err;
     }
   };
 
   const logout = async () => {
     try {
-      // Add your logout logic here
-      setUser(null);
-      setIsAuthenticated(false);
-    } catch (error) {
-      console.error('Logout failed:', error);
-      throw error;
+      setError(null);
+      await signOut(auth);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to sign out');
+      throw err;
     }
   };
 
   const value = {
     user,
-    login,
+    loading,
+    error,
+    isAuthenticated: !!user,
+    role,
+    signIn,
+    signUp,
+    signInWithGoogle,
     logout,
-    isAuthenticated,
   };
 
-  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
+  return (
+    <AuthContext.Provider value={value}>
+      {!loading && children}
+    </AuthContext.Provider>
+  );
 }; 

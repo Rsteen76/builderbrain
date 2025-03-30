@@ -47,7 +47,7 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
   const [mobileOpen, setMobileOpen] = useState(false);
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
-  const auth = useAuth();
+  const { user, role, logout } = useAuth();
   const navigate = useNavigate();
 
   const handleDrawerToggle = () => {
@@ -63,8 +63,8 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
   };
 
   const handleLogout = async () => {
-    if (auth.logout) {
-      await auth.logout();
+    if (logout) {
+      await logout();
       navigate('/login');
     }
   };
@@ -131,14 +131,14 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
           onClick={handleMenuOpen}
         >
           <Avatar sx={{ bgcolor: theme.palette.primary.main }}>
-            {auth.user?.email?.[0].toUpperCase()}
+            {user?.email?.[0].toUpperCase()}
           </Avatar>
           <Box sx={{ flex: 1 }}>
             <Typography variant="subtitle2" sx={{ fontWeight: 500 }}>
-              {auth.user?.email}
+              {user?.email}
             </Typography>
             <Typography variant="caption" color="text.secondary">
-              {auth.user?.role}
+              {role}
             </Typography>
           </Box>
         </Box>

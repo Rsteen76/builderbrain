@@ -25,6 +25,7 @@ import {
   Autocomplete,
   Tooltip,
   Divider,
+  CircularProgress,
 } from '@mui/material';
 import {
   Add as AddIcon,
@@ -35,6 +36,8 @@ import {
   Help as HelpIcon,
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
+import { ProjectService, Project } from '../../services/project';
+import { useAuth } from '../../contexts/AuthContext';
 
 // Predefined options for various fields
 const projectTypes = [
@@ -135,6 +138,10 @@ interface ProjectSetupData {
 
 const ProjectSetupWizard: React.FC = () => {
   const [activeStep, setActiveStep] = useState(0);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const { user } = useAuth();
+  const navigate = useNavigate();
   const [projectData, setProjectData] = useState<ProjectSetupData>({
     basicInfo: {
       name: '',
@@ -171,8 +178,6 @@ const ProjectSetupWizard: React.FC = () => {
     'Timeline & Phases',
     'Requirements',
   ];
-
-  const navigate = useNavigate();
 
   const handleNext = () => {
     setActiveStep((prevStep) => prevStep + 1);
@@ -244,9 +249,42 @@ const ProjectSetupWizard: React.FC = () => {
     }));
   };
 
-  const handleFinish = () => {
-    console.log('Project data:', projectData);
-    navigate('/projects');
+  const handleFinish = async () => {
+    if (!user) {
+      setError('You must be logged in to create a project');
+      return;
+    }
+
+    setLoading(true);
+    setError(null);
+
+    try {
+      // Convert project data to the format expected by ProjectService
+      const project: Omit<Project, 'id' | 'createdAt' | 'updatedAt'> = {
+        name: projectData.basicInfo.name,
+        description: projectData.basicInfo.description,
+        status: 'planning',
+        startDate: new Date(projectData.basicInfo.startDate),
+        endDate: new Date(new Date(projectData.basicInfo.startDate).getTime() + 
+          parseInt(projectData.basicInfo.estimatedDuration) * 30 * 24 * 60 * 60 * 1000),
+        budget: projectData.budget.totalBudget,
+        clientId: projectData.basicInfo.clientName, // You might want to create a proper client record
+        team: [], // You might want to add team members selection
+        location: projectData.basicInfo.location,
+        projectType: projectData.basicInfo.projectType,
+        estimatedDuration: projectData.basicInfo.estimatedDuration,
+        phases: projectData.phases,
+        keyMilestones: projectData.keyMilestones,
+        requirements: projectData.requirements,
+      };
+
+      const savedProject = await ProjectService.createProject(project);
+      navigate(`/projects/${savedProject.id}`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to create project');
+    } finally {
+      setLoading(false);
+    }
   };
 
   const renderStepContent = (step: number) => {
@@ -709,29 +747,36 @@ const ProjectSetupWizard: React.FC = () => {
           ))}
         </Stepper>
 
+        {error && (
+          <Alert severity="error" sx={{ mb: 2 }}>
+            {error}
+          </Alert>
+        )}
+
         {renderStepContent(activeStep)}
 
         <Box sx={{ display: 'flex', justifyContent: 'flex-end', mt: 3 }}>
-          <Button
-            disabled={activeStep === 0}
-            onClick={handleBack}
-            sx={{ mr: 1 }}
-          >
-            Back
-          </Button>
-          {activeStep === steps.length - 1 ? (
+          {activeStep > 0 && (
+            <Button onClick={handleBack} sx={{ mr: 1 }}>
+              Back
+            </Button>
+          )}
+          {activeStep < steps.length - 1 ? (
             <Button
               variant="contained"
-              onClick={handleFinish}
+              onClick={handleNext}
+              disabled={loading}
             >
-              Finish
+              Next
             </Button>
           ) : (
             <Button
               variant="contained"
-              onClick={handleNext}
+              onClick={handleFinish}
+              disabled={loading}
+              startIcon={loading ? <CircularProgress size={20} /> : null}
             >
-              Next
+              Create Project
             </Button>
           )}
         </Box>
