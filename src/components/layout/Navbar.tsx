@@ -1,21 +1,20 @@
 import React from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   AppBar,
   Toolbar,
-  Typography,
   IconButton,
-  Badge,
-  Box,
+  Typography,
   Avatar,
   Menu,
   MenuItem,
+  Box,
 } from '@mui/material';
 import {
   Menu as MenuIcon,
-  Notifications as NotificationsIcon,
-  AccountCircle,
+  Person as PersonIcon,
+  Logout as LogoutIcon,
 } from '@mui/icons-material';
-import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 
 interface NavbarProps {
@@ -25,7 +24,7 @@ interface NavbarProps {
 
 const Navbar: React.FC<NavbarProps> = ({ open, toggleDrawer }) => {
   const navigate = useNavigate();
-  const { currentUser } = useAuth();
+  const { user, logout } = useAuth();
   const [anchorEl, setAnchorEl] = React.useState<null | HTMLElement>(null);
 
   const handleMenu = (event: React.MouseEvent<HTMLElement>) => {
@@ -36,10 +35,13 @@ const Navbar: React.FC<NavbarProps> = ({ open, toggleDrawer }) => {
     setAnchorEl(null);
   };
 
-  const handleLogout = () => {
-    // For development, just log the action
-    console.log('Logout clicked');
-    handleClose();
+  const handleLogout = async () => {
+    try {
+      await logout();
+      navigate('/login');
+    } catch (error) {
+      console.error('Logout failed:', error);
+    }
   };
 
   return (
@@ -58,11 +60,6 @@ const Navbar: React.FC<NavbarProps> = ({ open, toggleDrawer }) => {
           Construction Management
         </Typography>
         <Box sx={{ display: 'flex', alignItems: 'center' }}>
-          <IconButton color="inherit">
-            <Badge badgeContent={4} color="error">
-              <NotificationsIcon />
-            </Badge>
-          </IconButton>
           <IconButton
             onClick={handleMenu}
             size="small"
@@ -72,25 +69,26 @@ const Navbar: React.FC<NavbarProps> = ({ open, toggleDrawer }) => {
             aria-expanded={Boolean(anchorEl) ? 'true' : undefined}
           >
             <Avatar sx={{ width: 32, height: 32 }}>
-              {currentUser?.displayName?.[0] || <AccountCircle />}
+              {user?.email?.[0].toUpperCase()}
             </Avatar>
           </IconButton>
           <Menu
-            id="account-menu"
             anchorEl={anchorEl}
+            id="account-menu"
             open={Boolean(anchorEl)}
             onClose={handleClose}
             onClick={handleClose}
             transformOrigin={{ horizontal: 'right', vertical: 'top' }}
             anchorOrigin={{ horizontal: 'right', vertical: 'bottom' }}
           >
-            <MenuItem onClick={() => { navigate('/profile'); handleClose(); }}>
+            <MenuItem onClick={() => navigate('/profile')}>
+              <PersonIcon sx={{ mr: 1 }} />
               Profile
             </MenuItem>
-            <MenuItem onClick={() => { navigate('/settings'); handleClose(); }}>
-              Settings
+            <MenuItem onClick={handleLogout}>
+              <LogoutIcon sx={{ mr: 1 }} />
+              Logout
             </MenuItem>
-            <MenuItem onClick={handleLogout}>Logout</MenuItem>
           </Menu>
         </Box>
       </Toolbar>

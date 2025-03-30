@@ -1,46 +1,84 @@
-import React, { createContext, useContext, useState, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useEffect } from 'react';
 
 interface User {
-  id: string;
   email: string;
-  displayName: string;
   role: string;
+  // Add other user properties as needed
 }
 
 interface AuthContextType {
-  currentUser: User | null;
-  loading: boolean;
-  error: string | null;
+  user: User | null;
+  login: (email: string, password: string) => Promise<void>;
+  logout: () => Promise<void>;
+  isAuthenticated: boolean;
 }
 
-const AuthContext = createContext<AuthContextType | undefined>(undefined);
+const AuthContext = createContext<AuthContextType>({
+  user: null,
+  login: async () => {},
+  logout: async () => {},
+  isAuthenticated: false,
+});
 
-// Mock user for development
-const mockUser: User = {
-  id: '1',
-  email: 'demo@example.com',
-  displayName: 'Demo User',
-  role: 'admin',
-};
+export const useAuth = () => useContext(AuthContext);
 
-export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
-  const [currentUser] = useState<User | null>(mockUser);
-  const [loading] = useState(false);
-  const [error] = useState<string | null>(null);
+export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const [user, setUser] = useState<User | null>(null);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+
+  useEffect(() => {
+    // Check for existing session
+    const checkAuth = async () => {
+      try {
+        // Add your authentication check logic here
+        // For now, we'll use a mock user
+        const mockUser = {
+          email: 'user@example.com',
+          role: 'admin',
+        };
+        setUser(mockUser);
+        setIsAuthenticated(true);
+      } catch (error) {
+        console.error('Auth check failed:', error);
+      }
+    };
+
+    checkAuth();
+  }, []);
+
+  const login = async (email: string, password: string) => {
+    try {
+      // Add your login logic here
+      // For now, we'll use a mock user
+      const mockUser = {
+        email,
+        role: 'admin',
+      };
+      setUser(mockUser);
+      setIsAuthenticated(true);
+    } catch (error) {
+      console.error('Login failed:', error);
+      throw error;
+    }
+  };
+
+  const logout = async () => {
+    try {
+      // Add your logout logic here
+      setUser(null);
+      setIsAuthenticated(false);
+    } catch (error) {
+      console.error('Logout failed:', error);
+      throw error;
+    }
+  };
 
   const value = {
-    currentUser,
-    loading,
-    error,
+    user,
+    login,
+    logout,
+    isAuthenticated,
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
-};
-
-export const useAuth = () => {
-  const context = useContext(AuthContext);
-  if (context === undefined) {
-    throw new Error('useAuth must be used within an AuthProvider');
-  }
-  return context;
 }; 

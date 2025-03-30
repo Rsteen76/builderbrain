@@ -1,4 +1,4 @@
-import React, { ReactNode, useState } from 'react';
+import React, { useState } from 'react';
 import { Outlet, useNavigate } from 'react-router-dom';
 import {
   Box,
@@ -11,73 +11,139 @@ import {
   ListItem,
   ListItemIcon,
   ListItemText,
+  ListItemButton,
   useTheme,
   useMediaQuery,
+  Avatar,
+  Menu,
+  MenuItem,
+  Divider,
+  alpha,
 } from '@mui/material';
 import {
   Menu as MenuIcon,
   Dashboard as DashboardIcon,
-  Assignment as ProjectsIcon,
-  Task as TasksIcon,
-  Receipt as ExpensesIcon,
-  Gavel as BidsIcon,
-  Description as DocumentsIcon,
-  Payment as PaymentsIcon,
+  Business as BusinessIcon,
+  Receipt as ReceiptIcon,
+  Gavel as GavelIcon,
+  Assignment as AssignmentIcon,
+  Description as DescriptionIcon,
+  Payment as PaymentIcon,
   Settings as SettingsIcon,
+  Person as PersonIcon,
+  Logout as LogoutIcon,
+  Group as GroupIcon,
 } from '@mui/icons-material';
+import { useAuth } from '../../contexts/AuthContext';
 
-const drawerWidth = 240;
+const drawerWidth = 280;
 
 interface MainLayoutProps {
-  children: ReactNode;
+  children?: React.ReactNode;
 }
 
 const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
   const theme = useTheme();
-  const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
+  const isMobile = useMediaQuery(theme.breakpoints.down('md'));
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
+  const auth = useAuth();
   const navigate = useNavigate();
 
   const handleDrawerToggle = () => {
     setMobileOpen(!mobileOpen);
   };
 
+  const handleMenuOpen = (event: React.MouseEvent<HTMLElement>) => {
+    setAnchorEl(event.currentTarget);
+  };
+
+  const handleMenuClose = () => {
+    setAnchorEl(null);
+  };
+
+  const handleLogout = async () => {
+    if (auth.logout) {
+      await auth.logout();
+      navigate('/login');
+    }
+  };
+
   const menuItems = [
     { text: 'Dashboard', icon: <DashboardIcon />, path: '/dashboard' },
-    { text: 'Projects', icon: <ProjectsIcon />, path: '/projects' },
-    { text: 'Tasks', icon: <TasksIcon />, path: '/tasks' },
-    { text: 'Expenses', icon: <ExpensesIcon />, path: '/expenses' },
-    { text: 'Bids', icon: <BidsIcon />, path: '/bids' },
-    { text: 'Documents', icon: <DocumentsIcon />, path: '/documents' },
-    { text: 'Payments', icon: <PaymentsIcon />, path: '/payments' },
+    { text: 'Projects', icon: <BusinessIcon />, path: '/projects' },
+    { text: 'Subcontractors', icon: <GroupIcon />, path: '/subcontractors' },
+    { text: 'Expenses', icon: <ReceiptIcon />, path: '/expenses' },
+    { text: 'Bids', icon: <GavelIcon />, path: '/bids' },
+    { text: 'Tasks', icon: <AssignmentIcon />, path: '/tasks' },
+    { text: 'Documents', icon: <DescriptionIcon />, path: '/documents' },
+    { text: 'Payments', icon: <PaymentIcon />, path: '/payments' },
     { text: 'Settings', icon: <SettingsIcon />, path: '/settings' },
   ];
 
   const drawer = (
-    <div>
-      <Toolbar>
-        <Typography variant="h6" noWrap component="div">
-          Construction App
+    <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+      <Box sx={{ p: 2, display: 'flex', alignItems: 'center', gap: 2 }}>
+        <BusinessIcon sx={{ fontSize: 32, color: theme.palette.primary.main }} />
+        <Typography variant="h6" sx={{ fontWeight: 600 }}>
+          Construction Manager
         </Typography>
-      </Toolbar>
-      <List>
+      </Box>
+      <Divider />
+      <List sx={{ flex: 1, px: 1 }}>
         {menuItems.map((item) => (
-          <ListItem
-            button
-            key={item.text}
-            onClick={() => {
-              navigate(item.path);
-              if (isMobile) {
-                setMobileOpen(false);
-              }
-            }}
-          >
-            <ListItemIcon>{item.icon}</ListItemIcon>
-            <ListItemText primary={item.text} />
+          <ListItem key={item.text} disablePadding>
+            <ListItemButton
+              onClick={() => {
+                navigate(item.path);
+                if (isMobile) setMobileOpen(false);
+              }}
+              sx={{
+                borderRadius: 1,
+                mb: 0.5,
+                '&:hover': {
+                  backgroundColor: alpha(theme.palette.primary.main, 0.08),
+                },
+              }}
+            >
+              <ListItemIcon sx={{ color: theme.palette.primary.main }}>
+                {item.icon}
+              </ListItemIcon>
+              <ListItemText primary={item.text} />
+            </ListItemButton>
           </ListItem>
         ))}
       </List>
-    </div>
+      <Divider />
+      <Box sx={{ p: 2 }}>
+        <Box
+          sx={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 2,
+            p: 1,
+            borderRadius: 1,
+            cursor: 'pointer',
+            '&:hover': {
+              backgroundColor: alpha(theme.palette.primary.main, 0.08),
+            },
+          }}
+          onClick={handleMenuOpen}
+        >
+          <Avatar sx={{ bgcolor: theme.palette.primary.main }}>
+            {auth.user?.email?.[0].toUpperCase()}
+          </Avatar>
+          <Box sx={{ flex: 1 }}>
+            <Typography variant="subtitle2" sx={{ fontWeight: 500 }}>
+              {auth.user?.email}
+            </Typography>
+            <Typography variant="caption" color="text.secondary">
+              {auth.user?.role}
+            </Typography>
+          </Box>
+        </Box>
+      </Box>
+    </Box>
   );
 
   return (
@@ -85,28 +151,27 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
       <AppBar
         position="fixed"
         sx={{
-          width: { sm: `calc(100% - ${drawerWidth}px)` },
-          ml: { sm: `${drawerWidth}px` },
+          width: { md: `calc(100% - ${drawerWidth}px)` },
+          ml: { md: `${drawerWidth}px` },
         }}
       >
         <Toolbar>
           <IconButton
             color="inherit"
-            aria-label="open drawer"
             edge="start"
             onClick={handleDrawerToggle}
-            sx={{ mr: 2, display: { sm: 'none' } }}
+            sx={{ mr: 2, display: { md: 'none' } }}
           >
             <MenuIcon />
           </IconButton>
-          <Typography variant="h6" noWrap component="div">
+          <Typography variant="h6" noWrap component="div" sx={{ flexGrow: 1 }}>
             Construction Management
           </Typography>
         </Toolbar>
       </AppBar>
       <Box
         component="nav"
-        sx={{ width: { sm: drawerWidth }, flexShrink: { sm: 0 } }}
+        sx={{ width: { md: drawerWidth }, flexShrink: { md: 0 } }}
       >
         {isMobile ? (
           <Drawer
@@ -114,11 +179,14 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
             open={mobileOpen}
             onClose={handleDrawerToggle}
             ModalProps={{
-              keepMounted: true, // Better open performance on mobile.
+              keepMounted: true,
             }}
             sx={{
-              display: { xs: 'block', sm: 'none' },
-              '& .MuiDrawer-paper': { boxSizing: 'border-box', width: drawerWidth },
+              display: { xs: 'block', md: 'none' },
+              '& .MuiDrawer-paper': {
+                boxSizing: 'border-box',
+                width: drawerWidth,
+              },
             }}
           >
             {drawer}
@@ -127,8 +195,12 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
           <Drawer
             variant="permanent"
             sx={{
-              display: { xs: 'none', sm: 'block' },
-              '& .MuiDrawer-paper': { boxSizing: 'border-box', width: drawerWidth },
+              display: { xs: 'none', md: 'block' },
+              '& .MuiDrawer-paper': {
+                boxSizing: 'border-box',
+                width: drawerWidth,
+                borderRight: `1px solid ${alpha(theme.palette.divider, 0.1)}`,
+              },
             }}
             open
           >
@@ -141,12 +213,34 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
         sx={{
           flexGrow: 1,
           p: 3,
-          width: { sm: `calc(100% - ${drawerWidth}px)` },
+          width: { md: `calc(100% - ${drawerWidth}px)` },
           mt: '64px',
         }}
       >
-        {children}
+        {children || <Outlet />}
       </Box>
+      <Menu
+        anchorEl={anchorEl}
+        open={Boolean(anchorEl)}
+        onClose={handleMenuClose}
+        onClick={handleMenuClose}
+        transformOrigin={{ horizontal: 'right', vertical: 'top' }}
+        anchorOrigin={{ horizontal: 'right', vertical: 'bottom' }}
+      >
+        <MenuItem onClick={() => navigate('/profile')}>
+          <ListItemIcon>
+            <PersonIcon fontSize="small" />
+          </ListItemIcon>
+          Profile
+        </MenuItem>
+        <Divider />
+        <MenuItem onClick={handleLogout}>
+          <ListItemIcon>
+            <LogoutIcon fontSize="small" />
+          </ListItemIcon>
+          Logout
+        </MenuItem>
+      </Menu>
     </Box>
   );
 };
