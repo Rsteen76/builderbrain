@@ -14,6 +14,7 @@ import {
   DocumentData,
 } from 'firebase/firestore';
 import { LineItem, Bid } from '../types/project.types';
+import { Task } from './task';
 
 export interface Project {
   id?: string;
@@ -46,17 +47,19 @@ export interface Project {
   };
   lineItems?: LineItem[];
   bids?: Bid[];
+  tasks?: Task[];
   createdAt: Date;
   updatedAt: Date;
 }
 
-interface FirestoreProject extends Omit<Project, 'startDate' | 'endDate' | 'createdAt' | 'updatedAt' | 'lineItems' | 'bids'> {
+interface FirestoreProject extends Omit<Project, 'startDate' | 'endDate' | 'createdAt' | 'updatedAt' | 'lineItems' | 'bids' | 'tasks'> {
   startDate: Timestamp;
   endDate: Timestamp;
   createdAt: Timestamp;
   updatedAt: Timestamp;
   lineItems?: LineItem[];
   bids?: Bid[];
+  tasks?: Task[];
 }
 
 export class ProjectService {
@@ -68,6 +71,7 @@ export class ProjectService {
       ...projectData,
       lineItems: projectData.lineItems || [],
       bids: projectData.bids || [],
+      tasks: projectData.tasks || [],
     };
     const project: FirestoreProject = {
       ...fullProjectData,
@@ -109,6 +113,7 @@ export class ProjectService {
     if (projectData.requirements) updateData.requirements = projectData.requirements;
     if (projectData.lineItems) updateData.lineItems = projectData.lineItems;
     if (projectData.bids) updateData.bids = projectData.bids;
+    if (projectData.tasks) updateData.tasks = projectData.tasks;
 
     await updateDoc(projectRef, updateData);
   }
@@ -178,6 +183,7 @@ export class ProjectService {
       updatedAt: data.updatedAt.toDate(),
       lineItems: data.lineItems || [],
       bids: data.bids || [],
+      tasks: data.tasks || [],
     };
   }
 } 

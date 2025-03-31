@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
   Box,
@@ -42,10 +42,15 @@ import {
   Calculate as EstimateIcon,
   Gavel as BidsIcon,
   ListAlt as MilestonesIcon,
+  Assignment as TasksIcon,
+  AccessAlarms as ScheduleIcon,
+  MonetizationOn as FinanceIcon,
 } from '@mui/icons-material';
 import { ProjectService, Project } from '../../services/project';
 import LineItemManager from './LineItemManager';
 import BidManager from './BidManager';
+import ProjectTaskManager from './ProjectTaskManager';
+import { formatCurrency, formatPercentage } from '../../utils/formatters';
 
 const ProjectDetails: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -118,51 +123,20 @@ const ProjectDetails: React.FC = () => {
 
   const handleProjectUpdate = (updatedProject: Project) => {
     setProject(updatedProject);
+    // Maybe add a notification/snackbar here to confirm update
   };
 
-  if (loading) {
+  // Calculate overview data
+  const overviewData = useMemo(() => calculateOverviewData(project), [project]);
+  const budgetProgress = project?.budget && project.budget > 0 ? (overviewData.totalEstimate / project.budget) * 100 : 0;
+
+  if (loading || !project?.id) {
     return (
       <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '50vh' }}>
-        <CircularProgress />
+        {loading ? <CircularProgress /> : <Alert severity="error">Project data could not be loaded.</Alert>}
       </Box>
     );
   }
-
-  if (error || !project) {
-    return (
-      <Box sx={{ p: 3 }}>
-        <Paper sx={{ p: 3, mb: 3 }}>
-          <Typography variant="h5" color="error" gutterBottom>
-            Error Loading Project
-          </Typography>
-          <Alert severity="error" sx={{ mb: 3 }}>
-            {error || 'Project not found'}
-          </Alert>
-          <Typography variant="body1" paragraph>
-            The project you're looking for could not be loaded. This may be because:
-          </Typography>
-          <ul>
-            <li>The project ID in the URL is incorrect</li>
-            <li>The project has been deleted</li>
-            <li>You don't have permission to view this project</li>
-            <li>There was a network or database error</li>
-          </ul>
-          <Box sx={{ mt: 3 }}>
-            <Button
-              variant="contained"
-              onClick={() => navigate('/projects')}
-              startIcon={<ArrowBackIcon />}
-            >
-              Back to Projects List
-            </Button>
-          </Box>
-        </Paper>
-      </Box>
-    );
-  }
-
-  // Calculate progress (mock for now)
-  const progress = Math.floor(Math.random() * 100);
 
   return (
     <Box sx={{ p: { xs: 1, sm: 2, md: 3 } }}>
@@ -208,125 +182,154 @@ const ProjectDetails: React.FC = () => {
           <Tab icon={<OverviewIcon />} iconPosition="start" label="Overview" id="tab-overview" aria-controls="tabpanel-overview" sx={{ minHeight: 48 }}/>
           <Tab icon={<EstimateIcon />} iconPosition="start" label="Estimate / Costs" id="tab-estimate" aria-controls="tabpanel-estimate" sx={{ minHeight: 48 }}/>
           <Tab icon={<BidsIcon />} iconPosition="start" label="Bids" id="tab-bids" aria-controls="tabpanel-bids" sx={{ minHeight: 48 }}/>
+          <Tab icon={<TasksIcon />} iconPosition="start" label="Tasks" id="tab-tasks" aria-controls="tabpanel-tasks" sx={{ minHeight: 48 }}/>
         </Tabs>
       </Box>
 
       <Box role="tabpanel" hidden={activeTab !== 0} id="tabpanel-overview" aria-labelledby="tab-overview">
-        {activeTab === 0 && (
+        {activeTab === 0 && project && (
           <Grid container spacing={3}>
+
+            {/* --- Left Column (Main Details & Finance) --- */} 
             <Grid item xs={12} md={8}>
+              {/* Project Description Card */} 
               <Card variant="outlined" sx={{ mb: 3 }}>
-                <CardContent>
-                  <Typography variant="h6" gutterBottom>
-                    Project Details
-                  </Typography>
-                  <Typography variant="body1" paragraph color="text.secondary" sx={{ mb: 3 }}>
-                    {project.description}
-                  </Typography>
-                  <Grid container spacing={3}>
-                    <Grid item xs={12} sm={6}>
-                      <Stack direction="row" spacing={1} alignItems="center">
-                        <StatusIcon color="action"/>
-                        <Box>
-                          <Typography variant="body2" color="text.secondary">Status</Typography>
-                          <Chip label={project.status.replace('_', ' ')} color={
-                            project.status === 'completed' ? 'success' :
-                            project.status === 'in_progress' ? 'warning' :
-                            project.status === 'planning' ? 'primary' : 'error'
-                          } size="small" />
-                        </Box>
-                      </Stack>
-                    </Grid>
-                    <Grid item xs={12} sm={6}>
-                       <Stack direction="row" spacing={1} alignItems="center">
-                         <CalendarIcon color="action" />
-                         <Box>
-                           <Typography variant="body2" color="text.secondary">Start Date</Typography>
-                           <Typography variant="body1">{formatDate(project.startDate)}</Typography>
-                         </Box>
-                       </Stack>
-                    </Grid>
-                    <Grid item xs={12} sm={6}>
-                       <Stack direction="row" spacing={1} alignItems="center">
-                         <CalendarIcon color="action" />
-                         <Box>
-                           <Typography variant="body2" color="text.secondary">End Date</Typography>
-                           <Typography variant="body1">{formatDate(project.endDate)}</Typography>
-                         </Box>
-                       </Stack>
-                    </Grid>
-                    <Grid item xs={12} sm={6}>
-                       <Stack direction="row" spacing={1} alignItems="center">
-                         <BudgetIcon color="action" />
-                         <Box>
-                           <Typography variant="body2" color="text.secondary">Budget</Typography>
-                           <Typography variant="body1">${project.budget?.toLocaleString() || 'Not set'}</Typography>
-                         </Box>
-                       </Stack>
-                    </Grid>
-                    <Grid item xs={12} sm={6}>
-                       <Stack direction="row" spacing={1} alignItems="center">
-                         <LocationIcon color="action" />
-                         <Box>
-                           <Typography variant="body2" color="text.secondary">Location</Typography>
-                           <Typography variant="body1">{project.location || 'Not specified'}</Typography>
-                         </Box>
-                       </Stack>
-                    </Grid>
-                    <Grid item xs={12} sm={6}>
-                       <Stack direction="row" spacing={1} alignItems="center">
-                         <CategoryIcon color="action" />
-                         <Box>
-                           <Typography variant="body2" color="text.secondary">Project Type</Typography>
-                           <Typography variant="body1">{project.projectType || 'Not specified'}</Typography>
-                         </Box>
-                       </Stack>
-                    </Grid>
-                  </Grid>
-                </CardContent>
-              </Card>
-            </Grid>
-
-            <Grid item xs={12} md={4}>
-              <Card variant="outlined" sx={{ mb: 3 }}>
-                <CardContent>
-                  <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 2 }}>
-                      <TeamIcon />
-                      <Typography variant="h6">Team</Typography>
-                  </Stack>
-                  {project.team && project.team.length > 0 ? (
-                    <List dense disablePadding>
-                      {project.team.map((memberId, index) => (
-                        <ListItem key={index} disableGutters>
-                          <ListItemText primary={memberId} secondary="Role Placeholder"/>
-                        </ListItem>
-                      ))}
-                    </List>
-                  ) : <Typography variant="body2" color="text.secondary">No team members assigned.</Typography>}
-                </CardContent>
-              </Card>
-
-              <Card variant="outlined">
-                <CardContent>
-                   <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 2 }}>
-                     <MilestonesIcon />
-                     <Typography variant="h6">Key Milestones</Typography>
-                   </Stack>
-                   {project.keyMilestones && project.keyMilestones.length > 0 ? (
-                    <List dense disablePadding>
-                      {project.keyMilestones.map((milestone, index) => (
-                        <ListItem key={index} disableGutters>
-                          <ListItemText 
-                            primary={milestone.name}
-                            secondary={`${formatDate(new Date(milestone.date))}`}
-                          />
-                        </ListItem>
-                      ))}
-                    </List>
-                  ) : <Typography variant="body2" color="text.secondary">No key milestones defined.</Typography>}
+                 <CardContent>
+                    <Typography variant="h6" gutterBottom>Description</Typography>
+                    <Typography variant="body2" color="text.secondary">
+                       {project.description || 'No description provided.'}
+                    </Typography>
                  </CardContent>
               </Card>
+              
+              {/* Financial Summary Card */} 
+              <Card variant="outlined" sx={{ mb: 3 }}>
+                 <CardContent>
+                     <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 2 }}>
+                       <FinanceIcon />
+                       <Typography variant="h6">Financial Summary</Typography>
+                     </Stack>
+                     <Grid container spacing={2}>
+                        <Grid item xs={12} sm={6}>
+                             <Typography variant="body2" color="text.secondary">Budget</Typography>
+                             <Typography variant="h5" gutterBottom>{formatCurrency(project.budget)}</Typography>
+                        </Grid>
+                        <Grid item xs={12} sm={6}>
+                            <Typography variant="body2" color="text.secondary">Total Estimated Cost</Typography>
+                            <Typography variant="h5" gutterBottom>{formatCurrency(overviewData.totalEstimate)}</Typography>
+                        </Grid>
+                        <Grid item xs={12}>
+                             <Typography variant="body2" color="text.secondary" gutterBottom>Budget Usage (Estimate vs Budget)</Typography>
+                             <Stack direction="row" spacing={2} alignItems="center">
+                               <LinearProgress 
+                                 variant="determinate" 
+                                 value={Math.min(budgetProgress, 100)} // Cap at 100%
+                                 color={budgetProgress > 100 ? 'error' : 'primary'}
+                                 sx={{ flexGrow: 1, height: 8, borderRadius: 4 }}
+                                />
+                               <Typography variant="body2" sx={{ fontWeight: 'bold' }}>
+                                 {formatPercentage(budgetProgress / 100)}
+                               </Typography>
+                             </Stack>
+                              {budgetProgress > 100 && 
+                                <Typography variant="caption" color="error" sx={{ display:'block', mt: 0.5 }}>
+                                    Estimated cost exceeds budget!
+                                </Typography>}
+                             {project.budget > 0 && overviewData.totalEstimate <= project.budget &&
+                                <Typography variant="caption" color="text.secondary" sx={{ display:'block', mt: 0.5 }}>
+                                    Remaining Budget: {formatCurrency(project.budget - overviewData.totalEstimate)}
+                                </Typography>}
+                        </Grid>
+                     </Grid>
+                 </CardContent>
+              </Card>
+              
+               {/* Core Details Card (Optional - could merge elsewhere) */} 
+               {/* <Card variant="outlined" sx={{ mb: 3 }}>
+                 <CardContent>
+                     <Typography variant="h6" gutterBottom>Core Details</Typography>
+                     <Stack spacing={1}>
+                        <Stack direction="row" spacing={1}><LocationIcon fontSize="small" color="action"/><Typography variant="body2">{project.location || 'Not specified'}</Typography></Stack>
+                        <Stack direction="row" spacing={1}><CategoryIcon fontSize="small" color="action"/><Typography variant="body2">{project.projectType || 'Not specified'}</Typography></Stack>
+                     </Stack>
+                 </CardContent>
+               </Card> */} 
             </Grid>
+
+            {/* --- Right Column (Schedule, Team, Milestones) --- */}
+            <Grid item xs={12} md={4}>
+                {/* Schedule Snapshot Card */} 
+                <Card variant="outlined" sx={{ mb: 3 }}>
+                    <CardContent>
+                        <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 2 }}>
+                           <ScheduleIcon />
+                           <Typography variant="h6">Schedule</Typography>
+                         </Stack>
+                         <Stack spacing={1.5}>
+                            <Stack direction="row" justifyContent="space-between">
+                                <Typography variant="body2" color="text.secondary">Start Date:</Typography>
+                                <Typography variant="body2">{formatDate(project.startDate)}</Typography>
+                            </Stack>
+                             <Stack direction="row" justifyContent="space-between">
+                                <Typography variant="body2" color="text.secondary">Target End:</Typography>
+                                <Typography variant="body2">{formatDate(project.endDate)}</Typography>
+                            </Stack>
+                            <Divider />
+                             <Typography variant="body2" color="text.secondary">Task Status:</Typography>
+                             <Stack direction="row" justifyContent="space-around" sx={{ textAlign: 'center' }}>
+                                <Box><Typography variant="h6">{overviewData.tasksToDo}</Typography><Typography variant="caption">To Do</Typography></Box>
+                                <Box><Typography variant="h6">{overviewData.tasksInProgress}</Typography><Typography variant="caption">In Progress</Typography></Box>
+                                <Box><Typography variant="h6">{overviewData.tasksDone}</Typography><Typography variant="caption">Done</Typography></Box>
+                            </Stack>
+                             <Divider />
+                            {overviewData.nextMilestone ? (
+                                <Box>
+                                    <Typography variant="body2" color="text.secondary">Next Milestone:</Typography>
+                                    <Typography variant="body1">{overviewData.nextMilestone.name} ({formatDate(overviewData.nextMilestone.dateObj)})</Typography>
+                                </Box>
+                            ) : (
+                                <Typography variant="body2" color="text.secondary">No upcoming milestones.</Typography>
+                            )}
+                         </Stack>
+                    </CardContent>
+                </Card>
+            
+                 {/* Team Card - Keep simple for now */}
+                 <Card variant="outlined" sx={{ mb: 3 }}>
+                   <CardContent>
+                     <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 1 }}>
+                         <TeamIcon />
+                         <Typography variant="h6">Team</Typography>
+                     </Stack>
+                     {project.team && project.team.length > 0 ? (
+                       <Typography variant="body2" color="text.secondary">{project.team.length} members assigned (Details TBD)</Typography>
+                     ) : <Typography variant="body2" color="text.secondary">No team members assigned.</Typography>}
+                   </CardContent>
+                 </Card>
+                 
+                 {/* Key Milestones Card - Keep simple */} 
+                 <Card variant="outlined">
+                   <CardContent>
+                     <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 1 }}>
+                       <MilestonesIcon />
+                       <Typography variant="h6">All Milestones</Typography>
+                     </Stack>
+                     {project.keyMilestones && project.keyMilestones.length > 0 ? (
+                       <List dense disablePadding>
+                         {project.keyMilestones.map((milestone, index) => (
+                           <ListItem key={index} disableGutters dense sx={{ pl: 1 }}>
+                             <ListItemText 
+                               primary={milestone.name}
+                               secondary={`${formatDate(new Date(milestone.date))}`}
+                             />
+                           </ListItem>
+                         ))}
+                       </List>
+                     ) : <Typography variant="body2" color="text.secondary">No key milestones defined.</Typography>}
+                    </CardContent>
+                 </Card>
+            </Grid>
+
           </Grid>
         )}
       </Box>
@@ -342,8 +345,36 @@ const ProjectDetails: React.FC = () => {
           <BidManager project={project} onProjectUpdate={handleProjectUpdate} />
         )}
       </Box>
+
+      <Box role="tabpanel" hidden={activeTab !== 3} id="tabpanel-tasks" aria-labelledby="tab-tasks">
+        {activeTab === 3 && (
+          <ProjectTaskManager project={project} onProjectUpdate={handleProjectUpdate} />
+        )}
+      </Box>
     </Box>
   );
+};
+
+// Function to calculate overview data (can be memoized)
+const calculateOverviewData = (project: Project | null) => {
+    if (!project) return { totalEstimate: 0, tasksToDo: 0, tasksInProgress: 0, tasksDone: 0, nextMilestone: null };
+
+    const totalEstimate = project.lineItems?.reduce((sum, item) => sum + (item.totalCost || 0), 0) || 0;
+    
+    const tasks = project.tasks || [];
+    const tasksToDo = tasks.filter(t => t.status === 'To Do').length;
+    const tasksInProgress = tasks.filter(t => t.status === 'In Progress').length;
+    const tasksDone = tasks.filter(t => t.status === 'Done').length;
+    
+    // Find next milestone
+    const now = new Date().getTime();
+    const upcomingMilestones = project.keyMilestones
+        ?.map(m => ({ ...m, dateObj: new Date(m.date) }))
+        .filter(m => m.dateObj.getTime() >= now)
+        .sort((a, b) => a.dateObj.getTime() - b.dateObj.getTime());
+    const nextMilestone = upcomingMilestones?.[0] || null;
+
+    return { totalEstimate, tasksToDo, tasksInProgress, tasksDone, nextMilestone };
 };
 
 export default ProjectDetails; 
