@@ -286,27 +286,22 @@ const Subcontractors: React.FC = () => {
 
   const handleTabChange = (event: React.SyntheticEvent, newValue: number) => {
     setTabValue(newValue);
-    
-    // Update specialty filter based on tab
+    let filter: string | null = null;
     switch(newValue) {
-      case 0: // All
-        setSpecialtyFilter(null);
-        break;
-      case 1: // Electrical
-        setSpecialtyFilter('Electrical');
-        break;
-      case 2: // Plumbing
-        setSpecialtyFilter('Plumbing');
-        break;
-      case 3: // HVAC
-        setSpecialtyFilter('HVAC');
-        break;
-      case 4: // Carpentry
-        setSpecialtyFilter('Carpentry');
-        break;
-      default:
-        setSpecialtyFilter(null);
+      case 0: filter = null; break; // All
+      case 1: filter = 'Electrical'; break;
+      case 2: filter = 'Plumbing'; break;
+      case 3: filter = 'HVAC'; break;
+      case 4: filter = 'Framing'; break; // Changed Carpentry to Framing for consistency?
+      case 5: filter = 'Drywall'; break; // New
+      case 6: filter = 'Painting'; break; // New
+      case 7: filter = 'Roofing'; break; // New
+      case 8: filter = 'Siding'; break; // New
+      case 9: filter = 'Concrete'; break; // New
+      // Add more cases as needed
+      default: filter = null;
     }
+    setSpecialtyFilter(filter);
   };
 
   const handleAddSubcontractor = () => {
@@ -405,9 +400,11 @@ const Subcontractors: React.FC = () => {
   );
 
   return (
-    <Box sx={{ py: 3 }}>
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
-        <Typography variant="h4" component="h1">Subcontractors</Typography>
+    <Box sx={{ py: 3, px: { xs: 1, sm: 2, md: 3 } }}>
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3, flexWrap: 'wrap' }}>
+        <Typography variant="h4" component="h1" sx={{ mb: { xs: 2, md: 0 } }}>
+          Subcontractors
+        </Typography>
         <Box sx={{ display: 'flex' }}>
           <Button 
             variant="outlined" 
@@ -444,125 +441,91 @@ const Subcontractors: React.FC = () => {
       
       {importResult && (
         <Alert 
-          severity={importResult.failed > 0 ? "warning" : "success"} 
-          sx={{ mb: 3 }}
+          severity={importResult.failed > 0 ? "warning" : "success"}
           onClose={clearImportResult}
+          sx={{ mb: 2 }}
         >
-          <AlertTitle>Import Results</AlertTitle>
-          Successfully imported {importResult.success} subcontractors.
+          <AlertTitle>Import Complete</AlertTitle>
+          Successfully imported: {importResult.success}. Failed: {importResult.failed}.
           {importResult.failed > 0 && (
-            <>
-              <br />Failed to import {importResult.failed} subcontractors.
-              {importResult.errors.length > 0 && (
-                <Box sx={{ mt: 1 }}>
-                  <Typography variant="body2" fontWeight="bold">Errors:</Typography>
-                  <ul style={{ margin: 0, paddingLeft: 20 }}>
-                    {importResult.errors.slice(0, 5).map((error, index) => (
-                      <li key={index}><Typography variant="body2">{error}</Typography></li>
-                    ))}
-                    {importResult.errors.length > 5 && (
-                      <li><Typography variant="body2">And {importResult.errors.length - 5} more errors...</Typography></li>
-                    )}
-                  </ul>
-                </Box>
-              )}
-            </>
+            <Box sx={{ maxHeight: 100, overflowY: 'auto', mt: 1 }}>
+              <Typography variant="caption">Errors:</Typography>
+              <ul>{importResult.errors.map((e, i) => <li key={i}><Typography variant="caption">{e}</Typography></li>)}</ul>
+            </Box>
           )}
         </Alert>
       )}
       
-      <Box sx={{ mb: 3 }}>
-        <Box sx={{ display: 'flex', mb: 2 }}>
-          <TextField
-            placeholder="Search subcontractors..."
-            variant="outlined"
-            size="small"
-            fullWidth
-            InputProps={{
-              startAdornment: <SearchIcon sx={{ mr: 1, color: 'text.secondary' }} />,
-            }}
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            sx={{ mr: 2 }}
-          />
-          <Button 
-            variant="outlined" 
-            startIcon={<FilterIcon />}
-            sx={{ minWidth: 120 }}
-          >
-            Filter
-          </Button>
-          <Button 
-            variant="outlined" 
-            startIcon={<SortIcon />}
-            sx={{ ml: 2, minWidth: 120 }}
-          >
-            Sort
-          </Button>
-        </Box>
-        
-        <Tabs 
-          value={tabValue} 
+      <Paper sx={{ p: 2, mb: 3, display: 'flex', alignItems: 'center', flexWrap: 'wrap' }}>
+        <TextField
+          placeholder="Search by name or specialty..."
+          variant="outlined"
+          size="small"
+          value={searchTerm}
+          onChange={(e) => setSearchTerm(e.target.value)}
+          InputProps={{
+            startAdornment: (
+              <InputAdornment position="start">
+                <SearchIcon />
+              </InputAdornment>
+            ),
+          }}
+          sx={{ flexGrow: 1, mr: { xs: 0, sm: 2 }, mb: { xs: 1, sm: 0 }, minWidth: '200px' }}
+        />
+      </Paper>
+      
+      <Box sx={{ borderBottom: 1, borderColor: 'divider', mb: 3 }}>
+        <Tabs
+          value={tabValue}
           onChange={handleTabChange}
           variant="scrollable"
           scrollButtons="auto"
+          allowScrollButtonsMobile 
+          aria-label="Subcontractor specialty filter tabs"
         >
           <Tab label="All" />
           <Tab label="Electrical" />
           <Tab label="Plumbing" />
           <Tab label="HVAC" />
-          <Tab label="Carpentry" />
+          <Tab label="Framing" />
+          <Tab label="Drywall" />
+          <Tab label="Painting" />
+          <Tab label="Roofing" />
+          <Tab label="Siding" />
+          <Tab label="Concrete" />
         </Tabs>
       </Box>
       
       {loading ? (
-        <Box sx={{ display: 'flex', justifyContent: 'center', my: 4 }}>
-          <CircularProgress />
-        </Box>
+        <Box sx={{ display: 'flex', justifyContent: 'center', py: 5 }}><CircularProgress /></Box>
       ) : error ? (
-        <Box sx={{ my: 4, textAlign: 'center' }}>
-          <Typography color="error">{error}</Typography>
-          <Button 
-            variant="contained" 
-            sx={{ mt: 2 }}
-            onClick={() => window.location.reload()}
-          >
-            Retry
-          </Button>
-        </Box>
-      ) : filteredSubcontractors.length === 0 ? (
-        <Box sx={{ my: 4, textAlign: 'center' }}>
-          <Typography variant="h6">No subcontractors found</Typography>
-          <Typography color="text.secondary" sx={{ mt: 1 }}>
-            Add your first subcontractor to get started
-          </Typography>
-          <Button 
-            variant="contained" 
-            startIcon={<AddIcon />}
-            sx={{ mt: 2 }}
-            onClick={handleAddSubcontractor}
-          >
-            Add Subcontractor
-          </Button>
-        </Box>
+        <Alert severity="error">{error}</Alert>
       ) : (
         <Grid container spacing={3}>
-          {filteredSubcontractors.map((subcontractor) => (
-            <Grid item xs={12} sm={6} md={4} key={subcontractor.id}>
-              <SubcontractorCard
-                id={subcontractor.id!}
-                name={subcontractor.name}
-                specialty={subcontractor.specialty}
-                rating={subcontractor.rating}
-                totalProjects={subcontractor.totalProjects}
-                lastBid={subcontractor.lastBid}
-                contact={subcontractor.contact}
-                performance={subcontractor.performance}
-                onEdit={handleEditSubcontractor}
-                onDelete={handleDeleteSubcontractor}
-              />
+          {filteredSubcontractors.length > 0 ? (
+            filteredSubcontractors.map((sub) => (
+              <Grid item key={sub.id} xs={12} sm={6} md={4} lg={3}>
+                <SubcontractorCard
+                  id={sub.id!}
+                  name={sub.name}
+                  specialty={sub.specialty}
+                  rating={sub.rating}
+                  totalProjects={sub.totalProjects}
+                  lastBid={sub.lastBid}
+                  contact={sub.contact}
+                  performance={sub.performance}
+                  onEdit={handleEditSubcontractor}
+                  onDelete={handleDeleteSubcontractor}
+                />
+              </Grid>
+            ))
+          ) : (
+            <Grid item xs={12}>
+              <Typography sx={{ textAlign: 'center', py: 5, color: 'text.secondary' }}>
+                No subcontractors found matching your criteria.
+              </Typography>
             </Grid>
-          ))}
+          )}
         </Grid>
       )}
     </Box>
