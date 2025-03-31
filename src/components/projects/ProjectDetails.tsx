@@ -21,6 +21,7 @@ import {
   Alert,
   useTheme,
   alpha,
+  Stack,
 } from '@mui/material';
 import {
   Edit as EditIcon,
@@ -29,17 +30,22 @@ import {
   AttachMoney as BudgetIcon,
   Group as TeamIcon,
   Assignment as TaskIcon,
-  Description as DocumentIcon,
+  Description as OverviewIcon,
   Receipt as ExpenseIcon,
-  Flag as PriorityIcon,
+  Flag as StatusIcon,
   LocationOn as LocationIcon,
   Category as CategoryIcon,
   AccessTime as TimeIcon,
   Event as EventIcon,
   Engineering as EngineeringIcon,
   ArrowBack as ArrowBackIcon,
+  Calculate as EstimateIcon,
+  Gavel as BidsIcon,
+  ListAlt as MilestonesIcon,
 } from '@mui/icons-material';
 import { ProjectService, Project } from '../../services/project';
+import LineItemManager from './LineItemManager';
+import BidManager from './BidManager';
 
 const ProjectDetails: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -110,6 +116,10 @@ const ProjectDetails: React.FC = () => {
     });
   };
 
+  const handleProjectUpdate = (updatedProject: Project) => {
+    setProject(updatedProject);
+  };
+
   if (loading) {
     return (
       <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '50vh' }}>
@@ -155,17 +165,23 @@ const ProjectDetails: React.FC = () => {
   const progress = Math.floor(Math.random() * 100);
 
   return (
-    <Box sx={{ p: 3 }}>
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
-        <Typography variant="h4" component="h1">
+    <Box sx={{ p: { xs: 1, sm: 2, md: 3 } }}>
+      <Stack 
+        direction={{ xs: 'column', sm: 'row' }}
+        justifyContent="space-between" 
+        alignItems={{ xs: 'flex-start', sm: 'center' }}
+        spacing={1}
+        sx={{ mb: 3 }}
+      >
+        <Typography variant="h4" component="h1" gutterBottom sx={{ mb: { xs: 1, sm: 0 } }}>
           {project.name}
         </Typography>
-        <Box>
+        <Stack direction="row" spacing={1}>
           <Button
             variant="outlined"
             startIcon={<EditIcon />}
-            sx={{ mr: 1 }}
             onClick={() => navigate(`/projects/${id}/edit`)}
+            size="small"
           >
             Edit
           </Button>
@@ -174,309 +190,158 @@ const ProjectDetails: React.FC = () => {
             color="error"
             startIcon={<DeleteIcon />}
             onClick={handleDelete}
+            size="small"
           >
             Delete
           </Button>
-        </Box>
+        </Stack>
+      </Stack>
+
+      <Box sx={{ borderBottom: 1, borderColor: 'divider', mb: 3 }}>
+        <Tabs 
+          value={activeTab} 
+          onChange={handleTabChange} 
+          aria-label="Project details tabs"
+          variant="scrollable"
+          scrollButtons="auto"
+        >
+          <Tab icon={<OverviewIcon />} iconPosition="start" label="Overview" id="tab-overview" aria-controls="tabpanel-overview" sx={{ minHeight: 48 }}/>
+          <Tab icon={<EstimateIcon />} iconPosition="start" label="Estimate / Costs" id="tab-estimate" aria-controls="tabpanel-estimate" sx={{ minHeight: 48 }}/>
+          <Tab icon={<BidsIcon />} iconPosition="start" label="Bids" id="tab-bids" aria-controls="tabpanel-bids" sx={{ minHeight: 48 }}/>
+        </Tabs>
       </Box>
 
-      <Grid container spacing={3}>
-        <Grid item xs={12} md={8}>
-          <Paper sx={{ p: 3, mb: 3 }}>
-            <Typography variant="h6" gutterBottom>
-              Project Overview
-            </Typography>
-            <Typography variant="body1" paragraph>
-              {project.description}
-            </Typography>
-
-            <Grid container spacing={3} sx={{ mt: 1 }}>
-              <Grid item xs={12} sm={6} md={4}>
-                <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                  <CalendarIcon sx={{ mr: 1, color: 'text.secondary' }} />
-                  <Box>
-                    <Typography variant="body2" color="text.secondary">
-                      Start Date
-                    </Typography>
-                    <Typography variant="body1">
-                      {formatDate(project.startDate)}
-                    </Typography>
-                  </Box>
-                </Box>
-              </Grid>
-              <Grid item xs={12} sm={6} md={4}>
-                <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                  <CalendarIcon sx={{ mr: 1, color: 'text.secondary' }} />
-                  <Box>
-                    <Typography variant="body2" color="text.secondary">
-                      End Date
-                    </Typography>
-                    <Typography variant="body1">
-                      {formatDate(project.endDate)}
-                    </Typography>
-                  </Box>
-                </Box>
-              </Grid>
-              <Grid item xs={12} sm={6} md={4}>
-                <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                  <BudgetIcon sx={{ mr: 1, color: 'text.secondary' }} />
-                  <Box>
-                    <Typography variant="body2" color="text.secondary">
-                      Budget
-                    </Typography>
-                    <Typography variant="body1">
-                      ${project.budget?.toLocaleString() || 'Not set'}
-                    </Typography>
-                  </Box>
-                </Box>
-              </Grid>
-              <Grid item xs={12} sm={6} md={4}>
-                <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                  <LocationIcon sx={{ mr: 1, color: 'text.secondary' }} />
-                  <Box>
-                    <Typography variant="body2" color="text.secondary">
-                      Location
-                    </Typography>
-                    <Typography variant="body1">
-                      {project.location || 'Not specified'}
-                    </Typography>
-                  </Box>
-                </Box>
-              </Grid>
-              <Grid item xs={12} sm={6} md={4}>
-                <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                  <CategoryIcon sx={{ mr: 1, color: 'text.secondary' }} />
-                  <Box>
-                    <Typography variant="body2" color="text.secondary">
-                      Project Type
-                    </Typography>
-                    <Typography variant="body1">
-                      {project.projectType || 'Not specified'}
-                    </Typography>
-                  </Box>
-                </Box>
-              </Grid>
-              <Grid item xs={12} sm={6} md={4}>
-                <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                  <TimeIcon sx={{ mr: 1, color: 'text.secondary' }} />
-                  <Box>
-                    <Typography variant="body2" color="text.secondary">
-                      Duration
-                    </Typography>
-                    <Typography variant="body1">
-                      {project.estimatedDuration || 'Not specified'} months
-                    </Typography>
-                  </Box>
-                </Box>
-              </Grid>
+      <Box role="tabpanel" hidden={activeTab !== 0} id="tabpanel-overview" aria-labelledby="tab-overview">
+        {activeTab === 0 && (
+          <Grid container spacing={3}>
+            <Grid item xs={12} md={8}>
+              <Card variant="outlined" sx={{ mb: 3 }}>
+                <CardContent>
+                  <Typography variant="h6" gutterBottom>
+                    Project Details
+                  </Typography>
+                  <Typography variant="body1" paragraph color="text.secondary" sx={{ mb: 3 }}>
+                    {project.description}
+                  </Typography>
+                  <Grid container spacing={3}>
+                    <Grid item xs={12} sm={6}>
+                      <Stack direction="row" spacing={1} alignItems="center">
+                        <StatusIcon color="action"/>
+                        <Box>
+                          <Typography variant="body2" color="text.secondary">Status</Typography>
+                          <Chip label={project.status.replace('_', ' ')} color={
+                            project.status === 'completed' ? 'success' :
+                            project.status === 'in_progress' ? 'warning' :
+                            project.status === 'planning' ? 'primary' : 'error'
+                          } size="small" />
+                        </Box>
+                      </Stack>
+                    </Grid>
+                    <Grid item xs={12} sm={6}>
+                       <Stack direction="row" spacing={1} alignItems="center">
+                         <CalendarIcon color="action" />
+                         <Box>
+                           <Typography variant="body2" color="text.secondary">Start Date</Typography>
+                           <Typography variant="body1">{formatDate(project.startDate)}</Typography>
+                         </Box>
+                       </Stack>
+                    </Grid>
+                    <Grid item xs={12} sm={6}>
+                       <Stack direction="row" spacing={1} alignItems="center">
+                         <CalendarIcon color="action" />
+                         <Box>
+                           <Typography variant="body2" color="text.secondary">End Date</Typography>
+                           <Typography variant="body1">{formatDate(project.endDate)}</Typography>
+                         </Box>
+                       </Stack>
+                    </Grid>
+                    <Grid item xs={12} sm={6}>
+                       <Stack direction="row" spacing={1} alignItems="center">
+                         <BudgetIcon color="action" />
+                         <Box>
+                           <Typography variant="body2" color="text.secondary">Budget</Typography>
+                           <Typography variant="body1">${project.budget?.toLocaleString() || 'Not set'}</Typography>
+                         </Box>
+                       </Stack>
+                    </Grid>
+                    <Grid item xs={12} sm={6}>
+                       <Stack direction="row" spacing={1} alignItems="center">
+                         <LocationIcon color="action" />
+                         <Box>
+                           <Typography variant="body2" color="text.secondary">Location</Typography>
+                           <Typography variant="body1">{project.location || 'Not specified'}</Typography>
+                         </Box>
+                       </Stack>
+                    </Grid>
+                    <Grid item xs={12} sm={6}>
+                       <Stack direction="row" spacing={1} alignItems="center">
+                         <CategoryIcon color="action" />
+                         <Box>
+                           <Typography variant="body2" color="text.secondary">Project Type</Typography>
+                           <Typography variant="body1">{project.projectType || 'Not specified'}</Typography>
+                         </Box>
+                       </Stack>
+                    </Grid>
+                  </Grid>
+                </CardContent>
+              </Card>
             </Grid>
-          </Paper>
 
-          <Paper sx={{ p: 3, mb: 3 }}>
-            <Tabs value={activeTab} onChange={handleTabChange} sx={{ mb: 2 }}>
-              <Tab label="Phases" />
-              <Tab label="Milestones" />
-              <Tab label="Requirements" />
-            </Tabs>
+            <Grid item xs={12} md={4}>
+              <Card variant="outlined" sx={{ mb: 3 }}>
+                <CardContent>
+                  <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 2 }}>
+                      <TeamIcon />
+                      <Typography variant="h6">Team</Typography>
+                  </Stack>
+                  {project.team && project.team.length > 0 ? (
+                    <List dense disablePadding>
+                      {project.team.map((memberId, index) => (
+                        <ListItem key={index} disableGutters>
+                          <ListItemText primary={memberId} secondary="Role Placeholder"/>
+                        </ListItem>
+                      ))}
+                    </List>
+                  ) : <Typography variant="body2" color="text.secondary">No team members assigned.</Typography>}
+                </CardContent>
+              </Card>
 
-            {activeTab === 0 && (
-              <div>
-                <Typography variant="subtitle1" gutterBottom>
-                  Project Phases
-                </Typography>
-                {project.phases && project.phases.length > 0 ? (
-                  <List>
-                    {project.phases.map((phase, index) => (
-                      <Card key={index} sx={{ mb: 2 }}>
-                        <CardContent>
-                          <Typography variant="h6">{phase.name}</Typography>
-                          <Box sx={{ display: 'flex', alignItems: 'center', mt: 1 }}>
-                            <TimeIcon sx={{ mr: 1, fontSize: 'small', color: 'text.secondary' }} />
-                            <Typography variant="body2" color="text.secondary">
-                              Duration: {phase.duration} weeks
-                            </Typography>
-                          </Box>
-                          <Typography variant="body2" sx={{ mt: 1 }}>
-                            {phase.description}
-                          </Typography>
-                          {phase.dependencies.length > 0 && (
-                            <Box sx={{ mt: 2 }}>
-                              <Typography variant="body2" color="text.secondary">
-                                Dependencies:
-                              </Typography>
-                              <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, mt: 0.5 }}>
-                                {phase.dependencies.map((dep, i) => (
-                                  <Chip key={i} label={dep} size="small" />
-                                ))}
-                              </Box>
-                            </Box>
-                          )}
-                        </CardContent>
-                      </Card>
-                    ))}
-                  </List>
-                ) : (
-                  <Typography variant="body1" color="text.secondary">
-                    No phases defined for this project.
-                  </Typography>
-                )}
-              </div>
-            )}
+              <Card variant="outlined">
+                <CardContent>
+                   <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 2 }}>
+                     <MilestonesIcon />
+                     <Typography variant="h6">Key Milestones</Typography>
+                   </Stack>
+                   {project.keyMilestones && project.keyMilestones.length > 0 ? (
+                    <List dense disablePadding>
+                      {project.keyMilestones.map((milestone, index) => (
+                        <ListItem key={index} disableGutters>
+                          <ListItemText 
+                            primary={milestone.name}
+                            secondary={`${formatDate(new Date(milestone.date))}`}
+                          />
+                        </ListItem>
+                      ))}
+                    </List>
+                  ) : <Typography variant="body2" color="text.secondary">No key milestones defined.</Typography>}
+                 </CardContent>
+              </Card>
+            </Grid>
+          </Grid>
+        )}
+      </Box>
 
-            {activeTab === 1 && (
-              <div>
-                <Typography variant="subtitle1" gutterBottom>
-                  Key Milestones
-                </Typography>
-                {project.keyMilestones && project.keyMilestones.length > 0 ? (
-                  <List>
-                    {project.keyMilestones.map((milestone, index) => (
-                      <Card key={index} sx={{ mb: 2 }}>
-                        <CardContent>
-                          <Typography variant="h6">{milestone.name}</Typography>
-                          <Box sx={{ display: 'flex', alignItems: 'center', mt: 1 }}>
-                            <EventIcon sx={{ mr: 1, fontSize: 'small', color: 'text.secondary' }} />
-                            <Typography variant="body2" color="text.secondary">
-                              Target Date: {milestone.date || 'Not set'}
-                            </Typography>
-                          </Box>
-                          <Typography variant="body2" sx={{ mt: 1 }}>
-                            {milestone.description}
-                          </Typography>
-                        </CardContent>
-                      </Card>
-                    ))}
-                  </List>
-                ) : (
-                  <Typography variant="body1" color="text.secondary">
-                    No milestones defined for this project.
-                  </Typography>
-                )}
-              </div>
-            )}
+      <Box role="tabpanel" hidden={activeTab !== 1} id="tabpanel-estimate" aria-labelledby="tab-estimate">
+        {activeTab === 1 && project && (
+          <LineItemManager project={project} onProjectUpdate={handleProjectUpdate} />
+        )}
+      </Box>
 
-            {activeTab === 2 && (
-              <div>
-                <Grid container spacing={3}>
-                  <Grid item xs={12} md={4}>
-                    <Typography variant="subtitle1" gutterBottom>
-                      Required Permits
-                    </Typography>
-                    {project.requirements?.permits && project.requirements.permits.length > 0 ? (
-                      <List>
-                        {project.requirements.permits.map((permit, index) => (
-                          <ListItem key={index}>
-                            <ListItemText primary={permit} />
-                          </ListItem>
-                        ))}
-                      </List>
-                    ) : (
-                      <Typography variant="body2" color="text.secondary">
-                        No permits listed.
-                      </Typography>
-                    )}
-                  </Grid>
-                  
-                  <Grid item xs={12} md={4}>
-                    <Typography variant="subtitle1" gutterBottom>
-                      Required Inspections
-                    </Typography>
-                    {project.requirements?.inspections && project.requirements.inspections.length > 0 ? (
-                      <List>
-                        {project.requirements.inspections.map((inspection, index) => (
-                          <ListItem key={index}>
-                            <ListItemText primary={inspection} />
-                          </ListItem>
-                        ))}
-                      </List>
-                    ) : (
-                      <Typography variant="body2" color="text.secondary">
-                        No inspections listed.
-                      </Typography>
-                    )}
-                  </Grid>
-                  
-                  <Grid item xs={12} md={4}>
-                    <Typography variant="subtitle1" gutterBottom>
-                      Required Documents
-                    </Typography>
-                    {project.requirements?.documents && project.requirements.documents.length > 0 ? (
-                      <List>
-                        {project.requirements.documents.map((document, index) => (
-                          <ListItem key={index}>
-                            <ListItemText primary={document} />
-                          </ListItem>
-                        ))}
-                      </List>
-                    ) : (
-                      <Typography variant="body2" color="text.secondary">
-                        No documents listed.
-                      </Typography>
-                    )}
-                  </Grid>
-                </Grid>
-              </div>
-            )}
-          </Paper>
-        </Grid>
-
-        <Grid item xs={12} md={4}>
-          <Paper sx={{ p: 3, mb: 3 }}>
-            <Typography variant="h6" gutterBottom>
-              Status
-            </Typography>
-            <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
-              <Chip 
-                label={project.status.replace('_', ' ')} 
-                color={
-                  project.status === 'completed' ? 'success' :
-                  project.status === 'in_progress' ? 'warning' :
-                  project.status === 'planning' ? 'primary' : 'error'
-                }
-              />
-            </Box>
-            <Typography variant="body2" color="text.secondary" gutterBottom>
-              Project Progress
-            </Typography>
-            <Box sx={{ display: 'flex', alignItems: 'center' }}>
-              <Box sx={{ width: '100%', mr: 1 }}>
-                <LinearProgress variant="determinate" value={progress} sx={{ height: 8, borderRadius: 4 }} />
-              </Box>
-              <Typography variant="body2" color="text.secondary">
-                {progress}%
-              </Typography>
-            </Box>
-          </Paper>
-
-          <Paper sx={{ p: 3, mb: 3 }}>
-            <Typography variant="h6" gutterBottom>
-              Team
-            </Typography>
-            {project.team && project.team.length > 0 ? (
-              <List>
-                {project.team.map((member, index) => (
-                  <ListItem key={index}>
-                    <ListItemText primary={member} />
-                  </ListItem>
-                ))}
-              </List>
-            ) : (
-              <Typography variant="body1" color="text.secondary">
-                No team members assigned yet.
-              </Typography>
-            )}
-          </Paper>
-
-          <Paper sx={{ p: 3 }}>
-            <Typography variant="h6" gutterBottom>
-              Client
-            </Typography>
-            <Typography variant="body1">
-              {project.clientId || 'No client specified'}
-            </Typography>
-          </Paper>
-        </Grid>
-      </Grid>
+      <Box role="tabpanel" hidden={activeTab !== 2} id="tabpanel-bids" aria-labelledby="tab-bids">
+        {activeTab === 2 && project && (
+          <BidManager project={project} onProjectUpdate={handleProjectUpdate} />
+        )}
+      </Box>
     </Box>
   );
 };

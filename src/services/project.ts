@@ -13,12 +13,13 @@ import {
   Timestamp,
   DocumentData,
 } from 'firebase/firestore';
+import { LineItem, Bid } from '../types/project.types';
 
 export interface Project {
   id?: string;
   name: string;
   description: string;
-  status: 'planning' | 'in_progress' | 'completed' | 'on_hold';
+  status: 'Estimate' | 'planning' | 'in_progress' | 'completed' | 'on_hold';
   startDate: Date;
   endDate: Date;
   budget: number;
@@ -43,15 +44,19 @@ export interface Project {
     inspections: string[];
     documents: string[];
   };
+  lineItems?: LineItem[];
+  bids?: Bid[];
   createdAt: Date;
   updatedAt: Date;
 }
 
-interface FirestoreProject extends Omit<Project, 'startDate' | 'endDate' | 'createdAt' | 'updatedAt'> {
+interface FirestoreProject extends Omit<Project, 'startDate' | 'endDate' | 'createdAt' | 'updatedAt' | 'lineItems' | 'bids'> {
   startDate: Timestamp;
   endDate: Timestamp;
   createdAt: Timestamp;
   updatedAt: Timestamp;
+  lineItems?: LineItem[];
+  bids?: Bid[];
 }
 
 export class ProjectService {
@@ -59,8 +64,13 @@ export class ProjectService {
 
   static async createProject(projectData: Omit<Project, 'id' | 'createdAt' | 'updatedAt'>): Promise<Project> {
     const now = new Date();
-    const project: FirestoreProject = {
+    const fullProjectData = { 
       ...projectData,
+      lineItems: projectData.lineItems || [],
+      bids: projectData.bids || [],
+    };
+    const project: FirestoreProject = {
+      ...fullProjectData,
       startDate: Timestamp.fromDate(projectData.startDate),
       endDate: Timestamp.fromDate(projectData.endDate),
       createdAt: Timestamp.fromDate(now),
@@ -70,7 +80,7 @@ export class ProjectService {
     const docRef = await addDoc(this.collection, project);
 
     return {
-      ...projectData,
+      ...fullProjectData,
       id: docRef.id,
       createdAt: now,
       updatedAt: now,
@@ -83,7 +93,6 @@ export class ProjectService {
       updatedAt: Timestamp.fromDate(new Date()),
     };
 
-    // Only include fields that are present in projectData
     if (projectData.name) updateData.name = projectData.name;
     if (projectData.description) updateData.description = projectData.description;
     if (projectData.status) updateData.status = projectData.status;
@@ -98,6 +107,8 @@ export class ProjectService {
     if (projectData.phases) updateData.phases = projectData.phases;
     if (projectData.keyMilestones) updateData.keyMilestones = projectData.keyMilestones;
     if (projectData.requirements) updateData.requirements = projectData.requirements;
+    if (projectData.lineItems) updateData.lineItems = projectData.lineItems;
+    if (projectData.bids) updateData.bids = projectData.bids;
 
     await updateDoc(projectRef, updateData);
   }
@@ -165,6 +176,8 @@ export class ProjectService {
       endDate: data.endDate.toDate(),
       createdAt: data.createdAt.toDate(),
       updatedAt: data.updatedAt.toDate(),
+      lineItems: data.lineItems || [],
+      bids: data.bids || [],
     };
   }
 } 

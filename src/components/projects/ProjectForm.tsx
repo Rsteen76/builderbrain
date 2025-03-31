@@ -51,7 +51,7 @@ const mockTeamMembers = [
 const initialProject: Partial<ProjectType> = {
   name: '',
   description: '',
-  status: 'planning',
+  status: 'Estimate',
   startDate: new Date(),
   endDate: new Date(new Date().setMonth(new Date().getMonth() + 3)), // 3 months in the future
   budget: 0,
@@ -237,10 +237,11 @@ const ProjectForm: React.FC = () => {
                 <FormControl fullWidth error={!!errors.status}>
                   <InputLabel>Status</InputLabel>
                   <Select
-                    value={project.status || 'planning'}
+                    value={project.status || 'Estimate'}
                     label="Status"
                     onChange={(e) => setProject({ ...project, status: e.target.value as ProjectType['status'] })}
                   >
+                    <MenuItem value="Estimate">Estimate</MenuItem>
                     <MenuItem value="planning">Planning</MenuItem>
                     <MenuItem value="in_progress">In Progress</MenuItem>
                     <MenuItem value="completed">Completed</MenuItem>
