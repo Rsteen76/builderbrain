@@ -22,6 +22,7 @@ interface AuthContextType {
   signUp: (email: string, password: string, displayName?: string) => Promise<void>;
   signInWithGoogle: () => Promise<void>;
   logout: () => Promise<void>;
+  signOut: () => Promise<void>;
   updateUserProfile: (data: Partial<User>) => Promise<void>;
 }
 
@@ -151,6 +152,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     signUp,
     signInWithGoogle,
     logout,
+    signOut: logout,
     updateUserProfile,
   };
 
