@@ -156,7 +156,27 @@ const ProjectDetailPage: React.FC = () => {
         }
         
         console.log('Project data retrieved:', projectData.name);
+        console.log('Project phases from API:', projectData.phases?.length || 0);
+        
         setProject(projectData);
+        
+        // Initialize phases from project data if available
+        if (projectData.phases && projectData.phases.length > 0) {
+          console.log('Setting phases from project data:', projectData.phases);
+          setPhases(projectData.phases as ProjectPhase[]);
+          
+          // Also initialize the phases being updated
+          const phasesMap: { [id: string]: ProjectPhase } = {};
+          projectData.phases.forEach(phase => {
+            if (phase.id) {
+              phasesMap[phase.id] = phase as ProjectPhase;
+            }
+          });
+          setPhasesBeingUpdated(phasesMap);
+        } else {
+          console.log('No phases found in project data');
+          setPhases([]);
+        }
         
         // In a real implementation, these would be API calls
         // fetchPhases(projectId);

@@ -215,6 +215,22 @@ const ProjectsList: React.FC = () => {
             >
               {isMobile ? <AddIcon /> : "New Project"}
             </Button>
+            
+            <Button
+              variant="outlined"
+              color="primary"
+              onClick={() => navigate('/projects/new-residential')}
+              sx={{ 
+                height: 40, 
+                minWidth: { xs: '100%', sm: 'auto' },
+                px: { xs: 1.5, sm: 2 },
+                borderRadius: 1.5,
+                ml: { xs: 0, sm: 1 },
+                display: { xs: 'none', md: 'flex' }
+              }}
+            >
+              Residential Template
+            </Button>
           </Box>
         </Box>
       </Paper>

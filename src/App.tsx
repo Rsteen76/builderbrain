@@ -8,6 +8,8 @@ import MainLayout from './components/layout/MainLayout';
 import { AuthProvider } from './contexts/AuthContext';
 import ProtectedRoute from './components/auth/ProtectedRoute';
 import ProjectDetailPage from './pages/ProjectDetailPage';
+import NewResidentialProjectForm from './components/projects/NewResidentialProjectForm';
+import ResidentialTemplateLanding from './components/landing/ResidentialTemplateLanding';
 
 // Lazy load components
 const Dashboard = lazy(() => import('./components/dashboard/Dashboard'));
@@ -133,7 +135,9 @@ const App: React.FC = () => {
                   <Route index element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
                   <Route path="dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
                   <Route path="projects" element={<ProtectedRoute><Projects /></ProtectedRoute>} />
-                  <Route path="projects/new" element={<ProtectedRoute><ProjectSetupWizard /></ProtectedRoute>} />
+                  <Route path="projects/new" element={<ProtectedRoute><ProjectForm /></ProtectedRoute>} />
+                  <Route path="projects/new-residential" element={<ProtectedRoute><NewResidentialProjectForm /></ProtectedRoute>} />
+                  <Route path="projects/residential-template" element={<ProtectedRoute><ResidentialTemplateLanding /></ProtectedRoute>} />
                   <Route path="projects/:id/edit" element={<ProtectedRoute><ProjectForm /></ProtectedRoute>} />
                   <Route path="projects/:projectId" element={<ProtectedRoute><ProjectDetailPage /></ProtectedRoute>} />
                   <Route path="tasks" element={<ProtectedRoute><Tasks /></ProtectedRoute>} />

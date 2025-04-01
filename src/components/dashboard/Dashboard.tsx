@@ -27,6 +27,7 @@ import {
   ListItem,
   ListItemAvatar,
   ListItemText,
+  ButtonGroup,
 } from '@mui/material';
 import {
   TrendingUp as TrendingUpIcon,
@@ -46,6 +47,9 @@ import {
   LocalAtm as LocalAtmIcon,
   ArrowForward as ArrowForwardIcon,
   Assessment as AssessmentIcon,
+  Add as AddIcon,
+  House as HouseIcon,
+  Construction as ConstructionIcon,
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 import { Project } from '../../types';
@@ -632,7 +636,126 @@ const Dashboard: React.FC = () => {
       subtitle={`Welcome back, ${user?.displayName || 'User'}`}
       icon={DashboardIcon}
     >
-      <Grid container spacing={{ xs: 2, sm: 3 }}>
+      <Container maxWidth="lg" sx={{ py: { xs: 2, sm: 3 } }}>
+        {/* Page header */}
+        <Box sx={{ mb: { xs: 2, sm: 3 } }}>
+          <Typography 
+            variant="h4" 
+            component="h1" 
+            fontWeight={600}
+            sx={{ mb: 1, fontSize: { xs: '1.5rem', sm: '1.75rem' } }}
+          >
+            Dashboard
+          </Typography>
+          <Typography variant="body1" color="text.secondary">
+            Welcome back! Here's an overview of your construction projects.
+          </Typography>
+        </Box>
+        
+        {/* Quick Actions Section */}
+        <Paper
+          elevation={0}
+          sx={{
+            mb: 3,
+            p: { xs: 2, sm: 2.5 },
+            borderRadius: 2,
+            border: `1px solid ${alpha(theme.palette.divider, 0.1)}`,
+          }}
+        >
+          <Stack
+            direction="row"
+            alignItems="center"
+            spacing={2}
+            sx={{ mb: 2 }}
+          >
+            <ConstructionIcon 
+              color="primary" 
+              sx={{ fontSize: { xs: 24, sm: 28 } }} 
+            />
+            <Typography
+              variant="h6"
+              fontWeight={600}
+              sx={{ fontSize: { xs: '1rem', sm: '1.1rem' } }}
+            >
+              Quick Actions
+            </Typography>
+          </Stack>
+          
+          <Grid container spacing={2}>
+            <Grid item xs={12} sm={6} md={4} lg={3}>
+              <Button
+                fullWidth
+                variant="outlined"
+                color="primary"
+                startIcon={<HouseIcon />}
+                onClick={() => navigate('/projects/new-residential')}
+                sx={{
+                  height: 46,
+                  justifyContent: 'flex-start',
+                  px: 2,
+                  borderRadius: 1.5,
+                  borderWidth: '1.5px',
+                  '&:hover': {
+                    borderWidth: '1.5px',
+                  },
+                }}
+              >
+                New Residential Project
+              </Button>
+            </Grid>
+            
+            <Grid item xs={12} sm={6} md={4} lg={3}>
+              <Button
+                fullWidth
+                variant="outlined"
+                startIcon={<BusinessIcon />}
+                onClick={() => navigate('/projects/new')}
+                sx={{
+                  height: 46,
+                  justifyContent: 'flex-start',
+                  px: 2,
+                  borderRadius: 1.5,
+                  borderWidth: '1.5px',
+                  borderColor: alpha(theme.palette.primary.main, 0.5),
+                  color: theme.palette.text.primary,
+                  '&:hover': {
+                    borderWidth: '1.5px',
+                    borderColor: theme.palette.primary.main,
+                    backgroundColor: alpha(theme.palette.primary.main, 0.04),
+                  },
+                }}
+              >
+                Custom Project
+              </Button>
+            </Grid>
+            
+            <Grid item xs={12} sm={6} md={4} lg={3}>
+              <Button
+                fullWidth
+                variant="outlined"
+                startIcon={<AssessmentIcon />}
+                onClick={() => navigate('/projects/residential-template')}
+                sx={{
+                  height: 46,
+                  justifyContent: 'flex-start',
+                  px: 2,
+                  borderRadius: 1.5,
+                  borderWidth: '1.5px',
+                  borderColor: alpha(theme.palette.info.main, 0.5),
+                  color: theme.palette.text.primary,
+                  '&:hover': {
+                    borderWidth: '1.5px',
+                    borderColor: theme.palette.info.main,
+                    backgroundColor: alpha(theme.palette.info.main, 0.04),
+                  },
+                }}
+              >
+                Learn About Templates
+              </Button>
+            </Grid>
+          </Grid>
+        </Paper>
+        
         {/* Stats Grid */}
         <Grid item xs={12} md={8}>
           <Grid container spacing={{ xs: 2, sm: 3 }}>
@@ -802,7 +925,7 @@ const Dashboard: React.FC = () => {
             </Grid>
           </Paper>
         </Grid>
-      </Grid>
+      </Container>
     </PageLayout>
   );
 };
