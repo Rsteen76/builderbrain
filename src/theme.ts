@@ -47,49 +47,79 @@ const theme = createTheme({
       fontSize: '2.5rem',
       fontWeight: 700,
       lineHeight: 1.2,
+      '@media (max-width:600px)': {
+        fontSize: '2rem',
+      },
     },
     h2: {
       fontSize: '2rem',
       fontWeight: 600,
       lineHeight: 1.3,
+      '@media (max-width:600px)': {
+        fontSize: '1.75rem',
+      },
     },
     h3: {
       fontSize: '1.75rem',
       fontWeight: 600,
       lineHeight: 1.4,
+      '@media (max-width:600px)': {
+        fontSize: '1.5rem',
+      },
     },
     h4: {
       fontSize: '1.5rem',
       fontWeight: 600,
       lineHeight: 1.4,
+      '@media (max-width:600px)': {
+        fontSize: '1.25rem',
+      },
     },
     h5: {
       fontSize: '1.25rem',
       fontWeight: 600,
       lineHeight: 1.4,
+      '@media (max-width:600px)': {
+        fontSize: '1.1rem',
+      },
     },
     h6: {
       fontSize: '1rem',
       fontWeight: 600,
       lineHeight: 1.4,
+      '@media (max-width:600px)': {
+        fontSize: '0.95rem',
+      },
     },
     subtitle1: {
       fontSize: '1rem',
       fontWeight: 500,
       lineHeight: 1.5,
+      '@media (max-width:600px)': {
+        fontSize: '0.95rem',
+      },
     },
     subtitle2: {
       fontSize: '0.875rem',
       fontWeight: 500,
       lineHeight: 1.5,
+      '@media (max-width:600px)': {
+        fontSize: '0.8rem',
+      },
     },
     body1: {
       fontSize: '1rem',
       lineHeight: 1.5,
+      '@media (max-width:600px)': {
+        fontSize: '0.95rem',
+      },
     },
     body2: {
       fontSize: '0.875rem',
       lineHeight: 1.5,
+      '@media (max-width:600px)': {
+        fontSize: '0.8rem',
+      },
     },
     button: {
       textTransform: 'none',
@@ -107,6 +137,10 @@ const theme = createTheme({
           padding: '8px 16px',
           fontSize: '0.875rem',
           fontWeight: 500,
+          '@media (max-width:600px)': {
+            padding: '6px 12px',
+            fontSize: '0.8rem',
+          },
           '&:hover': {
             boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)',
           },
@@ -147,6 +181,10 @@ const theme = createTheme({
           color: '#2D3748',
           boxShadow: '0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06)',
           borderBottom: `1px solid ${alpha('#E2E8F0', 0.8)}`,
+          height: 64,
+          '@media (max-width:600px)': {
+            height: 56,
+          },
         },
       },
     },
@@ -155,6 +193,10 @@ const theme = createTheme({
         paper: {
           backgroundColor: '#FFFFFF',
           borderRight: `1px solid ${alpha('#E2E8F0', 0.8)}`,
+          width: 280,
+          '@media (max-width:600px)': {
+            width: '85%',
+          },
         },
       },
     },
@@ -173,6 +215,10 @@ const theme = createTheme({
       styleOverrides: {
         root: {
           borderRadius: 8,
+          padding: '12px 16px',
+          '@media (max-width:600px)': {
+            padding: '8px 12px',
+          },
           '&:hover': {
             backgroundColor: alpha('#2C5282', 0.04),
           },
@@ -196,6 +242,10 @@ const theme = createTheme({
         root: {
           borderRadius: 6,
           fontWeight: 500,
+          height: 28,
+          '@media (max-width:600px)': {
+            height: 24,
+          },
           '&:hover': {
             backgroundColor: alpha('#2C5282', 0.08),
           },
@@ -206,6 +256,9 @@ const theme = createTheme({
       styleOverrides: {
         root: {
           padding: '24px 0',
+          '@media (max-width:600px)': {
+            padding: '16px 0',
+          },
         },
       },
     },
@@ -220,8 +273,34 @@ const theme = createTheme({
           }
         },
         label: {
-          fontWeight: 500
+          fontWeight: 500,
+          fontSize: '0.875rem',
+          '@media (max-width:600px)': {
+            fontSize: '0.8rem',
+          },
         }
+      },
+    },
+    MuiContainer: {
+      styleOverrides: {
+        root: {
+          paddingLeft: 24,
+          paddingRight: 24,
+          '@media (max-width:600px)': {
+            paddingLeft: 16,
+            paddingRight: 16,
+          },
+        },
+      },
+    },
+    MuiGrid: {
+      styleOverrides: {
+        root: {
+          marginTop: 16,
+          '@media (max-width:600px)': {
+            marginTop: 8,
+          },
+        },
       },
     },
   },

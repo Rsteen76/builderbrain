@@ -23,6 +23,7 @@ export interface Project {
   name: string;
   description: string;
   status: 'estimate' | 'planning' | 'in_progress' | 'completed' | 'on_hold' | 'draft' | 'active' | 'cancelled';
+  priority?: 'low' | 'medium' | 'high' | 'urgent';
   clientId?: string;
   contractorId?: string;
   startDate: Date;

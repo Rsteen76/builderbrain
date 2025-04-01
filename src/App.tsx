@@ -41,6 +41,7 @@ const App: React.FC = () => {
           },
           body: {
             backgroundColor: theme.palette.background.default,
+            overflowX: 'hidden',
           },
           '::-webkit-scrollbar': {
             width: '8px',
@@ -55,6 +56,68 @@ const App: React.FC = () => {
           },
           '::-webkit-scrollbar-thumb:hover': {
             background: theme.palette.action.hover,
+          },
+          // Add consistent spacing for mobile
+          '.MuiContainer-root': {
+            paddingLeft: { xs: 2, sm: 3 },
+            paddingRight: { xs: 2, sm: 3 },
+          },
+          // Improve form elements on mobile
+          'input, select, textarea': {
+            fontSize: { xs: '16px', sm: '16px' }, // Prevent zoom on iOS
+          },
+          // Consistent card styling
+          '.MuiCard-root': {
+            borderRadius: '12px',
+            transition: 'all 0.2s ease-in-out',
+            '&:hover': {
+              transform: 'translateY(-2px)',
+              boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)',
+            },
+          },
+          // Improve button touch targets on mobile
+          '.MuiButton-root': {
+            minHeight: { xs: '36px', sm: '40px' },
+            minWidth: { xs: '36px', sm: '40px' },
+          },
+          // Consistent spacing for lists
+          '.MuiList-root': {
+            padding: { xs: '8px', sm: '16px' },
+          },
+          // Improve table responsiveness
+          '.MuiTable-root': {
+            display: { xs: 'block', sm: 'table' },
+            width: '100%',
+            overflowX: 'auto',
+          },
+          // Consistent spacing for form groups
+          '.MuiFormGroup-root': {
+            marginBottom: { xs: '16px', sm: '24px' },
+          },
+          // Improve dialog responsiveness
+          '.MuiDialog-paper': {
+            margin: { xs: '16px', sm: '32px' },
+            width: { xs: 'calc(100% - 32px)', sm: 'auto' },
+            maxWidth: { xs: '100%', sm: '600px' },
+          },
+          // Consistent spacing for alerts
+          '.MuiAlert-root': {
+            marginBottom: { xs: '16px', sm: '24px' },
+            borderRadius: '8px',
+          },
+          // Improve mobile navigation
+          '.MuiDrawer-paper': {
+            width: { xs: '85%', sm: '280px' },
+            maxWidth: '280px',
+          },
+          // Consistent spacing for tabs
+          '.MuiTabs-root': {
+            marginBottom: { xs: '16px', sm: '24px' },
+          },
+          // Improve mobile grid spacing
+          '.MuiGrid-container': {
+            marginTop: { xs: '8px', sm: '16px' },
+            marginBottom: { xs: '8px', sm: '16px' },
           },
         }}
       />

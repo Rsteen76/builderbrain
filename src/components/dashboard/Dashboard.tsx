@@ -23,6 +23,10 @@ import {
   useMediaQuery,
   Skeleton,
   Button,
+  List,
+  ListItem,
+  ListItemAvatar,
+  ListItemText,
 } from '@mui/material';
 import {
   TrendingUp as TrendingUpIcon,
@@ -40,12 +44,15 @@ import {
   Business as BusinessIcon,
   Assignment as AssignmentIcon,
   LocalAtm as LocalAtmIcon,
+  ArrowForward as ArrowForwardIcon,
+  Assessment as AssessmentIcon,
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 import { Project } from '../../types';
 import { ProjectService } from '../../services/project';
 import { useAuth } from '../../contexts/AuthContext';
 import { formatCurrency, formatDate } from '../../utils/formatters';
+import PageLayout from '../layout/PageLayout';
 
 interface StatCardProps {
   title: string;
@@ -65,6 +72,8 @@ const StatCard: React.FC<StatCardProps> = ({
   onClick,
 }) => {
   const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
+  
   return (
     <Card
       elevation={0}
@@ -82,50 +91,79 @@ const StatCard: React.FC<StatCardProps> = ({
       }}
       onClick={onClick}
     >
-      <CardContent>
-        <Stack direction="row" spacing={2} alignItems="center" sx={{ mb: 2 }}>
+      <CardContent sx={{ p: { xs: 2, sm: 2.5 } }}>
+        <Stack 
+          direction="row" 
+          spacing={2} 
+          alignItems="center" 
+          sx={{ 
+            mb: { xs: 1.5, sm: 2 },
+            '& .MuiAvatar-root': {
+              width: { xs: 40, sm: 48 },
+              height: { xs: 40, sm: 48 },
+            }
+          }}
+        >
           <Avatar
             sx={{
               bgcolor: alpha(color, 0.1),
               color: color,
-              width: 48,
-              height: 48,
+              transition: 'all 0.2s ease',
             }}
           >
             {icon}
           </Avatar>
-          <Typography variant="h6" fontWeight={500}>
+          <Typography 
+            variant="h6" 
+            fontWeight={500}
+            sx={{ 
+              fontSize: { xs: '0.95rem', sm: '1.1rem' }
+            }}
+          >
             {title}
           </Typography>
         </Stack>
-        <Typography variant="h4" component="div" sx={{ mb: 1, fontWeight: 600 }}>
-          {value}
-        </Typography>
-        {change && (
-          <Box 
+        <Stack spacing={0.5}>
+          <Typography 
+            variant="h4" 
+            component="div" 
             sx={{ 
-              display: 'flex', 
-              alignItems: 'center', 
-              gap: 0.5,
-              bgcolor: alpha(change.startsWith('+') ? theme.palette.success.main : theme.palette.error.main, 0.1),
-              color: change.startsWith('+') ? theme.palette.success.main : theme.palette.error.main,
-              py: 0.5,
-              px: 1,
-              borderRadius: 1,
-              width: 'fit-content'
+              fontWeight: 600,
+              fontSize: { xs: '1.75rem', sm: '2rem' },
+              lineHeight: 1.2,
             }}
           >
-            <TrendingUpIcon
-              sx={{
-                transform: change.startsWith('+') ? 'none' : 'rotate(180deg)',
-                fontSize: 16,
+            {value}
+          </Typography>
+          {change && (
+            <Stack 
+              direction="row" 
+              spacing={0.5} 
+              alignItems="center"
+              sx={{ 
+                mt: 0.5,
+                '& .MuiChip-root': {
+                  height: { xs: 20, sm: 24 },
+                  '& .MuiChip-label': {
+                    px: { xs: 1, sm: 1.5 },
+                    fontSize: { xs: '0.75rem', sm: '0.875rem' },
+                  }
+                }
               }}
-            />
-            <Typography variant="body2" fontWeight={500}>
-              {change}
-            </Typography>
-          </Box>
-        )}
+            >
+              <Chip
+                label={change}
+                size="small"
+                sx={{
+                  backgroundColor: alpha(theme.palette.success.main, 0.1),
+                  color: theme.palette.success.main,
+                  fontWeight: 500,
+                  borderRadius: '4px',
+                }}
+              />
+            </Stack>
+          )}
+        </Stack>
       </CardContent>
     </Card>
   );
@@ -168,11 +206,13 @@ const ProjectCard: React.FC<ProjectCardProps> = ({
       elevation={0}
       sx={{
         height: '100%',
-        transition: 'all 0.2s ease',
         cursor: 'pointer',
+        transition: 'all 0.2s ease',
         borderRadius: 2,
         border: `1px solid ${alpha(theme.palette.divider, 0.1)}`,
         boxShadow: `0 2px 8px ${alpha(theme.palette.common.black, 0.04)}`,
+        position: 'relative',
+        overflow: 'hidden',
         '&:hover': {
           transform: 'translateY(-4px)',
           boxShadow: `0 4px 12px ${alpha(theme.palette.common.black, 0.08)}`,
@@ -180,14 +220,52 @@ const ProjectCard: React.FC<ProjectCardProps> = ({
       }}
       onClick={onClick}
     >
-      <CardContent>
-        <Stack direction="row" justifyContent="space-between" alignItems="flex-start" sx={{ mb: 2 }}>
-          <Stack spacing={1}>
-            <Typography variant="h6" component="div" fontWeight={600}>
+      <Box
+        sx={{
+          position: 'absolute',
+          top: 0,
+          right: 0,
+          left: 0,
+          height: '4px',
+          background: `linear-gradient(90deg, ${statusColors[status]} 0%, ${alpha(statusColors[status], 0.6)} 100%)`,
+        }}
+      />
+      <CardContent sx={{ p: { xs: 2, sm: 2.5 } }}>
+        <Stack 
+          direction="row" 
+          justifyContent="space-between" 
+          alignItems="flex-start" 
+          spacing={2}
+          sx={{ mb: { xs: 1.5, sm: 2 } }}
+        >
+          <Stack spacing={0.5}>
+            <Typography 
+              variant="h6" 
+              component="div" 
+              fontWeight={600}
+              sx={{ 
+                fontSize: { xs: '1rem', sm: '1.1rem' },
+                lineHeight: 1.3,
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                display: '-webkit-box',
+                WebkitLineClamp: 1,
+                WebkitBoxOrient: 'vertical',
+              }}
+            >
               {title}
             </Typography>
             {location && (
-              <Typography variant="body2" color="text.secondary" sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+              <Typography 
+                variant="body2" 
+                color="text.secondary" 
+                sx={{ 
+                  display: 'flex', 
+                  alignItems: 'center', 
+                  gap: 0.5,
+                  fontSize: { xs: '0.75rem', sm: '0.875rem' }
+                }}
+              >
                 <BusinessIcon fontSize="small" />
                 {location}
               </Typography>
@@ -202,15 +280,34 @@ const ProjectCard: React.FC<ProjectCardProps> = ({
               fontWeight: 500,
               borderRadius: '4px',
               textTransform: 'capitalize',
+              height: { xs: 20, sm: 24 },
+              '& .MuiChip-label': {
+                px: { xs: 1, sm: 1.5 },
+                fontSize: { xs: '0.75rem', sm: '0.875rem' },
+              }
             }}
           />
         </Stack>
-        <Box sx={{ mb: 2 }}>
-          <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
-            <Typography variant="body2" color="text.secondary">
+        <Box sx={{ mb: { xs: 1.5, sm: 2 } }}>
+          <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1, alignItems: 'center' }}>
+            <Typography 
+              variant="body2" 
+              color="text.secondary" 
+              sx={{ 
+                fontSize: { xs: '0.75rem', sm: '0.875rem' },
+                fontWeight: 500
+              }}
+            >
               Progress
             </Typography>
-            <Typography variant="body2" fontWeight={500}>
+            <Typography 
+              variant="body2" 
+              sx={{ 
+                fontSize: { xs: '0.75rem', sm: '0.875rem' },
+                color: progress > 75 ? theme.palette.success.main : theme.palette.text.secondary, 
+                fontWeight: 500
+              }}
+            >
               {progress}%
             </Typography>
           </Box>
@@ -218,40 +315,49 @@ const ProjectCard: React.FC<ProjectCardProps> = ({
             variant="determinate"
             value={progress}
             sx={{
-              height: 8,
+              height: { xs: 6, sm: 8 },
               borderRadius: 4,
               backgroundColor: alpha(theme.palette.primary.main, 0.1),
               '& .MuiLinearProgress-bar': {
                 borderRadius: 4,
+                backgroundImage: `linear-gradient(90deg, ${theme.palette.primary.main}, ${theme.palette.primary.light})`,
               },
             }}
           />
         </Box>
         <Stack 
-          direction={isMobile ? "column" : "row"} 
-          spacing={isMobile ? 1 : 2} 
-          sx={{ mt: 2 }}
-          divider={isMobile ? null : <Divider orientation="vertical" flexItem />}
+          direction="row" 
+          spacing={2} 
+          sx={{ 
+            '& .MuiAvatar-root': {
+              width: { xs: 24, sm: 28 },
+              height: { xs: 24, sm: 28 },
+            },
+            '& .MuiTypography-root': {
+              fontSize: { xs: '0.75rem', sm: '0.875rem' }
+            }
+          }}
+          divider={<Divider orientation="vertical" flexItem />}
         >
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-            <Avatar sx={{ width: 24, height: 24, bgcolor: alpha(theme.palette.primary.main, 0.1) }}>
-              <ScheduleIcon sx={{ fontSize: 14, color: theme.palette.primary.main }} />
+            <Avatar sx={{ bgcolor: alpha(theme.palette.primary.main, 0.1) }}>
+              <ScheduleIcon sx={{ fontSize: { xs: 14, sm: 16 }, color: theme.palette.primary.main }} />
             </Avatar>
             <Typography variant="body2">
               Due: {dueDate}
             </Typography>
           </Box>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-            <Avatar sx={{ width: 24, height: 24, bgcolor: alpha(theme.palette.success.main, 0.1) }}>
-              <MoneyIcon sx={{ fontSize: 14, color: theme.palette.success.main }} />
+            <Avatar sx={{ bgcolor: alpha(theme.palette.success.main, 0.1) }}>
+              <MoneyIcon sx={{ fontSize: { xs: 14, sm: 16 }, color: theme.palette.success.main }} />
             </Avatar>
             <Typography variant="body2">
               {budget}
             </Typography>
           </Box>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-            <Avatar sx={{ width: 24, height: 24, bgcolor: alpha(theme.palette.warning.main, 0.1) }}>
-              <GroupIcon sx={{ fontSize: 14, color: theme.palette.warning.main }} />
+            <Avatar sx={{ bgcolor: alpha(theme.palette.warning.main, 0.1) }}>
+              <GroupIcon sx={{ fontSize: { xs: 14, sm: 16 }, color: theme.palette.warning.main }} />
             </Avatar>
             <Typography variant="body2">
               {team} members
@@ -262,6 +368,12 @@ const ProjectCard: React.FC<ProjectCardProps> = ({
     </Card>
   );
 };
+
+interface RecentActivity {
+  title: string;
+  time: string;
+  icon: React.ReactNode;
+}
 
 const Dashboard: React.FC = () => {
   const theme = useTheme();
@@ -279,6 +391,35 @@ const Dashboard: React.FC = () => {
     teamMembers: 0,
     tasksDue: 0
   });
+
+  // Sample recent activity data
+  const recentActivity: RecentActivity[] = [
+    {
+      title: "New project created",
+      time: "2 hours ago",
+      icon: <BuildIcon />
+    },
+    {
+      title: "Task completed",
+      time: "4 hours ago",
+      icon: <CheckCircleIcon />
+    },
+    {
+      title: "Budget updated",
+      time: "1 day ago",
+      icon: <MoneyIcon />
+    },
+    {
+      title: "Team member added",
+      time: "2 days ago",
+      icon: <GroupIcon />
+    },
+    {
+      title: "Project status changed",
+      time: "3 days ago",
+      icon: <AssessmentIcon />
+    }
+  ];
 
   useEffect(() => {
     const fetchDashboardData = async () => {
@@ -486,159 +627,183 @@ const Dashboard: React.FC = () => {
   }
 
   return (
-    <Container maxWidth="xl" sx={{ mt: { xs: 2, sm: 3 }, pb: 4 }}>
-      <Stack 
-        direction={{ xs: 'column', sm: 'row' }} 
-        justifyContent="space-between" 
-        alignItems={{ xs: 'flex-start', sm: 'center' }}
-        spacing={2}
-        sx={{ mb: 3 }}
-      >
-        <Box>
-          <Stack direction="row" spacing={1.5} alignItems="center">
-            <Avatar 
-              sx={{ 
-                bgcolor: alpha(theme.palette.primary.main, 0.1),
-                color: theme.palette.primary.main,
-                width: 44,
-                height: 44,
-              }}
-            >
-              <DashboardIcon />
-            </Avatar>
-            <Box>
-              <Typography variant={isMobile ? "h5" : "h4"} component="h1" fontWeight={600}>
-                Dashboard
-              </Typography>
-              <Typography variant="body2" color="text.secondary">
-                Welcome back, {user?.displayName || 'User'}
-              </Typography>
-            </Box>
-          </Stack>
-        </Box>
-        
-        <Button
-          variant="outlined"
-          startIcon={<RefreshIcon />}
-          onClick={refreshData}
-          disabled={loading}
-          sx={{ borderRadius: 2 }}
-        >
-          Refresh
-        </Button>
-      </Stack>
-
-      {error && (
-        <Alert 
-          severity="error" 
-          sx={{ 
-            mb: 3, 
-            borderRadius: 2,
-            '& .MuiAlert-icon': { alignItems: 'center' }
-          }}
-        >
-          {error}
-        </Alert>
-      )}
-
-      <Box sx={{ mb: 4 }}>
-        <Grid container spacing={3}>
-          <Grid item xs={12} sm={6} md={3}>
-            <StatCard
-              title="Active Projects"
-              value={stats.activeProjects}
-              icon={<HomeIcon />}
-              color={theme.palette.primary.main}
-              onClick={() => navigate('/projects')}
-            />
-          </Grid>
-          <Grid item xs={12} sm={6} md={3}>
-            <StatCard
-              title="Total Budget"
-              value={formatCurrency(stats.totalBudget)}
-              icon={<MoneyIcon />}
-              color={theme.palette.success.main}
-              onClick={() => navigate('/expenses')}
-            />
-          </Grid>
-          <Grid item xs={12} sm={6} md={3}>
-            <StatCard
-              title="Team Members"
-              value={stats.teamMembers}
-              icon={<GroupIcon />}
-              color={theme.palette.warning.main}
-              onClick={() => navigate('/settings/team')}
-            />
-          </Grid>
-          <Grid item xs={12} sm={6} md={3}>
-            <StatCard
-              title="Tasks Due Soon"
-              value={stats.tasksDue}
-              change={stats.tasksDue > 3 ? '+' + (stats.tasksDue - 3) : '0'}
-              icon={<AssignmentIcon />}
-              color={theme.palette.error.main}
-              onClick={() => navigate('/tasks')}
-            />
+    <PageLayout
+      title="Dashboard"
+      subtitle={`Welcome back, ${user?.displayName || 'User'}`}
+      icon={DashboardIcon}
+    >
+      <Grid container spacing={{ xs: 2, sm: 3 }}>
+        {/* Stats Grid */}
+        <Grid item xs={12} md={8}>
+          <Grid container spacing={{ xs: 2, sm: 3 }}>
+            <Grid item xs={12} sm={6}>
+              <StatCard
+                title="Active Projects"
+                value={stats.activeProjects}
+                icon={<HomeIcon />}
+                color={theme.palette.primary.main}
+                onClick={() => navigate('/projects')}
+              />
+            </Grid>
+            <Grid item xs={12} sm={6}>
+              <StatCard
+                title="Total Budget"
+                value={formatCurrency(stats.totalBudget)}
+                icon={<MoneyIcon />}
+                color={theme.palette.success.main}
+                onClick={() => navigate('/expenses')}
+              />
+            </Grid>
+            <Grid item xs={12} sm={6}>
+              <StatCard
+                title="Team Members"
+                value={stats.teamMembers}
+                icon={<GroupIcon />}
+                color={theme.palette.warning.main}
+                onClick={() => navigate('/settings/team')}
+              />
+            </Grid>
+            <Grid item xs={12} sm={6}>
+              <StatCard
+                title="Tasks Due Soon"
+                value={stats.tasksDue}
+                change={stats.tasksDue > 3 ? '+' + (stats.tasksDue - 3) : '0'}
+                icon={<AssignmentIcon />}
+                color={theme.palette.error.main}
+                onClick={() => navigate('/tasks')}
+              />
+            </Grid>
           </Grid>
         </Grid>
-      </Box>
 
-      <Stack direction="row" spacing={1.5} alignItems="center" sx={{ mb: 2 }}>
-        <Avatar 
-          sx={{ 
-            bgcolor: alpha(theme.palette.success.main, 0.1),
-            color: theme.palette.success.main,
-            width: 36,
-            height: 36,
-          }}
-        >
-          <BusinessIcon />
-        </Avatar>
-        <Typography variant="h6" component="h2" fontWeight={500}>
-          Recent Projects
-        </Typography>
-      </Stack>
-
-      <Grid container spacing={3}>
-        {projects.length === 0 ? (
-          <Grid item xs={12}>
-            <Alert 
-              severity="info" 
-              sx={{ 
-                borderRadius: 2,
-                bgcolor: alpha(theme.palette.info.main, 0.05),
-                py: 2,
-                '& .MuiAlert-icon': { alignItems: 'center' }
-              }}
-            >
-              No projects found. Create a new project to get started.
-            </Alert>
-          </Grid>
-        ) : (
-          projects
-            .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())
-            .slice(0, 6)
-            .map((project) => {
-              const displayProject = formatProjectForDisplay(project);
-              return (
-                <Grid item xs={12} sm={6} md={4} key={project.id}>
-                  <ProjectCard
-                    title={displayProject.title}
-                    progress={displayProject.progress}
-                    status={displayProject.status}
-                    dueDate={displayProject.dueDate}
-                    budget={displayProject.budget}
-                    team={displayProject.team}
-                    projectId={displayProject.projectId}
-                    location={displayProject.location}
-                    onClick={() => navigate(`/projects/${project.id}`)}
+        {/* Recent Activity */}
+        <Grid item xs={12} md={4}>
+          <Paper
+            elevation={0}
+            sx={{
+              p: { xs: 2, sm: 2.5 },
+              height: '100%',
+              borderRadius: 2,
+              border: `1px solid ${alpha(theme.palette.divider, 0.1)}`,
+              background: theme.palette.background.paper,
+              boxShadow: '0 2px 10px rgba(0,0,0,0.03)'
+            }}
+          >
+            <Typography variant="h6" sx={{ mb: 2, fontWeight: 600 }}>
+              Recent Activity
+            </Typography>
+            <List sx={{ p: 0 }}>
+              {recentActivity.map((activity, index) => (
+                <ListItem
+                  key={index}
+                  sx={{
+                    px: 0,
+                    py: 1.5,
+                    borderBottom: index < recentActivity.length - 1 ? `1px solid ${alpha(theme.palette.divider, 0.1)}` : 'none',
+                  }}
+                >
+                  <ListItemAvatar>
+                    <Avatar
+                      sx={{
+                        bgcolor: alpha(theme.palette.primary.main, 0.1),
+                        color: theme.palette.primary.main,
+                        width: 32,
+                        height: 32,
+                      }}
+                    >
+                      {activity.icon}
+                    </Avatar>
+                  </ListItemAvatar>
+                  <ListItemText
+                    primary={activity.title}
+                    secondary={activity.time}
+                    primaryTypographyProps={{
+                      sx: { fontSize: '0.875rem', fontWeight: 500 }
+                    }}
+                    secondaryTypographyProps={{
+                      sx: { fontSize: '0.75rem', color: 'text.secondary' }
+                    }}
                   />
+                </ListItem>
+              ))}
+            </List>
+          </Paper>
+        </Grid>
+
+        {/* Recent Projects */}
+        <Grid item xs={12}>
+          <Paper
+            elevation={0}
+            sx={{
+              p: { xs: 2, sm: 2.5 },
+              borderRadius: 2,
+              border: `1px solid ${alpha(theme.palette.divider, 0.1)}`,
+              background: theme.palette.background.paper,
+              boxShadow: '0 2px 10px rgba(0,0,0,0.03)'
+            }}
+          >
+            <Stack
+              direction="row"
+              justifyContent="space-between"
+              alignItems="center"
+              sx={{ mb: 2 }}
+            >
+              <Typography variant="h6" sx={{ fontWeight: 600 }}>
+                Recent Projects
+              </Typography>
+              <Button
+                variant="text"
+                endIcon={<ArrowForwardIcon />}
+                onClick={() => navigate('/projects')}
+                sx={{ color: theme.palette.primary.main }}
+              >
+                View All
+              </Button>
+            </Stack>
+            <Grid container spacing={{ xs: 2, sm: 3 }}>
+              {projects.length === 0 ? (
+                <Grid item xs={12}>
+                  <Alert 
+                    severity="info" 
+                    sx={{ 
+                      borderRadius: 2,
+                      bgcolor: alpha(theme.palette.info.main, 0.05),
+                      py: { xs: 1.5, sm: 2 },
+                      px: { xs: 2, sm: 3 },
+                      '& .MuiAlert-icon': { alignItems: 'center' }
+                    }}
+                  >
+                    No projects found. Create a new project to get started.
+                  </Alert>
                 </Grid>
-              );
-            })
-        )}
+              ) : (
+                projects
+                  .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())
+                  .slice(0, 6)
+                  .map((project) => {
+                    const displayProject = formatProjectForDisplay(project);
+                    return (
+                      <Grid item xs={12} sm={6} md={4} key={project.id}>
+                        <ProjectCard
+                          title={displayProject.title}
+                          progress={displayProject.progress}
+                          status={displayProject.status}
+                          dueDate={displayProject.dueDate}
+                          budget={displayProject.budget}
+                          team={displayProject.team}
+                          projectId={displayProject.projectId}
+                          location={displayProject.location}
+                          onClick={() => navigate(`/projects/${project.id}`)}
+                        />
+                      </Grid>
+                    );
+                  })
+              )}
+            </Grid>
+          </Paper>
+        </Grid>
       </Grid>
-    </Container>
+    </PageLayout>
   );
 };
 

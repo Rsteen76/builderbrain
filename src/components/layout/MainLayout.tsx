@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { Outlet, useNavigate } from 'react-router-dom';
+import React, { useState, useEffect } from 'react';
+import { Outlet, useNavigate, useLocation } from 'react-router-dom';
 import {
   Box,
   AppBar,
@@ -19,6 +19,7 @@ import {
   MenuItem,
   Divider,
   alpha,
+  Button,
 } from '@mui/material';
 import {
   Menu as MenuIcon,
@@ -33,6 +34,7 @@ import {
   Person as PersonIcon,
   Logout as LogoutIcon,
   Group as GroupIcon,
+  Construction as ConstructionIcon,
 } from '@mui/icons-material';
 import { useAuth } from '../../contexts/AuthContext';
 
@@ -44,11 +46,17 @@ interface MainLayoutProps {
 
 const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
   const theme = useTheme();
-  const isMobile = useMediaQuery(theme.breakpoints.down('md'));
+  const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
   const [mobileOpen, setMobileOpen] = useState(false);
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
-  const { user, role, logout } = useAuth();
+  const { user, logout } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
+
+  // Close drawer on route change
+  useEffect(() => {
+    setMobileOpen(false);
+  }, [location.pathname]);
 
   const handleDrawerToggle = () => {
     setMobileOpen(!mobileOpen);
@@ -62,10 +70,12 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
     setAnchorEl(null);
   };
 
-  const handleLogout = async () => {
-    if (logout) {
+  const handleSignOut = async () => {
+    try {
       await logout();
       navigate('/login');
+    } catch (error) {
+      console.error('Error signing out:', error);
     }
   };
 
@@ -84,64 +94,79 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
   const drawer = (
     <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
       <Box sx={{ p: 2, display: 'flex', alignItems: 'center', gap: 2 }}>
-        <BusinessIcon sx={{ fontSize: 32, color: theme.palette.primary.main }} />
-        <Typography variant="h6" sx={{ fontWeight: 600 }}>
-          Construction Manager
-        </Typography>
+        <Avatar
+          src={user?.photoURL || undefined}
+          alt={user?.displayName || 'User'}
+          sx={{
+            width: 40,
+            height: 40,
+            bgcolor: alpha(theme.palette.primary.main, 0.1),
+            color: theme.palette.primary.main,
+          }}
+        >
+          {user?.displayName?.[0] || 'U'}
+        </Avatar>
+        <Box>
+          <Typography variant="subtitle1" fontWeight={600}>
+            {user?.displayName || 'User'}
+          </Typography>
+          <Typography variant="body2" color="text.secondary">
+            {user?.email}
+          </Typography>
+        </Box>
       </Box>
       <Divider />
-      <List sx={{ flex: 1, px: 1 }}>
+      <List sx={{ flex: 1, py: 2 }}>
         {menuItems.map((item) => (
-          <ListItem key={item.text} disablePadding>
-            <ListItemButton
-              onClick={() => {
-                navigate(item.path);
-                if (isMobile) setMobileOpen(false);
-              }}
-              sx={{
-                borderRadius: 1,
-                mb: 0.5,
+          <ListItem
+            key={item.path}
+            button
+            onClick={() => navigate(item.path)}
+            selected={location.pathname === item.path}
+            sx={{
+              py: 1.5,
+              px: 2,
+              mx: 1,
+              borderRadius: 2,
+              '&.Mui-selected': {
+                bgcolor: alpha(theme.palette.primary.main, 0.1),
+                color: theme.palette.primary.main,
                 '&:hover': {
-                  backgroundColor: alpha(theme.palette.primary.main, 0.08),
+                  bgcolor: alpha(theme.palette.primary.main, 0.15),
                 },
-              }}
-            >
-              <ListItemIcon sx={{ color: theme.palette.primary.main }}>
-                {item.icon}
-              </ListItemIcon>
-              <ListItemText primary={item.text} />
-            </ListItemButton>
+                '& .MuiListItemIcon-root': {
+                  color: theme.palette.primary.main,
+                },
+              },
+            }}
+          >
+            <ListItemIcon sx={{ minWidth: 40 }}>
+              {item.icon}
+            </ListItemIcon>
+            <ListItemText primary={item.text} />
           </ListItem>
         ))}
       </List>
       <Divider />
       <Box sx={{ p: 2 }}>
-        <Box
+        <Button
+          fullWidth
+          variant="outlined"
+          startIcon={<LogoutIcon />}
+          onClick={handleSignOut}
           sx={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: 2,
-            p: 1,
-            borderRadius: 1,
-            cursor: 'pointer',
+            borderRadius: 2,
+            py: 1,
+            color: theme.palette.error.main,
+            borderColor: alpha(theme.palette.error.main, 0.5),
             '&:hover': {
-              backgroundColor: alpha(theme.palette.primary.main, 0.08),
+              borderColor: theme.palette.error.main,
+              bgcolor: alpha(theme.palette.error.main, 0.04),
             },
           }}
-          onClick={handleMenuOpen}
         >
-          <Avatar sx={{ bgcolor: theme.palette.primary.main }}>
-            {user?.email?.[0].toUpperCase()}
-          </Avatar>
-          <Box sx={{ flex: 1 }}>
-            <Typography variant="subtitle2" sx={{ fontWeight: 500 }}>
-              {user?.email}
-            </Typography>
-            <Typography variant="caption" color="text.secondary">
-              {role}
-            </Typography>
-          </Box>
-        </Box>
+          Sign Out
+        </Button>
       </Box>
     </Box>
   );
@@ -151,8 +176,10 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
       <AppBar
         position="fixed"
         sx={{
-          width: { md: `calc(100% - ${drawerWidth}px)` },
-          ml: { md: `${drawerWidth}px` },
+          bgcolor: 'background.paper',
+          color: 'text.primary',
+          boxShadow: 'none',
+          borderBottom: `1px solid ${alpha(theme.palette.divider, 0.1)}`,
         }}
       >
         <Toolbar>
@@ -160,87 +187,127 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
             color="inherit"
             edge="start"
             onClick={handleDrawerToggle}
-            sx={{ mr: 2, display: { md: 'none' } }}
+            sx={{ mr: 2, display: { sm: 'none' } }}
           >
             <MenuIcon />
           </IconButton>
           <Typography variant="h6" noWrap component="div" sx={{ flexGrow: 1 }}>
-            Construction Management
+            Construction Manager
           </Typography>
+          <IconButton
+            onClick={handleMenuOpen}
+            sx={{
+              p: 1,
+              '&:hover': {
+                bgcolor: alpha(theme.palette.primary.main, 0.04),
+              },
+            }}
+          >
+            <Avatar
+              src={user?.photoURL || undefined}
+              alt={user?.displayName || 'User'}
+              sx={{
+                width: 32,
+                height: 32,
+                bgcolor: alpha(theme.palette.primary.main, 0.1),
+                color: theme.palette.primary.main,
+              }}
+            >
+              {user?.displayName?.[0] || 'U'}
+            </Avatar>
+          </IconButton>
+          <Menu
+            anchorEl={anchorEl}
+            open={Boolean(anchorEl)}
+            onClose={handleMenuClose}
+            PaperProps={{
+              sx: {
+                mt: 1.5,
+                borderRadius: 2,
+                boxShadow: '0 4px 20px rgba(0,0,0,0.1)',
+              },
+            }}
+          >
+            <MenuItem onClick={handleMenuClose}>
+              <ListItemIcon>
+                <PersonIcon fontSize="small" />
+              </ListItemIcon>
+              Profile
+            </MenuItem>
+            <MenuItem onClick={handleMenuClose}>
+              <ListItemIcon>
+                <SettingsIcon fontSize="small" />
+              </ListItemIcon>
+              Settings
+            </MenuItem>
+            <Divider />
+            <MenuItem onClick={handleSignOut}>
+              <ListItemIcon>
+                <LogoutIcon fontSize="small" sx={{ color: theme.palette.error.main }} />
+              </ListItemIcon>
+              <Typography color="error">Sign Out</Typography>
+            </MenuItem>
+          </Menu>
         </Toolbar>
       </AppBar>
       <Box
         component="nav"
-        sx={{ width: { md: drawerWidth }, flexShrink: { md: 0 } }}
+        sx={{ width: { sm: drawerWidth }, flexShrink: { sm: 0 } }}
       >
-        {isMobile ? (
-          <Drawer
-            variant="temporary"
-            open={mobileOpen}
-            onClose={handleDrawerToggle}
-            ModalProps={{
-              keepMounted: true,
-            }}
-            sx={{
-              display: { xs: 'block', md: 'none' },
-              '& .MuiDrawer-paper': {
-                boxSizing: 'border-box',
-                width: drawerWidth,
+        <Drawer
+          variant="temporary"
+          open={mobileOpen}
+          onClose={handleDrawerToggle}
+          ModalProps={{
+            keepMounted: true,
+            disableScrollLock: true,
+            disableEnforceFocus: true,
+            disableAutoFocus: true,
+            sx: {
+              '& .MuiBackdrop-root': {
+                bgcolor: alpha(theme.palette.common.black, 0.2),
               },
-            }}
-          >
-            {drawer}
-          </Drawer>
-        ) : (
-          <Drawer
-            variant="permanent"
-            sx={{
-              display: { xs: 'none', md: 'block' },
-              '& .MuiDrawer-paper': {
-                boxSizing: 'border-box',
-                width: drawerWidth,
-                borderRight: `1px solid ${alpha(theme.palette.divider, 0.1)}`,
-              },
-            }}
-            open
-          >
-            {drawer}
-          </Drawer>
-        )}
+            },
+          }}
+          sx={{
+            display: { xs: 'block', sm: 'none' },
+            '& .MuiDrawer-paper': {
+              boxSizing: 'border-box',
+              width: drawerWidth,
+              bgcolor: 'background.paper',
+            },
+          }}
+        >
+          {drawer}
+        </Drawer>
+        <Drawer
+          variant="permanent"
+          sx={{
+            display: { xs: 'none', sm: 'block' },
+            '& .MuiDrawer-paper': {
+              boxSizing: 'border-box',
+              width: drawerWidth,
+              bgcolor: 'background.paper',
+              borderRight: `1px solid ${alpha(theme.palette.divider, 0.1)}`,
+            },
+          }}
+          open
+        >
+          {drawer}
+        </Drawer>
       </Box>
       <Box
         component="main"
         sx={{
           flexGrow: 1,
           p: 3,
-          width: { md: `calc(100% - ${drawerWidth}px)` },
+          width: { sm: `calc(100% - ${drawerWidth}px)` },
           mt: '64px',
+          bgcolor: 'background.default',
         }}
       >
         {children || <Outlet />}
       </Box>
-      <Menu
-        anchorEl={anchorEl}
-        open={Boolean(anchorEl)}
-        onClose={handleMenuClose}
-        onClick={handleMenuClose}
-        transformOrigin={{ horizontal: 'right', vertical: 'top' }}
-        anchorOrigin={{ horizontal: 'right', vertical: 'bottom' }}
-      >
-        <MenuItem onClick={() => navigate('/profile')}>
-          <ListItemIcon>
-            <PersonIcon fontSize="small" />
-          </ListItemIcon>
-          Profile
-        </MenuItem>
-        <Divider />
-        <MenuItem onClick={handleLogout}>
-          <ListItemIcon>
-            <LogoutIcon fontSize="small" />
-          </ListItemIcon>
-          Logout
-        </MenuItem>
-      </Menu>
     </Box>
   );
 };
