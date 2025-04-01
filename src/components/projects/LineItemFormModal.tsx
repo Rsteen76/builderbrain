@@ -16,78 +16,79 @@ import {
   Box,
   Typography,
 } from '@mui/material';
-import { LineItem, LineItemCategory } from '../../types/project.types';
+import { LineItemCategory } from '../../types/project.types';
+import { LineItem } from '../../types';
 import { v4 as uuidv4 } from 'uuid'; // For generating unique IDs
 
 interface LineItemFormModalProps {
   open: boolean;
   onClose: () => void;
-  onSubmit: (item: LineItem) => void;
+  onSubmit: (item: LineItem) => void | Promise<void>;
   initialData?: LineItem | null; // For editing
 }
 
-const categories: LineItemCategory[] = ['Material', 'Labor', 'Subcontractor', 'Equipment', 'Permit', 'Other'];
+const categories: string[] = ['material', 'labor', 'subcontractor', 'equipment', 'permit', 'other'];
 // Define common units
 const commonUnits: string[] = ['sq ft', 'ln ft', 'hr', 'day', 'each', 'lump sum', 'yd', 'ton']; 
 
 // Define common line items with category and unit
 interface CommonLineItemOption {
   label: string; // The description to show and use
-  category: LineItemCategory;
+  category: string;
   unit: string;
 }
 
 const commonLineItems: CommonLineItemOption[] = [
   // Site Work & Foundation
-  { label: 'Site Clearing', category: 'Labor', unit: 'lump sum' },
-  { label: 'Excavation', category: 'Labor', unit: 'yd' },
-  { label: 'Foundation Concrete', category: 'Material', unit: 'yd' },
-  { label: 'Foundation Pour & Finish', category: 'Labor', unit: 'lump sum' },
-  { label: 'Foundation Waterproofing', category: 'Material', unit: 'sq ft' },
+  { label: 'Site Clearing', category: 'labor', unit: 'lump sum' },
+  { label: 'Excavation', category: 'labor', unit: 'yd' },
+  { label: 'Foundation Concrete', category: 'material', unit: 'yd' },
+  { label: 'Foundation Pour & Finish', category: 'labor', unit: 'lump sum' },
+  { label: 'Foundation Waterproofing', category: 'material', unit: 'sq ft' },
   // Framing
-  { label: 'Wall Framing Labor', category: 'Labor', unit: 'hr' },
-  { label: 'Roof Framing Labor', category: 'Labor', unit: 'hr' },
-  { label: 'Lumber - 2x4', category: 'Material', unit: 'ln ft' },
-  { label: 'Lumber - 2x6', category: 'Material', unit: 'ln ft' },
-  { label: 'Plywood Sheathing', category: 'Material', unit: 'sheet' }, 
-  { label: 'OSB Sheathing', category: 'Material', unit: 'sheet' },
+  { label: 'Wall Framing Labor', category: 'labor', unit: 'hr' },
+  { label: 'Roof Framing Labor', category: 'labor', unit: 'hr' },
+  { label: 'Lumber - 2x4', category: 'material', unit: 'ln ft' },
+  { label: 'Lumber - 2x6', category: 'material', unit: 'ln ft' },
+  { label: 'Plywood Sheathing', category: 'material', unit: 'sheet' }, 
+  { label: 'OSB Sheathing', category: 'material', unit: 'sheet' },
   // Exterior
-  { label: 'House Wrap', category: 'Material', unit: 'roll' },
-  { label: 'Siding Installation', category: 'Labor', unit: 'sq ft' },
-  { label: 'Vinyl Siding', category: 'Material', unit: 'sq ft' },
-  { label: 'Brick/Stone Veneer', category: 'Material', unit: 'sq ft' },
-  { label: 'Exterior Trim', category: 'Material', unit: 'ln ft' },
-  { label: 'Roofing Shingles', category: 'Material', unit: 'sq ft' },
-  { label: 'Roofing Installation', category: 'Labor', unit: 'sq ft' },
-  { label: 'Windows', category: 'Material', unit: 'each' },
-  { label: 'Exterior Doors', category: 'Material', unit: 'each' },
+  { label: 'House Wrap', category: 'material', unit: 'roll' },
+  { label: 'Siding Installation', category: 'labor', unit: 'sq ft' },
+  { label: 'Vinyl Siding', category: 'material', unit: 'sq ft' },
+  { label: 'Brick/Stone Veneer', category: 'material', unit: 'sq ft' },
+  { label: 'Exterior Trim', category: 'material', unit: 'ln ft' },
+  { label: 'Roofing Shingles', category: 'material', unit: 'sq ft' },
+  { label: 'Roofing Installation', category: 'labor', unit: 'sq ft' },
+  { label: 'Windows', category: 'material', unit: 'each' },
+  { label: 'Exterior Doors', category: 'material', unit: 'each' },
   // MEP
-  { label: 'Rough Plumbing Labor', category: 'Labor', unit: 'hr' },
-  { label: 'Finish Plumbing Labor', category: 'Labor', unit: 'hr' },
-  { label: 'Rough Electrical Labor', category: 'Labor', unit: 'hr' },
-  { label: 'Finish Electrical Labor', category: 'Labor', unit: 'hr' },
-  { label: 'HVAC Rough-in Labor', category: 'Labor', unit: 'hr' },
-  { label: 'HVAC System Install', category: 'Subcontractor', unit: 'lump sum' },
-  { label: 'Electrical Wiring', category: 'Material', unit: 'roll' },
-  { label: 'Outlets & Switches', category: 'Material', unit: 'each' },
+  { label: 'Rough Plumbing Labor', category: 'labor', unit: 'hr' },
+  { label: 'Finish Plumbing Labor', category: 'labor', unit: 'hr' },
+  { label: 'Rough Electrical Labor', category: 'labor', unit: 'hr' },
+  { label: 'Finish Electrical Labor', category: 'labor', unit: 'hr' },
+  { label: 'HVAC Rough-in Labor', category: 'labor', unit: 'hr' },
+  { label: 'HVAC System Install', category: 'subcontractor', unit: 'lump sum' },
+  { label: 'Electrical Wiring', category: 'material', unit: 'roll' },
+  { label: 'Outlets & Switches', category: 'material', unit: 'each' },
   // Interior
-  { label: 'Insulation - Batts', category: 'Material', unit: 'sq ft' },
-  { label: 'Insulation Installation', category: 'Labor', unit: 'sq ft' },
-  { label: 'Drywall Sheets', category: 'Material', unit: 'sheet' },
-  { label: 'Drywall Installation & Finish', category: 'Labor', unit: 'sq ft' },
-  { label: 'Interior Doors', category: 'Material', unit: 'each' },
-  { label: 'Interior Trim', category: 'Material', unit: 'ln ft' },
-  { label: 'Painting Labor', category: 'Labor', unit: 'hr' },
-  { label: 'Paint', category: 'Material', unit: 'gallon' },
-  { label: 'Flooring - Tile', category: 'Material', unit: 'sq ft' },
-  { label: 'Flooring - Hardwood', category: 'Material', unit: 'sq ft' },
-  { label: 'Flooring Installation', category: 'Labor', unit: 'sq ft' },
-  { label: 'Kitchen Cabinets', category: 'Material', unit: 'each' },
-  { label: 'Countertops', category: 'Material', unit: 'sq ft' },
+  { label: 'Insulation - Batts', category: 'material', unit: 'sq ft' },
+  { label: 'Insulation Installation', category: 'labor', unit: 'sq ft' },
+  { label: 'Drywall Sheets', category: 'material', unit: 'sheet' },
+  { label: 'Drywall Installation & Finish', category: 'labor', unit: 'sq ft' },
+  { label: 'Interior Doors', category: 'material', unit: 'each' },
+  { label: 'Interior Trim', category: 'material', unit: 'ln ft' },
+  { label: 'Painting Labor', category: 'labor', unit: 'hr' },
+  { label: 'Paint', category: 'material', unit: 'gallon' },
+  { label: 'Flooring - Tile', category: 'material', unit: 'sq ft' },
+  { label: 'Flooring - Hardwood', category: 'material', unit: 'sq ft' },
+  { label: 'Flooring Installation', category: 'labor', unit: 'sq ft' },
+  { label: 'Kitchen Cabinets', category: 'material', unit: 'each' },
+  { label: 'Countertops', category: 'material', unit: 'sq ft' },
   // Other
-  { label: 'Permit Fees', category: 'Permit', unit: 'lump sum' },
-  { label: 'Dumpster Rental', category: 'Equipment', unit: 'each' },
-  { label: 'General Labor', category: 'Labor', unit: 'hr' },
+  { label: 'Permit Fees', category: 'permit', unit: 'lump sum' },
+  { label: 'Dumpster Rental', category: 'equipment', unit: 'each' },
+  { label: 'General Labor', category: 'labor', unit: 'hr' },
 ];
 
 const LineItemFormModal: React.FC<LineItemFormModalProps> = ({ open, onClose, onSubmit, initialData }) => {
@@ -97,9 +98,16 @@ const LineItemFormModal: React.FC<LineItemFormModalProps> = ({ open, onClose, on
   useEffect(() => {
     // Reset form when initialData changes or modal opens/closes
     if (open) {
-      setItem(initialData || {
+      // Convert category to lowercase if it's in uppercase format
+      const normalizedInitialData = initialData ? {
+        ...initialData,
+        // Convert any legacy uppercase categories to lowercase
+        category: initialData.category ? initialData.category.toLowerCase() as LineItem['category'] : 'material'
+      } : null;
+
+      setItem(normalizedInitialData || {
         description: '',
-        category: 'Material',
+        category: 'material',
         quantity: 1,
         unit: '',
         unitCost: 0,
@@ -140,7 +148,7 @@ const LineItemFormModal: React.FC<LineItemFormModalProps> = ({ open, onClose, on
         // User selected a common item - update description, category, and unit
         updates = { 
           description: value.label,
-          category: value.category,
+          category: value.category as LineItem['category'],
           unit: value.unit
         };
       } else {
@@ -195,7 +203,7 @@ const LineItemFormModal: React.FC<LineItemFormModalProps> = ({ open, onClose, on
     const finalItem: LineItem = {
       id: initialData?.id || uuidv4(), // Generate new ID or use existing one
       description: item.description || '',
-      category: item.category || 'Other',
+      category: item.category || 'other',
       quantity: Number(item.quantity) || 0,
       unit: item.unit || '',
       unitCost: Number(item.unitCost) || 0,

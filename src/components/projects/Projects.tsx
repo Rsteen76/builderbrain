@@ -48,74 +48,55 @@ import {
   Description as DocumentIcon,
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
-import { ProjectService, Project } from '../../services/project';
-
-interface ProjectCardProps {
-  title: string;
-  client: string;
-  location: string;
-  progress: number;
-  status: 'on-track' | 'at-risk' | 'completed' | 'planning' | 'in_progress' | 'on_hold';
-  dueDate: string;
-  budget: string;
-  team: number;
-  priority: 'high' | 'medium' | 'low';
-  tasks: {
-    total: number;
-    completed: number;
-    overdue: number;
-  };
-  documents: number;
-  photos: number;
-  timeline: {
-    currentPhase: string;
-    nextMilestone: string;
-    daysUntilMilestone: number;
-  };
-}
+import { Project } from '../../types';
+import { ProjectService } from '../../services/project';
+import { useAuth } from '../../contexts/AuthContext';
 
 // Define valid status and priority types
 type ProjectStatus = 'on-track' | 'at-risk' | 'completed' | 'planning' | 'in_progress' | 'on_hold';
 type ProjectPriority = 'high' | 'medium' | 'low';
 
-const ProjectCard: React.FC<any> = (props) => {
+// Define display status types (local is fine)
+type DisplayProjectStatus = 'on-track' | 'at-risk' | 'completed' | 'planning' | 'in_progress' | 'on_hold';
+
+const ProjectCard: React.FC<Project & { onClick?: () => void }> = (props) => {
   const theme = useTheme();
   const navigate = useNavigate();
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
   
   const {
     id,
-    title,
-    name = title,
-    client,
+    name,
     clientId,
     location,
-    progress = 0,
     status,
-    dueDate,
     endDate,
     budget,
     team,
-    priority = 'medium',
-    tasks = { total: 0, completed: 0, overdue: 0 },
-    documents = 0,
-    photos = 0,
-    timeline = { currentPhase: '', nextMilestone: '', daysUntilMilestone: 0 },
+    onClick,
   } = props;
 
-  const statusColors: Record<ProjectStatus, string> = {
+  // Status Mapping: Map Project['status'] to DisplayProjectStatus
+  const statusMap: Partial<Record<Project['status'], DisplayProjectStatus>> = {
+      estimate: 'planning',
+      planning: 'planning',
+      in_progress: 'on-track',
+      active: 'on-track',
+      completed: 'completed',
+      on_hold: 'on_hold',
+      cancelled: 'at-risk',
+      draft: 'planning',
+  };
+  const displayStatus = statusMap[status] || 'planning'; // Default display status
+
+  // Status Colors: Use DisplayProjectStatus for keys
+  const statusColors: Record<DisplayProjectStatus, string> = {
     'on-track': theme.palette.success.main,
     'at-risk': theme.palette.warning.main,
     'completed': theme.palette.info.main,
     'planning': theme.palette.primary.main,
-    'in_progress': theme.palette.warning.main,
-    'on_hold': theme.palette.error.main,
-  };
-
-  const priorityColors: Record<ProjectPriority, string> = {
-    'high': theme.palette.error.main,
-    'medium': theme.palette.warning.main,
-    'low': theme.palette.success.main,
+    'in_progress': theme.palette.warning.main, // Or use a different color
+    'on_hold': theme.palette.grey[600],
   };
 
   const handleMenuClick = (event: React.MouseEvent<HTMLElement>) => {
@@ -126,38 +107,43 @@ const ProjectCard: React.FC<any> = (props) => {
     setAnchorEl(null);
   };
   
-  const formatDate = (date: string | Date) => {
-    if (!date) return 'TBD';
-    if (typeof date === 'string') return date;
-    return date.toLocaleDateString('en-US', { 
-      year: 'numeric', 
-      month: 'short', 
-      day: 'numeric' 
+  const formatDate = (dateValue: Date | null | undefined) => {
+    if (!dateValue) return 'TBD';
+    return new Date(dateValue).toLocaleDateString('en-US', { 
+      year: 'numeric', month: 'short', day: 'numeric' 
     });
   };
 
-  const displayProgress = progress || Math.floor(Math.random() * 100);
-  
-  const formatBudget = (budgetValue: string | number) => {
-    if (typeof budgetValue === 'string') return budgetValue;
-    return `$${(budgetValue || 0).toLocaleString()}`;
+  const formatBudget = (budgetValue: Project['budget']) => {
+    const total = typeof budgetValue === 'object' && budgetValue !== null ? budgetValue.total : budgetValue;
+    return `$${(total || 0).toLocaleString()}`;
   };
 
-  // Convert status to a valid status value or default to 'planning'
-  const displayStatus = (status?.replace('_', '-') || 'planning') as ProjectStatus;
-  // Ensure priority is one of the valid priority values
-  const displayPriority = (priority || 'medium') as ProjectPriority;
+  const formatLocation = (locationValue: Project['location']) => {
+      if (!locationValue) return 'No location set';
+      if (typeof locationValue === 'string') return locationValue;
+      return locationValue.address || `${locationValue.city}, ${locationValue.state}`; // Example format
+  }
+
+  const calculateProgress = () => {
+      if (status === 'completed') return 100;
+      // Add logic based on tasks, phases, dates, etc.
+      return Math.floor(Math.random() * 80) + 10; // Placeholder
+  }
+  const displayProgress = calculateProgress();
 
   return (
     <Card
       sx={{
         height: '100%',
         transition: 'all 0.3s ease',
+        cursor: onClick ? 'pointer' : 'default',
         '&:hover': {
           transform: 'translateY(-4px)',
           boxShadow: theme.shadows[4],
         },
       }}
+      onClick={onClick}
     >
       <CardContent>
         <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 2 }}>
@@ -166,7 +152,7 @@ const ProjectCard: React.FC<any> = (props) => {
               {name}
             </Typography>
             <Typography variant="body2" color="text.secondary">
-              {client || clientId || 'No client specified'}
+              {clientId || 'No client specified'}
             </Typography>
           </Box>
           <IconButton onClick={handleMenuClick}>
@@ -176,19 +162,12 @@ const ProjectCard: React.FC<any> = (props) => {
 
         <Box sx={{ display: 'flex', gap: 1, mb: 2 }}>
           <Chip
-            label={displayStatus}
+            label={displayStatus.replace('_', ' ').replace('-', ' ')}
             size="small"
             sx={{
-              backgroundColor: alpha(statusColors[displayStatus] || theme.palette.primary.main, 0.1),
-              color: statusColors[displayStatus] || theme.palette.primary.main,
-            }}
-          />
-          <Chip
-            label={displayPriority}
-            size="small"
-            sx={{
-              backgroundColor: alpha(priorityColors[displayPriority], 0.1),
-              color: priorityColors[displayPriority],
+              backgroundColor: alpha(statusColors[displayStatus] || theme.palette.grey[500], 0.1),
+              color: statusColors[displayStatus] || theme.palette.grey[500],
+              textTransform: 'capitalize',
             }}
           />
         </Box>
@@ -221,7 +200,7 @@ const ProjectCard: React.FC<any> = (props) => {
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
               <CalendarIcon sx={{ fontSize: 16, color: 'text.secondary' }} />
               <Typography variant="body2" color="text.secondary">
-                {formatDate(dueDate || endDate)}
+                {formatDate(endDate)}
               </Typography>
             </Box>
           </Grid>
@@ -237,7 +216,7 @@ const ProjectCard: React.FC<any> = (props) => {
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
               <GroupIcon sx={{ fontSize: 16, color: 'text.secondary' }} />
               <Typography variant="body2" color="text.secondary">
-                {typeof team === 'number' ? `${team} members` : `${team?.length || 0} members`}
+                {`${team?.length || 0} members`}
               </Typography>
             </Box>
           </Grid>
@@ -245,57 +224,11 @@ const ProjectCard: React.FC<any> = (props) => {
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
               <LocationIcon sx={{ fontSize: 16, color: 'text.secondary' }} />
               <Typography variant="body2" color="text.secondary">
-                {location || 'No location set'}
+                {formatLocation(location)}
               </Typography>
             </Box>
           </Grid>
         </Grid>
-
-        <Divider sx={{ my: 2 }} />
-
-        <Grid container spacing={2}>
-          <Grid item xs={4}>
-            <Box sx={{ textAlign: 'center' }}>
-              <Typography variant="h6" component="div">
-                {tasks.completed}/{tasks.total}
-              </Typography>
-              <Typography variant="caption" color="text.secondary">
-                Tasks
-              </Typography>
-            </Box>
-          </Grid>
-          <Grid item xs={4}>
-            <Box sx={{ textAlign: 'center' }}>
-              <Typography variant="h6" component="div">
-                {documents}
-              </Typography>
-              <Typography variant="caption" color="text.secondary">
-                Documents
-              </Typography>
-            </Box>
-          </Grid>
-          <Grid item xs={4}>
-            <Box sx={{ textAlign: 'center' }}>
-              <Typography variant="h6" component="div">
-                {photos}
-              </Typography>
-              <Typography variant="caption" color="text.secondary">
-                Photos
-              </Typography>
-            </Box>
-          </Grid>
-        </Grid>
-
-        {timeline.currentPhase && (
-          <Box sx={{ mt: 2, p: 1, bgcolor: alpha(theme.palette.primary.main, 0.05), borderRadius: 1 }}>
-            <Typography variant="body2" color="text.secondary" gutterBottom>
-              Current Phase: {timeline.currentPhase}
-            </Typography>
-            <Typography variant="body2" color="text.secondary">
-              Next Milestone: {timeline.nextMilestone} ({timeline.daysUntilMilestone} days)
-            </Typography>
-          </Box>
-        )}
       </CardContent>
 
       <Menu
@@ -305,7 +238,7 @@ const ProjectCard: React.FC<any> = (props) => {
         onClick={handleMenuClose}
       >
         <MenuItem onClick={() => {
-          console.log('View Details clicked for project:', { id, name, title });
+          console.log('View Details clicked for project:', { id, name, title: name });
           if (id) {
             navigate(`/projects/${id}`);
           } else {
@@ -335,6 +268,7 @@ const ProjectCard: React.FC<any> = (props) => {
 const Projects: React.FC = () => {
   const theme = useTheme();
   const navigate = useNavigate();
+  const { user } = useAuth();
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedTab, setSelectedTab] = useState(0);
   const [filterAnchorEl, setFilterAnchorEl] = useState<null | HTMLElement>(null);
@@ -344,18 +278,18 @@ const Projects: React.FC = () => {
   const [projects, setProjects] = useState<Project[]>([]);
 
   useEffect(() => {
-    const fetchProjects = async () => {
+    const fetchProjects = async (currentUserId: string) => {
       try {
         setLoading(true);
         setError(null);
         
-        let filters: any = {};
-        if (selectedTab === 1) filters.status = 'in_progress';
-        if (selectedTab === 2) filters.status = 'planning';
-        if (selectedTab === 3) filters.status = 'completed';
-        if (selectedTab === 4) filters.status = 'on_hold';
+        let statusFilter: Project['status'] | undefined = undefined;
+        if (selectedTab === 1) statusFilter = 'active';
+        if (selectedTab === 2) statusFilter = 'planning';
+        if (selectedTab === 3) statusFilter = 'completed';
+        if (selectedTab === 4) statusFilter = 'on_hold';
         
-        const projectsData = await ProjectService.getProjects(filters);
+        const projectsData = await ProjectService.getProjects(currentUserId, { status: statusFilter });
         console.log('Fetched projects from Firestore:', projectsData);
         
         // Check if projects have valid IDs
@@ -376,8 +310,13 @@ const Projects: React.FC = () => {
       }
     };
     
-    fetchProjects();
-  }, [selectedTab]);
+    if (user?.uid) {
+      fetchProjects(user.uid);
+    } else {
+      console.error('User is not authenticated');
+      setError('Failed to load projects. Please try again.');
+    }
+  }, [selectedTab, user]);
 
   const handleTabChange = (event: React.SyntheticEvent, newValue: number) => {
     setSelectedTab(newValue);
@@ -391,12 +330,18 @@ const Projects: React.FC = () => {
     setFilterAnchorEl(null);
   };
 
-  const filteredProjects = projects.filter(project => 
-    project.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    project.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    project.location?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    project.clientId?.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  const filteredProjects = projects.filter(project => {
+    const search = searchQuery.toLowerCase();
+    const locationString = typeof project.location === 'object' && project.location !== null 
+                            ? `${project.location.address} ${project.location.city}`.toLowerCase()
+                            : typeof project.location === 'string' ? project.location.toLowerCase() : '';
+                            
+    return project.name.toLowerCase().includes(search) ||
+           project.description.toLowerCase().includes(search) ||
+           locationString.includes(search) ||
+           project.clientId?.toLowerCase().includes(search) ||
+           project.status.toLowerCase().includes(search);
+  });
 
   return (
     <Box sx={{ p: 3 }}>
@@ -468,7 +413,7 @@ const Projects: React.FC = () => {
           <Grid container spacing={3}>
             {filteredProjects.map((project) => (
               <Grid item xs={12} md={4} key={project.id}>
-                <ProjectCard {...project} />
+                <ProjectCard {...project} onClick={() => navigate(`/projects/${project.id}`)} />
               </Grid>
             ))}
           </Grid>

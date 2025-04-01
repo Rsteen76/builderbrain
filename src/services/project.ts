@@ -13,50 +13,16 @@ import {
   Timestamp,
   DocumentData,
 } from 'firebase/firestore';
-import { LineItem, Bid } from '../types/project.types';
-import { Task } from './task';
+import { Project, LineItem, Bid, Task } from '../types';
 
-export interface Project {
-  id?: string;
-  name: string;
-  description: string;
-  status: 'Estimate' | 'planning' | 'in_progress' | 'completed' | 'on_hold';
-  startDate: Date;
-  endDate: Date;
-  budget: number;
-  clientId: string;
-  team: string[];
-  location: string;
-  projectType: string;
-  estimatedDuration: string;
-  phases: {
-    name: string;
-    duration: string;
-    description: string;
-    dependencies: string[];
-  }[];
-  keyMilestones: {
-    name: string;
-    date: string;
-    description: string;
-  }[];
-  requirements: {
-    permits: string[];
-    inspections: string[];
-    documents: string[];
-  };
-  lineItems?: LineItem[];
-  bids?: Bid[];
-  tasks?: Task[];
-  createdAt: Date;
-  updatedAt: Date;
-}
-
-interface FirestoreProject extends Omit<Project, 'startDate' | 'endDate' | 'createdAt' | 'updatedAt' | 'lineItems' | 'bids' | 'tasks'> {
+interface FirestoreProject extends Omit<Project, 'id' | 'startDate' | 'endDate' | 'createdAt' | 'updatedAt' | 'budget' | 'location' | 'lineItems' | 'bids' | 'tasks'> {
+  userId: string;
   startDate: Timestamp;
-  endDate: Timestamp;
+  endDate?: Timestamp | null;
   createdAt: Timestamp;
   updatedAt: Timestamp;
+  budget: number;
+  location: string;
   lineItems?: LineItem[];
   bids?: Bid[];
   tasks?: Task[];
@@ -65,57 +31,78 @@ interface FirestoreProject extends Omit<Project, 'startDate' | 'endDate' | 'crea
 export class ProjectService {
   private static collection = collection(db, 'projects');
 
-  static async createProject(projectData: Omit<Project, 'id' | 'createdAt' | 'updatedAt'>): Promise<Project> {
+  static async createProject(userId: string, projectData: Omit<Project, 'id' | 'userId' | 'createdAt' | 'updatedAt'>): Promise<Project> {
     const now = new Date();
-    const fullProjectData = { 
+    
+    const budgetValue = typeof projectData.budget === 'object' && projectData.budget !== null 
+                        ? projectData.budget.total 
+                        : typeof projectData.budget === 'number' ? projectData.budget : 0;
+    const locationValue = typeof projectData.location === 'object' && projectData.location !== null
+                          ? `${projectData.location.address}, ${projectData.location.city}`
+                          : typeof projectData.location === 'string' ? projectData.location : '';
+
+    const projectToSave: Omit<FirestoreProject, 'lineItems' | 'bids' | 'tasks'> = {
       ...projectData,
-      lineItems: projectData.lineItems || [],
-      bids: projectData.bids || [],
-      tasks: projectData.tasks || [],
-    };
-    const project: FirestoreProject = {
-      ...fullProjectData,
-      startDate: Timestamp.fromDate(projectData.startDate),
-      endDate: Timestamp.fromDate(projectData.endDate),
+      userId: userId,
+      budget: budgetValue,
+      location: locationValue,
+      startDate: Timestamp.fromDate(projectData.startDate || new Date()),
+      endDate: projectData.endDate ? Timestamp.fromDate(projectData.endDate) : null,
       createdAt: Timestamp.fromDate(now),
       updatedAt: Timestamp.fromDate(now),
     };
 
-    const docRef = await addDoc(this.collection, project);
+    const docRef = await addDoc(this.collection, projectToSave);
 
     return {
-      ...fullProjectData,
+      ...projectData,
       id: docRef.id,
+      userId: userId,
       createdAt: now,
       updatedAt: now,
-    };
+      budget: typeof projectData.budget === 'number' 
+              ? { total: projectData.budget, spent: 0, remaining: projectData.budget } 
+              : projectData.budget,
+      location: typeof projectData.location === 'string' 
+                ? { address: projectData.location, city: '', state: '', zipCode: '' } 
+                : projectData.location,
+    } as Project;
   }
 
-  static async updateProject(id: string, projectData: Partial<Project>): Promise<void> {
+  static async updateProject(id: string, projectData: Partial<Omit<Project, 'id' | 'userId'>>): Promise<void> {
     const projectRef = doc(this.collection, id);
-    const updateData: Partial<FirestoreProject> = {
+    const { userId, createdAt, updatedAt, ...updatePayload } = projectData as any;
+
+    const firestoreUpdateData: Partial<FirestoreProject> = {
       updatedAt: Timestamp.fromDate(new Date()),
     };
 
-    if (projectData.name) updateData.name = projectData.name;
-    if (projectData.description) updateData.description = projectData.description;
-    if (projectData.status) updateData.status = projectData.status;
-    if (projectData.startDate) updateData.startDate = Timestamp.fromDate(projectData.startDate);
-    if (projectData.endDate) updateData.endDate = Timestamp.fromDate(projectData.endDate);
-    if (projectData.budget) updateData.budget = projectData.budget;
-    if (projectData.clientId) updateData.clientId = projectData.clientId;
-    if (projectData.team) updateData.team = projectData.team;
-    if (projectData.location) updateData.location = projectData.location;
-    if (projectData.projectType) updateData.projectType = projectData.projectType;
-    if (projectData.estimatedDuration) updateData.estimatedDuration = projectData.estimatedDuration;
-    if (projectData.phases) updateData.phases = projectData.phases;
-    if (projectData.keyMilestones) updateData.keyMilestones = projectData.keyMilestones;
-    if (projectData.requirements) updateData.requirements = projectData.requirements;
-    if (projectData.lineItems) updateData.lineItems = projectData.lineItems;
-    if (projectData.bids) updateData.bids = projectData.bids;
-    if (projectData.tasks) updateData.tasks = projectData.tasks;
+    for (const key in updatePayload) {
+      if (Object.prototype.hasOwnProperty.call(updatePayload, key)) {
+        const typedKey = key as keyof typeof updatePayload;
+        const value = updatePayload[typedKey];
 
-    await updateDoc(projectRef, updateData);
+        if (typedKey === 'startDate' && value instanceof Date) {
+          firestoreUpdateData.startDate = Timestamp.fromDate(value);
+        } else if (typedKey === 'endDate' && value instanceof Date) {
+          firestoreUpdateData.endDate = Timestamp.fromDate(value);
+        } else if (typedKey === 'endDate' && value === null) {
+          firestoreUpdateData.endDate = null;
+        } else if (typedKey === 'budget') {
+          firestoreUpdateData.budget = typeof value === 'object' && value !== null 
+                                      ? (value as any).total
+                                      : typeof value === 'number' ? value : 0;
+        } else if (typedKey === 'location') {
+            firestoreUpdateData.location = typeof value === 'object' && value !== null
+                                        ? `${(value as any).address}, ${(value as any).city}`
+                                        : typeof value === 'string' ? value : '';
+        } else {
+           (firestoreUpdateData as any)[typedKey] = value;
+        }
+      }
+    }
+
+    await updateDoc(projectRef, firestoreUpdateData);
   }
 
   static async deleteProject(id: string): Promise<void> {
@@ -123,28 +110,32 @@ export class ProjectService {
     await deleteDoc(projectRef);
   }
 
-  static async getProject(id: string): Promise<Project | null> {
+  static async getProject(userId: string, id: string): Promise<Project | null> {
     const projectRef = doc(this.collection, id);
     const projectDoc = await getDoc(projectRef);
 
     if (!projectDoc.exists()) {
+      console.log(`ProjectService: Project ${id} not found.`);
       return null;
     }
 
     const data = projectDoc.data() as FirestoreProject;
-    return {
-      ...this.convertFirestoreData(data),
-      id: projectDoc.id
-    };
+
+    if (data.userId !== userId) {
+      console.warn(`ProjectService: User ${userId} attempted to access unauthorized project ${id} owned by ${data.userId}.`);
+      return null;
+    }
+
+    return this.convertFirestoreData(data, id);
   }
 
-  static async getProjects(filters?: {
+  static async getProjects(userId: string, filters?: {
     status?: Project['status'];
     clientId?: string;
     startDate?: Date;
     endDate?: Date;
   }): Promise<Project[]> {
-    let q = query(this.collection);
+    let q = query(this.collection, where('userId', '==', userId));
 
     if (filters?.status) {
       q = query(q, where('status', '==', filters.status));
@@ -167,23 +158,38 @@ export class ProjectService {
     const querySnapshot = await getDocs(q);
     return querySnapshot.docs.map(doc => {
       const data = doc.data() as FirestoreProject;
-      return {
-        ...this.convertFirestoreData(data),
-        id: doc.id
-      };
+      return this.convertFirestoreData(data, doc.id);
     });
   }
 
-  private static convertFirestoreData(data: FirestoreProject): Project {
-    return {
+  private static convertFirestoreData(data: FirestoreProject, id: string): Project {
+    const project: Project = {
       ...data,
+      id: id,
+      userId: data.userId,
       startDate: data.startDate.toDate(),
-      endDate: data.endDate.toDate(),
+      endDate: data.endDate ? data.endDate.toDate() : null,
       createdAt: data.createdAt.toDate(),
       updatedAt: data.updatedAt.toDate(),
+      budget: { 
+          total: data.budget || 0, 
+          spent: 0,
+          remaining: data.budget || 0 
+      }, 
+      location: { 
+          address: data.location || '',
+          city: '', 
+          state: '', 
+          zipCode: '' 
+      }, 
       lineItems: data.lineItems || [],
       bids: data.bids || [],
       tasks: data.tasks || [],
+      team: data.team || [],
+      phases: data.phases || [],
+      keyMilestones: data.keyMilestones || [],
+      requirements: data.requirements || { permits: [], inspections: [], documents: [] },
     };
+    return project;
   }
 } 

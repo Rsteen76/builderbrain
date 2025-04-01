@@ -7,9 +7,9 @@ import {
 import { DatePicker } from '@mui/x-date-pickers/DatePicker';
 import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
 import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns';
-import { Task, TaskStatus, TaskPriority, TaskService } from '../../services/task';
-import { Subcontractor, SubcontractorService } from '../../services/subcontractor';
-import { TextFieldProps } from '@mui/material/TextField';
+import { TaskService } from '../../services/task';
+import { SubcontractorService } from '../../services/subcontractor';
+import { Task, Subcontractor } from '../../types';
 
 interface TaskFormModalProps {
   open: boolean;
@@ -17,19 +17,20 @@ interface TaskFormModalProps {
   onSubmitSuccess: (task: Task) => void;
   initialData?: Task | null;
   projectId: string;
+  userId: string;
 }
 
 interface MockUser { id: string; name: string; }
 
-const taskStatuses: TaskStatus[] = ['To Do', 'In Progress', 'Blocked', 'Done'];
-const taskPriorities: TaskPriority[] = ['Low', 'Medium', 'High', 'Urgent'];
+const taskStatuses: Task['status'][] = ['todo', 'in_progress', 'review', 'completed'];
+const taskPriorities: Task['priority'][] = ['low', 'medium', 'high', 'urgent'];
 const mockUsers: MockUser[] = [
     {id: 'user1', name: 'Alice (PM)'},
     {id: 'user2', name: 'Bob (Site Super)'},
     {id: 'user3', name: 'Charlie (Admin)'}
 ];
 
-const TaskFormModal: React.FC<TaskFormModalProps> = ({ open, onClose, onSubmitSuccess, initialData, projectId }) => {
+const TaskFormModal: React.FC<TaskFormModalProps> = ({ open, onClose, onSubmitSuccess, initialData, projectId, userId }) => {
   const [task, setTask] = useState<Partial<Task>>({});
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(false);
@@ -46,11 +47,14 @@ const TaskFormModal: React.FC<TaskFormModalProps> = ({ open, onClose, onSubmitSu
         projectId: projectId,
         title: '',
         description: '',
-        status: 'To Do',
-        priority: 'Medium',
+        status: 'todo',
+        priority: 'medium',
         assigneeId: '',
         dueDate: null,
         assigneeType: undefined,
+        completedAt: null,
+        dependencies: [],
+        attachments: [],
       });
       if (initialData?.assigneeId) {
           setTask(prev => ({...prev, assigneeId: initialData.assigneeId}));
@@ -60,12 +64,20 @@ const TaskFormModal: React.FC<TaskFormModalProps> = ({ open, onClose, onSubmitSu
       setLoading(false);
 
       const fetchSubs = async () => {
+          if (!userId) {
+              console.error("TaskFormModal: userId not provided, cannot fetch subcontractors.");
+              setSubmitError("User information missing.");
+              return;
+          }
           try {
-              const subs = await SubcontractorService.getSubcontractors();
+              const subs: Subcontractor[] = await SubcontractorService.getSubcontractors(userId);
               setSubcontractors(subs);
           } catch (err) { console.error("Failed to fetch subcontractors for task form", err); }
       };
-      fetchSubs();
+      
+      if (userId) {
+          fetchSubs();
+      }
 
     } else {
         setTask({});
@@ -74,7 +86,7 @@ const TaskFormModal: React.FC<TaskFormModalProps> = ({ open, onClose, onSubmitSu
         setAssigneeType('none');
         setSubcontractors([]);
     }
-  }, [open, initialData, projectId]);
+  }, [open, initialData, projectId, userId]);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | { name?: string; value: unknown }>) => {
     const { name, value } = e.target;
@@ -135,6 +147,11 @@ const TaskFormModal: React.FC<TaskFormModalProps> = ({ open, onClose, onSubmitSu
     if (!validateForm()) {
       return;
     }
+    if (!userId) {
+        setSubmitError("Cannot save task: User information is missing.");
+        setLoading(false);
+        return;
+    }
     setLoading(true);
     setSubmitError(null);
 
@@ -146,24 +163,28 @@ const TaskFormModal: React.FC<TaskFormModalProps> = ({ open, onClose, onSubmitSu
         assigneeType: finalAssigneeType,
         assigneeId: finalAssigneeId
      };
-    taskData.status = taskData.status || 'To Do';
-    taskData.priority = taskData.priority || 'Medium';
+    taskData.status = taskData.status || 'todo';
+    taskData.priority = taskData.priority || 'medium';
     taskData.title = taskData.title || '';
 
     try {
       let savedTask: Task;
       if (initialData?.id) {
-        const updatePayload: Partial<Omit<Task, 'id' | 'createdAt' | 'projectId'>> = {
+        const updatePayload: Partial<Omit<Task, 'id' | 'userId' | 'createdAt' | 'projectId'>> = {
             title: taskData.title,
             description: taskData.description,
             status: taskData.status,
             priority: taskData.priority,
             assigneeId: taskData.assigneeId,
             assigneeType: taskData.assigneeType,
-            dueDate: taskData.dueDate
+            dueDate: taskData.dueDate,
+            completedAt: taskData.completedAt,
+            parentTaskId: taskData.parentTaskId,
+            dependencies: taskData.dependencies,
+            attachments: taskData.attachments,
         };
         await TaskService.updateTask(initialData.id, updatePayload);
-        const updatedTaskData = await TaskService.getTask(initialData.id);
+        const updatedTaskData = await TaskService.getTask(userId, initialData.id);
         if (!updatedTaskData) throw new Error("Failed to refetch updated task");
         savedTask = updatedTaskData;
 
@@ -171,17 +192,22 @@ const TaskFormModal: React.FC<TaskFormModalProps> = ({ open, onClose, onSubmitSu
         if (!taskData.projectId) {
              throw new Error("Project ID is missing");
         }
-         const createPayload: Omit<Task, 'id' | 'createdAt' | 'updatedAt'> = {
-            projectId: taskData.projectId,
-            title: taskData.title,
+         const createPayload: Omit<Task, 'id' | 'userId' | 'createdAt' | 'updatedAt'> = {
+            projectId: taskData.projectId!,
+            title: taskData.title || '',
             description: taskData.description || '',
-            status: taskData.status,
-            priority: taskData.priority,
-            assigneeId: taskData.assigneeId || '',
+            status: taskData.status!,
+            priority: taskData.priority!,
+            assigneeId: taskData.assigneeId || undefined,
             assigneeType: taskData.assigneeType,
-            dueDate: taskData.dueDate || null
+            dueDate: taskData.dueDate || null,
+            completedAt: taskData.completedAt || null,
+            createdBy: taskData.createdBy || userId,
+            parentTaskId: taskData.parentTaskId,
+            dependencies: taskData.dependencies || [],
+            attachments: taskData.attachments || [],
         };
-        savedTask = await TaskService.createTask(createPayload);
+        savedTask = await TaskService.createTask(userId, createPayload);
       }
       onSubmitSuccess(savedTask);
       onClose();
@@ -240,7 +266,7 @@ const TaskFormModal: React.FC<TaskFormModalProps> = ({ open, onClose, onSubmitSu
                   <Select
                     name="status"
                     label="Status"
-                    value={task.status || 'To Do'}
+                    value={task.status || 'todo'}
                     onChange={handleChange as any}
                   >
                     {taskStatuses.map(stat => (
@@ -255,7 +281,7 @@ const TaskFormModal: React.FC<TaskFormModalProps> = ({ open, onClose, onSubmitSu
                   <Select
                     name="priority"
                     label="Priority"
-                    value={task.priority || 'Medium'}
+                    value={task.priority || 'medium'}
                     onChange={handleChange as any}
                   >
                     {taskPriorities.map(prio => (
@@ -312,9 +338,6 @@ const TaskFormModal: React.FC<TaskFormModalProps> = ({ open, onClose, onSubmitSu
                  label="Due Date (Optional)"
                  value={task.dueDate || null}
                  onChange={handleDateChange}
-                 slotProps={{
-                    textField: { fullWidth: true } as TextFieldProps
-                 }}
                />
              </Grid>
           </Grid>

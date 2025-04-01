@@ -41,31 +41,13 @@ import {
   CloudDownload as DownloadIcon,
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
-import { SubcontractorService, Subcontractor } from '../../services/subcontractor';
+import { Subcontractor } from '../../types';
+import { SubcontractorService } from '../../services/subcontractor';
 import { formatCurrency } from '../../utils/formatters';
 import { exportSubcontractorsToCSV, importSubcontractorsFromCSV, downloadFile } from '../../utils/importExport';
+import { useAuth } from '../../contexts/AuthContext';
 
-interface SubcontractorCardProps {
-  id: string;
-  name: string;
-  specialty: string;
-  rating: number;
-  totalProjects: number;
-  lastBid?: {
-    date: Date;
-    amount: number;
-    projectId?: string;
-  };
-  contact: {
-    phone: string;
-    email: string;
-    location: string;
-  };
-  performance: {
-    onTime: number;
-    quality: number;
-    communication: number;
-  };
+interface SubcontractorCardProps extends Subcontractor {
   onEdit: (id: string) => void;
   onDelete: (id: string) => void;
 }
@@ -157,13 +139,13 @@ const SubcontractorCard: React.FC<SubcontractorCardProps> = ({
 
         <Box sx={{ mb: 2 }}>
           <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
-            <Rating value={rating} precision={0.5} readOnly size="small" />
+            <Rating value={rating ?? 0} precision={0.5} readOnly size="small" />
             <Typography variant="body2" sx={{ ml: 1 }}>
-              {rating.toFixed(1)}
+              {(rating ?? 0).toFixed(1)}
             </Typography>
           </Box>
           <Typography variant="body2" color="text.secondary">
-            {totalProjects} completed projects
+            {totalProjects ?? 0} completed projects
           </Typography>
         </Box>
 
@@ -171,7 +153,7 @@ const SubcontractorCard: React.FC<SubcontractorCardProps> = ({
           <Box sx={{ mb: 2 }}>
             <Typography variant="subtitle2">Last Bid</Typography>
             <Typography variant="body2">
-              {formatCurrency(lastBid.amount)} ({new Date(lastBid.date).toLocaleDateString()})
+              {formatCurrency(lastBid.amount)} ({lastBid.date ? new Date(lastBid.date).toLocaleDateString() : 'Date N/A'})
             </Typography>
           </Box>
         )}
@@ -184,10 +166,10 @@ const SubcontractorCard: React.FC<SubcontractorCardProps> = ({
                 <Typography variant="body2" sx={{ minWidth: 100 }}>On Time</Typography>
                 <LinearProgress
                   variant="determinate"
-                  value={performance.onTime}
+                  value={performance?.onTime ?? 0}
                   sx={{ flexGrow: 1, mr: 1 }}
                 />
-                <Typography variant="body2">{performance.onTime}%</Typography>
+                <Typography variant="body2">{performance?.onTime ?? 0}%</Typography>
               </Box>
             </Grid>
             <Grid item xs={12}>
@@ -195,11 +177,11 @@ const SubcontractorCard: React.FC<SubcontractorCardProps> = ({
                 <Typography variant="body2" sx={{ minWidth: 100 }}>Quality</Typography>
                 <LinearProgress
                   variant="determinate"
-                  value={performance.quality}
+                  value={performance?.quality ?? 0}
                   sx={{ flexGrow: 1, mr: 1 }}
                   color="success"
                 />
-                <Typography variant="body2">{performance.quality}%</Typography>
+                <Typography variant="body2">{performance?.quality ?? 0}%</Typography>
               </Box>
             </Grid>
             <Grid item xs={12}>
@@ -207,11 +189,11 @@ const SubcontractorCard: React.FC<SubcontractorCardProps> = ({
                 <Typography variant="body2" sx={{ minWidth: 100 }}>Communication</Typography>
                 <LinearProgress
                   variant="determinate"
-                  value={performance.communication}
+                  value={performance?.communication ?? 0}
                   sx={{ flexGrow: 1, mr: 1 }}
                   color="info"
                 />
-                <Typography variant="body2">{performance.communication}%</Typography>
+                <Typography variant="body2">{performance?.communication ?? 0}%</Typography>
               </Box>
             </Grid>
           </Grid>
@@ -223,19 +205,19 @@ const SubcontractorCard: React.FC<SubcontractorCardProps> = ({
             <Grid item xs={12}>
               <Box sx={{ display: 'flex', alignItems: 'center' }}>
                 <PhoneIcon fontSize="small" sx={{ mr: 1, color: 'text.secondary' }} />
-                <Typography variant="body2">{contact.phone}</Typography>
+                <Typography variant="body2">{contact?.phone || '-'}</Typography>
               </Box>
             </Grid>
             <Grid item xs={12}>
               <Box sx={{ display: 'flex', alignItems: 'center' }}>
                 <EmailIcon fontSize="small" sx={{ mr: 1, color: 'text.secondary' }} />
-                <Typography variant="body2">{contact.email}</Typography>
+                <Typography variant="body2">{contact?.email || '-'}</Typography>
               </Box>
             </Grid>
             <Grid item xs={12}>
               <Box sx={{ display: 'flex', alignItems: 'center' }}>
                 <LocationIcon fontSize="small" sx={{ mr: 1, color: 'text.secondary' }} />
-                <Typography variant="body2">{contact.location}</Typography>
+                <Typography variant="body2">{contact?.location || '-'}</Typography>
               </Box>
             </Grid>
           </Grid>
@@ -259,30 +241,44 @@ const Subcontractors: React.FC = () => {
   } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const navigate = useNavigate();
+  const { user } = useAuth();
 
   useEffect(() => {
-    const fetchSubcontractors = async () => {
-      try {
-        setLoading(true);
-        const filters: {specialty?: string} = {};
-        
-        if (specialtyFilter) {
-          filters.specialty = specialtyFilter;
-        }
-        
-        const data = await SubcontractorService.getSubcontractors(filters);
-        setSubcontractors(data);
-        setError(null);
-      } catch (err) {
-        console.error("Error fetching subcontractors:", err);
-        setError("Failed to load subcontractors. Please try again.");
-      } finally {
-        setLoading(false);
-      }
-    };
+    if (user?.uid) {
+      fetchSubcontractors(user.uid);
+    } else if (!user) {
+      setLoading(true);
+      setError(null);
+    } else {
+      setError("User not authenticated.");
+      setLoading(false);
+    }
+  }, [user]);
 
-    fetchSubcontractors();
-  }, [specialtyFilter]);
+  const fetchSubcontractors = async (currentUserId: string) => {
+    setLoading(true);
+    setError(null);
+    try {
+      const currentFilters = { specialty: specialtyFilter || undefined };
+      const data = await SubcontractorService.getSubcontractors(currentUserId, currentFilters);
+      const filteredData = data.filter(sub => 
+        sub.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
+        sub.specialty.toLowerCase().includes(searchTerm.toLowerCase())
+      );
+      setSubcontractors(filteredData);
+    } catch (err) {
+      console.error('Error fetching subcontractors:', err);
+      setError('Failed to load subcontractors');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (user?.uid) {
+      fetchSubcontractors(user.uid);
+    }
+  }, [specialtyFilter, searchTerm, user]);
 
   const handleTabChange = (event: React.SyntheticEvent, newValue: number) => {
     setTabValue(newValue);
@@ -325,23 +321,23 @@ const Subcontractors: React.FC = () => {
   };
 
   const handleExportCSV = async () => {
+    if (!user?.uid) {
+      setError("Cannot export: User not authenticated.");
+      return;
+    }
     try {
-      // Get all subcontractors for export (without filters)
-      const allSubcontractors = await SubcontractorService.getSubcontractors();
+      const allSubcontractors = await SubcontractorService.getSubcontractors(user.uid);
       
       if (allSubcontractors.length === 0) {
         setError("No subcontractors to export.");
         return;
       }
       
-      // Generate CSV and download it
-      const csvContent = exportSubcontractorsToCSV(allSubcontractors);
-      const fileName = `subcontractors-${new Date().toISOString().split('T')[0]}.csv`;
-      
-      downloadFile(csvContent, fileName, 'text/csv');
+      const csvData = exportSubcontractorsToCSV(allSubcontractors);
+      downloadFile(csvData, 'subcontractors.csv', 'text/csv;charset=utf-8;');
     } catch (err) {
-      console.error("Error exporting subcontractors:", err);
-      setError("Failed to export subcontractors. Please try again.");
+      console.error("Export failed:", err);
+      setError("Failed to export subcontractors.");
     }
   };
 
@@ -352,40 +348,30 @@ const Subcontractors: React.FC = () => {
   };
 
   const handleFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    if (!user?.uid) {
+      setError("Cannot import: User not authenticated.");
+      return;
+    }
     const file = event.target.files?.[0];
     if (!file) return;
     
+    setLoading(true);
+    setError(null);
+    setImportResult(null);
+    
     try {
-      setLoading(true);
-      const reader = new FileReader();
+      const result = await importSubcontractorsFromCSV(file, user.uid);
+      setImportResult(result);
       
-      reader.onload = async (e) => {
-        try {
-          const csvText = e.target?.result as string;
-          const result = await importSubcontractorsFromCSV(csvText);
-          
-          setImportResult(result);
-          
-          // Reload subcontractors after import
-          const data = await SubcontractorService.getSubcontractors();
-          setSubcontractors(data);
-          
-          // Reset file input
-          if (fileInputRef.current) {
-            fileInputRef.current.value = '';
-          }
-        } catch (err) {
-          console.error("Error importing subcontractors:", err);
-          setError("Failed to import subcontractors. Please check your CSV format.");
-        } finally {
-          setLoading(false);
-        }
-      };
+      await fetchSubcontractors(user.uid);
       
-      reader.readAsText(file);
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
     } catch (err) {
-      console.error("Error reading file:", err);
-      setError("Failed to read file. Please try again.");
+      console.error('Import failed:', err);
+      setError(`Import failed: ${err instanceof Error ? err.message : 'Unknown error'}`);
+    } finally {
       setLoading(false);
     }
   };
@@ -506,14 +492,7 @@ const Subcontractors: React.FC = () => {
             filteredSubcontractors.map((sub) => (
               <Grid item key={sub.id} xs={12} sm={6} md={4} lg={3}>
                 <SubcontractorCard
-                  id={sub.id!}
-                  name={sub.name}
-                  specialty={sub.specialty}
-                  rating={sub.rating}
-                  totalProjects={sub.totalProjects}
-                  lastBid={sub.lastBid}
-                  contact={sub.contact}
-                  performance={sub.performance}
+                  {...sub}
                   onEdit={handleEditSubcontractor}
                   onDelete={handleDeleteSubcontractor}
                 />

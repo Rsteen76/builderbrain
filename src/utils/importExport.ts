@@ -1,4 +1,5 @@
-import { Subcontractor, SubcontractorService } from '../services/subcontractor';
+import { Subcontractor } from '../types';
+import { SubcontractorService } from '../services/subcontractor';
 
 /**
  * Parse CSV data into an array of objects
@@ -52,121 +53,115 @@ export const objectsToCSV = (data: Record<string, any>[], headers?: string[]): s
 };
 
 /**
- * Import subcontractors from CSV data
- * @param csvText CSV text containing subcontractor data
- * @returns Promise with the results of the import operation
+ * Export subcontractors to CSV format
  */
-export const importSubcontractorsFromCSV = async (csvText: string): Promise<{
-  success: number;
-  failed: number;
-  errors: string[];
-}> => {
-  const parsedData = parseCSV(csvText);
-  const result = {
-    success: 0,
-    failed: 0,
-    errors: [] as string[],
-  };
-  
-  for (const row of parsedData) {
-    try {
-      // Transform CSV row into a subcontractor object
-      const subcontractor: Omit<Subcontractor, 'id' | 'createdAt' | 'updatedAt'> = {
-        name: row.name || '',
-        specialty: row.specialty || '',
-        rating: parseFloat(row.rating) || 0,
-        totalProjects: parseInt(row.totalProjects, 10) || 0,
-        contact: {
-          phone: row.phone || '',
-          email: row.email || '',
-          location: row.location || '',
-        },
-        performance: {
-          onTime: parseInt(row.onTime, 10) || 0,
-          quality: parseInt(row.quality, 10) || 0,
-          communication: parseInt(row.communication, 10) || 0,
-        },
-        companyInfo: {
-          website: row.website,
-          founded: row.founded,
-          employees: parseInt(row.employees, 10) || 0,
-          license: row.license,
-        },
-        notes: row.notes,
-      };
-      
-      // Add lastBid if both date and amount exist
-      if (row.lastBidDate && row.lastBidAmount) {
-        subcontractor.lastBid = {
-          date: new Date(row.lastBidDate),
-          amount: parseFloat(row.lastBidAmount) || 0,
-        };
-      }
-      
-      // Validate required fields
-      if (!subcontractor.name) {
-        throw new Error(`Missing required field: name`);
-      }
-      
-      // Save to Firestore
-      await SubcontractorService.createSubcontractor(subcontractor);
-      result.success++;
-    } catch (error) {
-      result.failed++;
-      result.errors.push(`Error importing row ${parsedData.indexOf(row) + 2}: ${error}`);
-    }
-  }
-  
-  return result;
+export const exportSubcontractorsToCSV = (subcontractors: Subcontractor[]): string => {
+  // Use fields from imported Subcontractor type
+  const header = [
+    'id', 'name', 'specialty', 'rating', 'totalProjects', 
+    'contact_phone', 'contact_email', 'contact_location', 
+    'perf_onTime', 'perf_quality', 'perf_communication',
+    'info_website', 'info_founded', 'info_employees', 'info_license', 
+    'notes', 'createdAt', 'updatedAt' 
+    // Add userId if needed for export, though maybe not desirable?
+  ];
+  const rows = subcontractors.map(sub => [
+    sub.id,
+    sub.name,
+    sub.specialty,
+    sub.rating ?? '',
+    sub.totalProjects ?? '',
+    sub.contact?.phone ?? '',
+    sub.contact?.email ?? '',
+    sub.contact?.location ?? '',
+    sub.performance?.onTime ?? '',
+    sub.performance?.quality ?? '',
+    sub.performance?.communication ?? '',
+    sub.companyInfo?.website ?? '',
+    sub.companyInfo?.founded ?? '',
+    sub.companyInfo?.employees ?? '',
+    sub.companyInfo?.license ?? '',
+    sub.notes ?? '',
+    sub.createdAt.toISOString(), // Format dates
+    sub.updatedAt.toISOString(),
+  ]);
+
+  return [header, ...rows].map(row => 
+    row.map(val => `"${String(val ?? '').replace(/"/g, '""')}"`).join(',')
+  ).join('\r\n');
 };
 
 /**
- * Export subcontractors to CSV
- * @param subcontractors Array of subcontractor objects
- * @returns CSV string
+ * Import subcontractors from CSV data
  */
-export const exportSubcontractorsToCSV = (subcontractors: Subcontractor[]): string => {
-  const headers = [
-    'name',
-    'specialty',
-    'rating',
-    'totalProjects',
-    'phone',
-    'email',
-    'location',
-    'onTime',
-    'quality',
-    'communication',
-    'website',
-    'founded',
-    'employees',
-    'license',
-    'lastBidDate',
-    'lastBidAmount',
-    'notes',
-  ];
+export const importSubcontractorsFromCSV = async (file: File, userId: string): Promise<{ success: number; failed: number; errors: string[] }> => {
+  const result = { success: 0, failed: 0, errors: [] as string[] };
   
-  const flattenedData = subcontractors.map(sub => ({
-    name: sub.name,
-    specialty: sub.specialty,
-    rating: sub.rating,
-    totalProjects: sub.totalProjects,
-    phone: sub.contact.phone,
-    email: sub.contact.email,
-    location: sub.contact.location,
-    onTime: sub.performance.onTime,
-    quality: sub.performance.quality,
-    communication: sub.performance.communication,
-    website: sub.companyInfo?.website || '',
-    founded: sub.companyInfo?.founded || '',
-    employees: sub.companyInfo?.employees || '',
-    license: sub.companyInfo?.license || '',
-    lastBidDate: sub.lastBid ? new Date(sub.lastBid.date).toISOString().split('T')[0] : '',
-    lastBidAmount: sub.lastBid ? sub.lastBid.amount : '',
-    notes: sub.notes || '',
-  }));
-  
-  return objectsToCSV(flattenedData, headers);
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+
+    reader.onload = async (e) => {
+      const csvText = e.target?.result as string;
+      const parsedData = parseCSV(csvText);
+
+      if (!parsedData || parsedData.length === 0) {
+        return reject(new Error('CSV file is empty or could not be parsed.'));
+      }
+
+      for (let i = 0; i < parsedData.length; i++) {
+        const row = parsedData[i];
+        try {
+          // Map CSV row to Omit<Subcontractor, ...> using imported type
+          const subcontractorData: Omit<Subcontractor, 'id' | 'userId' | 'createdAt' | 'updatedAt'> = {
+            name: row.name || '',
+            specialty: row.specialty || '',
+            rating: parseFloat(row.rating) || 0,
+            totalProjects: parseInt(row.totalProjects, 10) || 0,
+            contact: {
+              phone: row.contact_phone || '',
+              email: row.contact_email || '',
+              location: row.contact_location || '',
+            },
+            performance: {
+              onTime: parseFloat(row.perf_onTime) || 0,
+              quality: parseFloat(row.perf_quality) || 0,
+              communication: parseFloat(row.perf_communication) || 0,
+            },
+            companyInfo: {
+              website: row.info_website || '',
+              founded: row.info_founded || '',
+              employees: parseInt(row.info_employees, 10) || 0,
+              license: row.info_license || '',
+            },
+            projects: [], // Initialize projects array
+            notes: row.notes || '',
+          };
+          
+          // Basic validation
+          if (!subcontractorData.name || !subcontractorData.specialty) {
+            throw new Error(`Row ${i + 2}: Name and specialty are required.`);
+          }
+
+          // Pass userId to createSubcontractor
+          await SubcontractorService.createSubcontractor(userId, subcontractorData);
+          result.success++;
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error);
+          console.error(`Error processing row ${i + 2}:`, message, row);
+          result.failed++;
+          result.errors.push(`Row ${i + 2}: ${message}`);
+        }
+      }
+      resolve(result);
+    };
+
+    reader.onerror = (error) => {
+      console.error("File reading error:", error);
+      reject(new Error('Failed to read the file.'));
+    };
+
+    reader.readAsText(file);
+  });
 };
 
 /**

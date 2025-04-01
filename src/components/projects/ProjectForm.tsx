@@ -21,7 +21,9 @@ import {
 import { DatePicker } from '@mui/x-date-pickers/DatePicker';
 import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
 import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns';
-import { ProjectService, Project as ProjectType } from '../../services/project';
+import { Project } from '../../types';
+import { ProjectService } from '../../services/project';
+import { useAuth } from '../../contexts/AuthContext';
 
 // Types
 interface FormErrors {
@@ -32,6 +34,7 @@ interface FormErrors {
   endDate?: string;
   budget?: string;
   clientId?: string;
+  location?: string;
 }
 
 // Mock data - replace with API calls later
@@ -48,16 +51,20 @@ const mockTeamMembers = [
   { id: 'user4', name: 'Alice Brown' },
 ];
 
-const initialProject: Partial<ProjectType> = {
+// Define initial project based on imported Project type
+const initialProject: Partial<Project> = {
   name: '',
   description: '',
-  status: 'Estimate',
+  // Ensure status is a valid value from the Project type's status union
+  status: 'estimate', 
   startDate: new Date(),
-  endDate: new Date(new Date().setMonth(new Date().getMonth() + 3)), // 3 months in the future
-  budget: 0,
+  endDate: new Date(new Date().setMonth(new Date().getMonth() + 3)),
+  // Initialize budget/location according to the Project type structure
+  budget: { total: 0, spent: 0, remaining: 0 }, 
+  location: { address: '', city: '', state: '', zipCode: '' },
   clientId: '',
   team: [],
-  location: '',
+  // Initialize other fields from Project type
   projectType: '',
   estimatedDuration: '',
   phases: [],
@@ -67,12 +74,17 @@ const initialProject: Partial<ProjectType> = {
     inspections: [],
     documents: [],
   },
+  lineItems: [],
+  bids: [],
+  tasks: [],
 };
 
 const ProjectForm: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const [project, setProject] = useState<Partial<ProjectType>>(initialProject);
+  const { user } = useAuth(); // Get user
+  // Use imported Project type for state
+  const [project, setProject] = useState<Partial<Project>>(initialProject);
   const [errors, setErrors] = useState<FormErrors>({});
   const [loading, setLoading] = useState(false);
   const [fetchLoading, setFetchLoading] = useState(false);
@@ -81,17 +93,24 @@ const ProjectForm: React.FC = () => {
 
   useEffect(() => {
     const fetchProject = async () => {
-      if (!id) return;
+      if (!id || !user?.uid) { // Check for user ID too
+          if (!id) { /* Handle no ID case if needed */ }
+          else { setError('User not authenticated.'); }
+          setFetchLoading(false);
+          return;
+      }
       
       setFetchLoading(true);
       setError(null);
       
       try {
-        const projectData = await ProjectService.getProject(id);
+        // Pass userId to getProject
+        const projectData = await ProjectService.getProject(user.uid, id);
         if (projectData) {
-          setProject(projectData);
+          // Ensure the fetched data type matches the state type
+          setProject(projectData); 
         } else {
-          setError(`Project with ID ${id} not found`);
+          setError(`Project with ID ${id} not found or not accessible`);
         }
       } catch (err) {
         console.error('Error fetching project:', err);
@@ -101,39 +120,35 @@ const ProjectForm: React.FC = () => {
       }
     };
     
-    fetchProject();
-  }, [id]);
+    // Fetch only if id and user are present
+    if (id && user?.uid) {
+        fetchProject();
+    } else if (!id) {
+        // If creating new, ensure defaults are set (already done by useState)
+        setProject(initialProject);
+        setFetchLoading(false);
+    } else {
+        // Waiting for user
+        setError('Authenticating...');
+        setFetchLoading(false);
+    }
+  }, [id, user]); // Depend on user
 
   const validateForm = (): boolean => {
     const newErrors: FormErrors = {};
-
-    if (!project.name?.trim()) {
-      newErrors.name = 'Project name is required';
-    }
-
-    if (!project.description?.trim()) {
-      newErrors.description = 'Description is required';
-    }
-
-    if (!project.startDate) {
-      newErrors.startDate = 'Start date is required';
-    }
-
-    if (!project.endDate) {
-      newErrors.endDate = 'End date is required';
-    }
-
-    if (project.startDate && project.endDate && project.startDate > project.endDate) {
+    if (!project.name?.trim()) newErrors.name = 'Project name is required';
+    if (!project.description?.trim()) newErrors.description = 'Description is required';
+    if (!project.startDate) newErrors.startDate = 'Start date is required';
+    if (!project.endDate) newErrors.endDate = 'End date is required';
+    if (project.startDate && project.endDate && new Date(project.startDate) > new Date(project.endDate)) {
       newErrors.endDate = 'End date must be after start date';
     }
-
-    if (!project.budget || project.budget <= 0) {
+    // Validate budget based on its type
+    const budgetValue = typeof project.budget === 'object' && project.budget !== null ? project.budget.total : project.budget;
+    if (budgetValue === undefined || budgetValue === null || budgetValue <= 0) {
       newErrors.budget = 'Budget must be greater than 0';
     }
-
-    if (!project.clientId) {
-      newErrors.clientId = 'Client is required';
-    }
+    if (!project.clientId) newErrors.clientId = 'Client is required';
 
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
@@ -141,23 +156,35 @@ const ProjectForm: React.FC = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-
-    if (!validateForm()) {
-      return;
+    // Ensure user is authenticated
+    if (!user?.uid) {
+        setError("User authentication error. Cannot save project.");
+        return;
     }
+    if (!validateForm()) return;
 
     setLoading(true);
     setError(null);
     setSuccessMessage(null);
     
+    // Prepare data, ensuring it matches the service expectations
+    const projectPayload = { ...project }; 
+    // Remove fields not needed or handled by service (like id, userId, createdAt, updatedAt)
+    delete projectPayload.id;
+    delete projectPayload.userId;
+    delete projectPayload.createdAt;
+    delete projectPayload.updatedAt;
+
     try {
       if (id) {
-        // Update existing project
-        await ProjectService.updateProject(id, project);
+        // Update existing project - payload needs to match Partial<Omit<Project, 'id' | 'userId'>>
+        // Ensure projectPayload conforms to this
+        await ProjectService.updateProject(id, projectPayload as Partial<Omit<Project, 'id' | 'userId'>>);
         setSuccessMessage('Project updated successfully');
       } else {
-        // Create new project
-        await ProjectService.createProject(project as Omit<ProjectType, 'id' | 'createdAt' | 'updatedAt'>);
+        // Create new project - payload needs to match Omit<Project, 'id' | 'userId' | 'createdAt' | 'updatedAt'>
+        // Ensure projectPayload conforms to this (already handled by deleting fields above)
+        await ProjectService.createProject(user.uid, projectPayload as Omit<Project, 'id' | 'userId' | 'createdAt' | 'updatedAt'>);
         setSuccessMessage('Project created successfully');
       }
       
@@ -237,11 +264,11 @@ const ProjectForm: React.FC = () => {
                 <FormControl fullWidth error={!!errors.status}>
                   <InputLabel>Status</InputLabel>
                   <Select
-                    value={project.status || 'Estimate'}
+                    value={project.status || 'estimate'}
                     label="Status"
-                    onChange={(e) => setProject({ ...project, status: e.target.value as ProjectType['status'] })}
+                    onChange={(e) => setProject({ ...project, status: e.target.value as Project['status'] })}
                   >
-                    <MenuItem value="Estimate">Estimate</MenuItem>
+                    <MenuItem value="estimate">Estimate</MenuItem>
                     <MenuItem value="planning">Planning</MenuItem>
                     <MenuItem value="in_progress">In Progress</MenuItem>
                     <MenuItem value="completed">Completed</MenuItem>
@@ -314,22 +341,44 @@ const ProjectForm: React.FC = () => {
                   fullWidth
                   label="Budget"
                   type="number"
-                  value={project.budget || ''}
-                  onChange={(e) => setProject({ ...project, budget: parseFloat(e.target.value) })}
+                  value={typeof project.budget === 'object' && project.budget !== null ? project.budget.total : project.budget || ''}
+                  onChange={(e) => {
+                      const value = parseFloat(e.target.value) || 0;
+                      setProject({ 
+                          ...project, 
+                          budget: { // Store as object
+                              total: value, 
+                              spent: typeof project.budget === 'object' ? project.budget.spent : 0, 
+                              remaining: typeof project.budget === 'object' ? value - project.budget.spent : value 
+                          }
+                      });
+                  }}
                   error={!!errors.budget}
                   helperText={errors.budget}
-                  InputProps={{
-                    startAdornment: <InputAdornment position="start">$</InputAdornment>,
-                  }}
+                  InputProps={{ startAdornment: <InputAdornment position="start">$</InputAdornment> }}
+                  required
                 />
               </Grid>
 
               <Grid item xs={12} md={6}>
                 <TextField
                   fullWidth
-                  label="Location"
-                  value={project.location || ''}
-                  onChange={(e) => setProject({ ...project, location: e.target.value })}
+                  label="Location (Address)"
+                  value={typeof project.location === 'object' && project.location !== null ? project.location.address : project.location || ''}
+                  onChange={(e) => {
+                      const value = e.target.value;
+                      setProject({ 
+                          ...project, 
+                          location: { // Store as object
+                              address: value, 
+                              city: typeof project.location === 'object' ? project.location.city : '', 
+                              state: typeof project.location === 'object' ? project.location.state : '', 
+                              zipCode: typeof project.location === 'object' ? project.location.zipCode : '' 
+                          }
+                      });
+                  }}
+                  error={!!errors.location}
+                  helperText={errors.location}
                 />
               </Grid>
 

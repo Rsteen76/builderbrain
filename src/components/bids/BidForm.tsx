@@ -41,37 +41,37 @@ import {
   NavigateBefore as PrevIcon,
   RestartAlt as ResetIcon,
 } from '@mui/icons-material';
+import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns';
+import { 
+  Bid, 
+  BidVersion, 
+  LineItem, 
+  Project, 
+  Subcontractor,
+} from '../../types';
 import { 
   BidService, 
-  Bid, 
-  BidStatus, 
-  BidPriority, 
-  BidLineItem,
-  LineItemCategory,
-  BidVersion,
-  BidSummary,
+  BidSummary
 } from '../../services/bid';
-import { SubcontractorService, Subcontractor } from '../../services/subcontractor';
+import { SubcontractorService } from '../../services/subcontractor';
 import { ProjectService } from '../../services/project';
 import { useAuth } from '../../contexts/AuthContext';
 import LineItemsTable from './LineItemsTable';
 import { formatCurrency } from '../../utils/formatters';
 
 // Mapping of statuses to display names
-const STATUS_OPTIONS: { value: BidStatus; label: string }[] = [
+const STATUS_OPTIONS: { value: Bid['status']; label: string }[] = [
   { value: 'draft', label: 'Draft' },
   { value: 'submitted', label: 'Submitted' },
-  { value: 'under_review', label: 'Under Review' },
-  { value: 'awarded', label: 'Awarded' },
+  { value: 'accepted', label: 'Accepted' },
   { value: 'rejected', label: 'Rejected' },
   { value: 'expired', label: 'Expired' },
   { value: 'withdrawn', label: 'Withdrawn' },
   { value: 'revision_requested', label: 'Revision Requested' },
-  { value: 'revised', label: 'Revised' },
 ];
 
 // Mapping of priorities to display names
-const PRIORITY_OPTIONS: { value: BidPriority; label: string }[] = [
+const PRIORITY_OPTIONS: { value: NonNullable<Bid['priority']>; label: string }[] = [
   { value: 'low', label: 'Low' },
   { value: 'medium', label: 'Medium' },
   { value: 'high', label: 'High' },
@@ -79,7 +79,7 @@ const PRIORITY_OPTIONS: { value: BidPriority; label: string }[] = [
 ];
 
 // Default form values
-const DEFAULT_BID: Omit<Bid, 'id' | 'createdAt' | 'updatedAt' | 'currentVersionId' | 'versions'> = {
+const DEFAULT_BID: Omit<Bid, 'id' | 'userId' | 'createdAt' | 'updatedAt' | 'currentVersionId' | 'versions'> = {
   projectId: '',
   projectName: '',
   subcontractorId: '',
@@ -100,6 +100,7 @@ const DEFAULT_BID: Omit<Bid, 'id' | 'createdAt' | 'updatedAt' | 'currentVersionI
   requiresBond: false,
   isPublic: false,
   isApproved: false,
+  attachments: [],
 };
 
 // Steps for the stepper
@@ -108,13 +109,13 @@ const STEPS = ['Basic Information', 'Scope & Timeline', 'Line Items', 'Review'];
 // Project and Subcontractor option type
 interface SelectOption {
   id: string;
-  name: string;
+  name: string | undefined;
 }
 
 // Update LineItemsTable prop types
 interface LineItemsTableProps {
-  lineItems: BidLineItem[];
-  onChange: (updatedLineItems: BidLineItem[]) => void;
+  lineItems: LineItem[];
+  onChange: (updatedLineItems: LineItem[]) => void;
   editable?: boolean;
 }
 
@@ -126,8 +127,8 @@ const BidForm: React.FC = () => {
   const duplicateData = location.state?.duplicate as BidSummary | undefined;
   
   // Form state
-  const [formData, setFormData] = useState<Omit<Bid, 'id' | 'createdAt' | 'updatedAt' | 'currentVersionId' | 'versions'>>(DEFAULT_BID);
-  const [lineItems, setLineItems] = useState<BidLineItem[]>([]);
+  const [formData, setFormData] = useState<Omit<Bid, 'id' | 'userId' | 'createdAt' | 'updatedAt' | 'currentVersionId' | 'versions'>>(DEFAULT_BID);
+  const [lineItems, setLineItems] = useState<LineItem[]>([]);
   const [currentVersion, setCurrentVersion] = useState<Omit<BidVersion, 'id' | 'createdAt'>>({
     versionNumber: 1,
     totalAmount: 0,
@@ -153,17 +154,21 @@ const BidForm: React.FC = () => {
   // Load data when component mounts
   useEffect(() => {
     const fetchData = async () => {
+      if (!user?.uid) {
+        setError('User not authenticated. Cannot load data.');
+        setLoading(false);
+        return;
+      }
       try {
         setLoading(true);
-        await Promise.all([fetchProjects(), fetchSubcontractors()]);
+        setError(null);
+        await Promise.all([fetchProjects(user.uid), fetchSubcontractors(user.uid)]);
         
-        // If we're editing an existing bid
         if (id) {
-          await fetchBid(id);
+          await fetchBid(user.uid, id);
         } 
-        // If we're duplicating a bid
-        else if (duplicateData) {
-          await fetchBidForDuplication(duplicateData.id);
+        else if (duplicateData?.id) {
+          await fetchBidForDuplication(user.uid, duplicateData.id);
         }
       } catch (err) {
         console.error('Error loading form data:', err);
@@ -173,71 +178,89 @@ const BidForm: React.FC = () => {
       }
     };
     
-    fetchData();
-  }, [id, duplicateData]);
+    if (user?.uid) {
+      fetchData();
+    } else {
+      setError('Waiting for user authentication...');
+      setLoading(false);
+    }
+  }, [id, duplicateData, user]);
 
   // Calculate total amount when line items change
   useEffect(() => {
-    const total = lineItems.reduce((sum, item) => sum + item.total, 0);
+    const total = lineItems.reduce((sum, item) => sum + (item.totalCost || 0), 0);
     setFormData(prev => ({ ...prev, totalAmount: total }));
     setCurrentVersion(prev => ({ ...prev, totalAmount: total, lineItems }));
   }, [lineItems]);
 
   // Fetch projects
-  const fetchProjects = async () => {
+  const fetchProjects = async (currentUserId: string) => {
     try {
-      const projectsList = await ProjectService.getProjects();
-      setProjects(projectsList.map(p => ({ id: p.id!, name: p.name })));
+      const projectsList: Project[] = await ProjectService.getProjects(currentUserId);
+      setProjects(projectsList.map(p => ({ id: p.id, name: p.name })));
     } catch (err) {
       console.error('Error fetching projects:', err);
     }
   };
 
   // Fetch subcontractors
-  const fetchSubcontractors = async () => {
+  const fetchSubcontractors = async (currentUserId: string) => {
     try {
-      const subcontractorsList = await SubcontractorService.getSubcontractors();
-      setSubcontractors(subcontractorsList.map(s => ({ id: s.id!, name: s.name })));
+      const subcontractorsList: Subcontractor[] = await SubcontractorService.getSubcontractors(currentUserId);
+      setSubcontractors(subcontractorsList.map(s => ({ id: s.id, name: s.name })));
     } catch (err) {
       console.error('Error fetching subcontractors:', err);
     }
   };
 
   // Fetch bid details for editing
-  const fetchBid = async (bidId: string) => {
+  const fetchBid = async (currentUserId: string, bidId: string) => {
     try {
-      const bid = await BidService.getBid(bidId);
+      const bid = await BidService.getBid(currentUserId, bidId);
       
       if (!bid) {
-        setError('Bid not found');
+        setError('Bid not found or access denied');
         return;
       }
       
-      // Extract fields for the form
+      // Extract fields for the form, ensuring names are unique
       const { 
-        id: _, 
-        createdAt: __, 
-        updatedAt: ___, 
+        id: _id, 
+        userId: _userId, 
+        createdAt: _createdAt, 
+        updatedAt: _updatedAt,
         currentVersionId, 
         versions, 
         ...formFields 
       } = bid;
       
-      // Find the current version
-      const currentVersionData = versions.find(v => v.id === currentVersionId);
+      // Find the current version using imported BidVersion type
+      const currentVersionData = versions?.find((v: BidVersion) => v.id === currentVersionId);
       
       if (!currentVersionData) {
         setError('Error loading bid version');
-        return;
+        const fallbackVersion = versions?.[0];
+        if (fallbackVersion) {
+            // Ensure fallbackVersion.lineItems matches LineItem[]
+            setLineItems(fallbackVersion.lineItems || []);
+            const { id: _vId, createdAt: _vCreatedAt, ...fallbackVersionData } = fallbackVersion;
+            setCurrentVersion(fallbackVersionData);
+            console.warn('Current version ID not found, loaded first version as fallback.');
+        } else {
+            setLineItems([]);
+            setCurrentVersion({ versionNumber: 1, totalAmount: 0, notes: '', lineItems: [], attachments: [] });
+            return; 
+        }
+      } else {
+         // Ensure currentVersionData.lineItems matches LineItem[]
+         setLineItems(currentVersionData.lineItems || []);
+         const { id: _vId, createdAt: _vCreatedAt, ...versionData } = currentVersionData;
+         setCurrentVersion(versionData);
       }
-      
-      // Set form data
-      setFormData(formFields);
-      setLineItems(currentVersionData.lineItems);
-      
-      // Set current version data (excluding id and createdAt which will be generated when saving)
-      const { id: versionId, createdAt: versionCreatedAt, ...versionData } = currentVersionData;
-      setCurrentVersion(versionData);
+
+      // Set form data (formFields should match Omit<Bid, ...>)
+      setFormData(formFields); 
+
     } catch (err) {
       console.error('Error fetching bid:', err);
       setError('Failed to load bid data');
@@ -245,37 +268,50 @@ const BidForm: React.FC = () => {
   };
 
   // Fetch bid for duplication
-  const fetchBidForDuplication = async (bidId: string) => {
+  const fetchBidForDuplication = async (currentUserId: string, bidId: string) => {
     try {
-      const bid = await BidService.getBid(bidId);
+      const bid = await BidService.getBid(currentUserId, bidId);
       
       if (!bid) {
-        setError('Bid to duplicate not found');
+        setError('Bid to duplicate not found or access denied');
         return;
       }
       
+      // Destructure with unique names
+      const { 
+          id: _id, userId: _userId, createdAt: _createdAt, updatedAt: _updatedAt, 
+          currentVersionId: _cvId, versions: _versions, 
+          ...duplicatableFields 
+      } = bid;
+      
       // Set form data (with some fields reset)
       setFormData({
-        ...bid,
-        status: 'draft',
-        title: `Copy of ${bid.title}`,
+        ...DEFAULT_BID, // Start with defaults
+        ...duplicatableFields, // Spread fields from the fetched bid
+        status: 'draft', // Reset status
+        title: `Copy of ${bid.title || 'Bid'}`, // Adjust title
+        createdBy: '', // Reset creator/updater
+        updatedBy: '',
       });
       
-      // Find the current version
-      const currentVersionData = bid.versions.find(v => v.id === bid.currentVersionId);
+      // Find the original current version to duplicate line items
+      const originalCurrentVersion = _versions?.find((v: BidVersion) => v.id === _cvId); // Add type
+      // Ensure originalCurrentVersion.lineItems matches LineItem[]
+      const itemsToDuplicate = originalCurrentVersion?.lineItems || [];
+      const duplicatedAmount = itemsToDuplicate.reduce((sum, item) => sum + (item.totalCost || 0), 0);
       
-      if (currentVersionData) {
-        setLineItems(currentVersionData.lineItems);
-        
-        // Reset version data for the new bid
-        setCurrentVersion({
-          versionNumber: 1,
-          totalAmount: currentVersionData.totalAmount,
-          notes: 'Duplicated from previous bid',
-          lineItems: currentVersionData.lineItems,
-          attachments: [],
-        });
-      }
+      // Set lineItems state (expects LineItem[])
+      setLineItems(itemsToDuplicate); 
+      
+      // Set *new* current version data (expects Omit<BidVersion,...>)
+      setCurrentVersion({
+        versionNumber: 1,
+        totalAmount: duplicatedAmount, 
+        notes: 'Duplicated from previous bid',
+        lineItems: itemsToDuplicate, // Ensure this matches LineItem[]
+        attachments: [], 
+      });
+
     } catch (err) {
       console.error('Error duplicating bid:', err);
       setError('Failed to load bid for duplication');
@@ -315,7 +351,7 @@ const BidForm: React.FC = () => {
       setFormData(prev => ({
         ...prev,
         projectId: value.id,
-        projectName: value.name,
+        projectName: value.name || '',
       }));
       validateField('projectId', value.id);
       setTouched(prev => ({ ...prev, projectId: true }));
@@ -336,7 +372,7 @@ const BidForm: React.FC = () => {
       setFormData(prev => ({
         ...prev,
         subcontractorId: value.id,
-        subcontractorName: value.name,
+        subcontractorName: value.name || '',
       }));
       validateField('subcontractorId', value.id);
       setTouched(prev => ({ ...prev, subcontractorId: true }));
@@ -359,8 +395,8 @@ const BidForm: React.FC = () => {
 
   // Handle adding a tag
   const handleTagAdd = () => {
-    if (tagInput.trim() && !formData.tags.includes(tagInput.trim())) {
-      const newTags = [...formData.tags, tagInput.trim()];
+    if (tagInput.trim() && !(formData.tags || []).includes(tagInput.trim())) {
+      const newTags = [...(formData.tags || []), tagInput.trim()];
       setFormData(prev => ({ ...prev, tags: newTags }));
       setTagInput('');
     }
@@ -368,7 +404,7 @@ const BidForm: React.FC = () => {
 
   // Handle deleting a tag
   const handleTagDelete = (tagToDelete: string) => {
-    const newTags = formData.tags.filter(tag => tag !== tagToDelete);
+    const newTags = (formData.tags || []).filter((tag: string) => tag !== tagToDelete);
     setFormData(prev => ({ ...prev, tags: newTags }));
   };
 
@@ -386,12 +422,12 @@ const BidForm: React.FC = () => {
   };
   
   // Handle line item changes
-  const handleLineItemChange = (updatedLineItems: BidLineItem[]) => {
+  const handleLineItemChange = (updatedLineItems: LineItem[]) => {
     setLineItems(updatedLineItems);
   };
 
   // Handle adding a new line item
-  const handleAddLineItem = (category: LineItemCategory = 'labor') => {
+  const handleAddLineItem = (category: LineItem['category'] = 'labor') => {
     const newItem = BidService.createLineItem(category);
     setLineItems([...lineItems, newItem]);
   };
@@ -530,7 +566,7 @@ const BidForm: React.FC = () => {
     // Step 3: Line Items - no required fields, just make sure total amount is calculated
     else if (step === 2) {
       // Ensure total amount is calculated from line items
-      const total = lineItems.reduce((sum, item) => sum + item.total, 0);
+      const total = lineItems.reduce((sum, item) => sum + (item.totalCost || 0), 0);
       if (formData.totalAmount !== total) {
         setFormData(prev => ({ ...prev, totalAmount: total }));
       }
@@ -543,78 +579,51 @@ const BidForm: React.FC = () => {
 
   // Submit the form
   const handleSubmit = async (e?: React.FormEvent) => {
-    if (e) e.preventDefault();
+    e?.preventDefault();
+    if (!user?.uid) {
+      setError("User authentication error. Cannot save bid.");
+      return;
+    }
+    if (!validateStep(STEPS.length - 1)) {
+      setError('Please review errors before submitting.');
+      return;
+    }
+    setSaveLoading(true);
+    setError(null);
+    setSuccess(null);
+
+    // Prepare the main bid data payload (matches Omit<Bid, ...>)
+    const finalBidData: Omit<Bid, 'id' | 'userId' | 'createdAt' | 'updatedAt' | 'currentVersionId' | 'versions'> = {
+      ...formData,
+      totalAmount: currentVersion.totalAmount, // Ensure total amount is from the current version being saved
+      createdBy: formData.createdBy || user?.uid || '', // Ensure createdBy is set
+      updatedBy: user?.uid || '', // Set updatedBy
+    };
+    
+    // Prepare the version data payload (matches Omit<BidVersion, ...>)
+    // Note: When creating, we let createBid handle the initial version.
+    // When updating, we might need to create a *new* version if line items changed.
+    // For simplicity here, we assume updateBid might just update the main fields, 
+    // and a separate action/button would create a new version.
+    
     try {
-      // Validate all steps
-      if (
-        !validateStep(0) || 
-        !validateStep(1)
-      ) {
-        // If validation fails, go to the first invalid step
-        if (!validateStep(0)) {
-          setActiveStep(0);
-        } else if (!validateStep(1)) {
-          setActiveStep(1);
-        }
-        
-        setError('Please correct the errors before submitting');
-        return;
-      }
-      
-      setSaveLoading(true);
-      
-      // Ensure optional date fields are not undefined
-      const startDate = formData.startDate || null;
-      const completionDate = formData.completionDate || null;
-      
-      // Update form data with user info and clean optional fields
-      const updatedData = {
-        ...formData,
-        startDate,
-        completionDate,
-        createdBy: formData.createdBy || user?.uid || '',
-        updatedBy: user?.uid || '',
-      } as Omit<Bid, 'id' | 'createdAt' | 'updatedAt' | 'currentVersionId' | 'versions'>;
-      
-      // If editing an existing bid
       if (id) {
-        // Create a new version first
-        await BidService.createBidVersion(id, {
-          ...currentVersion,
-          versionNumber: currentVersion.versionNumber,
-          lineItems,
-        });
-        
-        // Update the bid
-        await BidService.updateBid(id, updatedData);
-        
+        // For update, we send the main bid fields that can change.
+        // We omit fields managed by the service (id, userId, timestamps) 
+        // and versioning fields (versions, currentVersionId)
+        await BidService.updateBid(id, finalBidData);
         setSuccess('Bid updated successfully');
-        setTimeout(() => {
-          navigate(`/bids/${id}`);
-        }, 1500);
-      } 
-      // Creating a new bid
-      else {
-        // Create new bid with all data
-        const newBid = await BidService.createBid(updatedData);
-        
-        // Update the version with line items if there are any
-        if (lineItems.length > 0) {
-          await BidService.createBidVersion(newBid.id!, {
-            ...currentVersion,
-            versionNumber: 1,
-            lineItems,
-          });
-        }
-        
-        setSuccess('Bid created successfully');
-        setTimeout(() => {
-          navigate(`/bids/${newBid.id}`);
-        }, 1500);
+        // Optionally refetch or update local state more granularly if needed
+        if (user?.uid) fetchBid(user.uid, id); 
+      } else {
+        // For create, the service handles the initial version automatically
+        const newBid = await BidService.createBid(user.uid, finalBidData);
+        setSuccess(`Bid created successfully (ID: ${newBid.id})`);
+        navigate(`/bids/${newBid.id}`); // Navigate to the new bid's details page
       }
     } catch (err) {
       console.error('Error saving bid:', err);
-      setError('Failed to save bid. Please try again.');
+      setError(err instanceof Error ? err.message : 'Failed to save bid');
     } finally {
       setSaveLoading(false);
     }
@@ -708,7 +717,7 @@ const BidForm: React.FC = () => {
 
                 <Autocomplete
                   options={projects}
-                  getOptionLabel={(option) => option.name}
+                  getOptionLabel={(option) => option.name || ''}
                   value={formData.projectId ? { id: formData.projectId, name: formData.projectName } : null}
                   onChange={handleProjectChange}
                   isOptionEqualToValue={(option, value) => option.id === value.id}
@@ -726,7 +735,7 @@ const BidForm: React.FC = () => {
 
                 <Autocomplete
                   options={subcontractors}
-                  getOptionLabel={(option) => option.name}
+                  getOptionLabel={(option) => option.name || ''}
                   value={formData.subcontractorId ? { id: formData.subcontractorId, name: formData.subcontractorName } : null}
                   onChange={handleSubcontractorChange}
                   isOptionEqualToValue={(option, value) => option.id === value.id}
@@ -781,7 +790,7 @@ const BidForm: React.FC = () => {
                 <Box sx={{ mb: 2 }}>
                   <Typography variant="subtitle2" gutterBottom>Tags</Typography>
                   <Box sx={{ display: 'flex', flexWrap: 'wrap', mb: 1 }}>
-                    {formData.tags.map(tag => (
+                    {(formData.tags || []).map(tag => (
                       <Chip
                         key={tag}
                         label={tag}
@@ -901,7 +910,7 @@ const BidForm: React.FC = () => {
                   <Button
                     variant="outlined"
                     startIcon={<AddIcon />}
-                    onClick={() => handleAddLineItem('materials')}
+                    onClick={() => handleAddLineItem('material')}
                     sx={{ mr: 1 }}
                   >
                     Add Materials
@@ -956,11 +965,11 @@ const BidForm: React.FC = () => {
                     <Typography variant="body2">
                       <strong>Priority:</strong> {PRIORITY_OPTIONS.find(o => o.value === formData.priority)?.label}
                     </Typography>
-                    {formData.tags.length > 0 && (
+                    {(formData.tags || []).length > 0 && (
                       <Box sx={{ mt: 1 }}>
                         <Typography variant="body2"><strong>Tags:</strong></Typography>
                         <Box sx={{ display: 'flex', flexWrap: 'wrap' }}>
-                          {formData.tags.map(tag => (
+                          {(formData.tags || []).map(tag => (
                             <Chip key={tag} label={tag} size="small" sx={{ m: 0.5 }} />
                           ))}
                         </Box>
@@ -975,7 +984,7 @@ const BidForm: React.FC = () => {
                     <Typography variant="body2" gutterBottom><strong>Scope:</strong></Typography>
                     <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap' }}>{formData.scope}</Typography>
                     <Typography variant="body2">
-                      <strong>Submission Deadline:</strong> {formData.submissionDeadline.toLocaleDateString()}
+                      <strong>Submission Deadline:</strong> {formData.submissionDeadline ? formData.submissionDeadline.toLocaleDateString() : 'N/A'}
                     </Typography>
                     <Typography variant="body2">
                       <strong>Requires Insurance:</strong> {formData.requiresInsurance ? 'Yes' : 'No'}

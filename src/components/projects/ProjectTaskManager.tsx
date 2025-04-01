@@ -10,10 +10,13 @@ import {
     Engineering as SubcontractorIcon
 } from '@mui/icons-material';
 import { visuallyHidden } from '@mui/utils';
-import { TaskService, Task, TaskStatus, TaskPriority } from '../../services/task';
-import { Subcontractor, SubcontractorService } from '../../services/subcontractor';
-import { Project } from '../../services/project';
-import TaskFormModal from '../tasks/TaskFormModal'; 
+import { Task, Project, Subcontractor } from '../../types'; // Import correct Task type
+import { TaskService } from '../../services/task'; // Keep service import
+import { SubcontractorService } from '../../services/subcontractor';
+import TaskFormModal from '../tasks/TaskFormModal'; // Ensure path is correct
+import { useAuth } from '../../contexts/AuthContext'; // Added useAuth
+import { useTheme } from '@mui/material/styles';
+import { ProjectService } from '../../services/project';
 
 interface MockUser { id: string; name: string; }
 const mockUsers: MockUser[] = [
@@ -23,55 +26,73 @@ const mockUsers: MockUser[] = [
 ];
 
 // Helper to get status chip color
-const getTaskStatusColor = (status: TaskStatus): "default" | "primary" | "secondary" | "error" | "info" | "success" | "warning" => {
+const getTaskStatusColor = (status: Task['status']): "default" | "primary" | "secondary" | "error" | "info" | "success" | "warning" => {
   switch (status) {
-    case 'To Do': return 'default';
-    case 'In Progress': return 'info';
-    case 'Blocked': return 'error';
-    case 'Done': return 'success';
+    case 'todo': return 'default';
+    case 'in_progress': return 'info';
+    case 'review': return 'warning';
+    case 'completed': return 'success';
     default: return 'default';
   }
 };
 
 // Helper to get priority indicator
-const getPriorityIndicator = (priority: TaskPriority): React.ReactNode => {
-    // Example: Use colored text or icons - adjust as needed
+const getPriorityIndicator = (priority: Task['priority']): React.ReactNode => {
     const colors = {
-        Low: 'text.secondary',
-        Medium: 'info.main',
-        High: 'warning.main',
-        Urgent: 'error.main'
+        low: 'text.secondary',
+        medium: 'info.main',
+        high: 'warning.main',
+        urgent: 'error.main'
     }
     return <Typography variant="caption" sx={{ fontWeight: 'bold', color: colors[priority] }}>{priority}</Typography>
 }
 
+// --- Local Types and Mappings ---
+// Define status colors based on Task['status'] values
+const taskStatusColors = {
+  todo: 'default',
+  in_progress: 'info',
+  review: 'warning',
+  completed: 'success',
+} as const; // Use const assertion for stricter type mapping
+
+// Define priority colors based on Task['priority'] values
+const taskPriorityColors = {
+  low: 'default',
+  medium: 'info',
+  high: 'warning',
+  urgent: 'error',
+} as const; // Use const assertion
+
+// Use imported Task type for props
 interface ProjectTaskManagerProps {
-  project: Project;
+  project: Project; // Use imported Project type
   onProjectUpdate: (updatedProject: Project) => void;
+  userId: string;
 }
+
+// Use imported Task type for head cells
+interface HeadCell {
+  id: keyof Task | 'actions';
+  numeric: boolean;
+  disablePadding: boolean;
+  label: string;
+}
+
+const headCells: readonly HeadCell[] = [
+  { id: 'title', numeric: false, disablePadding: false, label: 'Title' },
+  { id: 'status', numeric: false, disablePadding: false, label: 'Status' },
+  { id: 'priority', numeric: false, disablePadding: false, label: 'Priority' },
+  { id: 'assigneeId', numeric: false, disablePadding: false, label: 'Assignee' }, // Use assigneeId
+  { id: 'dueDate', numeric: false, disablePadding: false, label: 'Due Date' },
+  { id: 'actions', numeric: true, disablePadding: false, label: 'Actions' },
+];
 
 // --- Sorting Types & Config ---
 
 type Order = 'asc' | 'desc';
 // Define keys that are sortable
 type SortableTaskKeys = 'status' | 'priority' | 'title' | 'assigneeId' | 'dueDate' | 'createdAt'; 
-
-interface HeadCell {
-  id: SortableTaskKeys | 'actions' | 'assignee'; // Include non-sortable keys used for display
-  label: string;
-  numeric: boolean;
-  sortable: boolean;
-  disablePadding?: boolean;
-}
-
-const headCells: readonly HeadCell[] = [
-  { id: 'status', numeric: false, sortable: true, label: 'Status', disablePadding: true },
-  { id: 'priority', numeric: false, sortable: true, label: 'Priority', disablePadding: false },
-  { id: 'title', numeric: false, sortable: true, label: 'Title', disablePadding: false },
-  { id: 'assignee', numeric: false, sortable: false, label: 'Assignee', disablePadding: false }, // Display column, sort by assigneeId
-  { id: 'dueDate', numeric: false, sortable: true, label: 'Due Date', disablePadding: false },
-  { id: 'actions', numeric: false, sortable: false, label: 'Actions', disablePadding: false },
-];
 
 // --- Helper Functions (Sorting - adapted from BidManager) ---
 
@@ -121,51 +142,46 @@ function stableSort<T>(array: readonly T[], comparator: (a: T, b: T) => number):
   return stabilizedThis.map((el) => el[0]);
 }
 
-const ProjectTaskManager: React.FC<ProjectTaskManagerProps> = ({ project, onProjectUpdate }) => {
-  const tasks = useMemo(() => project.tasks || [], [project.tasks]);
-  const [subcontractors, setSubcontractors] = useState<Subcontractor[]>([]);
-  const [users, setUsers] = useState<MockUser[]>(mockUsers);
-  const [loading, setLoading] = useState(false);
-  const [fetchError, setFetchError] = useState<string | null>(null);
-  const [actionError, setActionError] = useState<string | null>(null);
+const ProjectTaskManager: React.FC<ProjectTaskManagerProps> = ({ project, onProjectUpdate, userId }) => {
+  const theme = useTheme();
+  const { user } = useAuth(); // Get user auth context if needed
+  
+  // State uses imported Task type
+  const [tasks, setTasks] = useState<Task[]>(project.tasks || []);
+  const [order, setOrder] = useState<'asc' | 'desc'>('asc');
+  const [orderBy, setOrderBy] = useState<keyof Task>('createdAt');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingTask, setEditingTask] = useState<Task | null>(null);
-  // Sorting State
-  const [order, setOrder] = useState<Order>('desc');
-  const [orderBy, setOrderBy] = useState<SortableTaskKeys>('createdAt'); // Default sort
+  const [subcontractors, setSubcontractors] = useState<Subcontractor[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
+  // Fetch subcontractors for assignee mapping
   useEffect(() => {
-    let isMounted = true;
-    const fetchRelatedData = async () => {
-        setLoading(true);
-        setFetchError(null);
-        try {
-            const fetchedSubcontractors = await SubcontractorService.getSubcontractors();
-            if (isMounted) {
-              setSubcontractors(fetchedSubcontractors);
-            }
-        } catch (err) {
-            console.error("Error fetching related data for tasks:", err);
-            if (isMounted) {
-              setFetchError("Failed to load subcontractor data.");
-            }
-        } finally {
-             if (isMounted) {
-                setLoading(false);
-             }
-        }
-    };
+      const fetchSubs = async () => {
+          if (!userId) return;
+          try {
+              const subs = await SubcontractorService.getSubcontractors(userId);
+              setSubcontractors(subs);
+          } catch(err) {
+              console.error("Failed to load subcontractors for Task Manager", err);
+              setError("Couldn't load subcontractor list.");
+          }
+      }
+      fetchSubs();
+  }, [userId]);
 
-    fetchRelatedData();
-    return () => { isMounted = false };
-  }, []);
+  // Update tasks state if project prop changes
+  useEffect(() => {
+    setTasks(project.tasks || []);
+  }, [project.tasks]);
 
   const userNameMap = useMemo(() => {
-    return users.reduce((map, user) => {
+    return mockUsers.reduce((map, user) => {
       map[user.id] = user.name;
       return map;
     }, {} as { [key: string]: string });
-  }, [users]);
+  }, []);
 
   const subcontractorNameMap = useMemo(() => {
     return subcontractors.reduce((map, sub) => {
@@ -197,7 +213,7 @@ const ProjectTaskManager: React.FC<ProjectTaskManagerProps> = ({ project, onProj
   const handleRequestSort = (event: React.MouseEvent<unknown>, property: SortableTaskKeys) => {
     const isAsc = orderBy === property && order === 'asc';
     setOrder(isAsc ? 'desc' : 'asc');
-    setOrderBy(property);
+    setOrderBy(property as keyof Task);
   };
 
   // --- Memoized Sorted Tasks ---
@@ -209,13 +225,13 @@ const ProjectTaskManager: React.FC<ProjectTaskManagerProps> = ({ project, onProj
   const handleAddTask = () => {
     setEditingTask(null);
     setIsModalOpen(true);
-    setActionError(null);
+    setError(null);
   };
 
   const handleEditTask = (task: Task) => {
     setEditingTask(task);
     setIsModalOpen(true);
-    setActionError(null);
+    setError(null);
   };
 
   const handleCloseModal = () => {
@@ -226,14 +242,14 @@ const ProjectTaskManager: React.FC<ProjectTaskManagerProps> = ({ project, onProj
   const handleDeleteTask = async (taskId: string) => {
       if (!window.confirm('Are you sure you want to delete this task?')) return;
       setLoading(true);
-      setActionError(null);
+      setError(null);
       try {
           await TaskService.deleteTask(taskId);
           const updatedTasks = tasks.filter(t => t.id !== taskId);
           onProjectUpdate({ ...project, tasks: updatedTasks });
       } catch(err) {
           console.error("Error deleting task:", err);
-          setActionError("Failed to delete task.");
+          setError("Failed to delete task.");
       } finally {
           setLoading(false);
       }
@@ -261,8 +277,7 @@ const ProjectTaskManager: React.FC<ProjectTaskManagerProps> = ({ project, onProj
         </Button>
       </Box>
 
-      {fetchError && !loading && <Alert severity="error" sx={{ mb: 2 }}>{fetchError}</Alert>}
-      {actionError && <Alert severity="error" sx={{ mb: 2 }}>{actionError}</Alert>}
+      {error && !loading && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
 
       {showLoading ? (
         <Box sx={{ display: 'flex', justifyContent: 'center', py: 3 }}><CircularProgress /></Box>
@@ -279,11 +294,10 @@ const ProjectTaskManager: React.FC<ProjectTaskManagerProps> = ({ project, onProj
                     sortDirection={orderBy === headCell.id ? order : false}
                     sx={{ fontWeight: 'bold', whiteSpace: 'nowrap', backgroundColor: 'background.paper' }}
                   >
-                    {headCell.sortable ? (
+                    {headCell.id === 'status' || headCell.id === 'priority' ? (
                       <TableSortLabel
                         active={orderBy === headCell.id}
                         direction={orderBy === headCell.id ? order : 'asc'}
-                        // Pass the correct sortable key to handler
                         onClick={(event) => handleRequestSort(event, headCell.id as SortableTaskKeys)}
                       >
                         {headCell.label}
@@ -307,7 +321,7 @@ const ProjectTaskManager: React.FC<ProjectTaskManagerProps> = ({ project, onProj
                 sortedTasks.map((task) => (
                   <TableRow hover key={task.id}>
                      <TableCell padding="none">
-                          <Chip label={task.status} size="small" color={getTaskStatusColor(task.status)} sx={{ m: 0.5 }}/>
+                          <Chip label={task.status} size="small" color={taskStatusColors[task.status] as any || 'default'} sx={{ m: 0.5 }}/>
                      </TableCell>
                      <TableCell>{getPriorityIndicator(task.priority)}</TableCell>
                      <TableCell>
@@ -344,6 +358,7 @@ const ProjectTaskManager: React.FC<ProjectTaskManagerProps> = ({ project, onProj
         onSubmitSuccess={handleTaskSubmit}
         initialData={editingTask}
         projectId={project.id!}
+        userId={userId}
       /> 
     </Paper>
   );

@@ -36,17 +36,16 @@ import {
   ExpandLess as ExpandLessIcon,
   FileCopy as DuplicateIcon,
 } from '@mui/icons-material';
-import { BidLineItem, LineItemCategory } from '../../services/bid';
+import { LineItem } from '../../types';
 import { formatCurrency } from '../../utils/formatters';
 
-// Line item categories with labels
-const CATEGORY_OPTIONS: { value: LineItemCategory; label: string }[] = [
+// Line item categories (local definition is fine, ensure values match LineItem['category'])
+const categories: { value: LineItem['category']; label: string }[] = [
+  { value: 'material', label: 'Materials' },
   { value: 'labor', label: 'Labor' },
-  { value: 'materials', label: 'Materials' },
   { value: 'equipment', label: 'Equipment' },
   { value: 'subcontractor', label: 'Subcontractor' },
-  { value: 'overhead', label: 'Overhead' },
-  { value: 'profit', label: 'Profit' },
+  { value: 'permit', label: 'Permit' },
   { value: 'other', label: 'Other' },
 ];
 
@@ -68,8 +67,8 @@ const UNIT_OPTIONS = [
 ];
 
 interface LineItemsTableProps {
-  lineItems: BidLineItem[];
-  onChange: (lineItems: BidLineItem[]) => void;
+  lineItems: LineItem[];
+  onChange: (updatedItems: LineItem[]) => void;
   editable?: boolean;
   showTotals?: boolean;
 }
@@ -81,36 +80,34 @@ const LineItemsTable: React.FC<LineItemsTableProps> = ({
   showTotals = true,
 }) => {
   const theme = useTheme();
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [editingRowId, setEditingRowId] = useState<string | null>(null);
   const [itemToDelete, setItemToDelete] = useState<string | null>(null);
-  const [editForm, setEditForm] = useState<BidLineItem | null>(null);
+  const [editForm, setEditForm] = useState<LineItem | null>(null);
 
   // Calculate totals by category
   const calculateCategoryTotals = () => {
-    const totals: Record<LineItemCategory, number> = {
+    const totals: Record<LineItem['category'], number> = {
+      material: 0,
       labor: 0,
-      materials: 0,
       equipment: 0,
       subcontractor: 0,
-      overhead: 0,
-      profit: 0,
+      permit: 0,
       other: 0,
     };
 
     lineItems.forEach(item => {
-      totals[item.category] += item.total;
+      totals[item.category] += item.totalCost || 0;
     });
 
     return totals;
   };
 
   const categoryTotals = calculateCategoryTotals();
-  const grandTotal = lineItems.reduce((sum, item) => sum + item.total, 0);
+  const grandTotal = lineItems.reduce((sum, item) => sum + (item.totalCost || 0), 0);
 
   // Handlers
-  const handleEditClick = (lineItem: BidLineItem) => {
-    setEditingId(lineItem.id);
+  const handleEditClick = (lineItem: LineItem) => {
+    setEditingRowId(lineItem.id);
     setEditForm({ ...lineItem });
   };
 
@@ -118,16 +115,16 @@ const LineItemsTable: React.FC<LineItemsTableProps> = ({
     if (!editForm) return;
 
     const newLineItems = lineItems.map(item =>
-      item.id === editingId ? editForm : item
+      item.id === editingRowId ? editForm : item
     );
 
     onChange(newLineItems);
-    setEditingId(null);
+    setEditingRowId(null);
     setEditForm(null);
   };
 
   const handleCancelClick = () => {
-    setEditingId(null);
+    setEditingRowId(null);
     setEditForm(null);
   };
 
@@ -147,10 +144,10 @@ const LineItemsTable: React.FC<LineItemsTableProps> = ({
     setItemToDelete(null);
   };
 
-  const handleDuplicateItem = (item: BidLineItem) => {
+  const handleDuplicateItem = (item: LineItem) => {
     // Create a duplicate with a new ID
     const { id, ...itemWithoutId } = item;
-    const newItem: BidLineItem = {
+    const newItem: LineItem = {
       ...itemWithoutId,
       id: `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`, // Generate a unique ID
       description: `${item.description} (Copy)`,
@@ -159,72 +156,54 @@ const LineItemsTable: React.FC<LineItemsTableProps> = ({
     onChange([...lineItems, newItem]);
   };
 
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>, field: keyof LineItem) => {
     if (!editForm) return;
-
-    const { name, value } = e.target;
-    setEditForm(prev => {
-      if (!prev) return null;
-
-      const updatedItem = { ...prev, [name]: value };
-
-      // Recalculate total if quantity or unit price changes
-      if (name === 'quantity' || name === 'unitPrice') {
-        const quantity = name === 'quantity' ? parseFloat(value) || 0 : prev.quantity;
-        const unitPrice = name === 'unitPrice' ? parseFloat(value) || 0 : prev.unitPrice;
-        updatedItem.total = quantity * unitPrice;
-      }
-
-      return updatedItem;
-    });
-  };
-
-  const handleSelectChange = (e: SelectChangeEvent) => {
-    if (!editForm) return;
-
-    const { name, value } = e.target;
-    if (name) {
-      setEditForm(prev => {
-        if (!prev) return null;
-        return { ...prev, [name]: value };
-      });
+    const value = e.target.value;
+    let updatedValue: string | number = value;
+    if (field === 'quantity' || field === 'unitCost' || field === 'totalCost') {
+      updatedValue = parseFloat(value) || 0;
     }
+    
+    const updatedItem = { 
+      ...editForm, 
+      [field]: updatedValue 
+    } as LineItem; // Ensure type consistency
+
+    // Recalculate totalCost if quantity or unitCost changed
+    if ((field === 'quantity' || field === 'unitCost') && typeof updatedItem.quantity === 'number' && typeof updatedItem.unitCost === 'number') {
+        updatedItem.totalCost = updatedItem.quantity * updatedItem.unitCost;
+    }
+    
+    setEditForm(updatedItem);
   };
 
-  const handleAddCategory = (category: LineItemCategory) => {
-    const newItem: BidLineItem = {
+  const handleSelectChange = (e: SelectChangeEvent<string>) => {
+      if (!editForm) return;
+      const { name, value } = e.target;
+      if (name) {
+          setEditForm(prev => {
+              if (!prev) return null;
+              // Ensure the value matches the LineItem['category'] type
+              return { ...prev, [name]: value as LineItem['category'] }; 
+          });
+      }
+  };
+
+  const handleAddCategory = (category: LineItem['category']) => {
+    const newItem: LineItem = {
       id: `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
       category,
       description: '',
       quantity: 1,
       unit: UNIT_OPTIONS[0],
-      unitPrice: 0,
-      total: 0,
+      unitCost: 0,
+      totalCost: 0,
       notes: '',
     };
 
     onChange([...lineItems, newItem]);
     handleEditClick(newItem);
   };
-
-  const handleExpandClick = (id: string) => {
-    setExpandedId(expandedId === id ? null : id);
-  };
-
-  // Group line items by category
-  const lineItemsByCategory: Record<LineItemCategory, BidLineItem[]> = {
-    labor: [],
-    materials: [],
-    equipment: [],
-    subcontractor: [],
-    overhead: [],
-    profit: [],
-    other: [],
-  };
-
-  lineItems.forEach(item => {
-    lineItemsByCategory[item.category].push(item);
-  });
 
   return (
     <>
@@ -242,11 +221,10 @@ const LineItemsTable: React.FC<LineItemsTableProps> = ({
             </TableRow>
           </TableHead>
           <TableBody>
-            {Object.entries(lineItemsByCategory).map(([category, items]) => {
-              if (items.length === 0) return null;
+            {Object.entries(categories).map(([category, { label }]) => {
+              const categoryItems = lineItems.filter(item => item.category === category);
+              if (categoryItems.length === 0) return null;
 
-              const categoryLabel = CATEGORY_OPTIONS.find(option => option.value === category)?.label || category;
-              
               return (
                 <React.Fragment key={category}>
                   {/* Category header */}
@@ -258,11 +236,11 @@ const LineItemsTable: React.FC<LineItemsTableProps> = ({
                     <TableCell colSpan={editable ? 6 : 5}>
                       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                         <Typography variant="subtitle1" fontWeight="bold">
-                          {categoryLabel} ({items.length} {items.length === 1 ? 'item' : 'items'})
+                          {label} ({categoryItems.length} {categoryItems.length === 1 ? 'item' : 'items'})
                         </Typography>
                         {showTotals && (
                           <Typography variant="subtitle1" fontWeight="bold">
-                            Subtotal: {formatCurrency(categoryTotals[category as LineItemCategory])}
+                            Subtotal: {formatCurrency(categoryTotals[category as LineItem['category']])}
                           </Typography>
                         )}
                       </Box>
@@ -270,22 +248,24 @@ const LineItemsTable: React.FC<LineItemsTableProps> = ({
                   </TableRow>
 
                   {/* Category items */}
-                  {items.map(item => (
-                    <React.Fragment key={item.id}>
+                  {categoryItems.map((item: LineItem) => {
+                    const isEditing = editable && editingRowId === item.id;
+                    return (
                       <TableRow 
+                        key={item.id}
                         sx={{ 
-                          bgcolor: editingId === item.id ? alpha(theme.palette.primary.main, 0.1) : 'inherit',
+                          bgcolor: isEditing ? alpha(theme.palette.primary.main, 0.1) : 'inherit',
                           '&:hover': {
                             bgcolor: alpha(theme.palette.primary.main, 0.05),
                           },
                         }}
                       >
                         <TableCell>
-                          {editingId === item.id ? (
+                          {isEditing ? (
                             <TextField
                               name="description"
                               value={editForm?.description || ''}
-                              onChange={handleInputChange}
+                              onChange={(e) => handleInputChange(e, 'description')}
                               fullWidth
                               size="small"
                               multiline
@@ -293,25 +273,16 @@ const LineItemsTable: React.FC<LineItemsTableProps> = ({
                             />
                           ) : (
                             <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                              {item.notes && (
-                                <IconButton 
-                                  size="small" 
-                                  onClick={() => handleExpandClick(item.id)}
-                                  sx={{ mr: 1 }}
-                                >
-                                  {expandedId === item.id ? <ExpandLessIcon /> : <ExpandMoreIcon />}
-                                </IconButton>
-                              )}
                               <Typography>{item.description || '(No description)'}</Typography>
                             </Box>
                           )}
                         </TableCell>
                         <TableCell align="right">
-                          {editingId === item.id ? (
+                          {isEditing ? (
                             <TextField
                               name="quantity"
                               value={editForm?.quantity || 0}
-                              onChange={handleInputChange}
+                              onChange={(e) => handleInputChange(e, 'quantity')}
                               type="number"
                               inputProps={{ min: 0, step: 0.01 }}
                               size="small"
@@ -322,11 +293,11 @@ const LineItemsTable: React.FC<LineItemsTableProps> = ({
                           )}
                         </TableCell>
                         <TableCell align="right">
-                          {editingId === item.id ? (
+                          {isEditing ? (
                             <Select
                               name="unit"
                               value={editForm?.unit || ''}
-                              onChange={handleSelectChange}
+                              onChange={(e) => handleSelectChange(e)}
                               size="small"
                               sx={{ width: 100 }}
                               displayEmpty
@@ -342,11 +313,11 @@ const LineItemsTable: React.FC<LineItemsTableProps> = ({
                           )}
                         </TableCell>
                         <TableCell align="right">
-                          {editingId === item.id ? (
+                          {isEditing ? (
                             <TextField
-                              name="unitPrice"
-                              value={editForm?.unitPrice || 0}
-                              onChange={handleInputChange}
+                              name="unitCost"
+                              value={editForm?.unitCost || 0}
+                              onChange={(e) => handleInputChange(e, 'unitCost')}
                               type="number"
                               inputProps={{ min: 0, step: 0.01 }}
                               size="small"
@@ -356,19 +327,20 @@ const LineItemsTable: React.FC<LineItemsTableProps> = ({
                               }}
                             />
                           ) : (
-                            formatCurrency(item.unitPrice)
+                            formatCurrency(item.unitCost || 0)
                           )}
                         </TableCell>
                         <TableCell align="right">
-                          {editingId === item.id && editForm
-                            ? formatCurrency(editForm.quantity * editForm.unitPrice)
-                            : formatCurrency(item.total)
-                          }
+                          {isEditing ? (
+                            formatCurrency(editForm?.totalCost || 0)
+                          ) : (
+                            formatCurrency(item.totalCost || 0)
+                          )}
                         </TableCell>
                         {editable && (
                           <TableCell align="right">
                             <Box sx={{ display: 'flex', justifyContent: 'flex-end' }}>
-                              {editingId === item.id ? (
+                              {isEditing ? (
                                 <>
                                   <Tooltip title="Save">
                                     <IconButton 
@@ -424,43 +396,8 @@ const LineItemsTable: React.FC<LineItemsTableProps> = ({
                           </TableCell>
                         )}
                       </TableRow>
-
-                      {/* Notes expansion panel */}
-                      {expandedId === item.id && item.notes && (
-                        <TableRow>
-                          <TableCell colSpan={editable ? 6 : 5} sx={{ py: 0, backgroundColor: 'grey.50' }}>
-                            <Collapse in={expandedId === item.id}>
-                              <Box sx={{ p: 2 }}>
-                                <Typography variant="subtitle2" gutterBottom>Notes:</Typography>
-                                <Typography variant="body2" sx={{ whiteSpace: 'pre-line' }}>
-                                  {item.notes}
-                                </Typography>
-                              </Box>
-                            </Collapse>
-                          </TableCell>
-                        </TableRow>
-                      )}
-
-                      {/* Notes editing in edit mode */}
-                      {editingId === item.id && (
-                        <TableRow>
-                          <TableCell colSpan={editable ? 6 : 5} sx={{ py: 1, backgroundColor: alpha(theme.palette.primary.main, 0.05) }}>
-                            <TextField
-                              name="notes"
-                              value={editForm?.notes || ''}
-                              onChange={handleInputChange}
-                              fullWidth
-                              size="small"
-                              multiline
-                              rows={2}
-                              placeholder="Add notes for this item (optional)"
-                              label="Notes"
-                            />
-                          </TableCell>
-                        </TableRow>
-                      )}
-                    </React.Fragment>
-                  ))}
+                    );
+                  })}
                 </React.Fragment>
               );
             })}
@@ -491,13 +428,13 @@ const LineItemsTable: React.FC<LineItemsTableProps> = ({
         <Box sx={{ mb: 3 }}>
           <Typography variant="subtitle1" gutterBottom>Add New Line Items:</Typography>
           <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
-            {CATEGORY_OPTIONS.map(category => (
+            {categories.map(category => (
               <Button
                 key={category.value}
                 variant="outlined"
                 size="small"
                 startIcon={<AddIcon />}
-                onClick={() => handleAddCategory(category.value)}
+                onClick={() => handleAddCategory(category.value as LineItem['category'])}
                 sx={{ mb: 1 }}
               >
                 {category.label}

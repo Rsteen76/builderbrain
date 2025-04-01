@@ -15,7 +15,9 @@ import {
   Alert,
 } from '@mui/material';
 import { ArrowBack as ArrowBackIcon, Save as SaveIcon } from '@mui/icons-material';
-import { SubcontractorService, Subcontractor } from '../../services/subcontractor';
+import { Subcontractor } from '../../types';
+import { SubcontractorService } from '../../services/subcontractor';
+import { useAuth } from '../../contexts/AuthContext';
 
 const specialties = [
   'Electrical',
@@ -36,12 +38,13 @@ const specialties = [
 const SubcontractorForm: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const { user } = useAuth();
   const [loading, setLoading] = useState(false);
   const [saveLoading, setSaveLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   
-  const emptySubcontractor: Omit<Subcontractor, 'id' | 'createdAt' | 'updatedAt'> = {
+  const emptySubcontractor: Omit<Subcontractor, 'id' | 'userId' | 'createdAt' | 'updatedAt'> = {
     name: '',
     specialty: '',
     rating: 0,
@@ -62,28 +65,36 @@ const SubcontractorForm: React.FC = () => {
       employees: 0,
       license: '',
     },
+    projects: [],
     notes: '',
   };
 
-  const [formData, setFormData] = useState<Omit<Subcontractor, 'id' | 'createdAt' | 'updatedAt'>>(emptySubcontractor);
+  const [formData, setFormData] = useState<Omit<Subcontractor, 'id' | 'userId' | 'createdAt' | 'updatedAt'>>(emptySubcontractor);
   const isEditMode = !!id;
 
   useEffect(() => {
     const fetchSubcontractor = async () => {
-      if (!id) return;
+      if (!id || !user?.uid) {
+        if (!id) {
+          // Handle if needed
+        } else {
+          setError('User not authenticated.');
+        }
+        setLoading(false);
+        return;
+      }
       
       try {
         setLoading(true);
-        const subcontractor = await SubcontractorService.getSubcontractor(id);
+        const subcontractor = await SubcontractorService.getSubcontractor(user.uid, id);
         
         if (!subcontractor) {
-          setError('Subcontractor not found');
+          setError('Subcontractor not found or not accessible');
           return;
         }
         
-        // Remove id, createdAt, updatedAt from the data
-        const { id: _, createdAt: __, updatedAt: ___, ...formData } = subcontractor;
-        setFormData(formData);
+        const { id: _id, userId: _userId, createdAt: _createdAt, updatedAt: _updatedAt, ...dataToSet } = subcontractor;
+        setFormData(dataToSet);
       } catch (err) {
         console.error('Error fetching subcontractor:', err);
         setError('Failed to load subcontractor data');
@@ -92,20 +103,21 @@ const SubcontractorForm: React.FC = () => {
       }
     };
 
-    if (isEditMode) {
+    if (isEditMode && user?.uid) {
       fetchSubcontractor();
+    } else if (isEditMode) {
+      setError('Authenticating...');
+      setLoading(false);
     }
-  }, [id, isEditMode]);
+  }, [id, isEditMode, user]);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
     
-    // Handle nested properties
     if (name.includes('.')) {
       const [parent, child] = name.split('.');
       setFormData(prev => {
         const parentObj = prev[parent as keyof typeof prev];
-        // Ensure the parent property is an object before spreading
         if (parentObj && typeof parentObj === 'object') {
           return {
             ...prev,
@@ -129,12 +141,10 @@ const SubcontractorForm: React.FC = () => {
     const { name, value } = e.target;
     const numValue = parseInt(value, 10) || 0;
     
-    // Handle nested properties
     if (name.includes('.')) {
       const [parent, child] = name.split('.');
       setFormData(prev => {
         const parentObj = prev[parent as keyof typeof prev];
-        // Ensure the parent property is an object before spreading
         if (parentObj && typeof parentObj === 'object') {
           return {
             ...prev,
@@ -165,7 +175,7 @@ const SubcontractorForm: React.FC = () => {
     setFormData(prev => ({
       ...prev,
       performance: {
-        ...prev.performance,
+        ...prev.performance || {},
         [name]: newValue as number,
       },
     }));
@@ -173,6 +183,11 @@ const SubcontractorForm: React.FC = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    
+    if (!user?.uid) {
+      setError("User authentication error. Cannot save.");
+      return;
+    }
     
     if (!formData.name || !formData.specialty) {
       setError('Name and specialty are required');
@@ -183,17 +198,22 @@ const SubcontractorForm: React.FC = () => {
       setSaveLoading(true);
       setError(null);
       
-      if (isEditMode) {
-        await SubcontractorService.updateSubcontractor(id, formData);
+      const payload: Omit<Subcontractor, 'id' | 'userId' | 'createdAt' | 'updatedAt'> = { 
+          ...emptySubcontractor,
+          ...formData,
+          contact: { ...emptySubcontractor.contact, ...formData.contact },
+          performance: { ...emptySubcontractor.performance, ...formData.performance },
+          companyInfo: { ...emptySubcontractor.companyInfo, ...formData.companyInfo },
+      };
+
+      if (isEditMode && id) {
+        const updatePayload: Partial<Omit<Subcontractor, 'id' | 'userId' | 'createdAt'>> = formData;
+        await SubcontractorService.updateSubcontractor(id, updatePayload);
         setSuccess('Subcontractor updated successfully');
       } else {
-        await SubcontractorService.createSubcontractor(formData);
+        await SubcontractorService.createSubcontractor(user.uid, payload);
         setSuccess('Subcontractor created successfully');
         
-        // For "Add Another" functionality, uncomment this line:
-        // setFormData(emptySubcontractor);
-        
-        // Or navigate back to the subcontractors list
         setTimeout(() => navigate('/subcontractors'), 1500);
       }
     } catch (err) {
@@ -346,9 +366,9 @@ const SubcontractorForm: React.FC = () => {
           <Typography variant="h6" sx={{ mb: 2 }}>Performance Metrics</Typography>
           <Grid container spacing={3} sx={{ mb: 4 }}>
             <Grid item xs={12}>
-              <Typography gutterBottom>On-Time Delivery: {formData.performance.onTime}%</Typography>
+              <Typography gutterBottom>On-Time Delivery: {formData.performance?.onTime || 0}%</Typography>
               <Slider
-                value={formData.performance.onTime}
+                value={formData.performance?.onTime || 0}
                 onChange={handlePerformanceChange('onTime')}
                 valueLabelDisplay="auto"
                 step={5}
@@ -358,9 +378,9 @@ const SubcontractorForm: React.FC = () => {
               />
             </Grid>
             <Grid item xs={12}>
-              <Typography gutterBottom>Quality: {formData.performance.quality}%</Typography>
+              <Typography gutterBottom>Quality: {formData.performance?.quality || 0}%</Typography>
               <Slider
-                value={formData.performance.quality}
+                value={formData.performance?.quality || 0}
                 onChange={handlePerformanceChange('quality')}
                 valueLabelDisplay="auto"
                 step={5}
@@ -370,9 +390,9 @@ const SubcontractorForm: React.FC = () => {
               />
             </Grid>
             <Grid item xs={12}>
-              <Typography gutterBottom>Communication: {formData.performance.communication}%</Typography>
+              <Typography gutterBottom>Communication: {formData.performance?.communication || 0}%</Typography>
               <Slider
-                value={formData.performance.communication}
+                value={formData.performance?.communication || 0}
                 onChange={handlePerformanceChange('communication')}
                 valueLabelDisplay="auto"
                 step={5}

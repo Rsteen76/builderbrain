@@ -38,12 +38,15 @@ import {
   ArrowBack as ArrowBackIcon,
   Link as LinkIcon,
 } from '@mui/icons-material';
-import { SubcontractorService, Subcontractor } from '../../services/subcontractor';
+import { Subcontractor } from '../../types';
+import { SubcontractorService } from '../../services/subcontractor';
 import { formatCurrency, formatDate, formatPhoneNumber } from '../../utils/formatters';
+import { useAuth } from '../../contexts/AuthContext';
 
 const SubcontractorDetails: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const { user } = useAuth();
   const [subcontractor, setSubcontractor] = useState<Subcontractor | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -52,18 +55,26 @@ const SubcontractorDetails: React.FC = () => {
 
   useEffect(() => {
     const fetchSubcontractor = async () => {
-      if (!id) return;
+      if (!id) {
+          setError('Subcontractor ID missing from URL.');
+          setLoading(false);
+          return;
+      }
+      if (!user?.uid) {
+          setError('User not authenticated.');
+          setLoading(false);
+          return;
+      }
       
       try {
         setLoading(true);
-        const data = await SubcontractorService.getSubcontractor(id);
+        const data = await SubcontractorService.getSubcontractor(user.uid, id);
         
         if (!data) {
-          setError('Subcontractor not found');
-          return;
+          setError('Subcontractor not found or access denied.');
+        } else {
+          setSubcontractor(data);
         }
-        
-        setSubcontractor(data);
       } catch (err) {
         console.error('Error fetching subcontractor:', err);
         setError('Failed to load subcontractor data');
@@ -73,7 +84,7 @@ const SubcontractorDetails: React.FC = () => {
     };
 
     fetchSubcontractor();
-  }, [id]);
+  }, [id, user]);
 
   const handleTabChange = (_: React.SyntheticEvent, newValue: number) => {
     setTabValue(newValue);
@@ -187,13 +198,13 @@ const SubcontractorDetails: React.FC = () => {
                 <Box>
                   <Box sx={{ display: 'flex', alignItems: 'center' }}>
                     <Rating 
-                      value={subcontractor.rating} 
+                      value={subcontractor.rating ?? 0} 
                       precision={0.5} 
                       readOnly 
                       size="small" 
                     />
                     <Typography variant="body2" sx={{ ml: 1 }}>
-                      {subcontractor.rating.toFixed(1)}
+                      {(subcontractor.rating ?? 0).toFixed(1)}
                     </Typography>
                   </Box>
                   <Typography variant="body2" color="text.secondary">
@@ -209,21 +220,21 @@ const SubcontractorDetails: React.FC = () => {
                 <PhoneIcon fontSize="small" sx={{ mr: 2, color: 'text.secondary' }} />
                 <ListItemText 
                   primary="Phone" 
-                  secondary={formatPhoneNumber(subcontractor.contact.phone)} 
+                  secondary={subcontractor.contact?.phone ? formatPhoneNumber(subcontractor.contact.phone) : 'N/A'} 
                 />
               </ListItem>
               <ListItem>
                 <EmailIcon fontSize="small" sx={{ mr: 2, color: 'text.secondary' }} />
                 <ListItemText 
                   primary="Email" 
-                  secondary={subcontractor.contact.email} 
+                  secondary={subcontractor.contact?.email || 'N/A'} 
                 />
               </ListItem>
               <ListItem>
                 <LocationIcon fontSize="small" sx={{ mr: 2, color: 'text.secondary' }} />
                 <ListItemText 
                   primary="Location" 
-                  secondary={subcontractor.contact.location} 
+                  secondary={subcontractor.contact?.location || 'N/A'} 
                 />
               </ListItem>
               {subcontractor.companyInfo?.website && (
@@ -260,10 +271,10 @@ const SubcontractorDetails: React.FC = () => {
                     <Typography variant="body2" sx={{ minWidth: 120 }}>On Time Delivery</Typography>
                     <LinearProgress 
                       variant="determinate" 
-                      value={subcontractor.performance.onTime} 
+                      value={subcontractor.performance?.onTime ?? 0} 
                       sx={{ flexGrow: 1, mr: 1 }} 
                     />
-                    <Typography variant="body2">{subcontractor.performance.onTime}%</Typography>
+                    <Typography variant="body2">{subcontractor.performance?.onTime ?? 0}%</Typography>
                   </Box>
                 </Grid>
                 <Grid item xs={12}>
@@ -271,11 +282,11 @@ const SubcontractorDetails: React.FC = () => {
                     <Typography variant="body2" sx={{ minWidth: 120 }}>Quality</Typography>
                     <LinearProgress 
                       variant="determinate" 
-                      value={subcontractor.performance.quality} 
+                      value={subcontractor.performance?.quality ?? 0} 
                       sx={{ flexGrow: 1, mr: 1 }} 
                       color="success"
                     />
-                    <Typography variant="body2">{subcontractor.performance.quality}%</Typography>
+                    <Typography variant="body2">{subcontractor.performance?.quality ?? 0}%</Typography>
                   </Box>
                 </Grid>
                 <Grid item xs={12}>
@@ -283,11 +294,11 @@ const SubcontractorDetails: React.FC = () => {
                     <Typography variant="body2" sx={{ minWidth: 120 }}>Communication</Typography>
                     <LinearProgress 
                       variant="determinate" 
-                      value={subcontractor.performance.communication} 
+                      value={subcontractor.performance?.communication ?? 0} 
                       sx={{ flexGrow: 1, mr: 1 }} 
                       color="info"
                     />
-                    <Typography variant="body2">{subcontractor.performance.communication}%</Typography>
+                    <Typography variant="body2">{subcontractor.performance?.communication ?? 0}%</Typography>
                   </Box>
                 </Grid>
               </Grid>

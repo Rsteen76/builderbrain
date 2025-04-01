@@ -30,7 +30,10 @@ import {
   Refresh as RefreshIcon,
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
-import { ProjectService, Project } from '../../services/project';
+import { Project } from '../../types';
+import { ProjectService } from '../../services/project';
+import { useAuth } from '../../contexts/AuthContext';
+import { formatCurrency } from '../../utils/formatters';
 
 interface StatCardProps {
   title: string;
@@ -207,6 +210,7 @@ const ProjectCard: React.FC<ProjectCardProps> = ({
 const Dashboard: React.FC = () => {
   const theme = useTheme();
   const navigate = useNavigate();
+  const { user } = useAuth();
   
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -220,31 +224,34 @@ const Dashboard: React.FC = () => {
 
   useEffect(() => {
     const fetchDashboardData = async () => {
+      if (!user?.uid) {
+        setError("User not authenticated. Cannot load dashboard data.");
+        setLoading(false);
+        return;
+      }
       try {
         setLoading(true);
         setError(null);
         
-        // Fetch projects from Firestore
-        const projectsData = await ProjectService.getProjects();
+        const projectsData: Project[] = await ProjectService.getProjects(user.uid);
         setProjects(projectsData);
         
-        // Calculate stats from the projects data
         const activeProjects = projectsData.filter(p => 
-          p.status === 'in_progress' || p.status === 'planning'
+          p.status === 'in_progress' || p.status === 'planning' || p.status === 'active'
         ).length;
         
-        const totalBudget = projectsData.reduce((sum, p) => sum + (p.budget || 0), 0);
+        const totalBudget = projectsData.reduce((sum, p) => {
+            const budgetValue = typeof p.budget === 'object' && p.budget !== null ? p.budget.total : (p.budget || 0);
+            return sum + (typeof budgetValue === 'number' ? budgetValue : 0);
+        }, 0);
         
-        // Count unique team members
-        const uniqueTeamMembers = new Set();
+        const uniqueTeamMembers = new Set<string>();
         projectsData.forEach(p => {
           if (p.team && Array.isArray(p.team)) {
-            p.team.forEach(member => uniqueTeamMembers.add(member));
+            p.team.forEach((member: string) => uniqueTeamMembers.add(member));
           }
         });
         
-        // For now, we'll just set a placeholder for tasks due
-        // In a real app, you'd fetch this from a tasks collection
         const tasksDue = Math.min(5, Math.floor(activeProjects * 1.5));
         
         setStats({
@@ -253,62 +260,62 @@ const Dashboard: React.FC = () => {
           teamMembers: uniqueTeamMembers.size,
           tasksDue
         });
-        
       } catch (err) {
         console.error('Error fetching dashboard data:', err);
-        setError('Failed to load dashboard data. Please try again.');
+        setError('Failed to load dashboard data');
       } finally {
         setLoading(false);
       }
     };
-    
-    fetchDashboardData();
-  }, []);
+
+    if (user?.uid) {
+        fetchDashboardData();
+    } else {
+        setLoading(false); 
+        setError('Waiting for user authentication...');
+    }
+
+  }, [user]);
   
   const refreshData = () => {
-    fetchDashboardData();
-  };
-  
-  const fetchDashboardData = async () => {
-    try {
-      setLoading(true);
-      setError(null);
-      
-      // Fetch projects from Firestore
-      const projectsData = await ProjectService.getProjects();
-      setProjects(projectsData);
-      
-      // Calculate stats from the projects data
-      const activeProjects = projectsData.filter(p => 
-        p.status === 'in_progress' || p.status === 'planning'
-      ).length;
-      
-      const totalBudget = projectsData.reduce((sum, p) => sum + (p.budget || 0), 0);
-      
-      // Count unique team members
-      const uniqueTeamMembers = new Set();
-      projectsData.forEach(p => {
-        if (p.team && Array.isArray(p.team)) {
-          p.team.forEach(member => uniqueTeamMembers.add(member));
-        }
-      });
-      
-      // For now, we'll just set a placeholder for tasks due
-      const tasksDue = Math.min(5, Math.floor(activeProjects * 1.5));
-      
-      setStats({
-        activeProjects,
-        totalBudget,
-        teamMembers: uniqueTeamMembers.size,
-        tasksDue
-      });
-      
-    } catch (err) {
-      console.error('Error fetching dashboard data:', err);
-      setError('Failed to load dashboard data. Please try again.');
-    } finally {
-      setLoading(false);
-    }
+      if (user?.uid) { 
+          const fetchDashboardData = async () => {
+                try {
+                    setLoading(true);
+                    setError(null);
+                    const projectsData: Project[] = await ProjectService.getProjects(user.uid);
+                    setProjects(projectsData);
+                    const activeProjects = projectsData.filter(p => 
+                        p.status === 'in_progress' || p.status === 'planning' || p.status === 'active'
+                    ).length;
+                    const totalBudget = projectsData.reduce((sum, p) => {
+                        const budgetValue = typeof p.budget === 'object' && p.budget !== null ? p.budget.total : (p.budget || 0);
+                        return sum + (typeof budgetValue === 'number' ? budgetValue : 0);
+                    }, 0);
+                    const uniqueTeamMembers = new Set<string>();
+                    projectsData.forEach(p => {
+                        if (p.team && Array.isArray(p.team)) {
+                            p.team.forEach((member: string) => uniqueTeamMembers.add(member));
+                        }
+                    });
+                    const tasksDue = Math.min(5, Math.floor(activeProjects * 1.5));
+                    setStats({
+                        activeProjects,
+                        totalBudget,
+                        teamMembers: uniqueTeamMembers.size,
+                        tasksDue
+                    });
+                } catch (err) {
+                    console.error('Error refreshing dashboard data:', err);
+                    setError('Failed to refresh dashboard data');
+                } finally {
+                    setLoading(false);
+                }
+          };
+          fetchDashboardData();
+      } else {
+          setError("Cannot refresh: User not authenticated.");
+      }
   };
 
   const dashboardStats = [
@@ -346,37 +353,30 @@ const Dashboard: React.FC = () => {
     },
   ];
 
-  // Format a project for display
   const formatProjectForDisplay = (project: Project) => {
-    // Map project status to display status
-    const statusMap: Record<string, 'on-track' | 'at-risk' | 'completed'> = {
-      'planning': 'on-track',
-      'in_progress': 'on-track',
-      'on_hold': 'at-risk',
-      'completed': 'completed'
-    };
+    let status: 'on-track' | 'at-risk' | 'completed' = 'on-track';
+    if (project.status === 'completed') {
+      status = 'completed';
+    } else if (project.endDate && new Date(project.endDate) < new Date()) {
+      status = 'at-risk';
+    } else if (project.status === 'on_hold' || project.status === 'cancelled') {
+        status = 'at-risk';
+    }
     
-    // Calculate a mock progress value based on status
-    const progressMap: Record<string, number> = {
-      'planning': 15,
-      'in_progress': 60,
-      'on_hold': 40,
-      'completed': 100
-    };
-    
+    const progress = project.status === 'completed' ? 100 : Math.floor(Math.random() * 80) + 10;
+
+    const budgetDisplay = typeof project.budget === 'object' && project.budget !== null 
+                          ? formatCurrency(project.budget.total)
+                          : formatCurrency(project.budget || 0);
+
     return {
+      id: project.id,
       title: project.name,
-      progress: progressMap[project.status] || 0,
-      status: statusMap[project.status] || 'at-risk',
-      dueDate: project.endDate ? new Date(project.endDate).toLocaleDateString('en-US', { 
-        year: 'numeric', 
-        month: 'short', 
-        day: 'numeric' 
-      }) : 'No due date',
-      budget: `$${(project.budget || 0).toLocaleString()}`,
+      progress: progress,
+      status: status,
+      dueDate: project.endDate ? new Date(project.endDate).toLocaleDateString() : 'N/A',
+      budget: budgetDisplay,
       team: project.team?.length || 0,
-      projectId: project.id,
-      onClick: () => navigate(`/projects/${project.id}`),
     };
   };
 
@@ -452,7 +452,10 @@ const Dashboard: React.FC = () => {
               <Grid container spacing={3}>
                 {projects.slice(0, 3).map((project, index) => (
                   <Grid item xs={12} md={4} key={project.id || index}>
-                    <ProjectCard {...formatProjectForDisplay(project)} />
+                    <ProjectCard 
+                        {...formatProjectForDisplay(project)} 
+                        onClick={() => navigate(`/projects/${project.id}`)}
+                    />
                   </Grid>
                 ))}
               </Grid>
@@ -536,7 +539,6 @@ const Dashboard: React.FC = () => {
             {projects.length > 0 ? (
               <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
                 {projects.slice(0, 3).map((project, index) => {
-                  // Get the first milestone or create a default one
                   const milestone = project.keyMilestones && project.keyMilestones.length > 0 
                     ? project.keyMilestones[0] 
                     : { name: `${project.name} completion`, date: project.endDate ? new Date(project.endDate).toISOString().split('T')[0] : '' };

@@ -7,8 +7,9 @@ import {
   alpha
 } from '@mui/material';
 import { Add as AddIcon, Edit as EditIcon, Delete as DeleteIcon } from '@mui/icons-material';
-import { ProjectService, Project } from '../../services/project';
-import { Bid, BidStatus } from '../../types/project.types';
+import { ProjectService } from '../../services/project';
+import { BidService } from '../../services/bid';
+import { Project, Bid } from '../../types';
 import BidFormModal from './BidFormModal'; // Import the modal
 import { visuallyHidden } from '@mui/utils'; // For accessibility with sorting
 
@@ -24,31 +25,35 @@ interface HeadCell {
 }
 
 const headCells: readonly HeadCell[] = [
-  { id: 'contractorName', numeric: false, label: 'Contractor/Supplier', sortable: true },
-  { id: 'category', numeric: false, label: 'Category', sortable: true },
-  { id: 'bidAmount', numeric: true, label: 'Amount', sortable: true },
+  { id: 'subcontractorName', numeric: false, label: 'Contractor/Supplier', sortable: true },
+  { id: 'scope', numeric: false, label: 'Category/Scope', sortable: true },
+  { id: 'totalAmount', numeric: true, label: 'Amount', sortable: true },
   { id: 'status', numeric: false, label: 'Status', sortable: true },
-  { id: 'submittedDate', numeric: false, label: 'Submitted Date', sortable: true },
+  { id: 'submissionDeadline', numeric: false, label: 'Submission Date', sortable: true },
   { id: 'actions', numeric: false, label: 'Actions', sortable: false },
 ];
 
 interface BidManagerProps {
   project: Project;
+  userId: string;
   onProjectUpdate: (updatedProject: Project) => void;
 }
 
 // Helper to get bid status chip color
-const getBidStatusColor = (status: BidStatus): "default" | "primary" | "secondary" | "error" | "info" | "success" | "warning" => {
+const getBidStatusColor = (status: Bid['status']): "default" | "primary" | "secondary" | "error" | "info" | "success" | "warning" => {
   switch (status) {
-    case 'Submitted':
-    case 'Pending':
+    case 'submitted':
+    case 'draft':
         return 'info';
-    case 'Accepted':
+    case 'accepted':
         return 'success';
-    case 'Rejected':
+    case 'rejected':
         return 'error';
-    case 'Needs Revision':
+    case 'revision_requested':
         return 'warning';
+    case 'expired':
+    case 'withdrawn':
+        return 'default';
     default: 
         return 'default';
   }
@@ -103,17 +108,17 @@ function descendingComparator<T>(a: T, b: T, orderBy: keyof T) {
    return 0;
 }
 
-const BidManager: React.FC<BidManagerProps> = ({ project, onProjectUpdate }) => {
+const BidManager: React.FC<BidManagerProps> = ({ project, userId, onProjectUpdate }) => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingBid, setEditingBid] = useState<Bid | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [order, setOrder] = useState<Order>('asc');
-  const [orderBy, setOrderBy] = useState<BidKeys>('category'); // Default sort by category
+  const [orderBy, setOrderBy] = useState<BidKeys>('scope'); // Default sort by scope
 
   const theme = useTheme(); // Get theme for styling
 
-  const bids = project.bids || [];
+  const bids = useMemo(() => project.bids || [], [project.bids]);
 
   const handleRequestSort = (event: React.MouseEvent<unknown>, property: BidKeys) => {
     const isAsc = orderBy === property && order === 'asc';
@@ -123,13 +128,13 @@ const BidManager: React.FC<BidManagerProps> = ({ project, onProjectUpdate }) => 
 
   // --- Memoized Sorting, Grouping, and Highlighting Logic ---
   const { groupedBids, lowestBidsByCategory } = useMemo(() => {
-    const eligibleStatusesForLowest: BidStatus[] = ['Submitted', 'Pending']; // Define statuses to consider for "lowest"
+    const eligibleStatusesForLowest: Bid['status'][] = ['submitted', 'draft']; // Define statuses to consider for "lowest"
 
     // 1. Primary sort by Category, Secondary sort by user selection
     const sortedBids = stableSort(bids, (a, b) => {
         // Primary Sort: Category (handle undefined)
-        const categoryA = a.category || 'zzzz'; // Put uncategorized last
-        const categoryB = b.category || 'zzzz';
+        const categoryA = a.scope || 'zzzz'; // Put uncategorized last
+        const categoryB = b.scope || 'zzzz';
         const categoryComparison = categoryA.localeCompare(categoryB);
         if (categoryComparison !== 0) {
              // Always sort categories ascending regardless of main order direction for grouping
@@ -144,16 +149,16 @@ const BidManager: React.FC<BidManagerProps> = ({ project, onProjectUpdate }) => 
     const lowest: { [category: string]: number } = {};
 
     sortedBids.forEach(bid => {
-      const category = bid.category || 'Uncategorized'; // Group undefined categories
+      const category = bid.scope || 'Uncategorized'; // Group undefined categories
       if (!grouped[category]) {
         grouped[category] = [];
       }
       grouped[category].push(bid);
 
       // Check if this bid qualifies for lowest calculation
-      if (eligibleStatusesForLowest.includes(bid.status) && bid.bidAmount > 0) {
-        if (lowest[category] === undefined || bid.bidAmount < lowest[category]) {
-          lowest[category] = bid.bidAmount;
+      if (eligibleStatusesForLowest.includes(bid.status) && bid.totalAmount > 0) {
+        if (lowest[category] === undefined || bid.totalAmount < lowest[category]) {
+          lowest[category] = bid.totalAmount;
         }
       }
     });
@@ -178,27 +183,45 @@ const BidManager: React.FC<BidManagerProps> = ({ project, onProjectUpdate }) => 
     setEditingBid(null);
   };
 
-  const handleFormSubmit = async (submittedBid: Bid) => {
-    console.log('Bid Form submitted:', submittedBid);
+  const handleFormSubmit = async (submittedBidData: Omit<Bid, 'id' | 'createdAt' | 'updatedAt' | 'userId'>) => {
+    console.log('Bid Form submitted:', submittedBidData);
     setLoading(true);
     setError(null);
-    let updatedBids;
 
-    if (editingBid) {
-      // Edit existing bid
-      updatedBids = bids.map(b => (b.id === submittedBid.id ? submittedBid : b));
-    } else {
-      // Add new bid
-      updatedBids = [...bids, submittedBid];
+    if (!userId) {
+        setError("User authentication error. Cannot save bid.");
+        setLoading(false);
+        return;
     }
 
     try {
-      const updatedProjectData: Partial<Project> = {
-        bids: updatedBids,
-      };
-      await ProjectService.updateProject(project.id!, updatedProjectData);
-      onProjectUpdate({ ...project, bids: updatedBids });
+      let savedBid: Bid;
+      let updatedBidsList: Bid[];
+
+      if (editingBid?.id) {
+        const bidIdToUpdate = editingBid.id;
+        const { id, createdAt, updatedAt, ...updatePayload } = submittedBidData as any;
+        
+        await BidService.updateBid(bidIdToUpdate, updatePayload);
+        
+        const refetchedBid = await BidService.getBid(userId, bidIdToUpdate);
+        if (!refetchedBid) throw new Error("Failed to refetch updated bid");
+        savedBid = refetchedBid;
+        updatedBidsList = bids.map(b => (b.id === savedBid.id ? savedBid : b));
+      } else {
+        // Create a full bid payload from the submitted data
+        const createPayload = {
+          ...submittedBidData,
+          userId // Add userId from props
+        };
+        savedBid = await BidService.createBid(userId, createPayload);
+        updatedBidsList = [...bids, savedBid];
+      }
+
+      const sortedBids = updatedBidsList.sort((a, b) => (a.scope || '').localeCompare(b.scope || ''));
+      onProjectUpdate({ ...project, bids: sortedBids });
       handleCloseModal();
+
     } catch (err) {
       console.error("Error saving bid:", err);
       setError(err instanceof Error ? err.message : "Failed to save bid. Please try again.");
@@ -208,21 +231,24 @@ const BidManager: React.FC<BidManagerProps> = ({ project, onProjectUpdate }) => 
   };
 
   const handleDelete = async (bidId: string) => {
-    if (!window.confirm('Are you sure you want to delete this bid?')) {
+    if (!window.confirm('Are you sure you want to delete this bid?') || !bidId) {
       return;
     }
+    if (!userId) {
+        setError("User authentication error. Cannot delete bid.");
+        return;
+    }
+
     console.log('Delete bid with ID:', bidId);
     setLoading(true);
     setError(null);
 
-    const updatedBids = bids.filter(b => b.id !== bidId);
-
     try {
-      const updatedProjectData: Partial<Project> = {
-        bids: updatedBids,
-      };
-      await ProjectService.updateProject(project.id!, updatedProjectData);
-      onProjectUpdate({ ...project, bids: updatedBids });
+      await BidService.deleteBid(bidId);
+
+      const updatedBidsList = bids.filter(b => b.id !== bidId);
+      onProjectUpdate({ ...project, bids: updatedBidsList });
+
     } catch (err) {
       console.error("Error deleting bid:", err);
       setError(err instanceof Error ? err.message : "Failed to delete bid. Please try again.");
@@ -303,23 +329,23 @@ const BidManager: React.FC<BidManagerProps> = ({ project, onProjectUpdate }) => 
                   {bidsInCategory.map((bid) => {
                      const isLowest =
                         lowestBidsByCategory[category] !== undefined &&
-                        bid.bidAmount === lowestBidsByCategory[category] &&
-                        ['Submitted', 'Pending'].includes(bid.status); // Double check eligibility
+                        bid.totalAmount === lowestBidsByCategory[category] &&
+                        ['submitted', 'draft'].includes(bid.status); // Double check eligibility
                      return (
                         <TableRow
                             key={bid.id}
                             hover
                             sx={ isLowest ? { backgroundColor: alpha(theme.palette.success.light, 0.2) } : {} }
                         >
-                        <TableCell>{bid.contractorName}</TableCell>
-                        <TableCell>{bid.category || '-'}</TableCell> 
+                        <TableCell>{bid.subcontractorName}</TableCell>
+                        <TableCell>{bid.scope || '-'}</TableCell> 
                         <TableCell align="right" sx={isLowest ? { fontWeight: 'bold' } : {}}>
-                            ${bid.bidAmount?.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                            ${bid.totalAmount?.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                         </TableCell>
                         <TableCell>
                             <Chip label={bid.status} color={getBidStatusColor(bid.status)} size="small" />
                         </TableCell>
-                        <TableCell sx={{ whiteSpace: 'nowrap' }}>{formatDate(bid.submittedDate)}</TableCell>
+                        <TableCell sx={{ whiteSpace: 'nowrap' }}>{formatDate(bid.submissionDeadline)}</TableCell>
                         <TableCell align="center">
                             <IconButton size="small" onClick={() => handleOpenEditModal(bid)} disabled={loading}>
                                 <EditIcon fontSize="inherit" />
@@ -343,6 +369,8 @@ const BidManager: React.FC<BidManagerProps> = ({ project, onProjectUpdate }) => 
         onClose={handleCloseModal}
         onSubmit={handleFormSubmit}
         initialData={editingBid}
+        userId={userId}
+        projectId={project.id}
       />
     </Paper>
   );

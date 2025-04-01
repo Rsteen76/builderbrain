@@ -46,7 +46,9 @@ import {
   AccessAlarms as ScheduleIcon,
   MonetizationOn as FinanceIcon,
 } from '@mui/icons-material';
-import { ProjectService, Project } from '../../services/project';
+import { ProjectService } from '../../services/project';
+import { Project, LineItem, Task } from '../../types';
+import { useAuth } from '../../contexts/AuthContext';
 import LineItemManager from './LineItemManager';
 import BidManager from './BidManager';
 import ProjectTaskManager from './ProjectTaskManager';
@@ -56,6 +58,7 @@ const ProjectDetails: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const theme = useTheme();
+  const { user } = useAuth();
   const [activeTab, setActiveTab] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -66,20 +69,26 @@ const ProjectDetails: React.FC = () => {
   useEffect(() => {
     const fetchProjectDetails = async () => {
       if (!id) {
-        setError('Project ID is missing');
+        setError('Project ID is missing from URL');
+        setLoading(false);
+        return;
+      }
+      if (!user?.uid) {
+        setError('User not authenticated. Cannot load project.');
         setLoading(false);
         return;
       }
 
       try {
         setLoading(true);
-        const projectData = await ProjectService.getProject(id);
+        setError(null);
+        const projectData = await ProjectService.getProject(user.uid, id);
         
         if (!projectData) {
-          setError(`Project with ID "${id}" not found. The project may have been deleted or you may have used an invalid URL.`);
+          setError(`Project with ID "${id}" not found or you don't have permission to view it.`);
         } else {
           setProject(projectData);
-          console.log('Loaded project data:', projectData);
+          console.log('Loaded project data for user:', user.uid, projectData);
         }
       } catch (err) {
         console.error('Error fetching project details:', err);
@@ -89,15 +98,23 @@ const ProjectDetails: React.FC = () => {
       }
     };
 
-    fetchProjectDetails();
-  }, [id]);
+    if (id && user?.uid) {
+       fetchProjectDetails();
+    } else {
+        setLoading(false);
+        if (!id) setError('Project ID is missing from URL');
+        else if (!user) setError('Authenticating...');
+    }
+  }, [id, user]);
 
   const handleTabChange = (event: React.SyntheticEvent, newValue: number) => {
     setActiveTab(newValue);
   };
 
   const handleDelete = async () => {
-    if (!id || !window.confirm('Are you sure you want to delete this project?')) {
+    if (!id || !user?.uid || !window.confirm('Are you sure you want to delete this project?')) {
+      if (!user?.uid) setError('Cannot delete: User not authenticated.');
+      if (!id) setError('Cannot delete: Project ID missing.');
       return;
     }
 
@@ -107,7 +124,7 @@ const ProjectDetails: React.FC = () => {
       navigate('/projects');
     } catch (err) {
       console.error('Error deleting project:', err);
-      setError('Failed to delete project');
+      setError(err instanceof Error ? `Failed to delete project: ${err.message}` : 'Failed to delete project');
       setLoading(false);
     }
   };
@@ -128,7 +145,8 @@ const ProjectDetails: React.FC = () => {
 
   // Calculate overview data
   const overviewData = useMemo(() => calculateOverviewData(project), [project]);
-  const budgetProgress = project?.budget && project.budget > 0 ? (overviewData.totalEstimate / project.budget) * 100 : 0;
+  const budgetTotal = typeof project?.budget === 'object' ? project.budget.total : (project?.budget || 0);
+  const budgetProgress = budgetTotal > 0 ? (overviewData.totalEstimate / budgetTotal) * 100 : 0;
 
   if (loading || !project?.id) {
     return (
@@ -212,7 +230,9 @@ const ProjectDetails: React.FC = () => {
                      <Grid container spacing={2}>
                         <Grid item xs={12} sm={6}>
                              <Typography variant="body2" color="text.secondary">Budget</Typography>
-                             <Typography variant="h5" gutterBottom>{formatCurrency(project.budget)}</Typography>
+                             <Typography variant="h5" gutterBottom>
+                               {formatCurrency(typeof project.budget === 'object' ? project.budget.total : project.budget)}
+                             </Typography>
                         </Grid>
                         <Grid item xs={12} sm={6}>
                             <Typography variant="body2" color="text.secondary">Total Estimated Cost</Typography>
@@ -235,9 +255,9 @@ const ProjectDetails: React.FC = () => {
                                 <Typography variant="caption" color="error" sx={{ display:'block', mt: 0.5 }}>
                                     Estimated cost exceeds budget!
                                 </Typography>}
-                             {project.budget > 0 && overviewData.totalEstimate <= project.budget &&
+                             {budgetTotal > 0 && overviewData.totalEstimate <= budgetTotal &&
                                 <Typography variant="caption" color="text.secondary" sx={{ display:'block', mt: 0.5 }}>
-                                    Remaining Budget: {formatCurrency(project.budget - overviewData.totalEstimate)}
+                                    Remaining Budget: {formatCurrency(budgetTotal - overviewData.totalEstimate)}
                                 </Typography>}
                         </Grid>
                      </Grid>
@@ -316,16 +336,22 @@ const ProjectDetails: React.FC = () => {
                      </Stack>
                      {project.keyMilestones && project.keyMilestones.length > 0 ? (
                        <List dense disablePadding>
-                         {project.keyMilestones.map((milestone, index) => (
+                         {project.keyMilestones.map((milestone: { name: string, date: string, description: string }, index: number) => (
                            <ListItem key={index} disableGutters dense sx={{ pl: 1 }}>
                              <ListItemText 
                                primary={milestone.name}
-                               secondary={`${formatDate(new Date(milestone.date))}`}
+                               secondary={formatDate(new Date(milestone.date))}
+                               primaryTypographyProps={{ variant: 'body2' }}
+                               secondaryTypographyProps={{ variant: 'caption' }}
                              />
                            </ListItem>
                          ))}
                        </List>
-                     ) : <Typography variant="body2" color="text.secondary">No key milestones defined.</Typography>}
+                     ) : (
+                       <Typography variant="body2" color="text.secondary">
+                         No milestones defined yet.
+                       </Typography>
+                     )}
                     </CardContent>
                  </Card>
             </Grid>
@@ -335,20 +361,20 @@ const ProjectDetails: React.FC = () => {
       </Box>
 
       <Box role="tabpanel" hidden={activeTab !== 1} id="tabpanel-estimate" aria-labelledby="tab-estimate">
-        {activeTab === 1 && project && (
-          <LineItemManager project={project} onProjectUpdate={handleProjectUpdate} />
+        {activeTab === 1 && project && user?.uid && (
+          <LineItemManager project={project} onProjectUpdate={handleProjectUpdate} userId={user.uid} />
         )}
       </Box>
 
       <Box role="tabpanel" hidden={activeTab !== 2} id="tabpanel-bids" aria-labelledby="tab-bids">
-        {activeTab === 2 && project && (
-          <BidManager project={project} onProjectUpdate={handleProjectUpdate} />
+        {activeTab === 2 && project && user?.uid && (
+          <BidManager project={project} onProjectUpdate={handleProjectUpdate} userId={user.uid} />
         )}
       </Box>
 
       <Box role="tabpanel" hidden={activeTab !== 3} id="tabpanel-tasks" aria-labelledby="tab-tasks">
-        {activeTab === 3 && (
-          <ProjectTaskManager project={project} onProjectUpdate={handleProjectUpdate} />
+        {activeTab === 3 && project && user?.uid && (
+          <ProjectTaskManager project={project} onProjectUpdate={handleProjectUpdate} userId={user.uid} />
         )}
       </Box>
     </Box>
@@ -359,19 +385,19 @@ const ProjectDetails: React.FC = () => {
 const calculateOverviewData = (project: Project | null) => {
     if (!project) return { totalEstimate: 0, tasksToDo: 0, tasksInProgress: 0, tasksDone: 0, nextMilestone: null };
 
-    const totalEstimate = project.lineItems?.reduce((sum, item) => sum + (item.totalCost || 0), 0) || 0;
+    const totalEstimate = project.lineItems?.reduce((sum: number, item: LineItem) => sum + (item.totalCost || 0), 0) || 0;
     
     const tasks = project.tasks || [];
-    const tasksToDo = tasks.filter(t => t.status === 'To Do').length;
-    const tasksInProgress = tasks.filter(t => t.status === 'In Progress').length;
-    const tasksDone = tasks.filter(t => t.status === 'Done').length;
+    const tasksToDo = tasks.filter((t: Task) => t.status === 'todo').length;
+    const tasksInProgress = tasks.filter((t: Task) => t.status === 'in_progress').length;
+    const tasksDone = tasks.filter((t: Task) => t.status === 'completed').length;
     
     // Find next milestone
     const now = new Date().getTime();
     const upcomingMilestones = project.keyMilestones
-        ?.map(m => ({ ...m, dateObj: new Date(m.date) }))
-        .filter(m => m.dateObj.getTime() >= now)
-        .sort((a, b) => a.dateObj.getTime() - b.dateObj.getTime());
+        ?.map((m: any) => ({ ...m, dateObj: new Date(m.date) }))
+        .filter((m: any) => m.dateObj.getTime() >= now)
+        .sort((a: any, b: any) => a.dateObj.getTime() - b.dateObj.getTime());
     const nextMilestone = upcomingMilestones?.[0] || null;
 
     return { totalEstimate, tasksToDo, tasksInProgress, tasksDone, nextMilestone };

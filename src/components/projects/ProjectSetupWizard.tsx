@@ -29,8 +29,9 @@ import {
   Delete as DeleteIcon,
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
-import { ProjectService, Project } from '../../services/project';
+import { ProjectService } from '../../services/project';
 import { useAuth } from '../../contexts/AuthContext';
+import { Project } from '../../types';
 
 // Predefined options for various fields
 const projectTypes = [
@@ -90,43 +91,12 @@ const commonDocuments = [
   'Warranty Documents',
 ];
 
-interface ProjectSetupData {
-  basicInfo: {
-    name: string;
-    description: string;
-    location: string;
-    startDate: string;
-    estimatedDuration: string;
-    clientName: string;
-    projectType: string;
-  };
-  budget: {
-    totalBudget: number;
-    contingency: number;
-    categories: {
-      materials: number;
-      labor: number;
-      equipment: number;
-      permits: number;
-      other: number;
-    };
-  };
-  phases: {
-    name: string;
-    duration: string;
-    description: string;
-    dependencies: string[];
-  }[];
-  keyMilestones: {
-    name: string;
-    date: string;
-    description: string;
-  }[];
-  requirements: {
-    permits: string[];
-    inspections: string[];
-    documents: string[];
-  };
+// Define budget interface directly instead of extending Project['budget']
+interface EnhancedBudget {
+  total: number;
+  spent: number;
+  remaining: number;
+  contingency?: number;
 }
 
 const ProjectSetupWizard: React.FC = () => {
@@ -135,41 +105,35 @@ const ProjectSetupWizard: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const { user } = useAuth();
   const navigate = useNavigate();
-  const [projectData, setProjectData] = useState<ProjectSetupData>({
-    basicInfo: {
-      name: '',
-      description: '',
-      location: '',
-      startDate: '',
-      estimatedDuration: '',
-      clientName: '',
-      projectType: '',
-    },
-    budget: {
-      totalBudget: 0,
-      contingency: 0,
-      categories: {
-        materials: 0,
-        labor: 0,
-        equipment: 0,
-        permits: 0,
-        other: 0,
-      },
-    },
+  const [projectData, setProjectData] = useState<Partial<Project>>({
+    name: '',
+    description: '',
+    status: 'planning',
+    startDate: new Date(),
+    endDate: null,
+    budget: { total: 0, spent: 0, remaining: 0 },
+    location: { address: '', city: '', state: '', zipCode: '' },
+    clientId: '',
+    projectType: '',
+    estimatedDuration: '',
     phases: [],
     keyMilestones: [],
     requirements: {
       permits: [],
       inspections: [],
-      documents: [],
+      documents: []
     },
+    team: [],
+    lineItems: [],
+    bids: [],
+    tasks: [],
   });
 
   const steps = [
     'Project Overview',
-    'Budget Planning',
-    'Timeline & Phases',
-    'Requirements',
+    'Budget & Requirements',
+    'Timeline & Details',
+    'Review & Create',
   ];
 
   const handleNext = () => {
@@ -180,70 +144,80 @@ const ProjectSetupWizard: React.FC = () => {
     setActiveStep((prevStep) => prevStep - 1);
   };
 
-  const handleBasicInfoChange = (field: keyof ProjectSetupData['basicInfo'], value: string) => {
-    setProjectData((prev) => ({
+  const handleBasicInfoChange = (field: keyof Project, value: any) => {
+    setProjectData(prev => ({ ...prev, [field]: value }));
+  };
+
+  const handleBudgetChange = (field: keyof EnhancedBudget, value: number) => {
+    setProjectData(prev => {
+      // Create a normalized budget object that includes both standard budget fields and contingency
+      const currentBudget = typeof prev.budget === 'object' 
+        ? { ...prev.budget, contingency: (prev.budget as any).contingency || 0 }
+        : { total: prev.budget || 0, spent: 0, remaining: prev.budget || 0, contingency: 0 };
+      
+      // Create a new budget with the updated field
+      const newBudget = {
+        ...currentBudget,
+        [field]: value
+      };
+      
+      // For the Project type, we need to return only the standard budget fields
+      const resultBudget = field === 'contingency' 
+        ? { total: newBudget.total, spent: newBudget.spent, remaining: newBudget.remaining, contingency: value }
+        : { total: newBudget.total, spent: newBudget.spent, remaining: newBudget.remaining };
+      
+      return {
+        ...prev,
+        budget: resultBudget
+      };
+    });
+  };
+
+  const handleLocationChange = (field: string, value: string) => {
+    setProjectData(prev => ({
       ...prev,
-      basicInfo: {
-        ...prev.basicInfo,
+      location: {
+        ...(typeof prev.location === 'object' ? prev.location : { address: '', city: '', state: '', zipCode: '' }),
         [field]: value,
-      },
+      }
     }));
   };
 
-  const handleBudgetChange = (field: keyof ProjectSetupData['budget']['categories'], value: number) => {
-    setProjectData((prev) => ({
-      ...prev,
-      budget: {
-        ...prev.budget,
-        categories: {
-          ...prev.budget.categories,
-          [field]: value,
-        },
-      },
-    }));
-  };
-
-  const addPhase = (phase?: typeof commonPhases[0]) => {
-    setProjectData((prev) => ({
+  const addPhase = (phase?: Required<Project>['phases'][0]) => {
+    setProjectData(prev => ({
       ...prev,
       phases: [
-        ...prev.phases,
-        phase || {
-          name: '',
-          duration: '',
-          description: '',
-          dependencies: [],
-        },
+        ...(prev.phases || []),
+        phase || { name: '', duration: '', description: '', dependencies: [] },
       ],
     }));
   };
 
-  const addMilestone = (milestone?: typeof commonMilestones[0]) => {
-    setProjectData((prev) => ({
+  const addMilestone = (milestone?: Required<Project>['keyMilestones'][0]) => {
+    setProjectData(prev => ({
       ...prev,
       keyMilestones: [
-        ...prev.keyMilestones,
-        milestone || {
-          name: '',
-          date: '',
-          description: '',
-        },
+        ...(prev.keyMilestones || []),
+        milestone || { name: '', date: '', description: '' },
       ],
     }));
   };
 
-  const addRequirement = (type: keyof ProjectSetupData['requirements'], value: string) => {
-    setProjectData((prev) => ({
+  const addRequirement = (type: keyof Required<Project>['requirements'], value: string) => {
+    setProjectData(prev => ({
       ...prev,
       requirements: {
         ...prev.requirements,
-        [type]: [...prev.requirements[type], value],
-      },
+        [type]: [
+          ...(prev.requirements?.[type] || []),
+          value
+        ],
+      } as Required<Project>['requirements'],
     }));
   };
 
   const handleFinish = async () => {
-    if (!user) {
+    if (!user?.uid) {
       setError('You must be logged in to create a project');
       return;
     }
@@ -252,26 +226,31 @@ const ProjectSetupWizard: React.FC = () => {
     setError(null);
 
     try {
-      // Convert project data to the format expected by ProjectService
-      const project: Omit<Project, 'id' | 'createdAt' | 'updatedAt'> = {
-        name: projectData.basicInfo.name,
-        description: projectData.basicInfo.description,
-        status: 'planning',
-        startDate: new Date(projectData.basicInfo.startDate),
-        endDate: new Date(new Date(projectData.basicInfo.startDate).getTime() + 
-          parseInt(projectData.basicInfo.estimatedDuration) * 30 * 24 * 60 * 60 * 1000),
-        budget: projectData.budget.totalBudget,
-        clientId: projectData.basicInfo.clientName, // You might want to create a proper client record
-        team: [], // You might want to add team members selection
-        location: projectData.basicInfo.location,
-        projectType: projectData.basicInfo.projectType,
-        estimatedDuration: projectData.basicInfo.estimatedDuration,
-        phases: projectData.phases,
-        keyMilestones: projectData.keyMilestones,
-        requirements: projectData.requirements,
+      const payload: Omit<Project, 'id' | 'userId' | 'createdAt' | 'updatedAt'> = {
+        name: projectData.name || '',
+        description: projectData.description || '',
+        status: projectData.status || 'planning',
+        startDate: projectData.startDate || new Date(),
+        endDate: projectData.endDate,
+        budget: typeof projectData.budget === 'number'
+                ? { total: projectData.budget, spent: 0, remaining: projectData.budget }
+                : projectData.budget || { total: 0, spent: 0, remaining: 0 },
+        location: typeof projectData.location === 'string'
+                ? { address: projectData.location, city: '', state: '', zipCode: '' }
+                : projectData.location || { address: '', city: '', state: '', zipCode: '' },
+        clientId: projectData.clientId || '',
+        projectType: projectData.projectType || '',
+        estimatedDuration: projectData.estimatedDuration || '',
+        phases: projectData.phases || [],
+        keyMilestones: projectData.keyMilestones || [],
+        requirements: projectData.requirements || { permits: [], inspections: [], documents: [] },
+        team: projectData.team || [],
+        lineItems: projectData.lineItems || [],
+        bids: projectData.bids || [],
+        tasks: projectData.tasks || [],
       };
 
-      const savedProject = await ProjectService.createProject(project);
+      const savedProject = await ProjectService.createProject(user.uid, payload);
       navigate(`/projects/${savedProject.id}`);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to create project');
@@ -290,7 +269,7 @@ const ProjectSetupWizard: React.FC = () => {
                 <TextField
                   fullWidth
                   label="Project Name"
-                  value={projectData.basicInfo.name}
+                  value={projectData.name || ''}
                   onChange={(e) => handleBasicInfoChange('name', e.target.value)}
                   helperText="Enter a clear, descriptive name for your project"
                 />
@@ -299,7 +278,7 @@ const ProjectSetupWizard: React.FC = () => {
                 <FormControl fullWidth>
                   <InputLabel>Project Type</InputLabel>
                   <Select
-                    value={projectData.basicInfo.projectType}
+                    value={projectData.projectType || ''}
                     label="Project Type"
                     onChange={(e) => handleBasicInfoChange('projectType', e.target.value)}
                   >
@@ -317,7 +296,7 @@ const ProjectSetupWizard: React.FC = () => {
                   multiline
                   rows={3}
                   label="Project Description"
-                  value={projectData.basicInfo.description}
+                  value={projectData.description || ''}
                   onChange={(e) => handleBasicInfoChange('description', e.target.value)}
                   helperText="Describe the scope of work, key features, and any special requirements"
                 />
@@ -325,9 +304,9 @@ const ProjectSetupWizard: React.FC = () => {
               <Grid item xs={12} md={6}>
                 <TextField
                   fullWidth
-                  label="Location"
-                  value={projectData.basicInfo.location}
-                  onChange={(e) => handleBasicInfoChange('location', e.target.value)}
+                  label="Location Address"
+                  value={typeof projectData.location === 'object' ? projectData.location?.address || '' : projectData.location || ''}
+                  onChange={(e) => handleLocationChange('address', e.target.value)}
                   helperText="Full address or site location"
                 />
               </Grid>
@@ -335,8 +314,8 @@ const ProjectSetupWizard: React.FC = () => {
                 <TextField
                   fullWidth
                   label="Client Name"
-                  value={projectData.basicInfo.clientName}
-                  onChange={(e) => handleBasicInfoChange('clientName', e.target.value)}
+                  value={projectData.clientId || ''}
+                  onChange={(e) => handleBasicInfoChange('clientId', e.target.value)}
                 />
               </Grid>
               <Grid item xs={12} md={6}>
@@ -344,8 +323,8 @@ const ProjectSetupWizard: React.FC = () => {
                   fullWidth
                   type="date"
                   label="Start Date"
-                  value={projectData.basicInfo.startDate}
-                  onChange={(e) => handleBasicInfoChange('startDate', e.target.value)}
+                  value={projectData.startDate ? projectData.startDate.toISOString().split('T')[0] : ''}
+                  onChange={(e) => handleBasicInfoChange('startDate', new Date(e.target.value))}
                   InputLabelProps={{ shrink: true }}
                 />
               </Grid>
@@ -353,7 +332,7 @@ const ProjectSetupWizard: React.FC = () => {
                 <TextField
                   fullWidth
                   label="Estimated Duration (months)"
-                  value={projectData.basicInfo.estimatedDuration}
+                  value={projectData.estimatedDuration || ''}
                   onChange={(e) => handleBasicInfoChange('estimatedDuration', e.target.value)}
                   helperText="Expected total project duration"
                 />
@@ -371,14 +350,8 @@ const ProjectSetupWizard: React.FC = () => {
                   fullWidth
                   type="number"
                   label="Total Budget"
-                  value={projectData.budget.totalBudget}
-                  onChange={(e) => setProjectData((prev) => ({
-                    ...prev,
-                    budget: {
-                      ...prev.budget,
-                      totalBudget: Number(e.target.value),
-                    },
-                  }))}
+                  value={typeof projectData.budget === 'object' ? projectData.budget?.total || 0 : projectData.budget || 0}
+                  onChange={(e) => handleBudgetChange('total', Number(e.target.value))}
                   InputProps={{
                     startAdornment: '$',
                   }}
@@ -390,14 +363,10 @@ const ProjectSetupWizard: React.FC = () => {
                   fullWidth
                   type="number"
                   label="Contingency (%)"
-                  value={projectData.budget.contingency}
-                  onChange={(e) => setProjectData((prev) => ({
-                    ...prev,
-                    budget: {
-                      ...prev.budget,
-                      contingency: Number(e.target.value),
-                    },
-                  }))}
+                  value={typeof projectData.budget === 'object' ? 
+                    ((projectData.budget as EnhancedBudget)?.contingency || 0) : 
+                    (projectData.budget || 0)}
+                  onChange={(e) => handleBudgetChange('contingency', Number(e.target.value))}
                   InputProps={{
                     endAdornment: '%',
                   }}
@@ -409,14 +378,14 @@ const ProjectSetupWizard: React.FC = () => {
                   Budget Categories
                 </Typography>
                 <Grid container spacing={2}>
-                  {Object.entries(projectData.budget.categories).map(([category, amount]) => (
+                  {Object.entries(typeof projectData.budget === 'object' ? projectData.budget : {}).map(([category, amount]) => (
                     <Grid item xs={12} md={6} key={category}>
                       <TextField
                         fullWidth
                         type="number"
                         label={category.charAt(0).toUpperCase() + category.slice(1)}
                         value={amount}
-                        onChange={(e) => handleBudgetChange(category as keyof ProjectSetupData['budget']['categories'], Number(e.target.value))}
+                        onChange={(e) => handleBudgetChange(category as 'total' | 'spent' | 'remaining', Number(e.target.value))}
                         InputProps={{
                           startAdornment: '$',
                         }}
@@ -455,7 +424,7 @@ const ProjectSetupWizard: React.FC = () => {
             <Typography variant="h6" gutterBottom>
               Project Phases
             </Typography>
-            {projectData.phases.map((phase, index) => (
+            {projectData.phases?.map((phase, index) => (
               <Card key={index} sx={{ mb: 2 }}>
                 <CardContent>
                   <Grid container spacing={2}>
@@ -463,10 +432,10 @@ const ProjectSetupWizard: React.FC = () => {
                       <TextField
                         fullWidth
                         label="Phase Name"
-                        value={phase.name}
+                        value={phase.name || ''}
                         onChange={(e) => {
-                          const newPhases = [...projectData.phases];
-                          newPhases[index].name = e.target.value;
+                          const newPhases = [...(projectData.phases || [])];
+                          newPhases[index] = { ...newPhases[index], name: e.target.value };
                           setProjectData((prev) => ({
                             ...prev,
                             phases: newPhases,
@@ -478,10 +447,10 @@ const ProjectSetupWizard: React.FC = () => {
                       <TextField
                         fullWidth
                         label="Duration (weeks)"
-                        value={phase.duration}
+                        value={phase.duration || ''}
                         onChange={(e) => {
-                          const newPhases = [...projectData.phases];
-                          newPhases[index].duration = e.target.value;
+                          const newPhases = [...(projectData.phases || [])];
+                          newPhases[index] = { ...newPhases[index], duration: e.target.value };
                           setProjectData((prev) => ({
                             ...prev,
                             phases: newPhases,
@@ -495,10 +464,10 @@ const ProjectSetupWizard: React.FC = () => {
                         multiline
                         rows={2}
                         label="Description"
-                        value={phase.description}
+                        value={phase.description || ''}
                         onChange={(e) => {
-                          const newPhases = [...projectData.phases];
-                          newPhases[index].description = e.target.value;
+                          const newPhases = [...(projectData.phases || [])];
+                          newPhases[index] = { ...newPhases[index], description: e.target.value };
                           setProjectData((prev) => ({
                             ...prev,
                             phases: newPhases,
@@ -527,7 +496,7 @@ const ProjectSetupWizard: React.FC = () => {
                 ))}
               </Grid>
 
-              {projectData.keyMilestones.map((milestone, index) => (
+              {projectData.keyMilestones?.map((milestone, index) => (
                 <Card key={index} sx={{ mb: 2 }}>
                   <CardContent>
                     <Grid container spacing={2}>
@@ -535,10 +504,10 @@ const ProjectSetupWizard: React.FC = () => {
                         <TextField
                           fullWidth
                           label="Milestone Name"
-                          value={milestone.name}
+                          value={milestone.name || ''}
                           onChange={(e) => {
-                            const newMilestones = [...projectData.keyMilestones];
-                            newMilestones[index].name = e.target.value;
+                            const newMilestones = [...(projectData.keyMilestones || [])];
+                            newMilestones[index] = { ...newMilestones[index], name: e.target.value };
                             setProjectData((prev) => ({
                               ...prev,
                               keyMilestones: newMilestones,
@@ -551,10 +520,10 @@ const ProjectSetupWizard: React.FC = () => {
                           fullWidth
                           type="date"
                           label="Target Date"
-                          value={milestone.date}
+                          value={milestone.date ? milestone.date.split('T')[0] : ''}
                           onChange={(e) => {
-                            const newMilestones = [...projectData.keyMilestones];
-                            newMilestones[index].date = e.target.value;
+                            const newMilestones = [...(projectData.keyMilestones || [])];
+                            newMilestones[index] = { ...newMilestones[index], date: e.target.value };
                             setProjectData((prev) => ({
                               ...prev,
                               keyMilestones: newMilestones,
@@ -569,10 +538,10 @@ const ProjectSetupWizard: React.FC = () => {
                           multiline
                           rows={2}
                           label="Description"
-                          value={milestone.description}
+                          value={milestone.description || ''}
                           onChange={(e) => {
-                            const newMilestones = [...projectData.keyMilestones];
-                            newMilestones[index].description = e.target.value;
+                            const newMilestones = [...(projectData.keyMilestones || [])];
+                            newMilestones[index] = { ...newMilestones[index], description: e.target.value };
                             setProjectData((prev) => ({
                               ...prev,
                               keyMilestones: newMilestones,
@@ -608,19 +577,21 @@ const ProjectSetupWizard: React.FC = () => {
                   ))}
                 </Grid>
                 <List>
-                  {projectData.requirements.permits.map((permit, index) => (
+                  {projectData.requirements?.permits?.map((permit, index) => (
                     <ListItem
                       key={index}
                       secondaryAction={
                         <IconButton
                           edge="end"
                           onClick={() => {
-                            const newPermits = projectData.requirements.permits.filter((_, i) => i !== index);
+                            const newPermits = projectData.requirements?.permits?.filter((_, i) => i !== index) || [];
                             setProjectData((prev) => ({
                               ...prev,
                               requirements: {
                                 ...prev.requirements,
                                 permits: newPermits,
+                                inspections: prev.requirements?.inspections || [],
+                                documents: prev.requirements?.documents || []
                               },
                             }));
                           }}
@@ -651,19 +622,21 @@ const ProjectSetupWizard: React.FC = () => {
                   ))}
                 </Grid>
                 <List>
-                  {projectData.requirements.inspections.map((inspection, index) => (
+                  {projectData.requirements?.inspections?.map((inspection, index) => (
                     <ListItem
                       key={index}
                       secondaryAction={
                         <IconButton
                           edge="end"
                           onClick={() => {
-                            const newInspections = projectData.requirements.inspections.filter((_, i) => i !== index);
+                            const newInspections = projectData.requirements?.inspections?.filter((_, i) => i !== index) || [];
                             setProjectData((prev) => ({
                               ...prev,
                               requirements: {
                                 ...prev.requirements,
+                                permits: prev.requirements?.permits || [],
                                 inspections: newInspections,
+                                documents: prev.requirements?.documents || []
                               },
                             }));
                           }}
@@ -694,19 +667,21 @@ const ProjectSetupWizard: React.FC = () => {
                   ))}
                 </Grid>
                 <List>
-                  {projectData.requirements.documents.map((document, index) => (
+                  {projectData.requirements?.documents?.map((document, index) => (
                     <ListItem
                       key={index}
                       secondaryAction={
                         <IconButton
                           edge="end"
                           onClick={() => {
-                            const newDocuments = projectData.requirements.documents.filter((_, i) => i !== index);
+                            const newDocuments = projectData.requirements?.documents?.filter((_, i) => i !== index) || [];
                             setProjectData((prev) => ({
                               ...prev,
                               requirements: {
                                 ...prev.requirements,
-                                documents: newDocuments,
+                                permits: prev.requirements?.permits || [],
+                                inspections: prev.requirements?.inspections || [],
+                                documents: newDocuments
                               },
                             }));
                           }}

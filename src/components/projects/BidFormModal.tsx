@@ -17,18 +17,22 @@ import {
 import { DatePicker } from '@mui/x-date-pickers/DatePicker';
 import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
 import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns';
-import { Bid, BidStatus } from '../../types/project.types';
+import { BidStatus } from '../../types/project.types';
+import { Bid } from '../../types';
 import { v4 as uuidv4 } from 'uuid';
 import { TextFieldProps } from '@mui/material/TextField';
+import { BidService } from '../../services/bid';
 
 interface BidFormModalProps {
   open: boolean;
   onClose: () => void;
-  onSubmit: (item: Bid) => void;
+  onSubmit: (item: Omit<Bid, 'id' | 'createdAt' | 'updatedAt' | 'userId'>) => void | Promise<void>;
   initialData?: Bid | null;
+  userId: string;
+  projectId: string;
 }
 
-const bidStatuses: BidStatus[] = ['Submitted', 'Accepted', 'Rejected', 'Pending', 'Needs Revision'];
+const bidStatuses: Bid['status'][] = ['draft', 'submitted', 'accepted', 'rejected', 'expired', 'withdrawn', 'revision_requested'];
 
 // Define common bid categories
 const commonBidCategories: string[] = [
@@ -60,25 +64,39 @@ const mockContractors = [
   { id: 'c4', name: 'Top Roofers Ltd.' },
 ];
 
-const BidFormModal: React.FC<BidFormModalProps> = ({ open, onClose, onSubmit, initialData }) => {
+// Status display names
+const STATUS_DISPLAY: Record<Bid['status'], string> = {
+  draft: 'Draft',
+  submitted: 'Submitted',
+  accepted: 'Accepted',
+  rejected: 'Rejected',
+  expired: 'Expired',
+  withdrawn: 'Withdrawn',
+  revision_requested: 'Revision Requested',
+};
+
+const BidFormModal: React.FC<BidFormModalProps> = ({ open, onClose, onSubmit, initialData, userId, projectId }) => {
   const [bid, setBid] = useState<Partial<Bid>>({});
   const [errors, setErrors] = useState<Record<string, string>>({});
 
   useEffect(() => {
     if (open) {
       setBid(initialData || {
-        contractorName: '',
-        category: '',
-        bidAmount: 0,
-        status: 'Submitted',
-        submittedDate: new Date(),
+        projectId,
+        title: '',
+        subcontractorName: '',
+        scope: '',
+        status: 'submitted',
+        priority: 'medium',
+        totalAmount: 0,
+        submissionDeadline: new Date(),
         notes: '',
       });
       setErrors({});
     } else {
       setBid({});
     }
-  }, [open, initialData]);
+  }, [open, initialData, projectId, userId]);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | { name?: string; value: unknown }>) => {
     const { name, value } = e.target;
@@ -100,24 +118,24 @@ const BidFormModal: React.FC<BidFormModalProps> = ({ open, onClose, onSubmit, in
   };
 
   const handleDateChange = (date: Date | null) => {
-    setBid(prev => ({ ...prev, submittedDate: date || new Date() }));
-     validateField('submittedDate', date);
+    setBid(prev => ({ ...prev, submissionDeadline: date || new Date() }));
+     validateField('submissionDeadline', date);
   };
 
   const validateField = (name: string, value: any): boolean => {
     let error = '';
     switch (name) {
-      case 'contractorName':
+      case 'subcontractorName':
         if (!value) error = 'Contractor/Supplier name is required';
         break;
-      case 'bidAmount':
+      case 'totalAmount':
         if (Number(value) <= 0) error = 'Bid Amount must be positive';
         break;
-      case 'submittedDate':
-         if (!value) error = 'Submitted date is required';
+      case 'submissionDeadline':
+         if (!value) error = 'Submission deadline is required';
          break;
-      case 'category':
-        // if (!value) error = 'Bid category is required'; // Example: Make it required if necessary
+      case 'scope':
+        // if (!value) error = 'Bid scope is required'; // Example: Make it required if necessary
         break;
     }
     setErrors(prev => ({ ...prev, [name]: error }));
@@ -126,7 +144,7 @@ const BidFormModal: React.FC<BidFormModalProps> = ({ open, onClose, onSubmit, in
 
   const validateForm = (): boolean => {
     let isValid = true;
-    const fieldsToValidate = ['contractorName', 'bidAmount', 'submittedDate', 'status'];
+    const fieldsToValidate = ['subcontractorName', 'totalAmount', 'submissionDeadline', 'status'];
     fieldsToValidate.forEach(field => {
       if (!validateField(field, bid[field as keyof Bid])) {
         isValid = false;
@@ -140,17 +158,30 @@ const BidFormModal: React.FC<BidFormModalProps> = ({ open, onClose, onSubmit, in
       return;
     }
 
-    const finalBid: Bid = {
-      id: initialData?.id || uuidv4(),
-      contractorName: bid.contractorName || '',
-      category: bid.category || 'Other',
-      bidAmount: Number(bid.bidAmount) || 0,
-      status: bid.status || 'Submitted',
-      submittedDate: bid.submittedDate || new Date(),
+    const submitPayload: Omit<Bid, 'id' | 'createdAt' | 'updatedAt' | 'userId'> = {
+      title: bid.title || `Bid from ${bid.subcontractorName}`,
+      projectId,
+      projectName: initialData?.projectName || 'Unknown Project',
+      subcontractorId: initialData?.subcontractorId || '',
+      subcontractorName: bid.subcontractorName || '',
+      scope: bid.scope || 'N/A',
+      status: (bid.status?.toLowerCase() || 'submitted') as Bid['status'],
+      priority: bid.priority || 'medium',
+      submissionDeadline: bid.submissionDeadline || new Date(),
+      startDate: bid.startDate || null,
+      completionDate: bid.completionDate || null,
+      totalAmount: Number(bid.totalAmount) || 0,
+      tags: bid.tags || [],
+      createdBy: initialData?.createdBy || userId,
+      updatedBy: userId,
+      requiresInsurance: bid.requiresInsurance ?? false,
+      requiresBond: bid.requiresBond ?? false,
+      isPublic: bid.isPublic ?? false,
+      isApproved: bid.isApproved ?? false,
       notes: bid.notes || '',
-      // contractorId, costCategoryId, attachments can be added later
     };
-    onSubmit(finalBid);
+    
+    onSubmit(submitPayload);
     onClose();
   };
 
@@ -165,20 +196,20 @@ const BidFormModal: React.FC<BidFormModalProps> = ({ open, onClose, onSubmit, in
                 freeSolo
                 options={mockContractors}
                 getOptionLabel={(option) => typeof option === 'string' ? option : option.name}
-                value={bid.contractorName || ''}
+                value={bid.subcontractorName || ''}
                 onChange={(event, newValue) => {
-                  handleAutocompleteChange('contractorName', newValue);
+                  handleAutocompleteChange('subcontractorName', newValue);
                 }}
                 onInputChange={(event, newInputValue) => {
-                    setBid(prev => ({...prev, contractorName: newInputValue}));
-                    validateField('contractorName', newInputValue); 
+                    setBid(prev => ({...prev, subcontractorName: newInputValue}));
+                    validateField('subcontractorName', newInputValue); 
                 }}
                 renderInput={(params) => (
                   <TextField
                     {...params}
                     label="Contractor / Supplier Name"
-                    error={!!errors.contractorName}
-                    helperText={errors.contractorName}
+                    error={!!errors.subcontractorName}
+                    helperText={errors.subcontractorName}
                     required
                   />
                 )}
@@ -189,20 +220,20 @@ const BidFormModal: React.FC<BidFormModalProps> = ({ open, onClose, onSubmit, in
                 freeSolo
                 options={commonBidCategories}
                 getOptionLabel={(option) => option}
-                value={bid.category || ''}
+                value={bid.scope || ''}
                 onChange={(event, newValue) => {
-                  handleAutocompleteChange('category', newValue);
+                  handleAutocompleteChange('scope', newValue);
                 }}
                 onInputChange={(event, newInputValue) => {
-                    setBid(prev => ({...prev, category: newInputValue}));
+                    setBid(prev => ({...prev, scope: newInputValue}));
                 }}
                 renderInput={(params) => (
                   <TextField
                     {...params}
-                    label="Bid Category"
+                    label="Bid Scope/Category"
                     placeholder="e.g., Plumbing, Electrical"
-                    error={!!errors.category}
-                    helperText={errors.category}
+                    error={!!errors.scope}
+                    helperText={errors.scope}
                   />
                 )}
               />
@@ -211,12 +242,12 @@ const BidFormModal: React.FC<BidFormModalProps> = ({ open, onClose, onSubmit, in
               <TextField
                 fullWidth
                 label="Bid Amount"
-                name="bidAmount"
+                name="totalAmount"
                 type="number"
-                value={bid.bidAmount ?? ''}
+                value={bid.totalAmount ?? ''}
                 onChange={handleChange}
-                error={!!errors.bidAmount}
-                helperText={errors.bidAmount}
+                error={!!errors.totalAmount}
+                helperText={errors.totalAmount}
                 InputProps={{
                   startAdornment: <InputAdornment position="start">$</InputAdornment>,
                 }}
@@ -229,28 +260,31 @@ const BidFormModal: React.FC<BidFormModalProps> = ({ open, onClose, onSubmit, in
                   <InputLabel>Status</InputLabel>
                   <Select
                     name="status"
-                    label="Status"
-                    value={bid.status || ''}
+                    value={bid.status || 'submitted'}
                     onChange={handleChange as any}
+                    label="Status"
+                    required
                   >
-                    {bidStatuses.map(stat => (
-                      <MenuItem key={stat} value={stat}>{stat}</MenuItem>
+                    {bidStatuses.map((status) => (
+                      <MenuItem key={status} value={status}>
+                        {STATUS_DISPLAY[status]}
+                      </MenuItem>
                     ))}
                   </Select>
                 </FormControl>
               </Grid>
              <Grid item xs={12} sm={6}>
                <DatePicker
-                 label="Submitted Date"
-                 value={bid.submittedDate instanceof Date ? bid.submittedDate : null}
+                 label="Submission Deadline"
+                 value={bid.submissionDeadline instanceof Date ? bid.submissionDeadline : null}
                  onChange={handleDateChange}
                  slotProps={{ 
                    textField: {
                      fullWidth: true,
                      required: true,
-                     error: !!errors.submittedDate,
-                     helperText: errors.submittedDate,
-                     name: 'submittedDate'
+                     error: !!errors.submissionDeadline,
+                     helperText: errors.submissionDeadline,
+                     name: 'submissionDeadline'
                    } as TextFieldProps
                  }}
                />

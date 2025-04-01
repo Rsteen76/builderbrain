@@ -12,41 +12,10 @@ import {
   orderBy,
   Timestamp,
 } from 'firebase/firestore';
+import { Subcontractor } from '../types';
 
-export interface Subcontractor {
-  id?: string;
-  name: string;
-  specialty: string;
-  rating: number;
-  totalProjects: number;
-  lastBid?: {
-    date: Date;
-    amount: number;
-    projectId?: string;
-  };
-  contact: {
-    phone: string;
-    email: string;
-    location: string;
-  };
-  performance: {
-    onTime: number;
-    quality: number;
-    communication: number;
-  };
-  companyInfo?: {
-    website?: string;
-    founded?: string;
-    employees?: number;
-    license?: string;
-  };
-  projects?: string[]; // Array of project IDs this subcontractor has worked on
-  notes?: string;
-  createdAt: Date;
-  updatedAt: Date;
-}
-
-interface FirestoreSubcontractor extends Omit<Subcontractor, 'lastBid' | 'createdAt' | 'updatedAt'> {
+interface FirestoreSubcontractor extends Omit<Subcontractor, 'id' | 'lastBid' | 'createdAt' | 'updatedAt'> {
+  userId: string;
   lastBid?: {
     date: Timestamp;
     amount: number;
@@ -56,67 +25,60 @@ interface FirestoreSubcontractor extends Omit<Subcontractor, 'lastBid' | 'create
   updatedAt: Timestamp;
 }
 
-// Interface for lastBid to use in type checking
-interface LastBid {
-  date: Date;
-  amount: number;
-  projectId?: string;
-}
-
 export class SubcontractorService {
   private static collection = collection(db, 'subcontractors');
 
-  static async createSubcontractor(subcontractorData: Omit<Subcontractor, 'id' | 'createdAt' | 'updatedAt'>): Promise<Subcontractor> {
+  static async createSubcontractor(userId: string, subcontractorData: Omit<Subcontractor, 'id' | 'userId' | 'createdAt' | 'updatedAt'>): Promise<Subcontractor> {
     const now = new Date();
     
-    // Convert Date objects to Firestore Timestamps
-    const firestoreData: any = {
+    const firestoreData: FirestoreSubcontractor = {
       ...subcontractorData,
+      userId: userId,
       createdAt: Timestamp.fromDate(now),
       updatedAt: Timestamp.fromDate(now),
+      lastBid: subcontractorData.lastBid?.date 
+        ? { ...subcontractorData.lastBid, date: Timestamp.fromDate(subcontractorData.lastBid.date) } 
+        : undefined,
     };
     
-    // Convert lastBid date if it exists
-    if (subcontractorData.lastBid?.date) {
-      firestoreData.lastBid = {
-        ...subcontractorData.lastBid,
-        date: Timestamp.fromDate(subcontractorData.lastBid.date)
-      };
-    }
-
     const docRef = await addDoc(this.collection, firestoreData);
 
     return {
       ...subcontractorData,
+      userId: userId,
       id: docRef.id,
       createdAt: now,
       updatedAt: now,
+      lastBid: subcontractorData.lastBid?.date 
+        ? { ...subcontractorData.lastBid, date: new Date(subcontractorData.lastBid.date) }
+        : undefined,
     };
   }
 
-  static async updateSubcontractor(id: string, subcontractorData: Partial<Subcontractor>): Promise<void> {
+  static async updateSubcontractor(id: string, subcontractorData: Partial<Omit<Subcontractor, 'id' | 'userId' | 'createdAt'>>): Promise<void> {
     const subcontractorRef = doc(this.collection, id);
-    const updateData: any = {
+    const { userId, createdAt, ...updatePayload } = subcontractorData as any;
+    const firestoreUpdateData: Partial<FirestoreSubcontractor> = {
       updatedAt: Timestamp.fromDate(new Date()),
     };
 
-    // Copy over each field in subcontractorData to updateData
-    Object.entries(subcontractorData).forEach(([key, value]) => {
-      if (key !== 'id' && key !== 'createdAt' && key !== 'updatedAt') {
-        if (key === 'lastBid' && value && typeof value === 'object' && 'date' in value) {
-          // Handle nested lastBid with date conversion
-          const lastBid = value as LastBid;
-          updateData.lastBid = {
-            ...lastBid,
-            date: lastBid.date ? Timestamp.fromDate(lastBid.date) : null,
+    for (const key in updatePayload) {
+      if (Object.prototype.hasOwnProperty.call(updatePayload, key)) {
+        const typedKey = key as keyof typeof updatePayload;
+        const value = updatePayload[typedKey];
+
+        if (typedKey === 'lastBid' && value && typeof value === 'object' && 'date' in value && value.date instanceof Date) {
+          firestoreUpdateData.lastBid = {
+            ...(value as any),
+            date: Timestamp.fromDate(value.date),
           };
         } else {
-          updateData[key] = value;
+          (firestoreUpdateData as any)[typedKey] = value;
         }
       }
-    });
+    }
 
-    await updateDoc(subcontractorRef, updateData);
+    await updateDoc(subcontractorRef, firestoreUpdateData);
   }
 
   static async deleteSubcontractor(id: string): Promise<void> {
@@ -124,24 +86,31 @@ export class SubcontractorService {
     await deleteDoc(subcontractorRef);
   }
 
-  static async getSubcontractor(id: string): Promise<Subcontractor | null> {
+  static async getSubcontractor(userId: string, id: string): Promise<Subcontractor | null> {
     const subcontractorRef = doc(this.collection, id);
     const subcontractorDoc = await getDoc(subcontractorRef);
 
     if (!subcontractorDoc.exists()) {
+      console.log(`SubcontractorService: Subcontractor ${id} not found.`);
       return null;
     }
 
     const data = subcontractorDoc.data() as FirestoreSubcontractor;
+
+    if (data.userId !== userId) {
+      console.warn(`SubcontractorService: User ${userId} attempted to access unauthorized subcontractor ${id} owned by ${data.userId}.`);
+      return null;
+    }
+
     return this.convertFirestoreData(data, subcontractorDoc.id);
   }
 
-  static async getSubcontractors(filters?: {
+  static async getSubcontractors(userId: string, filters?: {
     specialty?: string;
     minRating?: number;
     projectId?: string;
   }): Promise<Subcontractor[]> {
-    let q = query(this.collection);
+    let q = query(this.collection, where('userId', '==', userId));
 
     if (filters?.specialty) {
       q = query(q, where('specialty', '==', filters.specialty));
@@ -155,7 +124,7 @@ export class SubcontractorService {
       q = query(q, where('projects', 'array-contains', filters.projectId));
     }
 
-    q = query(q, orderBy('rating', 'desc'));
+    q = query(q, orderBy('name', 'asc'));
 
     const querySnapshot = await getDocs(q);
     return querySnapshot.docs.map(doc => {
@@ -164,31 +133,27 @@ export class SubcontractorService {
     });
   }
 
-  private static convertFirestoreData(data: FirestoreSubcontractor, id?: string): Subcontractor {
-    // Create a new object without the Firestore timestamp fields
+  private static convertFirestoreData(data: FirestoreSubcontractor, id: string): Subcontractor {
     const { lastBid, createdAt, updatedAt, ...restData } = data;
     
-    // Build the result object with converted Date fields
-    const result: Partial<Subcontractor> = {
+    const result: Subcontractor = {
       ...restData,
+      id: id,
+      userId: data.userId,
       createdAt: createdAt.toDate(),
       updatedAt: updatedAt.toDate(),
+      lastBid: lastBid?.date 
+        ? { ...lastBid, date: lastBid.date.toDate() } 
+        : undefined,
+      rating: data.rating ?? 0,
+      totalProjects: data.totalProjects ?? 0,
+      contact: data.contact ?? {},
+      performance: data.performance ?? {},
+      companyInfo: data.companyInfo ?? {},
+      projects: data.projects ?? [],
+      notes: data.notes ?? '',
     };
 
-    // Then handle the lastBid conversion if it exists
-    if (lastBid?.date) {
-      result.lastBid = {
-        amount: lastBid.amount,
-        date: lastBid.date.toDate(),
-        projectId: lastBid.projectId,
-      };
-    }
-
-    // Add the ID if provided
-    if (id) {
-      result.id = id;
-    }
-
-    return result as Subcontractor;
+    return result;
   }
 } 

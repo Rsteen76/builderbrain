@@ -4,16 +4,17 @@ import {
   TableContainer, TableHead, TableRow, IconButton, CircularProgress, Alert
 } from '@mui/material';
 import { Add as AddIcon, Edit as EditIcon, Delete as DeleteIcon } from '@mui/icons-material';
-import { ProjectService, Project } from '../../services/project';
-import { LineItem } from '../../types/project.types';
+import { Project, LineItem } from '../../types';
+import { ProjectService } from '../../services/project';
 import LineItemFormModal from './LineItemFormModal';
 
 interface LineItemManagerProps {
   project: Project;
+  userId: string;
   onProjectUpdate: (updatedProject: Project) => void;
 }
 
-const LineItemManager: React.FC<LineItemManagerProps> = ({ project, onProjectUpdate }) => {
+const LineItemManager: React.FC<LineItemManagerProps> = ({ project, userId, onProjectUpdate }) => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<LineItem | null>(null);
   const [loading, setLoading] = useState(false);
@@ -44,9 +45,13 @@ const LineItemManager: React.FC<LineItemManagerProps> = ({ project, onProjectUpd
 
   const handleFormSubmit = async (submittedItem: LineItem) => {
     console.log('Form submitted:', submittedItem);
+    if (!project.id) {
+      setError("Project ID is missing. Cannot save line item.");
+      return;
+    }
     setLoading(true);
     setError(null);
-    let updatedLineItems;
+    let updatedLineItems: LineItem[];
 
     if (editingItem) {
       updatedLineItems = lineItems.map(item =>
@@ -57,10 +62,10 @@ const LineItemManager: React.FC<LineItemManagerProps> = ({ project, onProjectUpd
     }
 
     try {
-      const updatedProjectData: Partial<Project> = {
+      const updatedProjectData: Partial<Omit<Project, 'id' | 'userId'>> = {
         lineItems: updatedLineItems,
       };
-      await ProjectService.updateProject(project.id!, updatedProjectData);
+      await ProjectService.updateProject(project.id, updatedProjectData);
       onProjectUpdate({ ...project, lineItems: updatedLineItems });
       handleCloseModal();
     } catch (err) {
@@ -72,7 +77,8 @@ const LineItemManager: React.FC<LineItemManagerProps> = ({ project, onProjectUpd
   };
 
   const handleDelete = async (itemId: string) => {
-    if (!window.confirm('Are you sure you want to delete this line item?')) {
+    if (!window.confirm('Are you sure you want to delete this line item?') || !project.id) {
+      if (!project.id) setError("Project ID is missing. Cannot delete line item.");
       return;
     }
     console.log('Delete item with ID:', itemId);
@@ -82,10 +88,10 @@ const LineItemManager: React.FC<LineItemManagerProps> = ({ project, onProjectUpd
     const updatedLineItems = lineItems.filter(item => item.id !== itemId);
 
     try {
-      const updatedProjectData: Partial<Project> = {
+      const updatedProjectData: Partial<Omit<Project, 'id' | 'userId'>> = {
         lineItems: updatedLineItems,
       };
-      await ProjectService.updateProject(project.id!, updatedProjectData);
+      await ProjectService.updateProject(project.id, updatedProjectData);
       onProjectUpdate({ ...project, lineItems: updatedLineItems });
     } catch (err) {
       console.error("Error deleting line item:", err);
@@ -128,7 +134,7 @@ const LineItemManager: React.FC<LineItemManagerProps> = ({ project, onProjectUpd
                 </TableCell>
               </TableRow>
             ) : (
-              lineItems.map((item) => (
+              lineItems.map((item: LineItem) => (
                 <TableRow key={item.id}>
                   <TableCell>{item.description}</TableCell>
                   <TableCell>{item.category}</TableCell>

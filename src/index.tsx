@@ -3,20 +3,26 @@ import ReactDOM from 'react-dom/client';
 import './index.css';
 import App from './App';
 import reportWebVitals from './reportWebVitals';
-import { seedDatabase } from './utils/seedData';
+import { AuthProvider } from './contexts/AuthContext';
+// import { seedDatabase } from './utils/seedData'; // OLD
+import { seedSubcontractorData } from './utils/seedData'; // NEW - Note: requires userId
 
 const root = ReactDOM.createRoot(
   document.getElementById('root') as HTMLElement
 );
 
-// Seed database with test data in development mode
-if (process.env.NODE_ENV === 'development') {
-  seedDatabase().catch(console.error);
-}
+// Seed the database (development only) - Needs to be called conditionally with userId
+// For now, commenting out the direct call. Consider moving this logic inside App.tsx
+// if (process.env.NODE_ENV === 'development') {
+//   // seedDatabase(); // OLD
+//   // seedSubcontractorData(userId); // NEW - Requires userId from AuthProvider/useAuth
+// }
 
 root.render(
   <React.StrictMode>
-    <App />
+    <AuthProvider>
+      <App />
+    </AuthProvider>
   </React.StrictMode>
 );
 

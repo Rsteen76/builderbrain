@@ -36,60 +36,77 @@ import {
   GetApp as DownloadIcon,
   AddCircleOutline as AddVersionIcon,
 } from '@mui/icons-material';
-import { BidService, Bid, BidVersion, BidStatus, BidPriority } from '../../services/bid';
+import { Bid, BidVersion, LineItem } from '../../types';
+import { BidService } from '../../services/bid';
 import LineItemsTable from './LineItemsTable';
-import { formatCurrency } from '../../utils/formatters';
+import { formatCurrency, formatDate } from '../../utils/formatters';
+import { useAuth } from '../../contexts/AuthContext';
 
-// Status chip colors
-const STATUS_COLORS: Record<BidStatus, string> = {
+// Status chip colors (Align with Bid['status'] from types/index.ts)
+const STATUS_COLORS: Record<Bid['status'], string> = {
   draft: 'default',
   submitted: 'info',
-  under_review: 'info',
-  awarded: 'success',
+  accepted: 'success',
   rejected: 'error',
   expired: 'warning',
   withdrawn: 'default',
   revision_requested: 'warning',
-  revised: 'info',
 };
 
-// Priority chip colors
-const PRIORITY_COLORS: Record<BidPriority, string> = {
+// Priority chip colors (NonNullable handles potential undefined)
+const PRIORITY_COLORS: Record<NonNullable<Bid['priority']>, string> = {
   low: 'default',
   medium: 'info',
   high: 'warning',
   urgent: 'error',
 };
 
-// Status display names
-const STATUS_DISPLAY: Record<BidStatus, string> = {
+// Status display names (Align with Bid['status'] from types/index.ts)
+const STATUS_DISPLAY: Record<Bid['status'], string> = {
   draft: 'Draft',
   submitted: 'Submitted',
-  under_review: 'Under Review',
-  awarded: 'Awarded',
+  accepted: 'Accepted',
   rejected: 'Rejected',
   expired: 'Expired',
   withdrawn: 'Withdrawn',
   revision_requested: 'Revision Requested',
-  revised: 'Revised',
 };
 
 // Priority display names
-const PRIORITY_DISPLAY: Record<BidPriority, string> = {
+const PRIORITY_DISPLAY: Record<NonNullable<Bid['priority']>, string> = {
   low: 'Low',
   medium: 'Medium',
   high: 'High',
   urgent: 'Urgent',
 };
 
+// Type for status mapping for forms/dropdowns if needed
+const STATUS_OPTIONS: { value: Bid['status']; label: string }[] = [
+  { value: 'draft', label: 'Draft' },
+  { value: 'submitted', label: 'Submitted' },
+  { value: 'accepted', label: 'Accepted' },
+  { value: 'rejected', label: 'Rejected' },
+  { value: 'expired', label: 'Expired' },
+  { value: 'withdrawn', label: 'Withdrawn' },
+  { value: 'revision_requested', label: 'Revision Requested' },
+];
+
+// Type for priority mapping for forms/dropdowns if needed
+const PRIORITY_OPTIONS: { value: NonNullable<Bid['priority']>; label: string }[] = [
+  { value: 'low', label: 'Low' },
+  { value: 'medium', label: 'Medium' },
+  { value: 'high', label: 'High' },
+  { value: 'urgent', label: 'Urgent' },
+];
+
 // Version card component for showing bid version history
 interface VersionCardProps {
   version: BidVersion;
-  isActive: boolean;
-  onClick: () => void;
+  isSelected: boolean;
+  onSelect: () => void;
 }
 
-const VersionCard: React.FC<VersionCardProps> = ({ version, isActive, onClick }) => {
+const VersionCard: React.FC<VersionCardProps> = ({ version, isSelected, onSelect }) => {
   const theme = useTheme();
   
   return (
@@ -97,19 +114,19 @@ const VersionCard: React.FC<VersionCardProps> = ({ version, isActive, onClick })
       sx={{ 
         mb: 2, 
         cursor: 'pointer',
-        border: isActive ? `2px solid ${theme.palette.primary.main}` : 'none',
+        border: isSelected ? `2px solid ${theme.palette.primary.main}` : 'none',
         transition: 'transform 0.2s',
         '&:hover': {
           transform: 'translateY(-2px)',
           boxShadow: 3
         }
       }}
-      onClick={onClick}
+      onClick={onSelect}
     >
       <CardContent>
         <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
           <Typography variant="h6">Version {version.versionNumber}</Typography>
-          {isActive && (
+          {isSelected && (
             <Chip label="Current" color="primary" size="small" />
           )}
         </Box>
@@ -120,7 +137,7 @@ const VersionCard: React.FC<VersionCardProps> = ({ version, isActive, onClick })
           Total: {formatCurrency(version.totalAmount)}
         </Typography>
         <Typography variant="body2">
-          Line items: {version.lineItems.length}
+          Line items: {(version.lineItems || []).length}
         </Typography>
         {version.notes && (
           <Box sx={{ mt: 1 }}>
@@ -137,6 +154,7 @@ const VersionCard: React.FC<VersionCardProps> = ({ version, isActive, onClick })
 
 const BidDetails: React.FC = () => {
   const { id } = useParams<{ id: string }>();
+  const { user } = useAuth();
   const navigate = useNavigate();
   const theme = useTheme();
   const [bid, setBid] = useState<Bid | null>(null);
@@ -147,29 +165,40 @@ const BidDetails: React.FC = () => {
   const [deleteDialogOpen, setDeleteDialogOpen] = useState<boolean>(false);
   
   useEffect(() => {
-    if (!id) return;
-    fetchBid(id);
-  }, [id]);
-  
-  const fetchBid = async (bidId: string) => {
-    try {
-      setLoading(true);
-      const bidData = await BidService.getBid(bidId);
-      
-      if (!bidData) {
-        setError('Bid not found');
+    const fetchBidDetails = async () => {
+      if (!id) {
+        setError('Bid ID is missing');
+        setLoading(false);
         return;
       }
-      
-      setBid(bidData);
-      setSelectedVersionId(bidData.currentVersionId);
-    } catch (err) {
-      console.error('Error fetching bid:', err);
-      setError('Failed to load bid details');
-    } finally {
-      setLoading(false);
-    }
-  };
+      if (!user?.uid) {
+          setError('User not authenticated');
+          setLoading(false);
+          return;
+      }
+
+      try {
+        setLoading(true);
+        // Pass userId to getBid
+        const bidData = await BidService.getBid(user.uid, id);
+        
+        if (!bidData) {
+          setError('Bid not found or access denied');
+        } else {
+          setBid(bidData);
+          // Use currentVersionId from fetched data
+          setSelectedVersionId(bidData.currentVersionId || null); 
+        }
+      } catch (err) {
+        console.error('Error fetching bid:', err);
+        setError('Failed to load bid details');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchBidDetails();
+  }, [id, user]);
   
   const handleTabChange = (_: React.SyntheticEvent, newValue: number) => {
     setTabValue(newValue);
@@ -197,6 +226,7 @@ const BidDetails: React.FC = () => {
     if (!id) return;
     
     try {
+      // Use the added deleteBid method
       await BidService.deleteBid(id);
       navigate('/bids');
     } catch (err) {
@@ -220,9 +250,10 @@ const BidDetails: React.FC = () => {
   };
   
   // Get current version details
-  const getCurrentVersion = () => {
-    if (!bid || !selectedVersionId) return null;
-    return bid.versions.find(v => v.id === selectedVersionId) || null;
+  const getCurrentVersion = (): BidVersion | null => {
+    if (!bid?.versions || !selectedVersionId) return null;
+    // Ensure find callback uses correct type
+    return bid.versions.find((v: BidVersion) => v.id === selectedVersionId) || null;
   };
   
   const currentVersion = getCurrentVersion();
@@ -306,8 +337,9 @@ const BidDetails: React.FC = () => {
                 <Typography variant="body2" color="text.secondary">Status</Typography>
                 <Box sx={{ mt: 0.5 }}>
                   <Chip 
-                    label={STATUS_DISPLAY[bid.status]} 
-                    color={STATUS_COLORS[bid.status] as any} 
+                    label={bid.status ? STATUS_DISPLAY[bid.status] : 'Unknown'} 
+                    size="small" 
+                    color={bid.status ? STATUS_COLORS[bid.status] as any : 'default'} 
                   />
                 </Box>
               </Grid>
@@ -315,8 +347,9 @@ const BidDetails: React.FC = () => {
                 <Typography variant="body2" color="text.secondary">Priority</Typography>
                 <Box sx={{ mt: 0.5 }}>
                   <Chip 
-                    label={PRIORITY_DISPLAY[bid.priority]} 
-                    color={PRIORITY_COLORS[bid.priority] as any} 
+                    label={bid.priority ? PRIORITY_DISPLAY[bid.priority] : 'N/A'} 
+                    size="small" 
+                    color={bid.priority ? PRIORITY_COLORS[bid.priority] as any : 'default'}
                   />
                 </Box>
               </Grid>
@@ -330,7 +363,7 @@ const BidDetails: React.FC = () => {
               </Grid>
               <Grid item xs={12} sm={6}>
                 <Typography variant="body2" color="text.secondary">Submission Deadline</Typography>
-                <Typography variant="body1">{new Date(bid.submissionDeadline).toLocaleDateString()}</Typography>
+                <Typography variant="body1">{bid.submissionDeadline ? new Date(bid.submissionDeadline).toLocaleDateString() : 'N/A'}</Typography>
               </Grid>
               <Grid item xs={12} sm={6}>
                 <Typography variant="body2" color="text.secondary">Total Amount</Typography>
@@ -373,13 +406,9 @@ const BidDetails: React.FC = () => {
               <Grid item xs={12}>
                 <Typography variant="body2" color="text.secondary" gutterBottom>Tags</Typography>
                 <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
-                  {bid.tags.length > 0 ? (
-                    bid.tags.map((tag, index) => (
-                      <Chip key={index} label={tag} size="small" />
-                    ))
-                  ) : (
-                    <Typography variant="body2">No tags</Typography>
-                  )}
+                  {(bid.tags || []).map((tag: string, index: number) => (
+                    <Chip key={index} label={tag} size="small" />
+                  ))}
                 </Box>
               </Grid>
             </Grid>
@@ -394,16 +423,44 @@ const BidDetails: React.FC = () => {
             </Box>
           </Grid>
           
-          {bid.notes && (
-            <Grid item xs={12}>
-              <Box>
-                <Typography variant="h6" gutterBottom>Notes</Typography>
-                <Typography variant="body1" sx={{ whiteSpace: 'pre-line' }}>
-                  {bid.notes}
-                </Typography>
-              </Box>
-            </Grid>
-          )}
+          <Grid item xs={12}>
+            <Box>
+              <Typography variant="h6" gutterBottom>Attachments</Typography>
+              <Stack direction="row" spacing={1} flexWrap="wrap">
+                {bid.attachments ? (
+                  bid.attachments.length > 0 ? (
+                    bid.attachments.map((attachment, index) => (
+                      <Chip
+                        key={index}
+                        label={typeof attachment === 'string' ? attachment : attachment.name}
+                        icon={<DownloadIcon />}
+                        onClick={() => {
+                          if (typeof attachment === 'string') {
+                            window.open(attachment, '_blank');
+                          } else {
+                            window.open(attachment.url, '_blank');
+                          }
+                        }}
+                      />
+                    ))
+                  ) : (
+                    <Typography variant="body1">No attachments</Typography>
+                  )
+                ) : (
+                  <Typography variant="body1">No attachments</Typography>
+                )}
+              </Stack>
+            </Box>
+          </Grid>
+          
+          <Grid item xs={12}>
+            <Box>
+              <Typography variant="h6" gutterBottom>Notes</Typography>
+              <Typography variant="body1" sx={{ whiteSpace: 'pre-line' }}>
+                {bid.notes}
+              </Typography>
+            </Box>
+          </Grid>
         </Grid>
       </Paper>
       
@@ -435,7 +492,7 @@ const BidDetails: React.FC = () => {
               </Box>
             </Box>
             <LineItemsTable 
-              lineItems={currentVersion.lineItems} 
+              lineItems={currentVersion.lineItems || []} 
               onChange={() => {}} // Read-only mode 
               editable={false}
             />
@@ -452,12 +509,12 @@ const BidDetails: React.FC = () => {
               <Typography variant="body2" color="text.secondary" paragraph>
                 Select a version to view its details
               </Typography>
-              {bid.versions.sort((a, b) => b.versionNumber - a.versionNumber).map(version => (
+              {(bid.versions || []).sort((a: BidVersion, b: BidVersion) => b.versionNumber - a.versionNumber).map((version: BidVersion) => (
                 <VersionCard 
                   key={version.id} 
                   version={version} 
-                  isActive={version.id === bid.currentVersionId}
-                  onClick={() => handleVersionSelect(version.id)}
+                  isSelected={version.id === selectedVersionId}
+                  onSelect={() => handleVersionSelect(version.id)}
                 />
               ))}
             </Grid>
@@ -487,7 +544,7 @@ const BidDetails: React.FC = () => {
                     Line Items
                   </Typography>
                   <LineItemsTable 
-                    lineItems={currentVersion.lineItems} 
+                    lineItems={currentVersion.lineItems || []} 
                     onChange={() => {}} // Read-only mode 
                     editable={false}
                   />

@@ -14,86 +14,103 @@ import {
   DocumentData,
 } from 'firebase/firestore';
 
-// --- Task Interface ---
-export type TaskStatus = 'To Do' | 'In Progress' | 'Blocked' | 'Done';
-export type TaskPriority = 'Low' | 'Medium' | 'High' | 'Urgent';
+// Import Task, TaskPriority, TaskStatus from the central types file
+import { Task, /*TaskPriority, TaskStatus*/ } from '../types'; // Assuming Priority/Status are string unions in types/index.ts
 
-export interface Task {
-  id?: string;
-  projectId: string; // Link to Project
-  title: string;
-  description?: string;
-  status: TaskStatus;
-  priority: TaskPriority;
-  assigneeType?: 'user' | 'subcontractor'; // Type of assignee
-  assigneeId?: string; // User ID or Subcontractor ID
-  dueDate?: Date | null; // Allow null for no due date
-  createdAt: Date;
-  updatedAt: Date;
-}
-
-// Interface for Firestore data (handles Timestamps)
-interface FirestoreTask extends Omit<Task, 'dueDate' | 'createdAt' | 'updatedAt'> {
+// Interface for Firestore data (handles Timestamps and userId)
+interface FirestoreTask extends Omit<Task, 'id' | 'dueDate' | 'createdAt' | 'updatedAt' | 'completedAt'> {
+  userId: string;
   dueDate?: Timestamp | null;
   createdAt: Timestamp;
   updatedAt: Timestamp;
+  completedAt?: Timestamp | null; // Add if present in imported Task type
 }
 
 // --- Task Service ---
 export class TaskService {
   private static collectionRef = collection(db, 'tasks');
 
-  // --- Convert Firestore data to Task ---
-  private static convertFirestoreData(docData: DocumentData, id: string): Task {
-    const data = docData as FirestoreTask;
+  // --- Convert Firestore data to IMPORTED Task type ---
+  private static convertFirestoreData(docData: FirestoreTask, id: string): Task {
     return {
-      ...data,
+      ...docData, 
       id,
-      // Convert Timestamps back to Dates
-      dueDate: data.dueDate ? data.dueDate.toDate() : null,
-      createdAt: data.createdAt.toDate(),
-      updatedAt: data.updatedAt.toDate(),
-    };
+      userId: docData.userId, // Ensure userId is mapped
+      dueDate: docData.dueDate ? docData.dueDate.toDate() : null,
+      createdAt: docData.createdAt.toDate(),
+      updatedAt: docData.updatedAt.toDate(),
+      completedAt: docData.completedAt ? docData.completedAt.toDate() : null, 
+      // Ensure all fields from imported Task type are present
+      dependencies: docData.dependencies || [], 
+      attachments: docData.attachments || [],
+      description: docData.description || '', // Add defaults for potentially missing optional fields
+      status: docData.status || 'todo', // Default status
+      priority: docData.priority || 'medium', // Default priority
+      assigneeType: docData.assigneeType,
+      assigneeId: docData.assigneeId,
+      parentTaskId: docData.parentTaskId,
+      createdBy: docData.createdBy,
+    } as Task; // Use assertion carefully
   }
 
-  // --- Create Task ---
-  static async createTask(taskData: Omit<Task, 'id' | 'createdAt' | 'updatedAt'>): Promise<Task> {
+  // --- Create Task (Uses imported Task type) ---
+  static async createTask(userId: string, taskData: Omit<Task, 'id' | 'userId' | 'createdAt' | 'updatedAt'>): Promise<Task> {
     const now = new Date();
     const firestoreData: FirestoreTask = {
       ...taskData,
+      userId: userId,
       dueDate: taskData.dueDate ? Timestamp.fromDate(taskData.dueDate) : null,
       createdAt: Timestamp.fromDate(now),
       updatedAt: Timestamp.fromDate(now),
+      completedAt: taskData.completedAt ? Timestamp.fromDate(taskData.completedAt) : null,
     };
     const docRef = await addDoc(this.collectionRef, firestoreData);
-    // Fetch the created doc to ensure data consistency including generated ID
-    const newTask = await this.getTask(docRef.id);
-    if (!newTask) throw new Error("Failed to retrieve created task.");
-    return newTask;
+    
+    // Return data matching imported Task type
+    return {
+        ...taskData,
+        id: docRef.id,
+        userId: userId,
+        createdAt: now, 
+        updatedAt: now, 
+        dueDate: taskData.dueDate || null,
+        completedAt: taskData.completedAt || null,
+    };
   }
 
-  // --- Get Task by ID ---
-  static async getTask(id: string): Promise<Task | null> {
+  // --- Get Task by ID (Returns imported Task type) ---
+  static async getTask(userId: string, id: string): Promise<Task | null> {
     const docRef = doc(this.collectionRef, id);
     const docSnap = await getDoc(docRef);
     if (!docSnap.exists()) {
+      console.log(`TaskService: Task ${id} not found.`);
       return null;
     }
-    return this.convertFirestoreData(docSnap.data(), docSnap.id);
+
+    const data = docSnap.data() as FirestoreTask;
+
+    // *** Crucial Check ***
+    if (data.userId !== userId) {
+      console.warn(`TaskService: User ${userId} attempted to access unauthorized task ${id} owned by ${data.userId}.`);
+      return null; // Or throw an error
+    }
+
+    return this.convertFirestoreData(data, docSnap.id);
   }
 
-  // --- Get Tasks (with Filters) ---
-  static async getTasks(filters?: {
+  // --- Get Tasks (Filters use imported Task type fields) ---
+  static async getTasks(userId: string, filters?: {
     projectId?: string;
-    status?: TaskStatus;
+    status?: Task['status']; // Use string union from imported type
     assigneeId?: string;
-    priority?: TaskPriority;
-    sortBy?: keyof Task;
+    priority?: Task['priority']; // Use string union from imported type
+    sortBy?: keyof Omit<Task, 'id'>; // Sort by fields excluding id
     sortDirection?: 'asc' | 'desc';
   }): Promise<Task[]> {
-    let q = query(this.collectionRef);
+    // Start query with the mandatory userId filter
+    let q = query(this.collectionRef, where('userId', '==', userId));
 
-    // Apply filters
+    // Apply other filters
     if (filters?.projectId) {
       q = query(q, where('projectId', '==', filters.projectId));
     }
@@ -103,48 +120,45 @@ export class TaskService {
     if (filters?.assigneeId) {
       q = query(q, where('assigneeId', '==', filters.assigneeId));
     }
-     if (filters?.priority) {
+    if (filters?.priority) {
       q = query(q, where('priority', '==', filters.priority));
     }
-    // Add more filters as needed (e.g., date ranges)
+    // Add more filters as needed
 
     // Apply sorting
-    // Handle potential sorting by ID if needed, otherwise default to createdAt
-    const sortBy = filters?.sortBy && filters.sortBy !== 'id' ? filters.sortBy : 'createdAt';
+    const sortBy = filters?.sortBy ? String(filters.sortBy) : 'createdAt'; // Convert symbol to string if needed
     const sortDirection = filters?.sortDirection || 'desc';
-    // Firestore cannot order by ID directly reliably with other filters/sorts
-    // If sorting by ID is critical, it might need client-side sorting after fetch
-    q = query(q, orderBy(sortBy, sortDirection)); 
+    q = query(q, orderBy(sortBy, sortDirection));
 
     const querySnapshot = await getDocs(q);
-    return querySnapshot.docs.map(doc => this.convertFirestoreData(doc.data(), doc.id));
+    return querySnapshot.docs.map(doc => this.convertFirestoreData(doc.data() as FirestoreTask, doc.id));
   }
 
-  // --- Update Task ---
-  // Note: Does not allow changing projectId
-  static async updateTask(id: string, taskData: Partial<Omit<Task, 'id' | 'createdAt' | 'projectId'>>): Promise<void> { 
+  // --- Update Task (Input uses imported Task type) ---
+  static async updateTask(id: string, taskData: Partial<Omit<Task, 'id' | 'userId' | 'createdAt' | 'projectId'>>): Promise<void> {
     const docRef = doc(this.collectionRef, id);
-    const updatePayload: { [key: string]: any } = { ...taskData }; 
-    
-    updatePayload.updatedAt = Timestamp.fromDate(new Date());
+    // Exclude fields not allowed in update
+    const { userId, projectId, createdAt, updatedAt, ...updatePayload } = taskData as any; // Also exclude updatedAt
 
-    if (taskData.dueDate !== undefined) {
-        updatePayload.dueDate = taskData.dueDate ? Timestamp.fromDate(taskData.dueDate) : null;
-    }
-    
-    // Explicitly handle assigneeType if it's part of the update
-    if (taskData.assigneeType !== undefined) {
-        updatePayload.assigneeType = taskData.assigneeType;
-    } else if (taskData.assigneeId === undefined || taskData.assigneeId === '') {
-         // If assigneeId is being cleared, also clear assigneeType
-         updatePayload.assigneeType = null; 
-    }
-    // If assigneeId is set but type isn't, the form logic should handle setting both
+    const firestoreUpdateData: { [key: string]: any } = {
+         ...updatePayload, 
+         updatedAt: Timestamp.fromDate(new Date())
+     };
 
-    await updateDoc(docRef, updatePayload);
+    // Convert dates back to Timestamps
+    if (updatePayload.dueDate !== undefined) {
+        firestoreUpdateData.dueDate = updatePayload.dueDate ? Timestamp.fromDate(updatePayload.dueDate) : null;
+    }
+    if (updatePayload.completedAt !== undefined) {
+        firestoreUpdateData.completedAt = updatePayload.completedAt ? Timestamp.fromDate(updatePayload.completedAt) : null;
+    }
+
+    // Security rules should enforce ownership and projectId immutability
+    await updateDoc(docRef, firestoreUpdateData);
   }
 
   // --- Delete Task ---
+  // Rely on security rules to enforce ownership.
   static async deleteTask(id: string): Promise<void> {
     const docRef = doc(this.collectionRef, id);
     await deleteDoc(docRef);

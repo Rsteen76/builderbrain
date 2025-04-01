@@ -54,31 +54,29 @@ import {
 } from '@mui/icons-material';
 import { 
   BidService, 
-  BidSummary, 
-  BidStatus, 
-  BidPriority, 
   BidFilter,
   BidSort,
   BidSortField,
-  SortDirection
+  SortDirection,
+  BidSummary
 } from '../../services/bid';
 import { formatCurrency } from '../../utils/formatters';
+import { Bid } from '../../types';
+import { useAuth } from '../../contexts/AuthContext';
 
-// Status chip colors
-const STATUS_COLORS: Record<BidStatus, string> = {
+// Status colors
+const bidStatusColors: Record<Bid['status'], string> = {
   draft: 'default',
   submitted: 'info',
-  under_review: 'info',
-  awarded: 'success',
+  accepted: 'success',
   rejected: 'error',
   expired: 'warning',
   withdrawn: 'default',
   revision_requested: 'warning',
-  revised: 'info',
 };
 
-// Priority chip colors
-const PRIORITY_COLORS: Record<BidPriority, string> = {
+// Priority colors
+const bidPriorityColors: Record<NonNullable<Bid['priority']>, string> = {
   low: 'default',
   medium: 'info',
   high: 'warning',
@@ -86,20 +84,18 @@ const PRIORITY_COLORS: Record<BidPriority, string> = {
 };
 
 // Status display names
-const STATUS_DISPLAY: Record<BidStatus, string> = {
+const STATUS_DISPLAY: Record<Bid['status'], string> = {
   draft: 'Draft',
   submitted: 'Submitted',
-  under_review: 'Under Review',
-  awarded: 'Awarded',
+  accepted: 'Accepted',
   rejected: 'Rejected',
   expired: 'Expired',
   withdrawn: 'Withdrawn',
   revision_requested: 'Revision Requested',
-  revised: 'Revised',
 };
 
 // Priority display names
-const PRIORITY_DISPLAY: Record<BidPriority, string> = {
+const PRIORITY_DISPLAY: Record<NonNullable<Bid['priority']>, string> = {
   low: 'Low',
   medium: 'Medium',
   high: 'High',
@@ -141,8 +137,12 @@ const BidRow: React.FC<BidRowProps> = ({
 
   // Calculate if deadline is close (within 3 days)
   const isDeadlineClose = () => {
+    // Check if deadline exists first
+    if (!bid.submissionDeadline) {
+        return false;
+    }
     const now = new Date();
-    const deadlineDate = new Date(bid.submissionDeadline);
+    const deadlineDate = new Date(bid.submissionDeadline); // Now safe to call
     const diffTime = deadlineDate.getTime() - now.getTime();
     const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
     return diffDays <= 3 && diffDays >= 0;
@@ -188,13 +188,15 @@ const BidRow: React.FC<BidRowProps> = ({
                 <Chip 
                   size="small" 
                   label={STATUS_DISPLAY[bid.status]} 
-                  color={STATUS_COLORS[bid.status] as any} 
+                  color={bidStatusColors[bid.status] as any} 
                 />
-                <Chip 
-                  size="small" 
-                  label={PRIORITY_DISPLAY[bid.priority]} 
-                  color={PRIORITY_COLORS[bid.priority] as any} 
-                />
+                {bid.priority && (
+                    <Chip 
+                      size="small" 
+                      label={PRIORITY_DISPLAY[bid.priority]} 
+                      color={bidPriorityColors[bid.priority] as any} 
+                    />
+                )}
                 {isDeadlineClose() && (
                   <Chip 
                     size="small" 
@@ -217,7 +219,7 @@ const BidRow: React.FC<BidRowProps> = ({
                 Deadline
               </Typography>
               <Typography variant="body1">
-                {new Date(bid.submissionDeadline).toLocaleDateString()}
+                {bid.submissionDeadline ? new Date(bid.submissionDeadline).toLocaleDateString() : 'N/A'}
               </Typography>
             </Box>
           </Grid>
@@ -283,34 +285,40 @@ const BidRow: React.FC<BidRowProps> = ({
 };
 
 interface FilterPanelProps {
-  filters: BidFilter;
-  onFilterChange: (filters: BidFilter) => void;
-  onResetFilters: () => void;
+  filter: BidFilter;
+  onFilterChange: (filter: BidFilter) => void;
+  sort: BidSort;
+  onSortChange: (sort: BidSort) => void;
+  statusOptions: Bid['status'][];
+  priorityOptions: NonNullable<Bid['priority']>[];
 }
 
 const FilterPanel: React.FC<FilterPanelProps> = ({ 
-  filters, 
-  onFilterChange,
-  onResetFilters 
+  filter, 
+  onFilterChange, 
+  sort, 
+  onSortChange,
+  statusOptions,
+  priorityOptions,
 }) => {
   const handleStatusChange = (event: React.ChangeEvent<{ value: unknown }>) => {
     onFilterChange({
-      ...filters,
-      status: event.target.value as BidStatus | BidStatus[],
+      ...filter,
+      status: event.target.value as Bid['status'] | Bid['status'][],
     });
   };
   
   const handlePriorityChange = (event: React.ChangeEvent<{ value: unknown }>) => {
     onFilterChange({
-      ...filters,
-      priority: event.target.value as BidPriority,
+      ...filter,
+      priority: event.target.value as NonNullable<Bid['priority']>,
     });
   };
   
   const handleMinAmountChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const value = event.target.value ? Number(event.target.value) : undefined;
     onFilterChange({
-      ...filters,
+      ...filter,
       minAmount: value,
     });
   };
@@ -318,7 +326,7 @@ const FilterPanel: React.FC<FilterPanelProps> = ({
   const handleMaxAmountChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const value = event.target.value ? Number(event.target.value) : undefined;
     onFilterChange({
-      ...filters,
+      ...filter,
       maxAmount: value,
     });
   };
@@ -326,7 +334,7 @@ const FilterPanel: React.FC<FilterPanelProps> = ({
   const handleDeadlineFromChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const value = event.target.value ? new Date(event.target.value) : undefined;
     onFilterChange({
-      ...filters,
+      ...filter,
       submissionDeadlineFrom: value,
     });
   };
@@ -334,9 +342,13 @@ const FilterPanel: React.FC<FilterPanelProps> = ({
   const handleDeadlineToChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const value = event.target.value ? new Date(event.target.value) : undefined;
     onFilterChange({
-      ...filters,
+      ...filter,
       submissionDeadlineTo: value,
     });
+  };
+
+  const handleSortChange = (newSort: BidSort) => {
+    onSortChange(newSort);
   };
 
   return (
@@ -346,7 +358,10 @@ const FilterPanel: React.FC<FilterPanelProps> = ({
         <Button 
           size="small" 
           startIcon={<RefreshIcon />}
-          onClick={onResetFilters}
+          onClick={() => {
+            onFilterChange({});
+            onSortChange({ field: 'submissionDeadline', direction: 'asc' });
+          }}
         >
           Reset
         </Button>
@@ -359,12 +374,12 @@ const FilterPanel: React.FC<FilterPanelProps> = ({
               labelId="status-label"
               id="status-select"
               multiple
-              value={filters.status || []}
+              value={filter.status || []}
               label="Status"
               onChange={handleStatusChange as any}
               renderValue={(selected) => (
                 <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
-                  {(selected as BidStatus[]).map((value) => (
+                  {(selected as Bid['status'][]).map((value) => (
                     <Chip 
                       key={value} 
                       label={STATUS_DISPLAY[value]} 
@@ -374,9 +389,9 @@ const FilterPanel: React.FC<FilterPanelProps> = ({
                 </Box>
               )}
             >
-              {Object.entries(STATUS_DISPLAY).map(([value, label]) => (
+              {statusOptions.map((value) => (
                 <MenuItem key={value} value={value}>
-                  {label}
+                  {STATUS_DISPLAY[value]}
                 </MenuItem>
               ))}
             </Select>
@@ -388,14 +403,14 @@ const FilterPanel: React.FC<FilterPanelProps> = ({
             <Select
               labelId="priority-label"
               id="priority-select"
-              value={filters.priority || ''}
+              value={filter.priority || ''}
               label="Priority"
               onChange={handlePriorityChange as any}
             >
               <MenuItem value="">Any Priority</MenuItem>
-              {Object.entries(PRIORITY_DISPLAY).map(([value, label]) => (
+              {priorityOptions.map((value) => (
                 <MenuItem key={value} value={value}>
-                  {label}
+                  {PRIORITY_DISPLAY[value]}
                 </MenuItem>
               ))}
             </Select>
@@ -405,7 +420,7 @@ const FilterPanel: React.FC<FilterPanelProps> = ({
           <TextField
             label="Min Amount"
             type="number"
-            value={filters.minAmount || ''}
+            value={filter.minAmount || ''}
             onChange={handleMinAmountChange}
             size="small"
             fullWidth
@@ -418,7 +433,7 @@ const FilterPanel: React.FC<FilterPanelProps> = ({
           <TextField
             label="Max Amount"
             type="number"
-            value={filters.maxAmount || ''}
+            value={filter.maxAmount || ''}
             onChange={handleMaxAmountChange}
             size="small"
             fullWidth
@@ -431,7 +446,7 @@ const FilterPanel: React.FC<FilterPanelProps> = ({
           <TextField
             label="Deadline From"
             type="date"
-            value={filters.submissionDeadlineFrom ? filters.submissionDeadlineFrom.toISOString().split('T')[0] : ''}
+            value={filter.submissionDeadlineFrom ? filter.submissionDeadlineFrom.toISOString().split('T')[0] : ''}
             onChange={handleDeadlineFromChange}
             InputLabelProps={{ shrink: true }}
             size="small"
@@ -442,12 +457,22 @@ const FilterPanel: React.FC<FilterPanelProps> = ({
           <TextField
             label="Deadline To"
             type="date"
-            value={filters.submissionDeadlineTo ? filters.submissionDeadlineTo.toISOString().split('T')[0] : ''}
+            value={filter.submissionDeadlineTo ? filter.submissionDeadlineTo.toISOString().split('T')[0] : ''}
             onChange={handleDeadlineToChange}
             InputLabelProps={{ shrink: true }}
             size="small"
             fullWidth
           />
+        </Grid>
+        <Grid item xs={12}>
+          <Button
+            variant="outlined"
+            startIcon={<SortIcon />}
+            onClick={() => handleSortChange({ field: 'submissionDeadline', direction: sort.direction === 'asc' ? 'desc' : 'asc' })}
+            sx={{ minWidth: 100 }}
+          >
+            Sort
+          </Button>
         </Grid>
       </Grid>
     </Paper>
@@ -455,176 +480,125 @@ const FilterPanel: React.FC<FilterPanelProps> = ({
 };
 
 const BidList: React.FC = () => {
+  const { user, loading: authLoading } = useAuth();
+  const navigate = useNavigate();
   const [bids, setBids] = useState<BidSummary[]>([]);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
+  const [filter, setFilter] = useState<BidFilter>({});
+  const [sort, setSort] = useState<BidSort>({ field: 'submissionDeadline', direction: 'asc' });
+  const [deleteTarget, setDeleteTarget] = useState<BidSummary | null>(null);
   const [showFilters, setShowFilters] = useState(false);
-  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
-  const [bidToDelete, setBidToDelete] = useState<BidSummary | null>(null);
   const [activeTab, setActiveTab] = useState(0);
-  const navigate = useNavigate();
-
-  // Filters and sorting
-  const [filters, setFilters] = useState<BidFilter>({});
-  const [sort, setSort] = useState<BidSort>({
-    field: 'submissionDeadline',
-    direction: 'asc',
-  });
-  const [anchorElSort, setAnchorElSort] = useState<null | HTMLElement>(null);
-
-  // Load bids
-  useEffect(() => {
-    fetchBids();
-  }, [filters, sort]);
 
   const fetchBids = async () => {
+    if (!user?.uid) {
+        setError("User not authenticated.");
+        setLoading(false);
+        return;
+    }
+    setLoading(true);
+    setError(null);
     try {
-      setLoading(true);
-      setError(null);
-
-      // Apply status filter based on active tab
-      let statusFilter: BidStatus | BidStatus[] | undefined = undefined;
-      
-      switch (activeTab) {
-        case 0: // All
-          statusFilter = undefined;
-          break;
-        case 1: // Draft
-          statusFilter = 'draft';
-          break;
-        case 2: // Submitted
-          statusFilter = ['submitted', 'under_review', 'revised'];
-          break;
-        case 3: // Awarded
-          statusFilter = 'awarded';
-          break;
-        case 4: // Rejected
-          statusFilter = ['rejected', 'expired', 'withdrawn'];
-          break;
-        default:
-          statusFilter = undefined;
-      }
-
-      const currentFilters = {
-        ...filters,
-        status: statusFilter,
-      };
-
-      const result = await BidService.getBids(currentFilters, sort);
-      setBids(result);
+      const fetchedBids = await BidService.getBids(user.uid, filter, sort);
+      setBids(fetchedBids);
     } catch (err) {
-      console.error('Error fetching bids:', err);
+      console.error("Error fetching bids:", err);
       setError('Failed to load bids. Please try again.');
     } finally {
       setLoading(false);
     }
   };
 
-  // Search bids
-  const filteredBids = bids.filter(bid => {
-    if (!searchTerm) return true;
-    
-    const search = searchTerm.toLowerCase();
-    return (
-      bid.title.toLowerCase().includes(search) ||
-      bid.projectName.toLowerCase().includes(search) ||
-      bid.subcontractorName.toLowerCase().includes(search)
-    );
-  });
-
-  // Handlers
-  const handleTabChange = (_: React.SyntheticEvent, newValue: number) => {
-    setActiveTab(newValue);
-    fetchBids();
-  };
+  useEffect(() => {
+    if (!authLoading && user) {
+      fetchBids();
+    } else if (!authLoading && !user) {
+      setError("Please log in to view bids.");
+      setLoading(false);
+    }
+  }, [user, filter, sort, authLoading]);
 
   const handleSearchChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     setSearchTerm(event.target.value);
   };
 
-  const handleSortClick = (event: React.MouseEvent<HTMLElement>) => {
-    setAnchorElSort(event.currentTarget);
+  const handleFilterChange = (newFilter: BidFilter) => {
+    setFilter(newFilter);
   };
 
-  const handleSortClose = () => {
-    setAnchorElSort(null);
-  };
-
-  const handleSortChange = (field: BidSortField, direction: SortDirection) => {
-    setSort({ field, direction });
-    handleSortClose();
-  };
-
-  const handleFilterChange = (newFilters: BidFilter) => {
-    setFilters(newFilters);
-  };
-
-  const handleResetFilters = () => {
-    setFilters({});
-  };
-
-  const handleAddBid = () => {
-    navigate('/bids/new');
-  };
-
-  const handleViewBid = (bid: BidSummary) => {
-    navigate(`/bids/${bid.id}`);
-  };
-
-  const handleEditBid = (bid: BidSummary) => {
-    navigate(`/bids/${bid.id}/edit`);
-  };
-
-  const handleDeleteClick = (bid: BidSummary) => {
-    setBidToDelete(bid);
-    setDeleteDialogOpen(true);
-  };
-
-  const handleDeleteConfirm = async () => {
-    if (!bidToDelete) return;
-
-    try {
-      await BidService.deleteBid(bidToDelete.id);
-      setBids(bids.filter(b => b.id !== bidToDelete.id));
-      setDeleteDialogOpen(false);
-      setBidToDelete(null);
-    } catch (err) {
-      console.error('Error deleting bid:', err);
-      setError('Failed to delete bid. Please try again.');
-    }
-  };
-
-  const handleDeleteCancel = () => {
-    setDeleteDialogOpen(false);
-    setBidToDelete(null);
-  };
-
-  const handleDuplicateBid = (bid: BidSummary) => {
-    // Navigate to new bid form with duplicated values
-    navigate('/bids/new', { state: { duplicate: bid } });
+  const handleSortChange = (newSort: BidSort) => {
+    setSort(newSort);
   };
 
   const handleRefresh = () => {
     fetchBids();
   };
 
+  const handleView = (bid: BidSummary) => {
+    navigate(`/bids/${bid.id}`);
+  };
+
+  const handleEdit = (bid: BidSummary) => {
+    navigate(`/bids/${bid.id}/edit`);
+  };
+
+  const handleDuplicate = (bid: BidSummary) => {
+    navigate(`/bids/new?duplicate=${bid.id}`);
+  };
+
+  const handleDeleteRequest = (bid: BidSummary) => {
+    setDeleteTarget(bid);
+  };
+
+  const handleDeleteConfirm = async () => {
+    if (!deleteTarget) return;
+    try {
+      await BidService.deleteBid(deleteTarget.id);
+      setBids(prevBids => prevBids.filter(b => b.id !== deleteTarget.id));
+      setDeleteTarget(null);
+    } catch (err) {
+      console.error("Error deleting bid:", err);
+      setError('Failed to delete bid. Please try again.');
+    }
+  };
+
+  const handleCloseDeleteDialog = () => {
+    setDeleteTarget(null);
+  };
+
+  const handleTabChange = (_: React.SyntheticEvent, newValue: number) => {
+    setActiveTab(newValue);
+    fetchBids();
+  };
+
+  const filteredBids = bids.filter(bid => {
+    const search = searchTerm.toLowerCase();
+    return (
+      (bid.title || '').toLowerCase().includes(search) ||
+      (bid.projectName || '').toLowerCase().includes(search) ||
+      (bid.subcontractorName || '').toLowerCase().includes(search)
+    );
+  });
+
+  const availableStatuses = Array.from(new Set(bids.map(b => b.status))) as Bid['status'][];
+  const availablePriorities = Array.from(new Set(bids.filter(b => b.priority).map(b => b.priority))) as NonNullable<Bid['priority']>[];
+
   return (
     <Box sx={{ py: 3 }}>
-      {/* Header */}
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
         <Typography variant="h4" component="h1">Bids</Typography>
         <Button 
           variant="contained" 
           color="primary" 
           startIcon={<AddIcon />}
-          onClick={handleAddBid}
+          onClick={() => navigate('/bids/new')}
         >
           New Bid
         </Button>
       </Box>
 
-      {/* Error message */}
       {error && (
         <Alert severity="error" sx={{ mb: 3 }}>
           <AlertTitle>Error</AlertTitle>
@@ -632,7 +606,6 @@ const BidList: React.FC = () => {
         </Alert>
       )}
 
-      {/* Search and filters */}
       <Box sx={{ mb: 3 }}>
         <Box sx={{ display: 'flex', gap: 2, mb: 2 }}>
           <TextField
@@ -657,7 +630,7 @@ const BidList: React.FC = () => {
             sx={{ minWidth: 100 }}
           >
             Filters
-            {Object.keys(filters).some(k => filters[k as keyof BidFilter] !== undefined) && (
+            {Object.keys(filter).some(k => filter[k as keyof BidFilter] !== undefined) && (
               <Badge 
                 color="primary" 
                 variant="dot" 
@@ -668,7 +641,7 @@ const BidList: React.FC = () => {
           <Button
             variant="outlined"
             startIcon={<SortIcon />}
-            onClick={handleSortClick}
+            onClick={() => handleSortChange({ field: 'submissionDeadline', direction: sort.direction === 'asc' ? 'desc' : 'asc' })}
             sx={{ minWidth: 100 }}
           >
             Sort
@@ -680,16 +653,17 @@ const BidList: React.FC = () => {
           </Tooltip>
         </Box>
 
-        {/* Filter panel */}
         <Collapse in={showFilters}>
           <FilterPanel 
-            filters={filters} 
-            onFilterChange={handleFilterChange} 
-            onResetFilters={handleResetFilters} 
+            filter={filter}
+            onFilterChange={handleFilterChange}
+            sort={sort}
+            onSortChange={handleSortChange}
+            statusOptions={availableStatuses}
+            priorityOptions={availablePriorities}
           />
         </Collapse>
 
-        {/* Tabs */}
         <Tabs 
           value={activeTab} 
           onChange={handleTabChange}
@@ -705,7 +679,6 @@ const BidList: React.FC = () => {
         </Tabs>
       </Box>
 
-      {/* Bid list */}
       {loading ? (
         <Box sx={{ display: 'flex', justifyContent: 'center', my: 4 }}>
           <CircularProgress />
@@ -723,7 +696,7 @@ const BidList: React.FC = () => {
           <Button 
             variant="contained" 
             startIcon={<AddIcon />}
-            onClick={handleAddBid}
+            onClick={() => navigate('/bids/new')}
           >
             Create New Bid
           </Button>
@@ -734,57 +707,27 @@ const BidList: React.FC = () => {
             <BidRow
               key={bid.id}
               bid={bid}
-              onView={handleViewBid}
-              onEdit={handleEditBid}
-              onDelete={handleDeleteClick}
-              onDuplicate={handleDuplicateBid}
+              onView={handleView}
+              onEdit={handleEdit}
+              onDelete={handleDeleteRequest}
+              onDuplicate={handleDuplicate}
             />
           ))}
         </Box>
       )}
 
-      {/* Sorting menu */}
-      <Menu
-        anchorEl={anchorElSort}
-        open={Boolean(anchorElSort)}
-        onClose={handleSortClose}
-      >
-        <MenuItem selected={sort.field === 'submissionDeadline' && sort.direction === 'asc'} onClick={() => handleSortChange('submissionDeadline', 'asc')}>
-          Deadline (Earliest first)
-        </MenuItem>
-        <MenuItem selected={sort.field === 'submissionDeadline' && sort.direction === 'desc'} onClick={() => handleSortChange('submissionDeadline', 'desc')}>
-          Deadline (Latest first)
-        </MenuItem>
-        <MenuItem selected={sort.field === 'createdAt' && sort.direction === 'desc'} onClick={() => handleSortChange('createdAt', 'desc')}>
-          Recently Created
-        </MenuItem>
-        <MenuItem selected={sort.field === 'updatedAt' && sort.direction === 'desc'} onClick={() => handleSortChange('updatedAt', 'desc')}>
-          Recently Updated
-        </MenuItem>
-        <MenuItem selected={sort.field === 'totalAmount' && sort.direction === 'desc'} onClick={() => handleSortChange('totalAmount', 'desc')}>
-          Amount (Highest first)
-        </MenuItem>
-        <MenuItem selected={sort.field === 'totalAmount' && sort.direction === 'asc'} onClick={() => handleSortChange('totalAmount', 'asc')}>
-          Amount (Lowest first)
-        </MenuItem>
-        <MenuItem selected={sort.field === 'priority' && sort.direction === 'desc'} onClick={() => handleSortChange('priority', 'desc')}>
-          Priority (Highest first)
-        </MenuItem>
-      </Menu>
-
-      {/* Delete confirmation dialog */}
       <Dialog
-        open={deleteDialogOpen}
-        onClose={handleDeleteCancel}
+        open={Boolean(deleteTarget)}
+        onClose={handleCloseDeleteDialog}
       >
         <DialogTitle>Confirm Deletion</DialogTitle>
         <DialogContent>
           <DialogContentText>
-            Are you sure you want to delete the bid "{bidToDelete?.title}"? This action cannot be undone.
+            Are you sure you want to delete the bid "{deleteTarget?.title}"? This action cannot be undone.
           </DialogContentText>
         </DialogContent>
         <DialogActions>
-          <Button onClick={handleDeleteCancel}>Cancel</Button>
+          <Button onClick={handleCloseDeleteDialog}>Cancel</Button>
           <Button onClick={handleDeleteConfirm} color="error">Delete</Button>
         </DialogActions>
       </Dialog>

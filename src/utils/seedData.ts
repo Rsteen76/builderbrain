@@ -1,9 +1,34 @@
-import { Subcontractor } from '../services/subcontractor';
+import { Subcontractor } from '../types';
+import { SubcontractorService } from '../services/subcontractor';
 
 /**
  * Seed data for testing subcontractors
  */
-export const seedSubcontractors: Omit<Subcontractor, 'id' | 'createdAt' | 'updatedAt'>[] = [
+const seedSubcontractors: Omit<Subcontractor, 'id' | 'userId' | 'createdAt' | 'updatedAt'>[] = [
+  {
+    name: 'ACME Electrical',
+    specialty: 'Electrical',
+    rating: 4.5,
+    totalProjects: 25,
+    contact: {
+      phone: '555-123-4567',
+      email: 'contact@acmeelectric.com',
+      location: '123 Main St, Anytown',
+    },
+    performance: {
+      onTime: 95,
+      quality: 92,
+      communication: 88,
+    },
+    companyInfo: {
+      website: 'acmeelectric.com',
+      founded: '1998',
+      employees: 15,
+      license: 'ELEC12345',
+    },
+    projects: [],
+    notes: 'Reliable team, good for large commercial jobs.',
+  },
   {
     name: 'Elite Electrical',
     specialty: 'Electrical',
@@ -142,27 +167,31 @@ export const seedSubcontractors: Omit<Subcontractor, 'id' | 'createdAt' | 'updat
 ];
 
 /**
- * Function to seed the database with test data
- * This would be called in development environments only
+ * Function to seed subcontractors into Firestore
+ * REQUIRES a userId to associate the data
  */
-export const seedDatabase = async (): Promise<void> => {
-  // Import only when needed to avoid circular dependencies
-  const { SubcontractorService } = await import('../services/subcontractor');
+export const seedSubcontractorData = async (userId: string): Promise<void> => {
+  if (!userId) {
+    console.error('Seed Error: userId is required to seed subcontractor data.');
+    return;
+  }
+  console.log('Attempting to seed subcontractor data...');
   
-  // Check if we have any subcontractors already
-  const existingSubcontractors = await SubcontractorService.getSubcontractors();
-  
-  // Only seed if no subcontractors exist
-  if (existingSubcontractors.length === 0) {
-    console.log('Seeding database with test data...');
+  try {
+    // Check if subcontractors exist FOR THIS USER
+    const existingSubcontractors = await SubcontractorService.getSubcontractors(userId);
     
-    // Add subcontractors
-    for (const subcontractor of seedSubcontractors) {
-      await SubcontractorService.createSubcontractor(subcontractor);
+    if (existingSubcontractors.length === 0) {
+      console.log('No existing subcontractors found for this user. Seeding data...');
+      // Add subcontractors with the provided userId
+      for (const subcontractor of seedSubcontractors) {
+        await SubcontractorService.createSubcontractor(userId, subcontractor);
+      }
+      console.log('Subcontractor database seeded successfully!');
+    } else {
+      console.log('Subcontractors already exist for this user. Skipping seed.');
     }
-    
-    console.log('Database seeded successfully!');
-  } else {
-    console.log('Database already has data, skipping seed operation');
+  } catch (error) {
+    console.error('Error seeding subcontractor data:', error);
   }
 }; 
