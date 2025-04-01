@@ -228,6 +228,10 @@ const BidFormModal: React.FC<BidFormModalProps> = ({ open, onClose, onSubmit, in
       return;
     }
 
+    // Make sure totalAmount is a valid number
+    const bidAmount = typeof bid.totalAmount === 'number' ? bid.totalAmount : 
+                     (bid.totalAmount ? parseFloat(String(bid.totalAmount)) : 0);
+
     const submitPayload: Omit<Bid, 'id' | 'createdAt' | 'updatedAt' | 'userId'> = {
       title: bid.title || `Bid from ${bid.subcontractorName}`,
       projectId,
@@ -240,7 +244,7 @@ const BidFormModal: React.FC<BidFormModalProps> = ({ open, onClose, onSubmit, in
       submissionDeadline: bid.submissionDeadline || new Date(),
       startDate: bid.startDate || null,
       completionDate: bid.completionDate || null,
-      totalAmount: Number(bid.totalAmount) || 0,
+      totalAmount: bidAmount, // Use the validated number value
       tags: bid.tags || [],
       createdBy: initialData?.createdBy || userId,
       updatedBy: userId,
@@ -337,7 +341,12 @@ const BidFormModal: React.FC<BidFormModalProps> = ({ open, onClose, onSubmit, in
                 name="totalAmount"
                 type="number"
                 value={bid.totalAmount ?? ''}
-                onChange={handleChange}
+                onChange={(e) => {
+                  // Convert the input value to a number explicitly
+                  const numValue = e.target.value ? parseFloat(e.target.value) : 0;
+                  setBid(prev => ({ ...prev, totalAmount: numValue }));
+                  validateField('totalAmount', numValue);
+                }}
                 error={!!errors.totalAmount}
                 helperText={errors.totalAmount}
                 InputProps={{

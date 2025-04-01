@@ -20,18 +20,19 @@ import {
 } from '@mui/material';
 import { Add as AddIcon, Edit as EditIcon, Delete as DeleteIcon, KeyboardArrowDown as KeyboardArrowDownIcon, KeyboardArrowUp as KeyboardArrowUpIcon, MonetizationOn as MoneyIcon, AttachMoney as AttachMoneyIcon, Business as BusinessIcon, Event as EventIcon, Description as DescriptionIcon, Gavel as GavelIcon, Check as CheckIcon, Close as CloseIcon, CheckCircle as CheckCircleIcon, HourglassEmpty as HourglassEmptyIcon, ReceiptLong as ReceiptIcon } from '@mui/icons-material';
 import { ProjectService } from '../../services/project';
-import { BidService } from '../../services/bid';
+import { BidService, BidFilter, BidSort, BidSortField, SortDirection } from '../../services/bid'; // Import filter/sort types
 import { ExpenseService } from '../../services/expense';
-import { Project, Bid, Expense } from '../../types';
+import { Project, Bid, Expense, BidPaymentStage } from '../../types';
 import BidFormModal from './BidFormModal'; // Import the modal
 import BidPaymentSchedule from './BidPaymentSchedule'; // Import payment schedule component
+import BidPaymentTermsModal from './BidPaymentTermsModal'; // Import the new payment terms modal
 import { visuallyHidden } from '@mui/utils'; // For accessibility with sorting
 import { v4 as uuidv4 } from 'uuid';
 import { formatCurrency, formatDate } from '../../utils/formatters';
 
 // Define types for sorting
-type Order = 'asc' | 'desc';
-type BidKeys = keyof Bid; // Properties we can sort by
+type Order = SortDirection; // Use imported type
+type BidKeys = BidSortField; // Use imported type
 
 interface HeadCell {
   id: BidKeys | 'actions'; // Include non-data columns if needed
@@ -111,6 +112,14 @@ function descendingComparator<T>(a: T, b: T, orderBy: keyof T) {
     if (bValue > aValue) return 1;
     return 0;
   }
+  // Firestore Timestamps can be compared with toMillis()
+  if (aValue && typeof aValue === 'object' && 'toDate' in aValue && bValue && typeof bValue === 'object' && 'toDate' in bValue) {
+    const aDate = (aValue as any).toDate();
+    const bDate = (bValue as any).toDate();
+    if (bDate.getTime() < aDate.getTime()) return -1;
+    if (bDate.getTime() > aDate.getTime()) return 1;
+    return 0;
+  }
   if (aValue instanceof Date && bValue instanceof Date) {
      if (bValue.getTime() < aValue.getTime()) return -1;
      if (bValue.getTime() > aValue.getTime()) return 1;
@@ -128,23 +137,56 @@ const BidManager: React.FC<BidManagerProps> = ({ project, userId, onProjectUpdat
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingBid, setEditingBid] = useState<Bid | null>(null);
   const [selectedBid, setSelectedBid] = useState<Bid | null>(null);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true); // Start loading true
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [order, setOrder] = useState<Order>('asc');
   const [orderBy, setOrderBy] = useState<BidKeys>('scope'); // Default sort by scope
-  const [bids, setBids] = useState<Bid[]>(project.bids || []);
+  const [bids, setBids] = useState<Bid[]>([]); // Initialize empty
   const theme = useTheme(); // Get theme for styling
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
   const isTablet = useMediaQuery(theme.breakpoints.down('md'));
   const [expandedBids, setExpandedBids] = useState<{ [key: string]: boolean }>({});
   const [page, setPage] = useState(0);
   const [rowsPerPage, setRowsPerPage] = useState(5);
+  
+  // New state for payment terms modal
+  const [paymentTermsModalOpen, setPaymentTermsModalOpen] = useState(false);
+  const [bidForPaymentTerms, setBidForPaymentTerms] = useState<Bid | null>(null);
 
-  // Ensure we always have the latest bids from the project
+  // Fetch bids when component mounts or project/user changes
   useEffect(() => {
-    setBids(project.bids || []);
-  }, [project.bids]);
+    const fetchBidsForProject = async () => {
+      if (!userId || !project.id) {
+        setError("User or Project ID missing, cannot fetch bids.");
+        setLoading(false);
+        setBids([]);
+        return;
+      }
+      setLoading(true);
+      setError(null);
+      try {
+        const bidFilters: BidFilter = { projectId: project.id };
+        // Assuming BidService.getBids returns Bid[] now, or adapt if it returns BidSummary[]
+        const fetchedBids = await BidService.getBids(userId, bidFilters);
+        setBids(fetchedBids);
+      } catch (err) {
+        console.error("Error fetching bids for project:", err);
+        setError(err instanceof Error ? err.message : "Failed to load bids for this project.");
+        setBids([]);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchBidsForProject();
+  }, [project.id, userId]); // Re-fetch if projectId or userId changes
+
+  // Keep this useEffect to sync with external project updates if needed,
+  // but primary data source is now the fetch above.
+  // useEffect(() => {
+  //   setBids(project.bids || []);
+  // }, [project.bids]);
 
   const handleRequestSort = (event: React.MouseEvent<unknown>, property: BidKeys) => {
     const isAsc = orderBy === property && order === 'asc';
@@ -153,11 +195,11 @@ const BidManager: React.FC<BidManagerProps> = ({ project, userId, onProjectUpdat
   };
 
   // --- Memoized Sorting, Grouping, and Highlighting Logic ---
-  const { groupedBids, lowestBidsByCategory } = useMemo(() => {
+  const { groupedBids, lowestBidsByCategory, sortedAndPagedBids } = useMemo(() => {
     const eligibleStatusesForLowest: Bid['status'][] = ['submitted', 'draft']; // Define statuses to consider for "lowest"
 
     // 1. Primary sort by Category, Secondary sort by user selection
-    const sortedBids = stableSort(bids, (a, b) => {
+    let sortedBids = stableSort(bids, (a, b) => {
         // Primary Sort: Category (handle undefined)
         const categoryA = a.scope || 'zzzz'; // Put uncategorized last
         const categoryB = b.scope || 'zzzz';
@@ -189,8 +231,11 @@ const BidManager: React.FC<BidManagerProps> = ({ project, userId, onProjectUpdat
       }
     });
 
-    return { groupedBids: grouped, lowestBidsByCategory: lowest };
-  }, [bids, order, orderBy]);
+    // 3. Apply pagination to the already sorted list
+    const pagedBids = sortedBids.slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage);
+
+    return { groupedBids: grouped, lowestBidsByCategory: lowest, sortedAndPagedBids: pagedBids };
+  }, [bids, order, orderBy, page, rowsPerPage]);
 
   const handleOpenAddModal = () => {
     setEditingBid(null);
@@ -218,7 +263,7 @@ const BidManager: React.FC<BidManagerProps> = ({ project, userId, onProjectUpdat
       setSelectedBid(updatedBid);
     }
     
-    // Update the parent component
+    // Update the parent component with the latest full list from state
     onProjectUpdate({ ...project, bids: updatedBids });
   };
 
@@ -237,15 +282,22 @@ const BidManager: React.FC<BidManagerProps> = ({ project, userId, onProjectUpdat
         setLoading(false);
         return;
     }
+    if (!project.id) {
+        setError("Project ID is missing. Cannot save bid.");
+        setLoading(false);
+        return;
+    }
 
     try {
       let savedBid: Bid;
       let updatedBidsList: Bid[];
       let wasAccepted = false;
       
+      const payloadWithProjectId = { ...submittedBidData, projectId: project.id };
+
       if (editingBid?.id) {
         const bidIdToUpdate = editingBid.id;
-        const { id, createdAt, updatedAt, ...updatePayload } = submittedBidData as any;
+        const { id, createdAt, updatedAt, userId: ignoredUserId, ...updatePayload } = payloadWithProjectId as any;
         
         // Check if status is being changed to 'accepted'
         wasAccepted = editingBid.status !== 'accepted' && updatePayload.status === 'accepted';
@@ -257,10 +309,9 @@ const BidManager: React.FC<BidManagerProps> = ({ project, userId, onProjectUpdat
         savedBid = refetchedBid;
         updatedBidsList = bids.map(b => (b.id === savedBid.id ? savedBid : b));
       } else {
-        // Create a full bid payload from the submitted data
+        // Create a full bid payload from the submitted data, ensuring projectId is included
         const createPayload = {
-          ...submittedBidData,
-          userId // Add userId from props
+          ...payloadWithProjectId,
         };
         
         // Check if new bid is being created with 'accepted' status
@@ -270,151 +321,21 @@ const BidManager: React.FC<BidManagerProps> = ({ project, userId, onProjectUpdat
         updatedBidsList = [...bids, savedBid];
       }
 
-      // If bid was accepted, create a pending expense
-      if (wasAccepted) {
-        await createPendingExpenseFromBid(savedBid);
-      }
-
-      const sortedBids = updatedBidsList.sort((a, b) => (a.scope || '').localeCompare(b.scope || ''));
-      onProjectUpdate({ ...project, bids: sortedBids });
+      // Update local state and close the form modal
+      setBids(updatedBidsList);
+      onProjectUpdate({ ...project, bids: updatedBidsList });
       handleCloseModal();
-
+      
+      // If bid was accepted, show the payment terms modal
+      if (wasAccepted) {
+        setBidForPaymentTerms(savedBid);
+        setPaymentTermsModalOpen(true);
+      }
     } catch (err) {
       console.error("Error saving bid:", err);
       setError(err instanceof Error ? err.message : "Failed to save bid. Please try again.");
     } finally {
       setLoading(false);
-    }
-  };
-
-  // Function to create a pending expense from an accepted bid
-  const createPendingExpenseFromBid = async (bid: Bid) => {
-    try {
-      // Map bid category to expense category
-      let expenseCategory: 'labor' | 'materials' | 'equipment' | 'permits' | 'other' = 'other';
-      
-      // Determine best category based on bid scope
-      const scope = bid.scope?.toLowerCase() || '';
-      if (scope.includes('labor') || 
-          scope.includes('framing') || 
-          scope.includes('install') ||
-          scope.includes('carpentry')) {
-        expenseCategory = 'labor';
-      } else if (scope.includes('material') || 
-                scope.includes('supplies') || 
-                scope.includes('concrete') || 
-                scope.includes('lumber')) {
-        expenseCategory = 'materials';
-      } else if (scope.includes('equipment') || 
-                scope.includes('machinery') || 
-                scope.includes('tools') ||
-                scope.includes('rental')) {
-        expenseCategory = 'equipment';
-      } else if (scope.includes('permit') || 
-                scope.includes('inspection') || 
-                scope.includes('license') ||
-                scope.includes('certification')) {
-        expenseCategory = 'permits';
-      }
-      
-      // If bid doesn't have payment stages, create a default payment schedule
-      if (!bid.paymentSchedule || bid.paymentSchedule.length === 0) {
-        // Create default payment stages - Deposit (30%), Progress (40%), Final (30%)
-        const now = new Date();
-        
-        // Calculate payment amounts
-        const depositAmount = Math.round(bid.totalAmount * 0.3 * 100) / 100;
-        const progressAmount = Math.round(bid.totalAmount * 0.4 * 100) / 100;
-        const finalAmount = bid.totalAmount - depositAmount - progressAmount; // Ensures total adds up exactly
-        
-        // Create the default payment schedule
-        const paymentSchedule = [
-          {
-            id: uuidv4(),
-            name: 'Initial Deposit',
-            description: 'Upfront payment to begin work',
-            percentage: 30,
-            amount: depositAmount,
-            status: 'pending' as const,
-            completionRequirements: 'Upon contract signing',
-            expenseId: undefined as string | undefined,
-            createdAt: now,
-            updatedAt: now
-          },
-          {
-            id: uuidv4(),
-            name: 'Progress Payment',
-            description: 'Mid-project milestone payment',
-            percentage: 40,
-            amount: progressAmount,
-            status: 'pending' as const,
-            completionRequirements: '50% project completion',
-            createdAt: now,
-            updatedAt: now
-          },
-          {
-            id: uuidv4(),
-            name: 'Final Payment',
-            description: 'Final payment upon completion',
-            percentage: 30,
-            amount: finalAmount,
-            status: 'pending' as const,
-            completionRequirements: 'Upon project completion and final inspection',
-            createdAt: now,
-            updatedAt: now
-          }
-        ];
-        
-        // Create the payment progress tracker
-        const paymentProgress = {
-          paid: 0,
-          pending: bid.totalAmount,
-          remaining: bid.totalAmount
-        };
-        
-        // Update the bid with payment schedule
-        await BidService.updateBid(bid.id, {
-          paymentSchedule,
-          paymentProgress
-        });
-        
-        // Create an expense for the initial deposit
-        const expenseData: Omit<Expense, 'id' | 'userId' | 'createdAt' | 'updatedAt' | 'createdBy'> = {
-          projectId: bid.projectId,
-          category: expenseCategory,
-          description: `Initial Deposit (30%) - ${bid.title || bid.scope || 'Unnamed bid'} - ${bid.subcontractorName || 'Unknown contractor'}`,
-          amount: depositAmount,
-          date: new Date(),
-          status: 'pending',
-          vendor: bid.subcontractorName || '',
-          notes: `This expense is the initial payment (30%) for accepted bid (ID: ${bid.id}).\n\nOriginal bid notes: ${bid.notes || 'None'}`,
-        };
-        
-        // Create the expense
-        const expense = await ExpenseService.createExpense(userId, expenseData);
-        
-        // Update the payment stage with the expense ID
-        if (expense) {
-          const updatedSchedule = [...paymentSchedule];
-          updatedSchedule[0].expenseId = expense.id;
-          
-          await BidService.updateBid(bid.id, {
-            paymentSchedule: updatedSchedule
-          });
-        }
-        
-        setSuccess(`Bid accepted and payment schedule created. Initial deposit of $${depositAmount.toLocaleString()} added to pending expenses.`);
-      } else {
-        // The bid already has a payment schedule, just update the status
-        setSuccess(`Bid accepted with existing payment schedule.`);
-      }
-      
-      // Auto-clear success message after 5 seconds
-      setTimeout(() => setSuccess(null), 5000);
-      
-    } catch (error) {
-      console.error('Error creating payment schedule from bid:', error);
-      // Don't throw error - we don't want to fail the bid update if expense creation fails
     }
   };
 
@@ -435,7 +356,8 @@ const BidManager: React.FC<BidManagerProps> = ({ project, userId, onProjectUpdat
       await BidService.deleteBid(bidId);
 
       const updatedBidsList = bids.filter(b => b.id !== bidId);
-      onProjectUpdate({ ...project, bids: updatedBidsList });
+      setBids(updatedBidsList); // Update local state first
+      onProjectUpdate({ ...project, bids: updatedBidsList }); // Then notify parent
 
     } catch (err) {
       console.error("Error deleting bid:", err);
@@ -479,12 +401,110 @@ const BidManager: React.FC<BidManagerProps> = ({ project, userId, onProjectUpdat
     }
   };
 
-  const displayedBids = bids.slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage);
-  const lowestBidAmount = bids.length > 0 ? Math.min(...bids.map(bid => bid.totalAmount || 0)) : 0;
-  const highestBidAmount = bids.length > 0 ? Math.max(...bids.map(bid => bid.totalAmount || 0)) : 0;
-  const avgBidAmount = bids.length > 0 ? bids.reduce((sum, bid) => sum + (bid.totalAmount || 0), 0) / bids.length : 0;
+  // Use sortedAndPagedBids which incorporates sorting and pagination
+  const displayedBids = sortedAndPagedBids;
+  const lowestBidAmount = bids.length > 0 ? Math.min(...bids.filter(bid => bid.totalAmount > 0).map(bid => bid.totalAmount || 0)) : 0;
+  const highestBidAmount = bids.length > 0 ? Math.max(...bids.filter(bid => bid.totalAmount > 0).map(bid => bid.totalAmount || 0)) : 0;
+  const avgBidAmount = bids.length > 0 ? bids.filter(bid => bid.totalAmount > 0).reduce((sum, bid) => sum + (bid.totalAmount || 0), 0) / bids.filter(bid => bid.totalAmount > 0).length : 0;
 
-  if (loading && bids.length === 0) {
+  // Add a function to handle payment terms submission
+  const handlePaymentTermsSubmit = async (paymentSchedule: BidPaymentStage[]) => {
+    if (!bidForPaymentTerms) return;
+    
+    try {
+      // Calculate payment progress
+      const totalAmount = bidForPaymentTerms.totalAmount;
+      const paymentProgress = {
+        paid: 0,
+        pending: totalAmount,
+        remaining: totalAmount
+      };
+      
+      // Update the bid with payment schedule
+      await BidService.updateBid(bidForPaymentTerms.id, {
+        paymentSchedule,
+        paymentProgress
+      });
+      
+      // Get the first payment stage to create an expense
+      const firstStage = paymentSchedule[0];
+      if (firstStage) {
+        // Create an expense for the initial payment
+        // Map bid category to expense category
+        let expenseCategory: 'labor' | 'materials' | 'equipment' | 'permits' | 'other' = 'other';
+        
+        // Determine best category based on bid scope
+        const scope = bidForPaymentTerms.scope?.toLowerCase() || '';
+        if (scope.includes('labor') || 
+            scope.includes('framing') || 
+            scope.includes('install') ||
+            scope.includes('carpentry')) {
+          expenseCategory = 'labor';
+        } else if (scope.includes('material') || 
+                  scope.includes('supplies') || 
+                  scope.includes('concrete') || 
+                  scope.includes('lumber')) {
+          expenseCategory = 'materials';
+        } else if (scope.includes('equipment') || 
+                  scope.includes('machinery') || 
+                  scope.includes('tools') ||
+                  scope.includes('rental')) {
+          expenseCategory = 'equipment';
+        } else if (scope.includes('permit') || 
+                  scope.includes('inspection') || 
+                  scope.includes('license') ||
+                  scope.includes('certification')) {
+          expenseCategory = 'permits';
+        }
+        
+        const expenseData: Omit<Expense, 'id' | 'userId' | 'createdAt' | 'updatedAt' | 'createdBy'> = {
+          projectId: bidForPaymentTerms.projectId,
+          category: expenseCategory,
+          description: `${firstStage.name} (${firstStage.percentage}%) - ${bidForPaymentTerms.title || bidForPaymentTerms.scope || 'Unnamed bid'} - ${bidForPaymentTerms.subcontractorName || 'Unknown contractor'}`,
+          amount: firstStage.amount,
+          date: new Date(),
+          status: 'pending',
+          vendor: bidForPaymentTerms.subcontractorName || '',
+          notes: `This expense is for payment stage: ${firstStage.name} (${firstStage.percentage}%) for accepted bid (ID: ${bidForPaymentTerms.id}).\n\nRequirements: ${firstStage.completionRequirements || 'None'}\n\nOriginal bid notes: ${bidForPaymentTerms.notes || 'None'}`,
+        };
+        
+        // Create the expense
+        const expense = await ExpenseService.createExpense(userId, expenseData);
+        
+        // Update the payment stage with the expense ID
+        if (expense) {
+          const updatedSchedule = [...paymentSchedule];
+          updatedSchedule[0].expenseId = expense.id;
+          
+          await BidService.updateBid(bidForPaymentTerms.id, {
+            paymentSchedule: updatedSchedule
+          });
+        }
+      }
+      
+      // Refresh the bids data
+      if (userId && project.id) {
+        const bidFilters: BidFilter = { projectId: project.id };
+        const refreshedBids = await BidService.getBids(userId, bidFilters);
+        setBids(refreshedBids);
+        onProjectUpdate({ ...project, bids: refreshedBids });
+      }
+      
+      setSuccess(`Bid accepted with payment schedule. Initial payment of ${formatCurrency(firstStage?.amount || 0)} has been added to expenses.`);
+      setTimeout(() => setSuccess(null), 5000);
+      
+    } catch (error) {
+      console.error('Error creating payment schedule:', error);
+      setError('Failed to save payment schedule. Please try again.');
+    }
+  };
+  
+  const handleClosePaymentTermsModal = () => {
+    setPaymentTermsModalOpen(false);
+    setBidForPaymentTerms(null);
+  };
+
+  if (loading) { // Show skeleton only during initial load
     return (
       <Box sx={{ p: 2 }}>
         <Box sx={{ mb: 3 }}>
@@ -619,7 +639,7 @@ const BidManager: React.FC<BidManagerProps> = ({ project, userId, onProjectUpdat
         </Alert>
       )}
 
-      {bids.length === 0 ? (
+      {bids.length === 0 && !loading ? (
         <Alert 
           severity="info"
           icon={<BusinessIcon color="info" />}
@@ -632,7 +652,7 @@ const BidManager: React.FC<BidManagerProps> = ({ project, userId, onProjectUpdat
         >
           No bids added yet. Click the "New Bid" button to create your first bid.
         </Alert>
-      ) : (
+      ) : bids.length > 0 ? (
         <Paper 
           elevation={0}
           sx={{ 
@@ -681,7 +701,9 @@ const BidManager: React.FC<BidManagerProps> = ({ project, userId, onProjectUpdat
                         
                         <Box sx={{ textAlign: 'right' }}>
                           <Typography variant="h6" fontWeight={600}>
-                            {formatCurrency(bid.totalAmount || 0)}
+                            {typeof bid.totalAmount === 'number' ? 
+                             formatCurrency(bid.totalAmount) : 
+                             formatCurrency(0)}
                           </Typography>
                           <Typography variant="caption" color="text.secondary">
                             {formatDate(bid.submissionDeadline)}
@@ -764,10 +786,77 @@ const BidManager: React.FC<BidManagerProps> = ({ project, userId, onProjectUpdat
                   <TableHead sx={{ bgcolor: alpha(theme.palette.primary.main, 0.03) }}>
                     <TableRow>
                       <TableCell width="56px" />
-                      <TableCell sx={{ fontWeight: 600 }}>Contractor</TableCell>
-                      <TableCell align="right" sx={{ fontWeight: 600 }}>Bid Amount</TableCell>
-                      <TableCell align="center" sx={{ fontWeight: 600 }}>Status</TableCell>
-                      <TableCell align="right" sx={{ fontWeight: 600 }}>Submission Date</TableCell>
+                      <TableCell 
+                        sortDirection={orderBy === 'subcontractorName' ? order : false}
+                        sx={{ fontWeight: 600 }}
+                      >
+                        <TableSortLabel
+                          active={orderBy === 'subcontractorName'}
+                          direction={orderBy === 'subcontractorName' ? order : 'asc'}
+                          onClick={(e) => handleRequestSort(e, 'subcontractorName')}
+                        >
+                          Contractor
+                          {orderBy === 'subcontractorName' ? (
+                            <Box component="span" sx={visuallyHidden}>
+                              {order === 'desc' ? 'sorted descending' : 'sorted ascending'}
+                            </Box>
+                          ) : null}
+                        </TableSortLabel>
+                      </TableCell>
+                      <TableCell 
+                        align="right" 
+                        sortDirection={orderBy === 'totalAmount' ? order : false}
+                        sx={{ fontWeight: 600 }}
+                      >
+                        <TableSortLabel
+                          active={orderBy === 'totalAmount'}
+                          direction={orderBy === 'totalAmount' ? order : 'asc'}
+                          onClick={(e) => handleRequestSort(e, 'totalAmount')}
+                        >
+                          Bid Amount
+                          {orderBy === 'totalAmount' ? (
+                            <Box component="span" sx={visuallyHidden}>
+                              {order === 'desc' ? 'sorted descending' : 'sorted ascending'}
+                            </Box>
+                          ) : null}
+                        </TableSortLabel>
+                      </TableCell>
+                      <TableCell 
+                        align="center" 
+                        sortDirection={orderBy === 'status' ? order : false}
+                        sx={{ fontWeight: 600 }}
+                      >
+                        <TableSortLabel
+                          active={orderBy === 'status'}
+                          direction={orderBy === 'status' ? order : 'asc'}
+                          onClick={(e) => handleRequestSort(e, 'status')}
+                        >
+                          Status
+                          {orderBy === 'status' ? (
+                            <Box component="span" sx={visuallyHidden}>
+                              {order === 'desc' ? 'sorted descending' : 'sorted ascending'}
+                            </Box>
+                          ) : null}
+                        </TableSortLabel>
+                      </TableCell>
+                      <TableCell 
+                        align="right" 
+                        sortDirection={orderBy === 'submissionDeadline' ? order : false}
+                        sx={{ fontWeight: 600 }}
+                      >
+                        <TableSortLabel
+                          active={orderBy === 'submissionDeadline'}
+                          direction={orderBy === 'submissionDeadline' ? order : 'asc'}
+                          onClick={(e) => handleRequestSort(e, 'submissionDeadline')}
+                        >
+                          Submission Date
+                          {orderBy === 'submissionDeadline' ? (
+                            <Box component="span" sx={visuallyHidden}>
+                              {order === 'desc' ? 'sorted descending' : 'sorted ascending'}
+                            </Box>
+                          ) : null}
+                        </TableSortLabel>
+                      </TableCell>
                       <TableCell align="right" sx={{ fontWeight: 600 }}>Actions</TableCell>
                     </TableRow>
                   </TableHead>
@@ -795,7 +884,9 @@ const BidManager: React.FC<BidManagerProps> = ({ project, userId, onProjectUpdat
                           </TableCell>
                           <TableCell align="right">
                             <Typography fontWeight={600}>
-                              {formatCurrency(bid.totalAmount || 0)}
+                              {typeof bid.totalAmount === 'number' ? 
+                               formatCurrency(bid.totalAmount) : 
+                               formatCurrency(0)}
                             </Typography>
                           </TableCell>
                           <TableCell align="center">
@@ -907,7 +998,8 @@ const BidManager: React.FC<BidManagerProps> = ({ project, userId, onProjectUpdat
             </>
           )}
         </Paper>
-      )}
+      ) : null /* Handle case where bids is empty but not loading */
+      }
 
       <BidFormModal
         open={isModalOpen}
@@ -917,6 +1009,16 @@ const BidManager: React.FC<BidManagerProps> = ({ project, userId, onProjectUpdat
         userId={userId}
         projectId={project.id}
       />
+
+      {/* Payment Terms Modal */}
+      {bidForPaymentTerms && (
+        <BidPaymentTermsModal
+          open={paymentTermsModalOpen}
+          onClose={handleClosePaymentTermsModal}
+          onSubmit={handlePaymentTermsSubmit}
+          bid={bidForPaymentTerms}
+        />
+      )}
     </>
   );
 };

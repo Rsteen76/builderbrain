@@ -52,11 +52,11 @@ const commonPhases = [
 ];
 
 const commonMilestones = [
-  { name: 'Permit Approval', date: '', description: 'All required permits obtained' },
-  { name: 'Foundation Complete', date: '', description: 'Foundation work inspected and approved' },
-  { name: 'Framing Complete', date: '', description: 'Structural framework inspected and approved' },
-  { name: 'Rough-in Complete', date: '', description: 'All mechanical systems installed and inspected' },
-  { name: 'Final Inspection', date: '', description: 'Project ready for occupancy' },
+  { name: 'Permit Approval', date: null, description: 'All required permits obtained' },
+  { name: 'Foundation Complete', date: null, description: 'Foundation work inspected and approved' },
+  { name: 'Framing Complete', date: null, description: 'Structural framework inspected and approved' },
+  { name: 'Rough-in Complete', date: null, description: 'All mechanical systems installed and inspected' },
+  { name: 'Final Inspection', date: null, description: 'Project ready for occupancy' },
 ];
 
 const commonPermits = [
@@ -198,7 +198,16 @@ const ProjectSetupWizard: React.FC = () => {
       ...prev,
       keyMilestones: [
         ...(prev.keyMilestones || []),
-        milestone || { name: '', date: '', description: '' },
+        milestone ? 
+          {
+            ...milestone,
+            // Convert string date to Date object or null if empty
+            date: milestone.date ? 
+              (typeof milestone.date === 'string' && milestone.date !== '' ? 
+                new Date(milestone.date) : milestone.date) 
+              : null
+          } 
+          : { name: '', date: null, description: '' },
       ],
     }));
   };
@@ -242,7 +251,12 @@ const ProjectSetupWizard: React.FC = () => {
         projectType: projectData.projectType || '',
         estimatedDuration: projectData.estimatedDuration || '',
         phases: projectData.phases || [],
-        keyMilestones: projectData.keyMilestones || [],
+        keyMilestones: (projectData.keyMilestones || []).map(milestone => ({
+          ...milestone,
+          // Ensure date is a Date object or null
+          date: milestone.date instanceof Date ? milestone.date : 
+                (typeof milestone.date === 'string' && milestone.date !== '' ? new Date(milestone.date) : null)
+        })),
         requirements: projectData.requirements || { permits: [], inspections: [], documents: [] },
         team: projectData.team || [],
         lineItems: projectData.lineItems || [],
@@ -520,10 +534,12 @@ const ProjectSetupWizard: React.FC = () => {
                           fullWidth
                           type="date"
                           label="Target Date"
-                          value={milestone.date ? milestone.date.split('T')[0] : ''}
+                          value={milestone.date instanceof Date ? milestone.date.toISOString().split('T')[0] : ''}
                           onChange={(e) => {
                             const newMilestones = [...(projectData.keyMilestones || [])];
-                            newMilestones[index] = { ...newMilestones[index], date: e.target.value };
+                            // Convert the string date to a Date object or null if empty
+                            const dateValue = e.target.value ? new Date(e.target.value) : null;
+                            newMilestones[index] = { ...newMilestones[index], date: dateValue };
                             setProjectData((prev) => ({
                               ...prev,
                               keyMilestones: newMilestones,

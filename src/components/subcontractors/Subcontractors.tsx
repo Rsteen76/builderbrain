@@ -25,6 +25,10 @@ import {
   CircularProgress,
   Alert,
   AlertTitle,
+  Stack,
+  Container,
+  useMediaQuery,
+  CardActionArea,
 } from '@mui/material';
 import {
   Search as SearchIcon,
@@ -39,11 +43,13 @@ import {
   MoreVert as MoreVertIcon,
   CloudUpload as UploadIcon,
   CloudDownload as DownloadIcon,
+  Person as PersonIcon,
+  Construction as ConstructionIcon,
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 import { Subcontractor } from '../../types';
 import { SubcontractorService } from '../../services/subcontractor';
-import { formatCurrency } from '../../utils/formatters';
+import { formatCurrency, formatPhoneNumber } from '../../utils/formatters';
 import { exportSubcontractorsToCSV, importSubcontractorsFromCSV, downloadFile } from '../../utils/importExport';
 import { useAuth } from '../../contexts/AuthContext';
 
@@ -66,10 +72,12 @@ const SubcontractorCard: React.FC<SubcontractorCardProps> = ({
 }) => {
   const theme = useTheme();
   const navigate = useNavigate();
+  const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
   const open = Boolean(anchorEl);
 
   const handleClick = (event: React.MouseEvent<HTMLButtonElement>) => {
+    event.stopPropagation();
     setAnchorEl(event.currentTarget);
   };
 
@@ -83,151 +91,218 @@ const SubcontractorCard: React.FC<SubcontractorCardProps> = ({
 
   return (
     <Card
+      elevation={0}
       sx={{
         height: '100%',
         display: 'flex',
         flexDirection: 'column',
-        cursor: 'pointer',
+        borderRadius: 2,
         transition: 'all 0.2s ease',
+        border: `1px solid ${alpha(theme.palette.divider, 0.1)}`,
+        boxShadow: `0 2px 8px ${alpha(theme.palette.common.black, 0.04)}`,
         '&:hover': {
           transform: 'translateY(-4px)',
-          boxShadow: 3
+          boxShadow: `0 4px 12px ${alpha(theme.palette.common.black, 0.08)}`,
         }
       }}
-      onClick={handleCardClick}
     >
-      <CardContent sx={{ flexGrow: 1 }}>
-        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 2 }}>
-          <Box sx={{ display: 'flex', alignItems: 'center' }}>
-            <Avatar
-              sx={{
-                bgcolor: theme.palette.primary.main,
-                width: 56,
-                height: 56,
-                mr: 2,
-              }}
-            >
-              {name.substring(0, 1)}
-            </Avatar>
+      <CardActionArea onClick={handleCardClick}>
+        <CardContent sx={{ p: isMobile ? 2 : 3, pb: isMobile ? 2 : 3 }}>
+          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 2 }}>
+            <Box sx={{ display: 'flex', alignItems: 'center' }}>
+              <Avatar
+                sx={{
+                  bgcolor: alpha(theme.palette.primary.main, 0.1),
+                  color: theme.palette.primary.main,
+                  width: 48,
+                  height: 48,
+                  mr: 2,
+                }}
+              >
+                {name.substring(0, 1)}
+              </Avatar>
+              <Box>
+                <Typography variant="h6" fontWeight={600} component="div">
+                  {name}
+                </Typography>
+                <Chip 
+                  label={specialty} 
+                  size="small" 
+                  sx={{ 
+                    bgcolor: alpha(theme.palette.primary.main, 0.1),
+                    color: theme.palette.primary.main,
+                    fontWeight: 500,
+                    mt: 0.5
+                  }} 
+                />
+              </Box>
+            </Box>
             <Box>
-              <Typography variant="h6" component="div">
-                {name}
-              </Typography>
-              <Chip label={specialty} size="small" color="primary" />
+              <IconButton 
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleClick(e as React.MouseEvent<HTMLButtonElement>);
+                }}
+                sx={{ 
+                  color: theme.palette.text.secondary,
+                  '&:hover': {
+                    color: theme.palette.primary.main,
+                    bgcolor: alpha(theme.palette.primary.main, 0.1),
+                  }
+                }}
+              >
+                <MoreVertIcon />
+              </IconButton>
+              <Menu
+                anchorEl={anchorEl}
+                open={open}
+                onClose={handleClose}
+                onClick={(e) => e.stopPropagation()}
+                PaperProps={{
+                  elevation: 2,
+                  sx: {
+                    width: 180,
+                    borderRadius: 2,
+                    overflow: 'visible',
+                    boxShadow: `0 5px 15px ${alpha(theme.palette.common.black, 0.1)}`,
+                  },
+                }}
+              >
+                <MenuItem onClick={() => { onEdit(id); handleClose(); }}>Edit</MenuItem>
+                <MenuItem 
+                  onClick={() => { onDelete(id); handleClose(); }}
+                  sx={{ color: theme.palette.error.main }}
+                >
+                  Delete
+                </MenuItem>
+              </Menu>
             </Box>
           </Box>
-          <Box>
-            <IconButton 
-              onClick={(e) => {
-                e.stopPropagation();
-                handleClick(e as React.MouseEvent<HTMLButtonElement>);
-              }}
-            >
-              <MoreVertIcon />
-            </IconButton>
-            <Menu
-              anchorEl={anchorEl}
-              open={open}
-              onClose={handleClose}
-              onClick={(e) => e.stopPropagation()}
-            >
-              <MenuItem onClick={() => { onEdit(id); handleClose(); }}>Edit</MenuItem>
-              <MenuItem onClick={() => { onDelete(id); handleClose(); }}>Delete</MenuItem>
-            </Menu>
-          </Box>
-        </Box>
 
-        <Box sx={{ mb: 2 }}>
-          <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
-            <Rating value={rating ?? 0} precision={0.5} readOnly size="small" />
-            <Typography variant="body2" sx={{ ml: 1 }}>
-              {(rating ?? 0).toFixed(1)}
-            </Typography>
-          </Box>
-          <Typography variant="body2" color="text.secondary">
-            {totalProjects ?? 0} completed projects
-          </Typography>
-        </Box>
-
-        {lastBid && (
           <Box sx={{ mb: 2 }}>
-            <Typography variant="subtitle2">Last Bid</Typography>
-            <Typography variant="body2">
-              {formatCurrency(lastBid.amount)} ({lastBid.date ? new Date(lastBid.date).toLocaleDateString() : 'Date N/A'})
+            <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
+              <Rating value={rating ?? 0} precision={0.5} readOnly size="small" />
+              <Typography variant="body2" sx={{ ml: 1, color: theme.palette.text.secondary }}>
+                {(rating ?? 0).toFixed(1)}
+              </Typography>
+            </Box>
+            <Typography variant="body2" sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+              <WorkIcon fontSize="small" color="action" />
+              {totalProjects ?? 0} completed projects
             </Typography>
           </Box>
-        )}
 
-        <Box sx={{ mb: 2 }}>
-          <Typography variant="subtitle2" sx={{ mb: 1 }}>Performance</Typography>
-          <Grid container spacing={1}>
-            <Grid item xs={12}>
-              <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                <Typography variant="body2" sx={{ minWidth: 100 }}>On Time</Typography>
-                <LinearProgress
-                  variant="determinate"
-                  value={performance?.onTime ?? 0}
-                  sx={{ flexGrow: 1, mr: 1 }}
-                />
-                <Typography variant="body2">{performance?.onTime ?? 0}%</Typography>
-              </Box>
-            </Grid>
-            <Grid item xs={12}>
-              <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                <Typography variant="body2" sx={{ minWidth: 100 }}>Quality</Typography>
-                <LinearProgress
-                  variant="determinate"
-                  value={performance?.quality ?? 0}
-                  sx={{ flexGrow: 1, mr: 1 }}
-                  color="success"
-                />
-                <Typography variant="body2">{performance?.quality ?? 0}%</Typography>
-              </Box>
-            </Grid>
-            <Grid item xs={12}>
-              <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                <Typography variant="body2" sx={{ minWidth: 100 }}>Communication</Typography>
-                <LinearProgress
-                  variant="determinate"
-                  value={performance?.communication ?? 0}
-                  sx={{ flexGrow: 1, mr: 1 }}
-                  color="info"
-                />
-                <Typography variant="body2">{performance?.communication ?? 0}%</Typography>
-              </Box>
-            </Grid>
-          </Grid>
-        </Box>
+          {lastBid && (
+            <Box sx={{ mb: 2 }}>
+              <Typography variant="subtitle2" color="text.secondary" fontWeight={600}>Last Bid</Typography>
+              <Typography variant="body2" fontWeight={500}>
+                {formatCurrency(lastBid.amount)}
+              </Typography>
+            </Box>
+          )}
 
-        <Box>
-          <Typography variant="subtitle2" sx={{ mb: 1 }}>Contact</Typography>
-          <Grid container spacing={1}>
-            <Grid item xs={12}>
+          <Box sx={{ mb: 2 }}>
+            <Typography variant="subtitle2" color="text.secondary" fontWeight={600} sx={{ mb: 1 }}>Performance</Typography>
+            <Grid container spacing={1}>
+              <Grid item xs={12}>
+                <Box sx={{ display: 'flex', alignItems: 'center', mb: 0.5 }}>
+                  <Box sx={{ minWidth: 100 }}>
+                    <Typography variant="body2">On Time</Typography>
+                  </Box>
+                  <Box sx={{ flexGrow: 1, mr: 1 }}>
+                    <LinearProgress
+                      variant="determinate"
+                      value={performance?.onTime ?? 0}
+                      sx={{ 
+                        height: 6, 
+                        borderRadius: 3,
+                        bgcolor: alpha(theme.palette.warning.main, 0.2),
+                        '& .MuiLinearProgress-bar': {
+                          bgcolor: theme.palette.warning.main,
+                        }
+                      }}
+                    />
+                  </Box>
+                  <Typography variant="body2" fontWeight={500}>{performance?.onTime ?? 0}%</Typography>
+                </Box>
+              </Grid>
+              <Grid item xs={12}>
+                <Box sx={{ display: 'flex', alignItems: 'center', mb: 0.5 }}>
+                  <Box sx={{ minWidth: 100 }}>
+                    <Typography variant="body2">Quality</Typography>
+                  </Box>
+                  <Box sx={{ flexGrow: 1, mr: 1 }}>
+                    <LinearProgress
+                      variant="determinate"
+                      value={performance?.quality ?? 0}
+                      sx={{ 
+                        height: 6, 
+                        borderRadius: 3,
+                        bgcolor: alpha(theme.palette.success.main, 0.2),
+                        '& .MuiLinearProgress-bar': {
+                          bgcolor: theme.palette.success.main,
+                        }
+                      }}
+                    />
+                  </Box>
+                  <Typography variant="body2" fontWeight={500}>{performance?.quality ?? 0}%</Typography>
+                </Box>
+              </Grid>
+              <Grid item xs={12}>
+                <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                  <Box sx={{ minWidth: 100 }}>
+                    <Typography variant="body2">Communication</Typography>
+                  </Box>
+                  <Box sx={{ flexGrow: 1, mr: 1 }}>
+                    <LinearProgress
+                      variant="determinate"
+                      value={performance?.communication ?? 0}
+                      sx={{ 
+                        height: 6, 
+                        borderRadius: 3,
+                        bgcolor: alpha(theme.palette.info.main, 0.2),
+                        '& .MuiLinearProgress-bar': {
+                          bgcolor: theme.palette.info.main,
+                        }
+                      }}
+                    />
+                  </Box>
+                  <Typography variant="body2" fontWeight={500}>{performance?.communication ?? 0}%</Typography>
+                </Box>
+              </Grid>
+            </Grid>
+          </Box>
+
+          <Stack direction="column" spacing={0.5}>
+            <Typography variant="subtitle2" color="text.secondary" fontWeight={600} sx={{ mb: 0.5 }}>Contact</Typography>
+            {contact?.phone && (
               <Box sx={{ display: 'flex', alignItems: 'center' }}>
                 <PhoneIcon fontSize="small" sx={{ mr: 1, color: 'text.secondary' }} />
-                <Typography variant="body2">{contact?.phone || '-'}</Typography>
+                <Typography variant="body2">{formatPhoneNumber(contact.phone)}</Typography>
               </Box>
-            </Grid>
-            <Grid item xs={12}>
+            )}
+            {contact?.email && (
               <Box sx={{ display: 'flex', alignItems: 'center' }}>
                 <EmailIcon fontSize="small" sx={{ mr: 1, color: 'text.secondary' }} />
-                <Typography variant="body2">{contact?.email || '-'}</Typography>
+                <Typography variant="body2">{contact.email}</Typography>
               </Box>
-            </Grid>
-            <Grid item xs={12}>
+            )}
+            {contact?.location && (
               <Box sx={{ display: 'flex', alignItems: 'center' }}>
                 <LocationIcon fontSize="small" sx={{ mr: 1, color: 'text.secondary' }} />
-                <Typography variant="body2">{contact?.location || '-'}</Typography>
+                <Typography variant="body2">{contact.location}</Typography>
               </Box>
-            </Grid>
-          </Grid>
-        </Box>
-      </CardContent>
+            )}
+          </Stack>
+        </CardContent>
+      </CardActionArea>
     </Card>
   );
 };
 
 const Subcontractors: React.FC = () => {
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
   const [subcontractors, setSubcontractors] = useState<Subcontractor[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
@@ -386,17 +461,44 @@ const Subcontractors: React.FC = () => {
   );
 
   return (
-    <Box sx={{ py: 3, px: { xs: 1, sm: 2, md: 3 } }}>
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3, flexWrap: 'wrap' }}>
-        <Typography variant="h4" component="h1" sx={{ mb: { xs: 2, md: 0 } }}>
-          Subcontractors
-        </Typography>
-        <Box sx={{ display: 'flex' }}>
+    <Container maxWidth="xl" sx={{ mt: { xs: 2, sm: 3 }, pb: 4 }}>
+      <Stack 
+        direction={{ xs: 'column', sm: 'row' }} 
+        justifyContent="space-between" 
+        alignItems={{ xs: 'flex-start', sm: 'center' }}
+        spacing={2}
+        sx={{ mb: 3 }}
+      >
+        <Box>
+          <Stack direction="row" spacing={1.5} alignItems="center">
+            <Avatar 
+              sx={{ 
+                bgcolor: alpha(theme.palette.primary.main, 0.1),
+                color: theme.palette.primary.main,
+                width: 44,
+                height: 44,
+              }}
+            >
+              <ConstructionIcon />
+            </Avatar>
+            <Box>
+              <Typography variant={isMobile ? "h5" : "h4"} component="h1" fontWeight={600}>
+                Subcontractors
+              </Typography>
+              <Typography variant="body2" color="text.secondary">
+                {filteredSubcontractors.length} subcontractors {specialtyFilter && `in ${specialtyFilter}`}
+              </Typography>
+            </Box>
+          </Stack>
+        </Box>
+        
+        <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1} sx={{ width: { xs: '100%', sm: 'auto' } }}>
           <Button 
             variant="outlined" 
             startIcon={<DownloadIcon />}
             onClick={handleExportCSV}
-            sx={{ mr: 1 }}
+            sx={{ borderRadius: 2 }}
+            fullWidth={isMobile}
           >
             Export
           </Button>
@@ -404,7 +506,8 @@ const Subcontractors: React.FC = () => {
             variant="outlined" 
             startIcon={<UploadIcon />}
             onClick={handleImportClick}
-            sx={{ mr: 1 }}
+            sx={{ borderRadius: 2 }}
+            fullWidth={isMobile}
           >
             Import
           </Button>
@@ -412,8 +515,10 @@ const Subcontractors: React.FC = () => {
             variant="contained" 
             startIcon={<AddIcon />}
             onClick={handleAddSubcontractor}
+            sx={{ borderRadius: 2 }}
+            fullWidth={isMobile}
           >
-            Add Subcontractor
+            {isMobile ? 'Add' : 'Add Subcontractor'}
           </Button>
           <input
             type="file"
@@ -422,14 +527,14 @@ const Subcontractors: React.FC = () => {
             style={{ display: 'none' }}
             onChange={handleFileChange}
           />
-        </Box>
-      </Box>
+        </Stack>
+      </Stack>
       
       {importResult && (
         <Alert 
           severity={importResult.failed > 0 ? "warning" : "success"}
           onClose={clearImportResult}
-          sx={{ mb: 2 }}
+          sx={{ mb: 3, borderRadius: 2 }}
         >
           <AlertTitle>Import Complete</AlertTitle>
           Successfully imported: {importResult.success}. Failed: {importResult.failed}.
@@ -442,25 +547,54 @@ const Subcontractors: React.FC = () => {
         </Alert>
       )}
       
-      <Paper sx={{ p: 2, mb: 3, display: 'flex', alignItems: 'center', flexWrap: 'wrap' }}>
+      {error && (
+        <Alert 
+          severity="error" 
+          sx={{ 
+            mb: 3, 
+            borderRadius: 2,
+            '& .MuiAlert-icon': { alignItems: 'center' }
+          }}
+        >
+          {error}
+        </Alert>
+      )}
+      
+      <Stack
+        direction={{ xs: 'column', md: 'row' }}
+        spacing={2}
+        alignItems={{ xs: 'stretch', md: 'center' }}
+        sx={{ mb: 3 }}
+      >
         <TextField
           placeholder="Search by name or specialty..."
           variant="outlined"
+          fullWidth
           size="small"
           value={searchTerm}
           onChange={(e) => setSearchTerm(e.target.value)}
+          sx={{
+            flex: 1,
+            bgcolor: 'background.paper',
+            borderRadius: 2,
+            '& .MuiOutlinedInput-root': {
+              borderRadius: 2,
+              '& fieldset': {
+                borderColor: alpha(theme.palette.divider, 0.2),
+              },
+            },
+          }}
           InputProps={{
             startAdornment: (
               <InputAdornment position="start">
-                <SearchIcon />
+                <SearchIcon color="action" />
               </InputAdornment>
             ),
           }}
-          sx={{ flexGrow: 1, mr: { xs: 0, sm: 2 }, mb: { xs: 1, sm: 0 }, minWidth: '200px' }}
         />
-      </Paper>
+      </Stack>
       
-      <Box sx={{ borderBottom: 1, borderColor: 'divider', mb: 3 }}>
+      <Box sx={{ mb: 3 }}>
         <Tabs
           value={tabValue}
           onChange={handleTabChange}
@@ -468,6 +602,19 @@ const Subcontractors: React.FC = () => {
           scrollButtons="auto"
           allowScrollButtonsMobile 
           aria-label="Subcontractor specialty filter tabs"
+          sx={{
+            '& .MuiTabs-indicator': {
+              height: 3,
+              borderRadius: '3px 3px 0 0',
+            },
+            '& .MuiTab-root': {
+              minWidth: 'auto',
+              mx: 1,
+              '&:first-of-type': {
+                ml: 0,
+              },
+            }
+          }}
         >
           <Tab label="All" />
           <Tab label="Electrical" />
@@ -483,9 +630,9 @@ const Subcontractors: React.FC = () => {
       </Box>
       
       {loading ? (
-        <Box sx={{ display: 'flex', justifyContent: 'center', py: 5 }}><CircularProgress /></Box>
-      ) : error ? (
-        <Alert severity="error">{error}</Alert>
+        <Box sx={{ display: 'flex', justifyContent: 'center', py: 8 }}>
+          <CircularProgress />
+        </Box>
       ) : (
         <Grid container spacing={3}>
           {filteredSubcontractors.length > 0 ? (
@@ -500,14 +647,37 @@ const Subcontractors: React.FC = () => {
             ))
           ) : (
             <Grid item xs={12}>
-              <Typography sx={{ textAlign: 'center', py: 5, color: 'text.secondary' }}>
-                No subcontractors found matching your criteria.
-              </Typography>
+              <Card
+                elevation={0}
+                sx={{
+                  p: 4,
+                  borderRadius: 2,
+                  textAlign: 'center',
+                  border: `1px solid ${alpha(theme.palette.divider, 0.1)}`,
+                  bgcolor: alpha(theme.palette.background.paper, 0.7),
+                }}
+              >
+                <ConstructionIcon sx={{ fontSize: 48, color: alpha(theme.palette.text.secondary, 0.3), mb: 2 }} />
+                <Typography variant="h6" color="text.secondary" gutterBottom>
+                  No subcontractors found
+                </Typography>
+                <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
+                  {searchTerm ? 'Try adjusting your search or filters' : 'Add your first subcontractor to get started'}
+                </Typography>
+                <Button
+                  variant="contained"
+                  startIcon={<AddIcon />}
+                  onClick={handleAddSubcontractor}
+                  sx={{ borderRadius: 2 }}
+                >
+                  Add Subcontractor
+                </Button>
+              </Card>
             </Grid>
           )}
         </Grid>
       )}
-    </Box>
+    </Container>
   );
 };
 

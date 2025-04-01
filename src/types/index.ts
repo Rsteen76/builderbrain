@@ -51,7 +51,7 @@ export interface Project {
   }[];
   keyMilestones?: {
     name: string;
-    date: string;
+    date: Date | null;
     description: string;
   }[];
   requirements?: {

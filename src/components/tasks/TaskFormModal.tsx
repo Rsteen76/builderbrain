@@ -170,18 +170,18 @@ const TaskFormModal: React.FC<TaskFormModalProps> = ({ open, onClose, onSubmitSu
     try {
       let savedTask: Task;
       if (initialData?.id) {
-        const updatePayload: Partial<Omit<Task, 'id' | 'userId' | 'createdAt' | 'projectId'>> = {
-            title: taskData.title,
-            description: taskData.description,
-            status: taskData.status,
-            priority: taskData.priority,
-            assigneeId: taskData.assigneeId,
-            assigneeType: taskData.assigneeType,
-            dueDate: taskData.dueDate,
-            completedAt: taskData.completedAt,
-            parentTaskId: taskData.parentTaskId,
-            dependencies: taskData.dependencies,
-            attachments: taskData.attachments,
+        const updatePayload: any = {
+            ...(taskData.title !== undefined ? { title: taskData.title } : {}),
+            ...(taskData.description !== undefined ? { description: taskData.description } : {}),
+            ...(taskData.status !== undefined ? { status: taskData.status } : {}),
+            ...(taskData.priority !== undefined ? { priority: taskData.priority } : {}),
+            ...(taskData.assigneeId ? { assigneeId: taskData.assigneeId } : { assigneeId: null }),
+            ...(taskData.assigneeType ? { assigneeType: taskData.assigneeType } : {}),
+            ...(taskData.dueDate !== undefined ? { dueDate: taskData.dueDate } : {}),
+            ...(taskData.completedAt !== undefined ? { completedAt: taskData.completedAt } : {}),
+            ...(taskData.parentTaskId ? { parentTaskId: taskData.parentTaskId } : {}),
+            ...(taskData.dependencies ? { dependencies: taskData.dependencies } : {}),
+            ...(taskData.attachments ? { attachments: taskData.attachments } : {}),
         };
         await TaskService.updateTask(initialData.id, updatePayload);
         const updatedTaskData = await TaskService.getTask(userId, initialData.id);
@@ -192,18 +192,18 @@ const TaskFormModal: React.FC<TaskFormModalProps> = ({ open, onClose, onSubmitSu
         if (!taskData.projectId) {
              throw new Error("Project ID is missing");
         }
-         const createPayload: Omit<Task, 'id' | 'userId' | 'createdAt' | 'updatedAt'> = {
+         const createPayload: any = {
             projectId: taskData.projectId!,
             title: taskData.title || '',
             description: taskData.description || '',
             status: taskData.status!,
             priority: taskData.priority!,
-            assigneeId: taskData.assigneeId || undefined,
-            assigneeType: taskData.assigneeType,
+            ...(taskData.assigneeId ? { assigneeId: taskData.assigneeId } : { assigneeId: null }),
+            ...(taskData.assigneeType ? { assigneeType: taskData.assigneeType } : {}),
             dueDate: taskData.dueDate || null,
             completedAt: taskData.completedAt || null,
             createdBy: taskData.createdBy || userId,
-            parentTaskId: taskData.parentTaskId,
+            ...(taskData.parentTaskId ? { parentTaskId: taskData.parentTaskId } : {}),
             dependencies: taskData.dependencies || [],
             attachments: taskData.attachments || [],
         };

@@ -84,7 +84,8 @@ export type BidSortField =
   | 'priority' 
   | 'projectName' 
   | 'subcontractorName'
-  | 'title';
+  | 'title'
+  | 'scope';
 
 export type SortDirection = 'asc' | 'desc';
 export interface BidSort { field: BidSortField; direction: SortDirection; }

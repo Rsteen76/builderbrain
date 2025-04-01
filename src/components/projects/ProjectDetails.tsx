@@ -58,14 +58,36 @@ import {
   Business as BusinessIcon,
   CheckCircleOutline as CheckCircleOutlineIcon,
   RadioButtonUnchecked as RadioButtonUncheckedIcon,
+  Timeline as TimelineIcon,
+  AccountTree as AccountTreeIcon,
 } from '@mui/icons-material';
 import { ProjectService } from '../../services/project';
-import { Project, LineItem, Task } from '../../types';
+import { Project, LineItem, Task, Bid } from '../../types';
 import { useAuth } from '../../contexts/AuthContext';
 import LineItemManager from './LineItemManager';
 import BidManager from './BidManager';
 import ProjectTaskManager from './ProjectTaskManager';
-import { formatCurrency, formatPercentage } from '../../utils/formatters';
+import { formatCurrency, formatPercentage, formatDate } from '../../utils/formatters';
+// @ts-ignore 
+import Timeline, { GanttData } from 'react-gantt-timeline';
+
+// Helper Function to calculate Project Duration
+const calculateProjectDuration = (start?: Date | null, end?: Date | null): number => {
+  if (!start || !end) return 0;
+  const diffTime = Math.abs(end.getTime() - start.getTime());
+  const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)); 
+  return diffDays;
+};
+
+// Helper Function to calculate Days Passed
+const calculateDaysPassed = (start?: Date | null): number => {
+  if (!start) return 0;
+  const now = new Date();
+  if (start > now) return 0;
+  const diffTime = Math.abs(now.getTime() - start.getTime());
+  const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)); 
+  return diffDays;
+};
 
 const ProjectDetails: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -103,8 +125,36 @@ const ProjectDetails: React.FC = () => {
         if (!projectData) {
           setError(`Project with ID "${id}" not found or you don't have permission to view it.`);
         } else {
-          setProject(projectData);
-          console.log('Loaded project data for user:', user.uid, projectData);
+          // Ensure date fields are Date objects
+           const processedProject = {
+            ...projectData,
+            startDate: projectData.startDate ? new Date(projectData.startDate) : new Date(), // Provide default if null
+            endDate: projectData.endDate ? new Date(projectData.endDate) : null,
+            createdAt: projectData.createdAt ? new Date(projectData.createdAt) : new Date(),
+            updatedAt: projectData.updatedAt ? new Date(projectData.updatedAt) : new Date(),
+            tasks: (projectData.tasks || []).map(task => ({
+              ...task,
+              createdAt: task.createdAt ? new Date(task.createdAt) : new Date(), // Provide default
+              updatedAt: task.updatedAt ? new Date(task.updatedAt) : new Date(),
+              dueDate: task.dueDate ? new Date(task.dueDate) : null,
+              completedAt: task.completedAt ? new Date(task.completedAt) : null,
+            })),
+             // Ensure milestone dates are Date objects or null
+            keyMilestones: (projectData.keyMilestones || []).map(ms => {
+              let dateObj: Date | null = null;
+              if (ms.date) {
+                  try {
+                      const parsedDate = new Date(ms.date);
+                      if (!isNaN(parsedDate.getTime())) {
+                          dateObj = parsedDate;
+                      }
+                  } catch (e) { /* ignore parse errors */ }
+              }
+              return { ...ms, date: dateObj }; // Store as Date or null
+            })
+          };
+          setProject(processedProject);
+          console.log('Loaded project data for user:', user.uid, processedProject);
         }
       } catch (err) {
         console.error('Error fetching project details:', err);
@@ -145,13 +195,18 @@ const ProjectDetails: React.FC = () => {
     }
   };
 
-  const formatDate = (date: Date | null | undefined) => {
+  const formatNullableDate = (date: Date | null | undefined): string => {
     if (!date) return 'Not set';
-    return new Date(date).toLocaleDateString('en-US', {
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric',
-    });
+    try {
+      return new Date(date).toLocaleDateString('en-US', {
+        year: 'numeric',
+        month: 'short',
+        day: 'numeric',
+      });
+    } catch (e) {
+      console.error("Error formatting date:", date, e);
+      return 'Invalid Date';
+    }
   };
 
   const handleProjectUpdate = (updatedProject: Project) => {
@@ -159,10 +214,77 @@ const ProjectDetails: React.FC = () => {
     // Maybe add a notification/snackbar here to confirm update
   };
 
-  // Calculate overview data
-  const overviewData = useMemo(() => calculateOverviewData(project), [project]);
+  // Calculate overview data, including Gantt data
+  const { overviewData, ganttData } = useMemo(() => {
+    const calculatedOverview = calculateOverviewData(project);
+    
+    // --- Transform data for Gantt directly inside useMemo ---
+    const transformData = (proj: Project | null, currentTheme: any): GanttData[] => {
+        if (!proj) return [];
+        const ganttItems: GanttData[] = [];
+
+        (proj.tasks || []).forEach(task => {
+          const startDate = task.createdAt; 
+          let endDate = task.dueDate; 
+          if (!endDate && startDate) {
+            endDate = new Date(startDate);
+            endDate.setDate(startDate.getDate() + 1);
+          }
+
+          if (startDate && endDate) {
+            let color = currentTheme.palette.primary.main;
+            let style: 'primary' | 'secondary' | 'milestone' = 'primary';
+            if (task.status === 'completed') {
+              color = currentTheme.palette.success.main;
+              style = 'secondary';
+            } else if (task.status === 'in_progress') {
+              color = currentTheme.palette.warning.main;
+            }
+
+            ganttItems.push({
+              id: `task-${task.id}`,
+              name: task.title,
+              start: startDate,
+              end: endDate,
+              color: color, 
+              style: style, 
+            });
+          }
+        });
+
+        (proj.keyMilestones || []).forEach((milestone, index) => {
+          // The date should already be a Date object or null due to processing in useEffect
+          const milestoneDate = milestone.date; 
+          if (milestoneDate && !isNaN(milestoneDate.getTime())) {
+            ganttItems.push({
+              id: `milestone-${index}`,
+              name: `Milestone: ${milestone.name}`,
+              start: milestoneDate,
+              end: milestoneDate,
+              color: currentTheme.palette.secondary.main,
+              style: 'milestone',
+            });
+          }
+        });
+
+        const validGanttItems = ganttItems.filter(item => item.start && !isNaN(item.start.getTime()));
+        validGanttItems.sort((a, b) => a.start.getTime() - b.start.getTime());
+        return validGanttItems;
+    };
+    // --- End transformation logic ---
+
+    const calculatedGanttData = transformData(project, theme); // Use theme directly here
+    return { overviewData: calculatedOverview, ganttData: calculatedGanttData };
+  }, [project, theme]); // Add theme dependency
+  
   const budgetTotal = typeof project?.budget === 'object' ? project.budget.total : (project?.budget || 0);
-  const budgetProgress = budgetTotal > 0 ? (overviewData.totalEstimate / budgetTotal) * 100 : 0;
+  const budgetSpent = typeof project?.budget === 'object' ? project.budget.spent : 0; // Assuming spent is tracked
+  const budgetProgress = budgetTotal > 0 ? (budgetSpent / budgetTotal) * 100 : 0; // Use spent for progress
+  const estimatedCost = overviewData.totalEstimate; // Use calculated estimate
+  const estimateVsBudgetProgress = budgetTotal > 0 ? (estimatedCost / budgetTotal) * 100 : 0;
+  const projectDuration = calculateProjectDuration(project?.startDate, project?.endDate);
+  const daysPassed = calculateDaysPassed(project?.startDate);
+  const scheduleProgress = projectDuration > 0 ? Math.min((daysPassed / projectDuration) * 100, 100) : 0;
 
   // Status mapping for visual display  
   const getStatusColor = (status: string) => {
@@ -398,480 +520,215 @@ const ProjectDetails: React.FC = () => {
           <Box role="tabpanel" hidden={activeTab !== 0} id="tabpanel-overview" aria-labelledby="tab-overview">
             {activeTab === 0 && project && (
               <Grid container spacing={3}>
-                {/* --- Left Column (Main Details & Finance) --- */} 
-                <Grid item xs={12} md={8}>
-                  {/* Project Description Card */} 
+                {/* --- Key Metrics Row --- */} 
+                <Grid item xs={12}>
+                  <Grid container spacing={3}>
+                    {/* Budget Card */}
+                    <Grid item xs={12} sm={4}>
+                      <Card 
+                        elevation={0}
+                        sx={{ 
+                          borderRadius: 2,
+                          border: `1px solid ${alpha(theme.palette.divider, 0.1)}`,
+                          boxShadow: `0 2px 8px ${alpha(theme.palette.common.black, 0.04)}`,
+                          height: '100%'
+                        }}
+                      >
+                        <CardContent>
+                          <Stack direction="row" spacing={1.5} alignItems="center" sx={{ mb: 2 }}>
+                            <Avatar 
+                              sx={{ 
+                                bgcolor: alpha(theme.palette.success.main, 0.1),
+                                color: theme.palette.success.main,
+                                width: 36,
+                                height: 36, 
+                              }}
+                            >
+                              <BudgetIcon />
+                            </Avatar>
+                            <Typography variant="h6" fontWeight={500}>Budget</Typography>
+                          </Stack>
+                          <Typography variant="h4" fontWeight={600}>{formatCurrency(budgetTotal)}</Typography>
+                          <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+                            Estimated Cost: {formatCurrency(estimatedCost)}
+                          </Typography>
+                          <Tooltip title={`Estimated Cost (${formatCurrency(estimatedCost)}) / Budget (${formatCurrency(budgetTotal)})`}>
+                            <Box>
+                              <LinearProgress 
+                                variant="determinate" 
+                                value={Math.min(estimateVsBudgetProgress, 100)} // Cap at 100%
+                                color={estimateVsBudgetProgress > 100 ? 'error' : 'success'}
+                                sx={{ 
+                                  height: 8, 
+                                  borderRadius: 4,
+                                  backgroundColor: alpha(
+                                    estimateVsBudgetProgress > 100 ? theme.palette.error.main : theme.palette.success.main, 
+                                    0.1
+                                  ),
+                                  mb: 0.5
+                                }}
+                              />
+                              <Typography 
+                                variant="caption" 
+                                sx={{ 
+                                  fontWeight: 'bold',
+                                  color: estimateVsBudgetProgress > 100 ? theme.palette.error.main : theme.palette.success.dark 
+                                }}
+                              >
+                                {formatPercentage(estimateVsBudgetProgress / 100)} Est. Used
+                                {estimateVsBudgetProgress > 100 && ` (${formatCurrency(estimatedCost - budgetTotal)} Over)`}
+                              </Typography>
+                            </Box>
+                          </Tooltip>
+                        </CardContent>
+                      </Card>
+                    </Grid>
+                    
+                    {/* Schedule Card */}
+                    <Grid item xs={12} sm={4}>
+                      <Card 
+                        elevation={0}
+                        sx={{ 
+                          borderRadius: 2,
+                          border: `1px solid ${alpha(theme.palette.divider, 0.1)}`,
+                          boxShadow: `0 2px 8px ${alpha(theme.palette.common.black, 0.04)}`,
+                          height: '100%'
+                        }}
+                      >
+                        <CardContent>
+                          <Stack direction="row" spacing={1.5} alignItems="center" sx={{ mb: 2 }}>
+                            <Avatar 
+                              sx={{ 
+                                bgcolor: alpha(theme.palette.primary.main, 0.1),
+                                color: theme.palette.primary.main,
+                                width: 36,
+                                height: 36, 
+                              }}
+                            >
+                              <ScheduleIcon />
+                            </Avatar>
+                            <Typography variant="h6" fontWeight={500}>Schedule</Typography>
+                          </Stack>
+                          <Typography variant="h4" fontWeight={600}>
+                            {projectDuration} <Typography variant="h6" component="span" fontWeight={400}>days</Typography>
+                          </Typography>
+                           <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+                            {formatNullableDate(project.startDate)} - {formatNullableDate(project.endDate)}
+                          </Typography>
+                          <Tooltip title={`${daysPassed} of ${projectDuration} days passed`}>
+                            <Box>
+                              <LinearProgress 
+                                variant="determinate" 
+                                value={scheduleProgress}
+                                color="primary"
+                                sx={{ 
+                                  height: 8, 
+                                  borderRadius: 4,
+                                  backgroundColor: alpha(theme.palette.primary.main, 0.1),
+                                  mb: 0.5
+                                }}
+                              />
+                              <Typography variant="caption" fontWeight="bold" color="primary.dark">
+                                {formatPercentage(scheduleProgress / 100)} Complete
+                              </Typography>
+                            </Box>
+                          </Tooltip>
+                        </CardContent>
+                      </Card>
+                    </Grid>
+                    
+                    {/* Tasks Card */}
+                    <Grid item xs={12} sm={4}>
+                      <Card 
+                        elevation={0}
+                        sx={{ 
+                          borderRadius: 2,
+                          border: `1px solid ${alpha(theme.palette.divider, 0.1)}`,
+                          boxShadow: `0 2px 8px ${alpha(theme.palette.common.black, 0.04)}`,
+                          height: '100%'
+                        }}
+                      >
+                        <CardContent>
+                          <Stack direction="row" spacing={1.5} alignItems="center" sx={{ mb: 2 }}>
+                            <Avatar 
+                              sx={{ 
+                                bgcolor: alpha(theme.palette.warning.main, 0.1),
+                                color: theme.palette.warning.main,
+                                width: 36,
+                                height: 36, 
+                              }}
+                            >
+                              <AccountTreeIcon />
+                            </Avatar>
+                            <Typography variant="h6" fontWeight={500}>Tasks</Typography>
+                          </Stack>
+                           <Typography variant="h4" fontWeight={600}>{(project.tasks || []).length} <Typography variant="h6" component="span" fontWeight={400}>total</Typography></Typography>
+                          <Stack direction="row" spacing={2} sx={{ mt: 2, justifyContent: 'space-around' }}>
+                            <Stack alignItems="center">
+                              <Typography variant="h6" color="error.main" fontWeight={500}>{overviewData.tasksToDo}</Typography>
+                              <Typography variant="caption" color="text.secondary">To Do</Typography>
+                            </Stack>
+                            <Stack alignItems="center">
+                              <Typography variant="h6" color="warning.main" fontWeight={500}>{overviewData.tasksInProgress}</Typography>
+                              <Typography variant="caption" color="text.secondary">In Progress</Typography>
+                            </Stack>
+                            <Stack alignItems="center">
+                              <Typography variant="h6" color="success.main" fontWeight={500}>{overviewData.tasksDone}</Typography>
+                              <Typography variant="caption" color="text.secondary">Completed</Typography>
+                            </Stack>
+                          </Stack>
+                        </CardContent>
+                      </Card>
+                    </Grid>
+                  </Grid>
+                </Grid>
+                
+                {/* --- Project Timeline --- */}
+                <Grid item xs={12}>
                   <Card 
                     elevation={0}
                     sx={{ 
-                      mb: 3, 
                       borderRadius: 2,
                       border: `1px solid ${alpha(theme.palette.divider, 0.1)}`,
-                      boxShadow: `0 2px 8px ${alpha(theme.palette.common.black, 0.04)}`
+                      boxShadow: `0 2px 8px ${alpha(theme.palette.common.black, 0.04)}`,
                     }}
                   >
                     <CardContent>
                       <Stack direction="row" spacing={1.5} alignItems="center" sx={{ mb: 2 }}>
                         <Avatar 
                           sx={{ 
-                            bgcolor: alpha(theme.palette.info.main, 0.1),
-                            color: theme.palette.info.main,
+                            bgcolor: alpha(theme.palette.secondary.main, 0.1),
+                            color: theme.palette.secondary.main,
                             width: 36,
                             height: 36, 
                           }}
                         >
-                          <OverviewIcon />
+                          <TimelineIcon />
                         </Avatar>
-                        <Typography variant="h6" fontWeight={500}>Description</Typography>
+                        <Typography variant="h6" fontWeight={500}>Project Timeline</Typography>
                       </Stack>
-                      <Typography variant="body1" sx={{ pl: 1 }}>
-                        {project.description || 'No description provided.'}
-                      </Typography>
-                    </CardContent>
-                  </Card>
-                  
-                  {/* Financial Summary Card */} 
-                  <Card 
-                    elevation={0}
-                    sx={{ 
-                      mb: 3, 
-                      borderRadius: 2,
-                      border: `1px solid ${alpha(theme.palette.divider, 0.1)}`,
-                      boxShadow: `0 2px 8px ${alpha(theme.palette.common.black, 0.04)}`
-                    }}
-                  >
-                    <CardContent>
-                      <Stack direction="row" spacing={1.5} alignItems="center" sx={{ mb: 2 }}>
-                        <Avatar 
-                          sx={{ 
-                            bgcolor: alpha(theme.palette.success.main, 0.1),
-                            color: theme.palette.success.main,
-                            width: 36,
-                            height: 36,
-                          }}
-                        >
-                          <FinanceIcon />
-                        </Avatar>
-                        <Typography variant="h6" fontWeight={500}>Financial Summary</Typography>
-                      </Stack>
-                      <Box sx={{ px: 1 }}>
-                        <Grid container spacing={3}>
-                          <Grid item xs={12} sm={6}>
-                            <Box sx={{ p: 2, borderRadius: 2, bgcolor: alpha(theme.palette.background.default, 0.5) }}>
-                              <Typography variant="body2" color="text.secondary" gutterBottom>Budget</Typography>
-                              <Typography variant="h5" color="text.primary" fontWeight={600}>
-                                {formatCurrency(typeof project.budget === 'object' ? project.budget.total : project.budget)}
-                              </Typography>
-                            </Box>
-                          </Grid>
-                          <Grid item xs={12} sm={6}>
-                            <Box sx={{ p: 2, borderRadius: 2, bgcolor: alpha(theme.palette.background.default, 0.5) }}>
-                              <Typography variant="body2" color="text.secondary" gutterBottom>Total Estimated Cost</Typography>
-                              <Typography 
-                                variant="h5" 
-                                color={budgetProgress > 100 ? "error.main" : "text.primary"}
-                                fontWeight={600}
-                              >
-                                {formatCurrency(overviewData.totalEstimate)}
-                              </Typography>
-                            </Box>
-                          </Grid>
-                          <Grid item xs={12}>
-                            <Typography variant="body2" color="text.secondary" gutterBottom fontWeight={500}>
-                              Budget Usage (Estimate vs Budget)
-                            </Typography>
-                            <Stack direction="row" spacing={2} alignItems="center">
-                              <LinearProgress 
-                                variant="determinate" 
-                                value={Math.min(budgetProgress, 100)} // Cap at 100%
-                                color={budgetProgress > 100 ? 'error' : 'primary'}
-                                sx={{ 
-                                  flexGrow: 1, 
-                                  height: 10, 
-                                  borderRadius: 5,
-                                  backgroundColor: alpha(
-                                    budgetProgress > 100 ? theme.palette.error.main : theme.palette.primary.main, 
-                                    0.1
-                                  ),
-                                }}
-                              />
-                              <Typography 
-                                variant="body2" 
-                                sx={{ 
-                                  fontWeight: 'bold',
-                                  color: budgetProgress > 100 ? theme.palette.error.main : 'inherit' 
-                                }}
-                              >
-                                {formatPercentage(budgetProgress / 100)}
-                              </Typography>
-                            </Stack>
-                            {budgetProgress > 100 && 
-                              <Alert 
-                                severity="warning" 
-                                sx={{ 
-                                  mt: 2, 
-                                  borderRadius: 1.5, 
-                                  '& .MuiAlert-icon': { alignItems: 'center' }
-                                }}
-                              >
-                                Estimated cost exceeds budget by {formatCurrency(overviewData.totalEstimate - budgetTotal)}
-                              </Alert>
-                            }
-                            {budgetTotal > 0 && overviewData.totalEstimate <= budgetTotal &&
-                              <Box sx={{ 
-                                mt: 1.5,
-                                p: 1.5, 
-                                borderRadius: 1.5, 
-                                bgcolor: alpha(theme.palette.success.main, 0.1),
-                                display: 'flex',
-                                alignItems: 'center',
-                                gap: 1,
-                              }}>
-                                <CheckCircleOutlineIcon color="success" fontSize="small" />
-                                <Typography variant="body2" color="success.main" fontWeight={500}>
-                                  Remaining Budget: {formatCurrency(budgetTotal - overviewData.totalEstimate)}
-                                </Typography>
-                              </Box>
-                            }
-                          </Grid>
-                        </Grid>
-                      </Box>
+                      {ganttData.length > 0 && project.startDate ? (
+                        <Box sx={{ 
+                          "& .rt-timeline__item--primary": { backgroundColor: alpha(theme.palette.primary.main, 0.8) },
+                          "& .rt-timeline__item--secondary": { backgroundColor: alpha(theme.palette.success.main, 0.8) },
+                          "& .rt-timeline__item--milestone": { backgroundColor: alpha(theme.palette.secondary.main, 0.8), height: '8px !important' }, // Make milestones thinner
+                          "& .rt-timeline__time": { fontSize: '0.75rem' },
+                          "& .rt-timeline__header-row:first-of-type .rt-timeline__header-col:not(:first-child)": { fontSize: '0.8rem' },
+                          "& .rt-timeline__row-text": { fontSize: '0.85rem' },
+                        }}>
+                          <Timeline 
+                            data={ganttData} 
+                            links={[]} // Add links later if needed for dependencies
+                            scale={{ start: project.startDate, end: project.endDate || new Date(project.startDate.getTime() + 30 * 24 * 60 * 60 * 1000) }} // Fallback to 30 days if no end date
+                            />
+                        </Box>
+                      ) : (
+                        <Alert severity="info">No tasks or milestones with dates to display timeline.</Alert>
+                      )}
                     </CardContent>
                   </Card>
                 </Grid>
 
-                {/* --- Right Column (Schedule, Team, Milestones) --- */}
-                <Grid item xs={12} md={4}>
-                  {/* Schedule Snapshot Card */} 
-                  <Card 
-                    elevation={0}
-                    sx={{ 
-                      mb: 3, 
-                      borderRadius: 2,
-                      border: `1px solid ${alpha(theme.palette.divider, 0.1)}`,
-                      boxShadow: `0 2px 8px ${alpha(theme.palette.common.black, 0.04)}`
-                    }}
-                  >
-                    <CardContent>
-                      <Stack direction="row" spacing={1.5} alignItems="center" sx={{ mb: 2 }}>
-                        <Avatar 
-                          sx={{ 
-                            bgcolor: alpha(theme.palette.primary.main, 0.1),
-                            color: theme.palette.primary.main,
-                            width: 36,
-                            height: 36, 
-                          }}
-                        >
-                          <ScheduleIcon />
-                        </Avatar>
-                        <Typography variant="h6" fontWeight={500}>Schedule</Typography>
-                      </Stack>
-                      <Stack spacing={2} sx={{ px: 1 }}>
-                        <Box sx={{ 
-                          display: 'flex', 
-                          justifyContent: 'space-between',
-                          p: 1.5, 
-                          borderRadius: 2, 
-                          bgcolor: alpha(theme.palette.background.default, 0.5)
-                        }}>
-                          <Stack>
-                            <Typography variant="body2" color="text.secondary">Start Date</Typography>
-                            <Typography variant="body1" fontWeight={500}>{formatDate(project.startDate)}</Typography>
-                          </Stack>
-                          <Stack alignItems="flex-end">
-                            <Typography variant="body2" color="text.secondary">Target End</Typography>
-                            <Typography variant="body1" fontWeight={500}>{formatDate(project.endDate)}</Typography>
-                          </Stack>
-                        </Box>
-                        
-                        <Divider />
-                        
-                        <Box>
-                          <Typography variant="body2" color="text.secondary" fontWeight={500} gutterBottom>
-                            Task Status
-                          </Typography>
-                          <Stack 
-                            direction="row" 
-                            justifyContent="space-around" 
-                            sx={{ 
-                              p: 1.5, 
-                              borderRadius: 2, 
-                              bgcolor: alpha(theme.palette.background.default, 0.5),
-                              textAlign: 'center',
-                            }}
-                          >
-                            <Stack alignItems="center">
-                              <Badge 
-                                badgeContent={overviewData.tasksToDo} 
-                                color="error"
-                                max={99}
-                                sx={{ 
-                                  '& .MuiBadge-badge': { 
-                                    fontSize: '0.8rem',
-                                    minWidth: 20,
-                                    height: 20,
-                                  }
-                                }}
-                              >
-                                <Avatar 
-                                  sx={{ 
-                                    width: 32, 
-                                    height: 32,
-                                    bgcolor: alpha(theme.palette.error.main, 0.1),
-                                    color: theme.palette.error.main,
-                                  }}
-                                >
-                                  <RadioButtonUncheckedIcon fontSize="small" />
-                                </Avatar>
-                              </Badge>
-                              <Typography variant="caption" sx={{ mt: 0.5 }}>To Do</Typography>
-                            </Stack>
-                            
-                            <Stack alignItems="center">
-                              <Badge 
-                                badgeContent={overviewData.tasksInProgress} 
-                                color="warning"
-                                max={99}
-                                sx={{ 
-                                  '& .MuiBadge-badge': { 
-                                    fontSize: '0.8rem',
-                                    minWidth: 20,
-                                    height: 20,
-                                  }
-                                }}
-                              >
-                                <Avatar 
-                                  sx={{ 
-                                    width: 32, 
-                                    height: 32,
-                                    bgcolor: alpha(theme.palette.warning.main, 0.1),
-                                    color: theme.palette.warning.main,
-                                  }}
-                                >
-                                  <TimeIcon fontSize="small" />
-                                </Avatar>
-                              </Badge>
-                              <Typography variant="caption" sx={{ mt: 0.5 }}>In Progress</Typography>
-                            </Stack>
-                            
-                            <Stack alignItems="center">
-                              <Badge 
-                                badgeContent={overviewData.tasksDone} 
-                                color="success"
-                                max={99}
-                                sx={{ 
-                                  '& .MuiBadge-badge': { 
-                                    fontSize: '0.8rem',
-                                    minWidth: 20,
-                                    height: 20,
-                                  }
-                                }}
-                              >
-                                <Avatar 
-                                  sx={{ 
-                                    width: 32, 
-                                    height: 32,
-                                    bgcolor: alpha(theme.palette.success.main, 0.1),
-                                    color: theme.palette.success.main,
-                                  }}
-                                >
-                                  <CheckCircleOutlineIcon fontSize="small" />
-                                </Avatar>
-                              </Badge>
-                              <Typography variant="caption" sx={{ mt: 0.5 }}>Done</Typography>
-                            </Stack>
-                          </Stack>
-                        </Box>
-                        
-                        <Divider />
-                        
-                        <Box sx={{ p: 1.5, borderRadius: 2, bgcolor: alpha(theme.palette.background.default, 0.5) }}>
-                          <Typography variant="body2" color="text.secondary" fontWeight={500} gutterBottom>
-                            Next Milestone
-                          </Typography>
-                          {overviewData.nextMilestone ? (
-                            <Stack direction="row" spacing={1.5}>
-                              <EventIcon color="primary" />
-                              <Stack>
-                                <Typography variant="body1" fontWeight={500}>
-                                  {overviewData.nextMilestone.name}
-                                </Typography>
-                                <Typography variant="caption" color="text.secondary">
-                                  {formatDate(overviewData.nextMilestone.dateObj)}
-                                </Typography>
-                              </Stack>
-                            </Stack>
-                          ) : (
-                            <Typography variant="body2" color="text.secondary">
-                              No upcoming milestones.
-                            </Typography>
-                          )}
-                        </Box>
-                      </Stack>
-                    </CardContent>
-                  </Card>
-              
-                  {/* Team Card */}
-                  <Card 
-                    elevation={0}
-                    sx={{ 
-                      mb: 3, 
-                      borderRadius: 2,
-                      border: `1px solid ${alpha(theme.palette.divider, 0.1)}`,
-                      boxShadow: `0 2px 8px ${alpha(theme.palette.common.black, 0.04)}`
-                    }}
-                  >
-                    <CardContent>
-                      <Stack direction="row" spacing={1.5} alignItems="center" sx={{ mb: 2 }}>
-                        <Avatar 
-                          sx={{ 
-                            bgcolor: alpha(theme.palette.warning.main, 0.1),
-                            color: theme.palette.warning.main,
-                            width: 36,
-                            height: 36, 
-                          }}
-                        >
-                          <TeamIcon />
-                        </Avatar>
-                        <Typography variant="h6" fontWeight={500}>Team</Typography>
-                      </Stack>
-                      {project.team && project.team.length > 0 ? (
-                        <Box sx={{ px: 1 }}>
-                          <Box sx={{ 
-                            p: 1.5, 
-                            borderRadius: 2, 
-                            bgcolor: alpha(theme.palette.background.default, 0.5),
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'space-between',
-                          }}>
-                            <Stack direction="row" spacing={1} alignItems="center">
-                              <Badge 
-                                badgeContent={project.team.length} 
-                                color="primary"
-                                max={99}
-                                sx={{ 
-                                  '& .MuiBadge-badge': { 
-                                    fontSize: '0.8rem',
-                                    minWidth: 20,
-                                    height: 20,
-                                  }
-                                }}
-                              >
-                                <Avatar sx={{ bgcolor: alpha(theme.palette.primary.main, 0.2), color: theme.palette.primary.main }}>
-                                  <BusinessIcon />
-                                </Avatar>
-                              </Badge>
-                              <Typography variant="body1" fontWeight={500}>Team members</Typography>
-                            </Stack>
-                            <Button 
-                              variant="outlined" 
-                              size="small" 
-                              sx={{ 
-                                borderRadius: 4, 
-                                minWidth: 0, 
-                                py: 0.5,
-                                px: 1,
-                              }}
-                            >
-                              View All
-                            </Button>
-                          </Box>
-                        </Box>
-                      ) : (
-                        <Alert 
-                          severity="info" 
-                          icon={<TeamIcon color="info" />}
-                          sx={{ 
-                            borderRadius: 2, 
-                            bgcolor: alpha(theme.palette.info.main, 0.05),
-                            '& .MuiAlert-icon': { alignItems: 'center' }
-                          }}
-                        >
-                          No team members assigned yet.
-                        </Alert>
-                      )}
-                    </CardContent>
-                  </Card>
-                  
-                  {/* Milestones Card */}
-                  <Card 
-                    elevation={0}
-                    sx={{ 
-                      borderRadius: 2,
-                      border: `1px solid ${alpha(theme.palette.divider, 0.1)}`,
-                      boxShadow: `0 2px 8px ${alpha(theme.palette.common.black, 0.04)}`
-                    }}
-                  >
-                    <CardContent>
-                      <Stack direction="row" spacing={1.5} alignItems="center" sx={{ mb: 2 }}>
-                        <Avatar 
-                          sx={{ 
-                            bgcolor: alpha(theme.palette.info.main, 0.1),
-                            color: theme.palette.info.main,
-                            width: 36,
-                            height: 36, 
-                          }}
-                        >
-                          <MilestonesIcon />
-                        </Avatar>
-                        <Typography variant="h6" fontWeight={500}>Milestones</Typography>
-                      </Stack>
-                      {project.keyMilestones && project.keyMilestones.length > 0 ? (
-                        <Box sx={{ px: 1 }}>
-                          <List 
-                            sx={{ 
-                              p: 1.5, 
-                              borderRadius: 2, 
-                              bgcolor: alpha(theme.palette.background.default, 0.5),
-                            }}
-                          >
-                            {project.keyMilestones.map((milestone: { name: string, date: string, description: string }, index: number) => (
-                              <ListItem 
-                                key={index} 
-                                disableGutters 
-                                sx={{ 
-                                  py: 1,
-                                  px: 0,
-                                  borderBottom: index < project.keyMilestones!.length - 1 ? 
-                                    `1px solid ${alpha(theme.palette.divider, 0.1)}` : 'none',
-                                }}
-                              >
-                                <ListItemIcon sx={{ minWidth: 32 }}>
-                                  <EventIcon color="primary" fontSize="small" />
-                                </ListItemIcon>
-                                <ListItemText 
-                                  primary={milestone.name}
-                                  secondary={formatDate(new Date(milestone.date))}
-                                  primaryTypographyProps={{ 
-                                    variant: 'body2', 
-                                    fontWeight: 500,
-                                  }}
-                                  secondaryTypographyProps={{ 
-                                    variant: 'caption',
-                                    color: 'text.secondary',
-                                  }}
-                                />
-                              </ListItem>
-                            ))}
-                          </List>
-                        </Box>
-                      ) : (
-                        <Alert 
-                          severity="info" 
-                          icon={<MilestonesIcon color="info" />}
-                          sx={{ 
-                            borderRadius: 2, 
-                            bgcolor: alpha(theme.palette.info.main, 0.05),
-                            '& .MuiAlert-icon': { alignItems: 'center' }
-                          }}
-                        >
-                          No milestones defined yet.
-                        </Alert>
-                      )}
-                    </CardContent>
-                  </Card>
-                </Grid>
               </Grid>
             )}
           </Box>
@@ -899,10 +756,11 @@ const ProjectDetails: React.FC = () => {
   );
 };
 
-// Function to calculate overview data (can be memoized)
+// Function to calculate overview data (simple version)
 const calculateOverviewData = (project: Project | null) => {
     if (!project) return { totalEstimate: 0, tasksToDo: 0, tasksInProgress: 0, tasksDone: 0, nextMilestone: null };
 
+    // Use line items for estimate, or bids if no line items?
     const totalEstimate = project.lineItems?.reduce((sum: number, item: LineItem) => sum + (item.totalCost || 0), 0) || 0;
     
     const tasks = project.tasks || [];
@@ -914,7 +772,7 @@ const calculateOverviewData = (project: Project | null) => {
     const now = new Date().getTime();
     const upcomingMilestones = project.keyMilestones
         ?.map((m: any) => ({ ...m, dateObj: new Date(m.date) }))
-        .filter((m: any) => m.dateObj.getTime() >= now)
+        .filter((m: any) => m.dateObj && m.dateObj.getTime() >= now)
         .sort((a: any, b: any) => a.dateObj.getTime() - b.dateObj.getTime());
     const nextMilestone = upcomingMilestones?.[0] || null;
 
