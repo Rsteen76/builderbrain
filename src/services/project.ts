@@ -225,6 +225,138 @@ export class ProjectService {
   }
 
   /**
+   * Helper method to get phase description based on name
+   */
+  private static getPhasesDescription(phaseName: string): string {
+    switch(phaseName) {
+      case 'Pre-Construction':
+        return 'Planning, permits, site preparation, and initial design work';
+      case 'Site Work & Foundation':
+        return 'Clearing the site, excavation, pouring footings and foundation';
+      case 'Framing':
+        return 'Building the skeleton of the house including walls, floors, and roof';
+      case 'Exterior Finishing':
+        return 'Roofing, siding, windows, and doors';
+      case 'Rough-In Mechanical Systems':
+        return 'Electrical, plumbing, and HVAC rough-in installation';
+      case 'Insulation & Drywall':
+        return 'Installing insulation and hanging and finishing drywall';
+      case 'Interior Finishing':
+        return 'Painting, trim, cabinets, countertops, and flooring';
+      case 'Mechanical Trim-Out':
+        return 'Installing fixtures, outlets, switches, and appliances';
+      case 'Landscaping & Exterior Work':
+        return 'Basic grading, driveways, walkways, and plantings';
+      case 'Final Inspection & Closeout':
+        return 'Final walk-through, punch list items, and project delivery';
+      default:
+        return 'Construction phase';
+    }
+  }
+  
+  /**
+   * Helper method to create tasks based on phase name
+   */
+  private static createPhaseTasks(userId: string, projectId: string, phaseName: string): Task[] {
+    const tasks: Task[] = [];
+    
+    // Common task structure
+    const createTask = (title: string, priority: 'low' | 'medium' | 'high' = 'medium'): Task => ({
+      id: crypto.randomUUID(),
+      userId,
+      projectId,
+      title,
+      status: 'todo',
+      priority,
+      createdAt: new Date(),
+      updatedAt: new Date()
+    });
+    
+    // Add phase-specific tasks
+    switch(phaseName) {
+      case 'Pre-Construction':
+        tasks.push(
+          createTask('Obtain building permits', 'high'),
+          createTask('Finalize architectural plans', 'high'),
+          createTask('Conduct site survey', 'medium')
+        );
+        break;
+      case 'Site Work & Foundation':
+        tasks.push(
+          createTask('Clear and excavate site', 'high'),
+          createTask('Install footings', 'high'),
+          createTask('Pour foundation', 'high'),
+          createTask('Waterproof foundation', 'high')
+        );
+        break;
+      case 'Framing':
+        tasks.push(
+          createTask('Frame exterior walls', 'high'),
+          createTask('Frame interior walls', 'high'),
+          createTask('Install roof trusses', 'high'),
+          createTask('Install roof sheathing', 'high')
+        );
+        break;
+      case 'Exterior Finishing':
+        tasks.push(
+          createTask('Install roofing materials', 'high'),
+          createTask('Install exterior doors and windows', 'high'),
+          createTask('Install siding', 'medium')
+        );
+        break;
+      case 'Rough-In Mechanical Systems':
+        tasks.push(
+          createTask('Install electrical rough-in', 'high'),
+          createTask('Install plumbing rough-in', 'high'),
+          createTask('Install HVAC rough-in', 'high')
+        );
+        break;
+      case 'Insulation & Drywall':
+        tasks.push(
+          createTask('Install insulation', 'high'),
+          createTask('Hang drywall', 'high'),
+          createTask('Tape and mud drywall', 'medium'),
+          createTask('Sand and prime drywall', 'medium')
+        );
+        break;
+      case 'Interior Finishing':
+        tasks.push(
+          createTask('Paint interior walls', 'medium'),
+          createTask('Install interior doors', 'medium'),
+          createTask('Install trim and molding', 'medium'),
+          createTask('Install cabinets and countertops', 'high'),
+          createTask('Install flooring', 'high')
+        );
+        break;
+      case 'Mechanical Trim-Out':
+        tasks.push(
+          createTask('Install electrical fixtures', 'high'),
+          createTask('Install plumbing fixtures', 'high'),
+          createTask('Install HVAC registers and grilles', 'medium'),
+          createTask('Install appliances', 'medium')
+        );
+        break;
+      case 'Landscaping & Exterior Work':
+        tasks.push(
+          createTask('Rough grade yard', 'medium'),
+          createTask('Install driveway and walkways', 'medium'),
+          createTask('Install basic landscaping', 'low')
+        );
+        break;
+      case 'Final Inspection & Closeout':
+        tasks.push(
+          createTask('Schedule final inspections', 'high'),
+          createTask('Complete punch list items', 'high'),
+          createTask('Conduct final walk-through', 'high'),
+          createTask('Deliver project documentation', 'medium')
+        );
+        break;
+    }
+    
+    return tasks;
+  }
+
+  /**
    * Creates a new residential construction project with standard phases
    * @param userId The user ID creating the project
    * @param projectData Basic project data
@@ -243,559 +375,74 @@ export class ProjectService {
       
       console.log("Creating residential project with base project:", project.id);
       
-      // Define standard residential construction phases
-      const residentialPhases: Phase[] = [
-        {
-          id: crypto.randomUUID(),
-          projectId: project.id,
-          name: 'Pre-Construction',
-          startDate: new Date(),
-          endDate: this.addDays(new Date(), 30),
-          status: 'not_started',
-          progress: 0,
-          budget: typeof projectData.budget === 'number' 
-            ? projectData.budget * 0.05  // 5% of total budget
-            : (projectData.budget?.total || 0) * 0.05,
-          actualCost: 0,
-          description: 'Planning, permits, site preparation, and initial design work',
-          tasks: [
-            {
-              id: crypto.randomUUID(),
-              userId,
-              projectId: project.id,
-              title: 'Obtain building permits',
-              status: 'todo',
-              priority: 'high',
-              createdAt: new Date(),
-              updatedAt: new Date()
-            },
-            {
-              id: crypto.randomUUID(),
-              userId,
-              projectId: project.id,
-              title: 'Finalize architectural plans',
-              status: 'todo',
-              priority: 'high',
-              createdAt: new Date(),
-              updatedAt: new Date()
-            },
-            {
-              id: crypto.randomUUID(),
-              userId,
-              projectId: project.id,
-              title: 'Conduct site survey',
-              status: 'todo',
-              priority: 'medium',
-              createdAt: new Date(),
-              updatedAt: new Date()
-            }
-          ]
-        },
-        {
-          id: crypto.randomUUID(),
-          projectId: project.id,
-          name: 'Site Work & Foundation',
-          startDate: this.addDays(new Date(), 30),
-          endDate: this.addDays(new Date(), 60),
-          status: 'not_started',
-          progress: 0,
-          budget: typeof projectData.budget === 'number' 
-            ? projectData.budget * 0.15  // 15% of total budget
-            : (projectData.budget?.total || 0) * 0.15,
-          actualCost: 0,
-          description: 'Clearing the site, excavation, pouring footings and foundation',
-          tasks: [
-            {
-              id: crypto.randomUUID(),
-              userId,
-              projectId: project.id,
-              title: 'Clear and excavate site',
-              status: 'todo',
-              priority: 'high',
-              createdAt: new Date(),
-              updatedAt: new Date()
-            },
-            {
-              id: crypto.randomUUID(),
-              userId,
-              projectId: project.id,
-              title: 'Install footings',
-              status: 'todo',
-              priority: 'high',
-              createdAt: new Date(),
-              updatedAt: new Date()
-            },
-            {
-              id: crypto.randomUUID(),
-              userId,
-              projectId: project.id,
-              title: 'Pour foundation',
-              status: 'todo',
-              priority: 'high',
-              createdAt: new Date(),
-              updatedAt: new Date()
-            },
-            {
-              id: crypto.randomUUID(),
-              userId,
-              projectId: project.id,
-              title: 'Waterproof foundation',
-              status: 'todo',
-              priority: 'high',
-              createdAt: new Date(),
-              updatedAt: new Date()
-            }
-          ]
-        },
-        {
-          id: crypto.randomUUID(),
-          projectId: project.id,
-          name: 'Framing',
-          startDate: this.addDays(new Date(), 60),
-          endDate: this.addDays(new Date(), 90),
-          status: 'not_started',
-          progress: 0,
-          budget: typeof projectData.budget === 'number' 
-            ? projectData.budget * 0.20  // 20% of total budget
-            : (projectData.budget?.total || 0) * 0.20,
-          actualCost: 0,
-          description: 'Building the skeleton of the house including walls, floors, and roof',
-          tasks: [
-            {
-              id: crypto.randomUUID(),
-              userId,
-              projectId: project.id,
-              title: 'Frame exterior walls',
-              status: 'todo',
-              priority: 'high',
-              createdAt: new Date(),
-              updatedAt: new Date()
-            },
-            {
-              id: crypto.randomUUID(),
-              userId,
-              projectId: project.id,
-              title: 'Frame interior walls',
-              status: 'todo',
-              priority: 'high',
-              createdAt: new Date(),
-              updatedAt: new Date()
-            },
-            {
-              id: crypto.randomUUID(),
-              userId,
-              projectId: project.id,
-              title: 'Install roof trusses',
-              status: 'todo',
-              priority: 'high',
-              createdAt: new Date(),
-              updatedAt: new Date()
-            },
-            {
-              id: crypto.randomUUID(),
-              userId,
-              projectId: project.id,
-              title: 'Install roof sheathing',
-              status: 'todo',
-              priority: 'high',
-              createdAt: new Date(),
-              updatedAt: new Date()
-            }
-          ]
-        },
-        {
-          id: crypto.randomUUID(),
-          projectId: project.id,
-          name: 'Exterior Finishing',
-          startDate: this.addDays(new Date(), 90),
-          endDate: this.addDays(new Date(), 120),
-          status: 'not_started',
-          progress: 0,
-          budget: typeof projectData.budget === 'number' 
-            ? projectData.budget * 0.10  // 10% of total budget
-            : (projectData.budget?.total || 0) * 0.10,
-          actualCost: 0,
-          description: 'Roofing, siding, windows, and doors',
-          tasks: [
-            {
-              id: crypto.randomUUID(),
-              userId,
-              projectId: project.id,
-              title: 'Install roofing materials',
-              status: 'todo',
-              priority: 'high',
-              createdAt: new Date(),
-              updatedAt: new Date()
-            },
-            {
-              id: crypto.randomUUID(),
-              userId,
-              projectId: project.id,
-              title: 'Install windows and exterior doors',
-              status: 'todo',
-              priority: 'high',
-              createdAt: new Date(),
-              updatedAt: new Date()
-            },
-            {
-              id: crypto.randomUUID(),
-              userId,
-              projectId: project.id,
-              title: 'Install siding and exterior trim',
-              status: 'todo',
-              priority: 'medium',
-              createdAt: new Date(),
-              updatedAt: new Date()
-            }
-          ]
-        },
-        {
-          id: crypto.randomUUID(),
-          projectId: project.id,
-          name: 'Rough-In Mechanical Systems',
-          startDate: this.addDays(new Date(), 120),
-          endDate: this.addDays(new Date(), 150),
-          status: 'not_started',
-          progress: 0,
-          budget: typeof projectData.budget === 'number' 
-            ? projectData.budget * 0.15  // 15% of total budget
-            : (projectData.budget?.total || 0) * 0.15,
-          actualCost: 0,
-          description: 'Plumbing, electrical, and HVAC rough-in work',
-          tasks: [
-            {
-              id: crypto.randomUUID(),
-              userId,
-              projectId: project.id,
-              title: 'Rough-in plumbing',
-              status: 'todo',
-              priority: 'high',
-              createdAt: new Date(),
-              updatedAt: new Date()
-            },
-            {
-              id: crypto.randomUUID(),
-              userId,
-              projectId: project.id,
-              title: 'Rough-in electrical',
-              status: 'todo',
-              priority: 'high',
-              createdAt: new Date(),
-              updatedAt: new Date()
-            },
-            {
-              id: crypto.randomUUID(),
-              userId,
-              projectId: project.id,
-              title: 'Rough-in HVAC',
-              status: 'todo',
-              priority: 'high',
-              createdAt: new Date(),
-              updatedAt: new Date()
-            },
-            {
-              id: crypto.randomUUID(),
-              userId,
-              projectId: project.id,
-              title: 'Schedule rough-in inspections',
-              status: 'todo',
-              priority: 'high',
-              createdAt: new Date(),
-              updatedAt: new Date()
-            }
-          ]
-        },
-        {
-          id: crypto.randomUUID(),
-          projectId: project.id,
-          name: 'Insulation & Drywall',
-          startDate: this.addDays(new Date(), 150),
-          endDate: this.addDays(new Date(), 170),
-          status: 'not_started',
-          progress: 0,
-          budget: typeof projectData.budget === 'number' 
-            ? projectData.budget * 0.07  // 7% of total budget
-            : (projectData.budget?.total || 0) * 0.07,
-          actualCost: 0,
-          description: 'Installing insulation, hanging and finishing drywall',
-          tasks: [
-            {
-              id: crypto.randomUUID(),
-              userId,
-              projectId: project.id,
-              title: 'Install insulation',
-              status: 'todo',
-              priority: 'high',
-              createdAt: new Date(),
-              updatedAt: new Date()
-            },
-            {
-              id: crypto.randomUUID(),
-              userId,
-              projectId: project.id,
-              title: 'Install drywall',
-              status: 'todo',
-              priority: 'high',
-              createdAt: new Date(),
-              updatedAt: new Date()
-            },
-            {
-              id: crypto.randomUUID(),
-              userId,
-              projectId: project.id,
-              title: 'Tape and mud drywall',
-              status: 'todo',
-              priority: 'high',
-              createdAt: new Date(),
-              updatedAt: new Date()
-            },
-            {
-              id: crypto.randomUUID(),
-              userId,
-              projectId: project.id,
-              title: 'Sand and prime drywall',
-              status: 'todo',
-              priority: 'medium',
-              createdAt: new Date(),
-              updatedAt: new Date()
-            }
-          ]
-        },
-        {
-          id: crypto.randomUUID(),
-          projectId: project.id,
-          name: 'Interior Finishing',
-          startDate: this.addDays(new Date(), 170),
-          endDate: this.addDays(new Date(), 210),
-          status: 'not_started',
-          progress: 0,
-          budget: typeof projectData.budget === 'number' 
-            ? projectData.budget * 0.15  // 15% of total budget
-            : (projectData.budget?.total || 0) * 0.15,
-          actualCost: 0,
-          description: 'Cabinets, trim, painting, flooring, and fixtures',
-          tasks: [
-            {
-              id: crypto.randomUUID(),
-              userId,
-              projectId: project.id,
-              title: 'Install interior doors and trim',
-              status: 'todo',
-              priority: 'medium',
-              createdAt: new Date(),
-              updatedAt: new Date()
-            },
-            {
-              id: crypto.randomUUID(),
-              userId,
-              projectId: project.id,
-              title: 'Install kitchen and bathroom cabinets',
-              status: 'todo',
-              priority: 'high',
-              createdAt: new Date(),
-              updatedAt: new Date()
-            },
-            {
-              id: crypto.randomUUID(),
-              userId,
-              projectId: project.id,
-              title: 'Install countertops',
-              status: 'todo',
-              priority: 'medium',
-              createdAt: new Date(),
-              updatedAt: new Date()
-            },
-            {
-              id: crypto.randomUUID(),
-              userId,
-              projectId: project.id,
-              title: 'Interior painting',
-              status: 'todo',
-              priority: 'medium',
-              createdAt: new Date(),
-              updatedAt: new Date()
-            },
-            {
-              id: crypto.randomUUID(),
-              userId,
-              projectId: project.id,
-              title: 'Install flooring',
-              status: 'todo',
-              priority: 'high',
-              createdAt: new Date(),
-              updatedAt: new Date()
-            }
-          ]
-        },
-        {
-          id: crypto.randomUUID(),
-          projectId: project.id,
-          name: 'Mechanical Trim-Out',
-          startDate: this.addDays(new Date(), 210),
-          endDate: this.addDays(new Date(), 230),
-          status: 'not_started',
-          progress: 0,
-          budget: typeof projectData.budget === 'number' 
-            ? projectData.budget * 0.08  // 8% of total budget
-            : (projectData.budget?.total || 0) * 0.08,
-          actualCost: 0,
-          description: 'Final installation of plumbing fixtures, electrical fixtures, HVAC registers',
-          tasks: [
-            {
-              id: crypto.randomUUID(),
-              userId,
-              projectId: project.id,
-              title: 'Install plumbing fixtures',
-              status: 'todo',
-              priority: 'high',
-              createdAt: new Date(),
-              updatedAt: new Date()
-            },
-            {
-              id: crypto.randomUUID(),
-              userId,
-              projectId: project.id,
-              title: 'Install light fixtures and outlets',
-              status: 'todo',
-              priority: 'high',
-              createdAt: new Date(),
-              updatedAt: new Date()
-            },
-            {
-              id: crypto.randomUUID(),
-              userId,
-              projectId: project.id,
-              title: 'Install HVAC registers and thermostat',
-              status: 'todo',
-              priority: 'medium',
-              createdAt: new Date(),
-              updatedAt: new Date()
-            },
-            {
-              id: crypto.randomUUID(),
-              userId,
-              projectId: project.id,
-              title: 'Install appliances',
-              status: 'todo',
-              priority: 'medium',
-              createdAt: new Date(),
-              updatedAt: new Date()
-            }
-          ]
-        },
-        {
-          id: crypto.randomUUID(),
-          projectId: project.id,
-          name: 'Landscaping & Exterior Work',
-          startDate: this.addDays(new Date(), 230),
-          endDate: this.addDays(new Date(), 250),
-          status: 'not_started',
-          progress: 0,
-          budget: typeof projectData.budget === 'number' 
-            ? projectData.budget * 0.05  // 5% of total budget
-            : (projectData.budget?.total || 0) * 0.05,
-          actualCost: 0,
-          description: 'Grading, driveways, patios, walkways, and basic landscaping',
-          tasks: [
-            {
-              id: crypto.randomUUID(),
-              userId,
-              projectId: project.id,
-              title: 'Final grading',
-              status: 'todo',
-              priority: 'medium',
-              createdAt: new Date(),
-              updatedAt: new Date()
-            },
-            {
-              id: crypto.randomUUID(),
-              userId,
-              projectId: project.id,
-              title: 'Install driveway and walkways',
-              status: 'todo',
-              priority: 'medium',
-              createdAt: new Date(),
-              updatedAt: new Date()
-            },
-            {
-              id: crypto.randomUUID(),
-              userId,
-              projectId: project.id,
-              title: 'Basic landscaping',
-              status: 'todo',
-              priority: 'low',
-              createdAt: new Date(),
-              updatedAt: new Date()
-            }
-          ]
-        },
-        {
-          id: crypto.randomUUID(),
-          projectId: project.id,
-          name: 'Final Inspection & Closeout',
-          startDate: this.addDays(new Date(), 250),
-          endDate: this.addDays(new Date(), 270),
-          status: 'not_started',
-          progress: 0,
-          budget: typeof projectData.budget === 'number' 
-            ? projectData.budget * 0.02  // 2% of total budget
-            : (projectData.budget?.total || 0) * 0.02,
-          actualCost: 0,
-          description: 'Final inspections, punch list completion, and project handover',
-          tasks: [
-            {
-              id: crypto.randomUUID(),
-              userId,
-              projectId: project.id,
-              title: 'Final cleaning',
-              status: 'todo',
-              priority: 'medium',
-              createdAt: new Date(),
-              updatedAt: new Date()
-            },
-            {
-              id: crypto.randomUUID(),
-              userId,
-              projectId: project.id,
-              title: 'Schedule final inspections',
-              status: 'todo',
-              priority: 'high',
-              createdAt: new Date(),
-              updatedAt: new Date()
-            },
-            {
-              id: crypto.randomUUID(),
-              userId,
-              projectId: project.id,
-              title: 'Complete punch list items',
-              status: 'todo',
-              priority: 'high',
-              createdAt: new Date(),
-              updatedAt: new Date()
-            },
-            {
-              id: crypto.randomUUID(),
-              userId,
-              projectId: project.id,
-              title: 'Client walkthrough',
-              status: 'todo',
-              priority: 'high',
-              createdAt: new Date(),
-              updatedAt: new Date()
-            },
-            {
-              id: crypto.randomUUID(),
-              userId,
-              projectId: project.id,
-              title: 'Obtain certificate of occupancy',
-              status: 'todo',
-              priority: 'high',
-              createdAt: new Date(),
-              updatedAt: new Date()
-            }
-          ]
-        }
+      // Calculate total budget from project data
+      const totalBudget = typeof projectData.budget === 'number'
+        ? projectData.budget
+        : (projectData.budget?.total || 0);
+      
+      // Define standard residential construction phases with percentage allocations
+      const phaseAllocations = [
+        { name: 'Pre-Construction', percentage: 0.05 }, // 5%
+        { name: 'Site Work & Foundation', percentage: 0.15 }, // 15%
+        { name: 'Framing', percentage: 0.2 }, // 20%
+        { name: 'Exterior Finishing', percentage: 0.1 }, // 10%
+        { name: 'Rough-In Mechanical Systems', percentage: 0.1 }, // 10%
+        { name: 'Insulation & Drywall', percentage: 0.08 }, // 8%
+        { name: 'Interior Finishing', percentage: 0.15 }, // 15%
+        { name: 'Mechanical Trim-Out', percentage: 0.07 }, // 7%
+        { name: 'Landscaping & Exterior Work', percentage: 0.05 }, // 5%
+        { name: 'Final Inspection & Closeout', percentage: 0.05 }, // 5%
       ];
+      
+      // Validate that percentages add up to 100%
+      const totalPercentage = phaseAllocations.reduce((sum, phase) => sum + phase.percentage, 0);
+      if (Math.abs(totalPercentage - 1) > 0.001) { // Allow for small floating point errors
+        console.warn(`Phase budget allocations don't add up to 100% (actual: ${totalPercentage * 100}%). Normalizing values.`);
+        // Normalize percentages to ensure they sum to exactly 1 (100%)
+        phaseAllocations.forEach(phase => {
+          phase.percentage = phase.percentage / totalPercentage;
+        });
+      }
+      
+      // Create phases with normalized budget allocations
+      const residentialPhases: Phase[] = [];
+      let remainingDays = 0;
+      
+      phaseAllocations.forEach((allocation, index) => {
+        // Calculate exact budget based on percentage
+        const phaseBudget = Math.round(totalBudget * allocation.percentage);
+        
+        // Calculate phase duration and dates
+        const phaseStartDate = index === 0 
+          ? new Date() 
+          : this.addDays(new Date(), remainingDays);
+        
+        const phaseDuration = 30; // Each phase is roughly 30 days
+        remainingDays += phaseDuration;
+        
+        const phaseEndDate = this.addDays(phaseStartDate, phaseDuration);
+        
+        // Create the phase
+        const phase: Phase = {
+          id: crypto.randomUUID(),
+          projectId: project.id,
+          name: allocation.name,
+          startDate: phaseStartDate,
+          endDate: phaseEndDate,
+          status: 'not_started',
+          progress: 0,
+          budget: phaseBudget,
+          actualCost: 0,
+          description: this.getPhasesDescription(allocation.name),
+          tasks: this.createPhaseTasks(userId, project.id, allocation.name),
+        };
+        
+        residentialPhases.push(phase);
+      });
+      
+      // Verify total budget matches sum of phase budgets
+      const totalPhaseBudget = residentialPhases.reduce((sum, phase) => sum + phase.budget, 0);
+      console.log(`Total budget: ${totalBudget}, Sum of phase budgets: ${totalPhaseBudget}`);
       
       // Collect all tasks from phases to add to project tasks
       const allTasks: Task[] = [];

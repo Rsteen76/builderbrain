@@ -272,7 +272,22 @@ const ProjectDetailPage: React.FC = () => {
   
   // Calculate budget vs actual costs
   const budgetData = useMemo(() => {
-    const totalBudget = phases.reduce((sum, phase) => sum + phase.budget, 0);
+    // Use the project's original budget if available, otherwise sum the phase budgets
+    let totalBudget = 0;
+    
+    if (project?.budget) {
+      if (typeof project.budget === 'number') {
+        totalBudget = project.budget;
+      } else if (typeof project.budget === 'object' && 'total' in project.budget) {
+        totalBudget = project.budget.total;
+      }
+    }
+    
+    // If budget wasn't found or is 0, calculate from phases
+    if (totalBudget === 0) {
+      totalBudget = phases.reduce((sum, phase) => sum + phase.budget, 0);
+    }
+    
     const totalActual = phases.reduce((sum, phase) => sum + phase.actualCost, 0);
     
     return {
@@ -281,7 +296,7 @@ const ProjectDetailPage: React.FC = () => {
       difference: totalBudget - totalActual,
       percentUsed: totalBudget > 0 ? (totalActual / totalBudget) * 100 : 0
     };
-  }, [phases]);
+  }, [phases, project?.budget]);
 
   // Generate combined expenses for charts
   const combinedExpenses = useMemo(() => {
@@ -302,8 +317,21 @@ const ProjectDetailPage: React.FC = () => {
       percentComplete: 0 
     };
     
-    const startDates = phases.map(p => new Date(p.startDate).getTime());
-    const endDates = phases.map(p => new Date(p.endDate).getTime());
+    // Safely parse dates and filter out invalid ones
+    const parseDates = (dateString: string | Date): number => {
+      if (!dateString) return Date.now();
+      try {
+        const date = typeof dateString === 'string' ? new Date(dateString) : dateString;
+        const timestamp = date.getTime();
+        return isNaN(timestamp) ? Date.now() : timestamp;
+      } catch (e) {
+        console.warn('Invalid date found:', dateString);
+        return Date.now();
+      }
+    };
+    
+    const startDates = phases.map(p => parseDates(p.startDate));
+    const endDates = phases.map(p => parseDates(p.endDate));
     
     const projectStartDate = new Date(Math.min(...startDates));
     const projectEndDate = new Date(Math.max(...endDates));
@@ -954,7 +982,9 @@ const ProjectDetailPage: React.FC = () => {
                       Start
                     </Typography>
                     <Typography variant="body2" fontWeight={600}>
-                      {timeline.startDate?.toLocaleDateString() || 'N/A'}
+                      {timeline.startDate && !isNaN(timeline.startDate.getTime()) 
+                        ? timeline.startDate.toLocaleDateString() 
+                        : 'N/A'}
                     </Typography>
                   </Box>
                   <Box>
@@ -962,7 +992,9 @@ const ProjectDetailPage: React.FC = () => {
                       End
                     </Typography>
                     <Typography variant="body2" fontWeight={600}>
-                      {timeline.endDate?.toLocaleDateString() || 'N/A'}
+                      {timeline.endDate && !isNaN(timeline.endDate.getTime()) 
+                        ? timeline.endDate.toLocaleDateString() 
+                        : 'N/A'}
                     </Typography>
                   </Box>
                   <Box>
