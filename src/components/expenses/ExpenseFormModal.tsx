@@ -242,16 +242,16 @@ const ExpenseFormModal: React.FC<ExpenseFormModalProps> = ({
         }
       }}
     >
-      <DialogTitle sx={{ 
-        display: 'flex', 
-        justifyContent: 'space-between', 
-        alignItems: 'center',
-        borderBottom: `1px solid ${theme.palette.divider}`,
-        pb: 2,
-      }}>
-        <Typography variant="h5" fontWeight="bold">
-          {isEditMode ? 'Edit Expense' : 'New Expense'}
-        </Typography>
+      <DialogTitle 
+        sx={{ 
+          display: 'flex', 
+          justifyContent: 'space-between', 
+          alignItems: 'center',
+          borderBottom: `1px solid ${theme.palette.divider}`,
+          pb: 2,
+        }}
+      >
+        {isEditMode ? 'Edit Expense' : 'New Expense'}
         <IconButton edge="end" color="inherit" onClick={onClose} aria-label="close">
           <CloseIcon />
         </IconButton>

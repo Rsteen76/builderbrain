@@ -6,6 +6,7 @@ import {
   Grid,
   Card,
   CardContent,
+  CardActions,
   Tabs,
   Tab,
   TextField,
@@ -19,9 +20,7 @@ import {
   Alert,
   Menu,
   MenuItem,
-  Skeleton,
-  Tooltip,
-  LinearProgress,
+  Avatar,
   useTheme,
 } from '@mui/material';
 import {
@@ -31,22 +30,18 @@ import {
   MoreVert as MoreVertIcon,
   AttachMoney as MoneyIcon,
   AccountBalance as AccountBalanceIcon,
-  ShowChart as ShowChartIcon,
+  Receipt as ReceiptIcon,
   Description as DescriptionIcon,
-  FileDownload as FileDownloadIcon,
   Category as CategoryIcon,
-  ListAlt as ListAltIcon,
   Paid as PaidIcon,
-  PendingActions as PendingIcon,
-  ThumbUpAlt as ApprovedIcon,
-  Cancel as RejectedIcon,
-  EventNote as DateRangeIcon,
+  CalendarToday as CalendarIcon,
   Business as VendorIcon,
   Assignment as ProjectIcon,
-  Person as PersonIcon,
-  Construction as ConstructionIcon,
   Edit as EditIcon,
   Delete as DeleteIcon,
+  CheckCircle as CheckCircleIcon,
+  DeleteOutline as Delete,
+  Business as BusinessIcon,
 } from '@mui/icons-material';
 import { ExpenseService } from '../../services/expense';
 import { ProjectService } from '../../services/project';
@@ -54,21 +49,15 @@ import { Expense } from '../../types';
 import { useAuth } from '../../contexts/AuthContext';
 import { formatCurrency, formatDate } from '../../utils/formatters';
 import ExpenseFormModal from './ExpenseFormModal';
+import PaymentFormModal from './PaymentFormModal';
 
-// Status color mapping
-const STATUS_COLORS: Record<string, string> = {
-  pending: '#ff9800',
-  approved: '#4caf50',
-  rejected: '#f44336',
-  paid: '#2196f3',
-};
-
-const CATEGORY_ICONS: Record<string, React.ReactNode> = {
-  materials: <ConstructionIcon fontSize="small" />,
-  equipment: <CategoryIcon fontSize="small" />,
-  labor: <PersonIcon fontSize="small" />,
-  permits: <ListAltIcon fontSize="small" />,
-  other: <DescriptionIcon fontSize="small" />,
+// Category icons mapping
+const CATEGORY_ICONS = {
+  labor: <Avatar sx={{ bgcolor: '#E1F5FE', color: '#0288D1' }}><BusinessIcon /></Avatar>,
+  materials: <Avatar sx={{ bgcolor: '#E8F5E9', color: '#388E3C' }}><CategoryIcon /></Avatar>,
+  equipment: <Avatar sx={{ bgcolor: '#FFF8E1', color: '#FFA000' }}><CategoryIcon /></Avatar>,
+  permits: <Avatar sx={{ bgcolor: '#F3E5F5', color: '#7B1FA2' }}><ReceiptIcon /></Avatar>,
+  other: <Avatar sx={{ bgcolor: '#ECEFF1', color: '#607D8B' }}><DescriptionIcon /></Avatar>,
 };
 
 interface Project {
@@ -86,13 +75,9 @@ const Expenses: React.FC = () => {
   const [tabValue, setTabValue] = useState(0);
   const [searchTerm, setSearchTerm] = useState('');
   const [categoryFilter, setCategoryFilter] = useState<string | null>(null);
-  const [statusFilter, setStatusFilter] = useState<string | null>(null);
   const [projectFilter, setProjectFilter] = useState<string | null>(null);
-  const [dateRange, setDateRange] = useState<{ start: Date | null; end: Date | null }>({
-    start: null,
-    end: null
-  });
-  const [modalOpen, setModalOpen] = useState(false);
+  const [expenseModalOpen, setExpenseModalOpen] = useState(false);
+  const [paymentModalOpen, setPaymentModalOpen] = useState(false);
   const [selectedExpense, setSelectedExpense] = useState<any>(null);
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
   const [selectedExpenseId, setSelectedExpenseId] = useState<string | null>(null);
@@ -106,8 +91,7 @@ const Expenses: React.FC = () => {
   
   // Calculate summary data based on expenses
   const totalExpenses = expenses.reduce((sum, expense) => sum + expense.amount, 0);
-  const pendingExpenses = expenses.filter(e => e.status === 'pending').reduce((sum, e) => sum + e.amount, 0);
-  const approvedExpenses = expenses.filter(e => e.status === 'approved').reduce((sum, e) => sum + e.amount, 0);
+  const needsPaymentExpenses = expenses.filter(e => e.status !== 'paid').reduce((sum, e) => sum + e.amount, 0);
   const paidExpenses = expenses.filter(e => e.status === 'paid').reduce((sum, e) => sum + e.amount, 0);
   
   // Calculate category breakdown
@@ -133,7 +117,18 @@ const Expenses: React.FC = () => {
       const expenseToEdit = expenses.find(exp => exp.id === selectedExpenseId);
       if (expenseToEdit) {
         setSelectedExpense(expenseToEdit);
-        setModalOpen(true);
+        setExpenseModalOpen(true);
+      }
+    }
+    handleMenuClose();
+  };
+
+  const handlePayFromMenu = () => {
+    if (selectedExpenseId) {
+      const expenseToEdit = expenses.find(exp => exp.id === selectedExpenseId);
+      if (expenseToEdit) {
+        setSelectedExpense(expenseToEdit);
+        setPaymentModalOpen(true);
       }
     }
     handleMenuClose();
@@ -182,18 +177,18 @@ const Expenses: React.FC = () => {
       // Build filters based on tab and explicit filters
       const filters: any = {};
       
-      // Tab filters (high-level status groupings)
-      if (tabValue === 1) filters.status = 'pending';
-      else if (tabValue === 2) filters.status = 'approved';
-      else if (tabValue === 3) filters.status = 'rejected';
-      else if (tabValue === 4) filters.status = 'paid';
+      // Tab filters - simplified to just paid or needs payment
+      if (tabValue === 1) {
+        // Needs Payment tab shows all non-paid expenses
+        filters.status = ['pending', 'approved']; // Using array to match multiple statuses
+      } else if (tabValue === 2) {
+        // Paid tab
+        filters.status = 'paid';
+      }
       
       // Detailed filters (if set)
       if (categoryFilter) filters.category = categoryFilter;
-      if (statusFilter && tabValue === 0) filters.status = statusFilter;
       if (projectFilter) filters.projectId = projectFilter;
-      if (dateRange.start) filters.startDate = dateRange.start;
-      if (dateRange.end) filters.endDate = dateRange.end;
       
       const fetchedExpenses = await ExpenseService.getExpenses(user.uid, filters);
       
@@ -219,20 +214,41 @@ const Expenses: React.FC = () => {
   
   const handleAddExpense = () => {
     setSelectedExpense(null);  // Ensure we're creating a new expense
-    setModalOpen(true);
+    setExpenseModalOpen(true);
   };
   
-  const handleViewExpense = (id: string) => {
-    const expense = expenses.find(e => e.id === id);
-    if (expense) {
-      setSelectedExpense(expense);
-      setModalOpen(true);
-    }
+  const handleViewExpense = (expense: any) => {
+    setSelectedExpense(expense);
+    setExpenseModalOpen(true);
   };
   
-  const handleCloseModal = () => {
-    setModalOpen(false);
+  const handleCloseExpenseModal = () => {
+    setExpenseModalOpen(false);
     setSelectedExpense(null);
+  };
+  
+  const handleClosePaymentModal = () => {
+    setPaymentModalOpen(false);
+  };
+  
+  const handleMarkAsPaid = async (expenseId: string) => {
+    if (!user?.uid) return;
+    
+    try {
+      // Update status to paid
+      await ExpenseService.markAsPaid(expenseId);
+      
+      // Update local state
+      setExpenses(prev => prev.map(e => 
+        e.id === expenseId ? { ...e, status: 'paid' } : e
+      ));
+      
+      setPaymentModalOpen(false);
+      // Success notification could be added
+    } catch (error) {
+      console.error('Error marking expense as paid:', error);
+      setError('Failed to mark expense as paid. Please try again.');
+    }
   };
   
   const handleSaveExpense = async (expenseData: Partial<Expense>) => {
@@ -267,25 +283,23 @@ const Expenses: React.FC = () => {
     }
   };
   
-  // Filter expenses based on search term and other filters
-  const filterExpenses = () => {
-    if (!searchTerm) return expenses;
+  // Filter expenses based on search term
+  const filteredExpenses = expenses.filter(expense => {
+    if (!searchTerm) return true;
     
-    return expenses.filter(expense => 
+    return (
       expense.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
       expense.vendor?.toLowerCase().includes(searchTerm.toLowerCase()) ||
       expense.projectName?.toLowerCase().includes(searchTerm.toLowerCase())
     );
-  };
-  
-  const displayExpenses = filterExpenses();
+  });
 
   return (
-    <Box sx={{ maxWidth: 1200, mx: 'auto', p: { xs: 1, sm: 3 } }}>
+    <Box sx={{ maxWidth: 1200, mx: 'auto', p: { xs: 2, sm: 3 } }}>
       {/* Header section */}
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
-        <Typography variant="h4" component="h1" sx={{ fontWeight: 'bold' }}>
-          Expenses
+      <Box sx={{ mb: 4, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <Typography variant="h4" component="h1" fontWeight="bold">
+          Expenses & Payments
         </Typography>
         
         <Button
@@ -314,122 +328,52 @@ const Expenses: React.FC = () => {
       
       {/* Summary cards */}
       <Grid container spacing={3} sx={{ mb: 4 }}>
-        <Grid item xs={12} sm={6} md={3}>
-          <Card elevation={2} sx={{ 
-            borderRadius: 2,
-            transition: 'transform 0.3s, box-shadow 0.3s',
-            '&:hover': { 
-              transform: 'translateY(-4px)',
-              boxShadow: '0 12px 20px -10px rgba(0,0,0,0.1)'
-            }
-          }}>
-            <CardContent>
-              <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 2 }}>
-                <Typography color="text.secondary" variant="subtitle2" fontWeight="medium">
-                  Total Expenses
-                </Typography>
-                <MoneyIcon color="primary" />
-              </Box>
-              
-              {loading ? (
-                <Skeleton variant="rectangular" width={100} height={40} />
-              ) : (
-                <Typography variant="h4" component="div" sx={{ fontWeight: 'bold' }}>
-                  {formatCurrency(totalExpenses)}
-                </Typography>
-              )}
-            </CardContent>
-          </Card>
+        <Grid item xs={12} md={4}>
+          <Paper sx={{ p: 3, bgcolor: 'primary.light', color: 'primary.contrastText', borderRadius: 2 }}>
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
+              <Typography variant="h6">Total Expenses</Typography>
+              <MoneyIcon />
+            </Box>
+            {loading ? (
+              <CircularProgress size={24} color="inherit" />
+            ) : (
+              <Typography variant="h4" fontWeight="bold">{formatCurrency(totalExpenses)}</Typography>
+            )}
+          </Paper>
         </Grid>
         
-        <Grid item xs={12} sm={6} md={3}>
-          <Card elevation={2} sx={{ 
-            borderRadius: 2,
-            transition: 'transform 0.3s, box-shadow 0.3s',
-            '&:hover': { 
-              transform: 'translateY(-4px)',
-              boxShadow: '0 12px 20px -10px rgba(0,0,0,0.1)'
-            }
-          }}>
-            <CardContent>
-              <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 2 }}>
-                <Typography color="text.secondary" variant="subtitle2" fontWeight="medium">
-                  Pending Approval
-                </Typography>
-                <PendingIcon sx={{ color: STATUS_COLORS.pending }} />
-              </Box>
-              
-              {loading ? (
-                <Skeleton variant="rectangular" width={100} height={40} />
-              ) : (
-                <Typography variant="h4" component="div" sx={{ fontWeight: 'bold' }}>
-                  {formatCurrency(pendingExpenses)}
-                </Typography>
-              )}
-            </CardContent>
-          </Card>
+        <Grid item xs={12} md={4}>
+          <Paper sx={{ p: 3, bgcolor: 'warning.light', color: 'warning.contrastText', borderRadius: 2 }}>
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
+              <Typography variant="h6">Needs Payment</Typography>
+              <AccountBalanceIcon />
+            </Box>
+            {loading ? (
+              <CircularProgress size={24} color="inherit" />
+            ) : (
+              <Typography variant="h4" fontWeight="bold">{formatCurrency(needsPaymentExpenses)}</Typography>
+            )}
+          </Paper>
         </Grid>
         
-        <Grid item xs={12} sm={6} md={3}>
-          <Card elevation={2} sx={{ 
-            borderRadius: 2,
-            transition: 'transform 0.3s, box-shadow 0.3s',
-            '&:hover': { 
-              transform: 'translateY(-4px)',
-              boxShadow: '0 12px 20px -10px rgba(0,0,0,0.1)'
-            }
-          }}>
-            <CardContent>
-              <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 2 }}>
-                <Typography color="text.secondary" variant="subtitle2" fontWeight="medium">
-                  Approved
-                </Typography>
-                <ApprovedIcon sx={{ color: STATUS_COLORS.approved }} />
-              </Box>
-              
-              {loading ? (
-                <Skeleton variant="rectangular" width={100} height={40} />
-              ) : (
-                <Typography variant="h4" component="div" sx={{ fontWeight: 'bold' }}>
-                  {formatCurrency(approvedExpenses)}
-                </Typography>
-              )}
-            </CardContent>
-          </Card>
-        </Grid>
-        
-        <Grid item xs={12} sm={6} md={3}>
-          <Card elevation={2} sx={{ 
-            borderRadius: 2,
-            transition: 'transform 0.3s, box-shadow 0.3s',
-            '&:hover': { 
-              transform: 'translateY(-4px)',
-              boxShadow: '0 12px 20px -10px rgba(0,0,0,0.1)'
-            }
-          }}>
-            <CardContent>
-              <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 2 }}>
-                <Typography color="text.secondary" variant="subtitle2" fontWeight="medium">
-                  Paid
-                </Typography>
-                <PaidIcon sx={{ color: STATUS_COLORS.paid }} />
-              </Box>
-              
-              {loading ? (
-                <Skeleton variant="rectangular" width={100} height={40} />
-              ) : (
-                <Typography variant="h4" component="div" sx={{ fontWeight: 'bold' }}>
-                  {formatCurrency(paidExpenses)}
-                </Typography>
-              )}
-            </CardContent>
-          </Card>
+        <Grid item xs={12} md={4}>
+          <Paper sx={{ p: 3, bgcolor: 'success.light', color: 'success.contrastText', borderRadius: 2 }}>
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
+              <Typography variant="h6">Paid</Typography>
+              <PaidIcon />
+            </Box>
+            {loading ? (
+              <CircularProgress size={24} color="inherit" />
+            ) : (
+              <Typography variant="h4" fontWeight="bold">{formatCurrency(paidExpenses)}</Typography>
+            )}
+          </Paper>
         </Grid>
       </Grid>
       
       {/* Tabs and search */}
-      <Paper elevation={0} sx={{ mb: 3, borderRadius: 2, overflow: 'hidden', border: `1px solid ${theme.palette.divider}` }}>
-        <Box sx={{ px: 2 }}>
+      <Box sx={{ mb: 3, display: 'flex', flexDirection: { xs: 'column', md: 'row' }, gap: 2, alignItems: { xs: 'stretch', md: 'center' } }}>
+        <Box sx={{ flexGrow: 1 }}>
           <Tabs 
             value={tabValue} 
             onChange={handleTabChange}
@@ -438,176 +382,196 @@ const Expenses: React.FC = () => {
             aria-label="expense tabs"
             variant="scrollable"
             scrollButtons="auto"
+            sx={{ borderBottom: 1, borderColor: 'divider' }}
           >
-            <Tab label="All" />
-            <Tab label="Pending" />
-            <Tab label="Approved" />
-            <Tab label="Rejected" />
+            <Tab label="All Expenses" />
+            <Tab label="Needs Payment" />
             <Tab label="Paid" />
           </Tabs>
         </Box>
         
-        <Divider />
-        
-        <Box sx={{ p: 2 }}>
-          <TextField
-            fullWidth
-            placeholder="Search expenses..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            variant="outlined"
-            size="small"
-            InputProps={{
-              startAdornment: (
-                <InputAdornment position="start">
-                  <SearchIcon color="action" />
-                </InputAdornment>
-              ),
-              endAdornment: searchTerm && (
-                <InputAdornment position="end">
-                  <IconButton size="small" onClick={() => setSearchTerm('')}>
-                    <RejectedIcon fontSize="small" />
-                  </IconButton>
-                </InputAdornment>
-              ),
-              sx: { borderRadius: 2 }
-            }}
-          />
-        </Box>
-      </Paper>
+        <TextField
+          placeholder="Search expenses..."
+          value={searchTerm}
+          onChange={(e) => setSearchTerm(e.target.value)}
+          variant="outlined"
+          size="small"
+          sx={{ width: { xs: '100%', md: '300px' } }}
+          InputProps={{
+            startAdornment: (
+              <InputAdornment position="start">
+                <SearchIcon color="action" />
+              </InputAdornment>
+            ),
+            endAdornment: searchTerm && (
+              <InputAdornment position="end">
+                <IconButton size="small" onClick={() => setSearchTerm('')}>
+                  <DeleteIcon fontSize="small" />
+                </IconButton>
+              </InputAdornment>
+            ),
+          }}
+        />
+      </Box>
       
       {/* Expenses list */}
-      <Paper 
-        elevation={0} 
-        sx={{ 
-          borderRadius: 2, 
-          border: `1px solid ${theme.palette.divider}`,
-          overflow: 'hidden'
-        }}
-      >
-        {loading ? (
-          <Box sx={{ p: 2 }}>
-            {[1, 2, 3].map(i => (
-              <Box key={i} sx={{ mb: 2, p: 2, borderBottom: `1px solid ${theme.palette.divider}` }}>
-                <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
-                  <Skeleton variant="circular" width={40} height={40} sx={{ mr: 2 }} />
-                  <Box sx={{ width: '100%' }}>
-                    <Skeleton variant="text" width="60%" height={30} />
-                    <Skeleton variant="text" width="40%" height={20} />
-                  </Box>
-                  <Skeleton variant="rectangular" width={80} height={30} />
-                </Box>
-                <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
-                  <Skeleton variant="text" width="30%" height={20} />
-                  <Skeleton variant="text" width="20%" height={20} />
-                </Box>
-              </Box>
+      {loading ? (
+        <Box sx={{ mt: 4 }}>
+          <Grid container spacing={3}>
+            {[1, 2, 3, 4].map((item) => (
+              <Grid item xs={12} md={6} lg={4} key={item}>
+                <Card sx={{ height: '100%' }}>
+                  <CardContent>
+                    <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 2 }}>
+                      <CircularProgress size={20} />
+                      <CircularProgress size={20} />
+                    </Box>
+                    <Box sx={{ bgcolor: 'grey.100', height: 80, borderRadius: 1 }} />
+                    <Divider sx={{ my: 2 }} />
+                    <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                      <CircularProgress size={20} />
+                      <CircularProgress size={20} />
+                    </Box>
+                  </CardContent>
+                </Card>
+              </Grid>
             ))}
-          </Box>
-        ) : displayExpenses.length === 0 ? (
-          <Box sx={{ p: 4, textAlign: 'center' }}>
-            <DescriptionIcon sx={{ fontSize: 60, color: 'text.secondary', mb: 2, opacity: 0.5 }} />
-            <Typography variant="h6" color="text.secondary" gutterBottom>
-              No expenses found
-            </Typography>
-            <Typography variant="body2" color="text.secondary">
-              {searchTerm ? 'Try adjusting your search or filters' : 'Click "Add Expense" to create your first expense'}
-            </Typography>
-          </Box>
-        ) : (
-          <Box>
-            {displayExpenses.map((expense) => (
-              <Box
-                key={expense.id}
-                sx={{
-                  p: 2,
-                  borderBottom: `1px solid ${theme.palette.divider}`,
-                  cursor: 'pointer',
-                  transition: 'background-color 0.2s',
+          </Grid>
+        </Box>
+      ) : filteredExpenses.length === 0 ? (
+        <Box sx={{ p: 4, textAlign: 'center', mt: 4, bgcolor: 'background.paper', borderRadius: 2 }}>
+          <DescriptionIcon sx={{ fontSize: 60, color: 'text.secondary', mb: 2, opacity: 0.5 }} />
+          <Typography variant="h6" color="text.secondary" gutterBottom>
+            No expenses found
+          </Typography>
+          <Typography variant="body2" color="text.secondary">
+            {searchTerm ? 'Try adjusting your search' : 'Click "Add Expense" to create your first expense'}
+          </Typography>
+        </Box>
+      ) : (
+        <Grid container spacing={3} sx={{ mt: 1 }}>
+          {filteredExpenses.map((expense) => (
+            <Grid item xs={12} md={6} lg={4} key={expense.id}>
+              <Card 
+                sx={{ 
+                  height: '100%',
+                  transition: 'transform 0.2s, box-shadow 0.2s',
                   '&:hover': {
-                    backgroundColor: theme.palette.action.hover,
+                    transform: 'translateY(-4px)',
+                    boxShadow: '0 8px 16px rgba(0,0,0,0.1)',
+                    cursor: 'pointer'
                   },
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
+                  position: 'relative',
+                  overflow: 'visible'
                 }}
-                onClick={() => handleViewExpense(expense.id)}
               >
-                <Box sx={{ display: 'flex', alignItems: 'center', flex: 1 }}>
+                {expense.status === 'paid' && (
                   <Box
                     sx={{
-                      backgroundColor: `${STATUS_COLORS[expense.status as keyof typeof STATUS_COLORS]}20`,
-                      color: STATUS_COLORS[expense.status as keyof typeof STATUS_COLORS],
-                      p: 1,
+                      position: 'absolute',
+                      top: -10,
+                      right: -10,
+                      bgcolor: 'success.main',
+                      color: 'white',
                       borderRadius: '50%',
-                      mr: 2,
-                      display: { xs: 'none', sm: 'block' }
+                      width: 36,
+                      height: 36,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      boxShadow: '0 2px 4px rgba(0,0,0,0.2)',
+                      zIndex: 1
                     }}
                   >
-                    {expense.status === 'pending' && <PendingIcon />}
-                    {expense.status === 'approved' && <ApprovedIcon />}
-                    {expense.status === 'rejected' && <RejectedIcon />}
-                    {expense.status === 'paid' && <PaidIcon />}
+                    <PaidIcon />
+                  </Box>
+                )}
+                
+                <CardContent onClick={() => handleViewExpense(expense)}>
+                  <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 2 }}>
+                    <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                      {CATEGORY_ICONS[expense.category as keyof typeof CATEGORY_ICONS] || CATEGORY_ICONS.other}
+                      <Box sx={{ ml: 2 }}>
+                        <Typography variant="h6" sx={{ mb: 0 }}>
+                          {formatCurrency(expense.amount)}
+                        </Typography>
+                        <Chip 
+                          label={expense.status === 'paid' ? 'Paid' : 'Needs Payment'} 
+                          size="small"
+                          color={expense.status === 'paid' ? 'success' : 'warning'}
+                        />
+                      </Box>
+                    </Box>
+                    <IconButton
+                      size="small"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleMenuOpen(e, expense.id);
+                      }}
+                    >
+                      <MoreVertIcon />
+                    </IconButton>
                   </Box>
                   
-                  <Box sx={{ flexGrow: 1 }}>
-                    <Box sx={{ display: 'flex', alignItems: 'center', mb: 0.5 }}>
-                      <Typography variant="subtitle1" sx={{ mr: 1, fontWeight: 'medium' }}>
-                        {expense.description}
-                      </Typography>
-                      <Chip
-                        size="small"
-                        label={expense.status.toUpperCase()}
-                        sx={{
-                          height: 20, 
-                          fontSize: '0.7rem',
-                          backgroundColor: `${STATUS_COLORS[expense.status as keyof typeof STATUS_COLORS]}20`,
-                          color: STATUS_COLORS[expense.status as keyof typeof STATUS_COLORS],
-                        }}
-                      />
+                  <Typography sx={{ mb: 2, fontWeight: 'medium' }}>
+                    {expense.description}
+                  </Typography>
+                  
+                  <Divider sx={{ my: 2 }} />
+                  
+                  <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+                    <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                      <CalendarIcon fontSize="small" sx={{ mr: 1, color: 'text.secondary' }} />
+                      <Typography variant="body2">{formatDate(expense.date)}</Typography>
                     </Box>
                     
-                    <Box sx={{ display: 'flex', alignItems: 'center', fontSize: '0.8rem', color: 'text.secondary' }}>
-                      <Box component="span" sx={{ display: 'flex', alignItems: 'center', mr: 2 }}>
-                        <DateRangeIcon fontSize="small" sx={{ mr: 0.5, fontSize: '0.9rem' }} />
-                        {formatDate(expense.date)}
+                    {expense.vendor && (
+                      <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                        <VendorIcon fontSize="small" sx={{ mr: 1, color: 'text.secondary' }} />
+                        <Typography variant="body2">{expense.vendor}</Typography>
                       </Box>
-                      
-                      {expense.vendor && (
-                        <Box component="span" sx={{ display: 'flex', alignItems: 'center', mr: 2 }}>
-                          <VendorIcon fontSize="small" sx={{ mr: 0.5, fontSize: '0.9rem' }} />
-                          {expense.vendor}
-                        </Box>
-                      )}
-                      
-                      <Box component="span" sx={{ display: 'flex', alignItems: 'center' }}>
-                        <ProjectIcon fontSize="small" sx={{ mr: 0.5, fontSize: '0.9rem' }} />
-                        {expense.projectName}
-                      </Box>
+                    )}
+                    
+                    <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                      <ProjectIcon fontSize="small" sx={{ mr: 1, color: 'text.secondary' }} />
+                      <Typography variant="body2">{expense.projectName}</Typography>
                     </Box>
                   </Box>
-                </Box>
+                </CardContent>
                 
-                <Typography 
-                  variant="h6" 
-                  sx={{ 
-                    fontWeight: 'medium', 
-                    color: 'text.primary', 
-                    mr: 1, 
-                    whiteSpace: 'nowrap' 
-                  }}
-                >
-                  {formatCurrency(expense.amount)}
-                </Typography>
-                
-                <IconButton size="small" onClick={(e) => handleMenuOpen(e, expense.id)}>
-                  <MoreVertIcon fontSize="small" />
-                </IconButton>
-              </Box>
-            ))}
-          </Box>
-        )}
-      </Paper>
+                <CardActions sx={{ justifyContent: 'space-between', borderTop: `1px solid ${theme.palette.divider}`, px: 2 }}>
+                  <Button 
+                    size="small" 
+                    startIcon={<EditIcon />}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setSelectedExpense(expense);
+                      setExpenseModalOpen(true);
+                    }}
+                  >
+                    Edit
+                  </Button>
+                  
+                  {expense.status !== 'paid' && (
+                    <Button 
+                      size="small" 
+                      color="success"
+                      startIcon={<PaidIcon />}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setSelectedExpense(expense);
+                        setPaymentModalOpen(true);
+                      }}
+                    >
+                      Mark as Paid
+                    </Button>
+                  )}
+                </CardActions>
+              </Card>
+            </Grid>
+          ))}
+        </Grid>
+      )}
 
       {/* Action Menu */}
       <Menu
@@ -617,9 +581,17 @@ const Expenses: React.FC = () => {
       >
         <MenuItem onClick={handleEditFromMenu}>
           <EditIcon fontSize="small" sx={{ mr: 1 }} />
-          Edit
+          Edit Expense
         </MenuItem>
-        <MenuItem onClick={handleDeleteFromMenu}>
+        
+        {selectedExpenseId && expenses.find(e => e.id === selectedExpenseId)?.status !== 'paid' && (
+          <MenuItem onClick={handlePayFromMenu}>
+            <PaidIcon fontSize="small" sx={{ mr: 1 }} />
+            Mark as Paid
+          </MenuItem>
+        )}
+        
+        <MenuItem onClick={handleDeleteFromMenu} sx={{ color: 'error.main' }}>
           <DeleteIcon fontSize="small" sx={{ mr: 1 }} />
           Delete
         </MenuItem>
@@ -627,11 +599,23 @@ const Expenses: React.FC = () => {
 
       {/* Expense Form Modal */}
       <ExpenseFormModal
-        open={modalOpen}
-        onClose={handleCloseModal}
+        open={expenseModalOpen}
+        onClose={handleCloseExpenseModal}
         expense={selectedExpense}
         onSave={handleSaveExpense}
         projects={projects}
+      />
+      
+      {/* Payment Modal */}
+      <PaymentFormModal
+        open={paymentModalOpen}
+        onClose={handleClosePaymentModal}
+        expense={selectedExpense}
+        onSave={() => {
+          if (selectedExpense?.id) {
+            handleMarkAsPaid(selectedExpense.id);
+          }
+        }}
       />
     </Box>
   );
