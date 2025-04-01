@@ -1,13 +1,15 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import {
-  Box, Typography, Button, Paper, List, ListItem, ListItemText, 
+  Box, Typography, Button, Paper, 
   CircularProgress, Alert, IconButton, Chip, Stack, Tooltip,
-  Table, TableBody, TableCell, TableContainer, TableHead, TableRow, TableSortLabel
+  Table, TableBody, TableCell, TableContainer, TableHead, TableRow, TableSortLabel,
+  Card, useMediaQuery, useTheme, alpha, List, ListItem, ListItemText, Divider
 } from '@mui/material';
 import { 
     Add as AddIcon, Edit as EditIcon, Delete as DeleteIcon, 
     Person as PersonIcon,
-    Engineering as SubcontractorIcon
+    Engineering as SubcontractorIcon,
+    Assignment as TaskIcon
 } from '@mui/icons-material';
 import { visuallyHidden } from '@mui/utils';
 import { Task, Project, Subcontractor } from '../../types'; // Import correct Task type
@@ -15,7 +17,6 @@ import { TaskService } from '../../services/task'; // Keep service import
 import { SubcontractorService } from '../../services/subcontractor';
 import TaskFormModal from '../tasks/TaskFormModal'; // Ensure path is correct
 import { useAuth } from '../../contexts/AuthContext'; // Added useAuth
-import { useTheme } from '@mui/material/styles';
 import { ProjectService } from '../../services/project';
 
 interface MockUser { id: string; name: string; }
@@ -144,6 +145,7 @@ function stableSort<T>(array: readonly T[], comparator: (a: T, b: T) => number):
 
 const ProjectTaskManager: React.FC<ProjectTaskManagerProps> = ({ project, onProjectUpdate, userId }) => {
   const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
   const { user } = useAuth(); // Get user auth context if needed
   
   // State uses imported Task type
@@ -269,10 +271,37 @@ const ProjectTaskManager: React.FC<ProjectTaskManagerProps> = ({ project, onProj
   const showLoading = loading && tasks.length === 0 && subcontractors.length === 0;
 
   return (
-    <Paper sx={{ p: 3, overflow: 'hidden' }}>
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-        <Typography variant="h6">Project Tasks</Typography>
-        <Button variant="contained" startIcon={<AddIcon />} onClick={handleAddTask} disabled={loading}>
+    <Paper 
+      elevation={0} 
+      sx={{ 
+        p: { xs: 2, sm: 3 }, 
+        overflow: 'hidden',
+        border: `1px solid ${alpha(theme.palette.divider, 0.1)}`,
+        borderRadius: 2
+      }}
+    >
+      <Box sx={{ 
+        display: 'flex', 
+        justifyContent: 'space-between', 
+        alignItems: 'center', 
+        mb: 2,
+        flexDirection: { xs: 'column', sm: 'row' },
+        gap: { xs: 2, sm: 0 }
+      }}>
+        <Stack direction="row" spacing={1.5} alignItems="center">
+          <TaskIcon color="primary" />
+          <Typography variant="h6">Project Tasks</Typography>
+        </Stack>
+        <Button 
+          variant="contained" 
+          startIcon={<AddIcon />} 
+          onClick={handleAddTask} 
+          disabled={loading}
+          sx={{ 
+            borderRadius: 1.5,
+            width: { xs: '100%', sm: 'auto' }
+          }}
+        >
           Add Task
         </Button>
       </Box>
@@ -281,8 +310,112 @@ const ProjectTaskManager: React.FC<ProjectTaskManagerProps> = ({ project, onProj
 
       {showLoading ? (
         <Box sx={{ display: 'flex', justifyContent: 'center', py: 3 }}><CircularProgress /></Box>
+      ) : sortedTasks.length === 0 ? (
+        <Alert 
+          severity="info" 
+          icon={<TaskIcon />}
+          sx={{ 
+            my: 2,
+            borderRadius: 1,
+            '& .MuiAlert-message': { width: '100%', textAlign: 'center' }
+          }}
+        >
+          No tasks found for this project. Click "Add Task" to get started.
+        </Alert>
+      ) : isMobile ? (
+        // Mobile view - List of cards instead of table
+        <List sx={{ p: 0 }}>
+          {sortedTasks.map((task) => (
+            <Card
+              key={task.id}
+              elevation={0}
+              sx={{
+                mb: 2,
+                border: `1px solid ${alpha(theme.palette.divider, 0.15)}`,
+                borderRadius: 1.5,
+              }}
+            >
+              <Box sx={{ p: 2 }}>
+                <Box sx={{ 
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'flex-start',
+                  mb: 1
+                }}>
+                  <Typography variant="subtitle1" fontWeight={500}>
+                    {task.title}
+                  </Typography>
+                  <Box sx={{ display: 'flex', gap: 0.5 }}>
+                    <IconButton 
+                      size="small" 
+                      onClick={() => handleEditTask(task)}
+                    >
+                      <EditIcon fontSize="small" />
+                    </IconButton>
+                    <IconButton 
+                      size="small" 
+                      color="error"
+                      onClick={() => handleDeleteTask(task.id!)}
+                    >
+                      <DeleteIcon fontSize="small" />
+                    </IconButton>
+                  </Box>
+                </Box>
+
+                {task.description && (
+                  <Typography 
+                    variant="body2" 
+                    color="text.secondary"
+                    sx={{ mb: 1.5 }}
+                  >
+                    {task.description}
+                  </Typography>
+                )}
+
+                <Stack direction="row" spacing={1} mb={1.5}>
+                  <Chip 
+                    label={task.status} 
+                    size="small" 
+                    color={taskStatusColors[task.status] as any || 'default'} 
+                  />
+                  <Chip 
+                    label={task.priority} 
+                    size="small"
+                    color={taskPriorityColors[task.priority] as any || 'default'} 
+                  />
+                </Stack>
+
+                <Divider sx={{ my: 1.5 }} />
+
+                <Stack direction="row" justifyContent="space-between">
+                  <Box>
+                    <Typography variant="caption" color="text.secondary">Assignee</Typography>
+                    <Box sx={{ mt: 0.5 }}>{getAssigneeDisplay(task)}</Box>
+                  </Box>
+                  <Box>
+                    <Typography variant="caption" color="text.secondary" align="right" display="block">
+                      Due Date
+                    </Typography>
+                    <Typography variant="body2" align="right">
+                      {task.dueDate ? new Date(task.dueDate).toLocaleDateString() : '-'}
+                    </Typography>
+                  </Box>
+                </Stack>
+              </Box>
+            </Card>
+          ))}
+        </List>
       ) : (
-        <TableContainer component={Paper} variant="outlined" sx={{ maxHeight: 600 }}>
+        // Desktop view - Table
+        <TableContainer 
+          component={Paper} 
+          variant="outlined" 
+          sx={{ 
+            borderRadius: 1.5,
+            border: `1px solid ${alpha(theme.palette.divider, 0.1)}`,
+            maxHeight: 600
+          }}
+        >
           <Table size="small" stickyHeader aria-label="project tasks table">
             <TableHead>
               <TableRow>
@@ -292,9 +425,16 @@ const ProjectTaskManager: React.FC<ProjectTaskManagerProps> = ({ project, onProj
                     align={headCell.numeric ? 'right' : 'left'}
                     padding={headCell.disablePadding ? 'none' : 'normal'}
                     sortDirection={orderBy === headCell.id ? order : false}
-                    sx={{ fontWeight: 'bold', whiteSpace: 'nowrap', backgroundColor: 'background.paper' }}
+                    sx={{ 
+                      fontWeight: 600, 
+                      whiteSpace: 'nowrap', 
+                      backgroundColor: alpha(theme.palette.primary.main, 0.03),
+                      color: 'text.primary',
+                      px: 2
+                    }}
                   >
-                    {headCell.id === 'status' || headCell.id === 'priority' ? (
+                    {(headCell.id === 'status' || headCell.id === 'priority' || headCell.id === 'title' || 
+                      headCell.id === 'dueDate') ? (
                       <TableSortLabel
                         active={orderBy === headCell.id}
                         direction={orderBy === headCell.id ? order : 'asc'}
@@ -320,30 +460,47 @@ const ProjectTaskManager: React.FC<ProjectTaskManagerProps> = ({ project, onProj
               ) : (
                 sortedTasks.map((task) => (
                   <TableRow hover key={task.id}>
-                     <TableCell padding="none">
-                          <Chip label={task.status} size="small" color={taskStatusColors[task.status] as any || 'default'} sx={{ m: 0.5 }}/>
-                     </TableCell>
-                     <TableCell>{getPriorityIndicator(task.priority)}</TableCell>
-                     <TableCell>
-                         <Typography variant="body2" sx={{ fontWeight: 500 }}>{task.title}</Typography>
-                         {task.description && <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>{task.description}</Typography>}
-                      </TableCell>
-                     <TableCell>{getAssigneeDisplay(task)}</TableCell>
-                     <TableCell sx={{ whiteSpace: 'nowrap' }}>
-                       {task.dueDate ? new Date(task.dueDate).toLocaleDateString() : '-'}
-                     </TableCell>
-                     <TableCell align="right">
-                       <Tooltip title="Edit Task">
+                    <TableCell>
+                      <Typography variant="body2" sx={{ fontWeight: 500 }}>{task.title}</Typography>
+                      {task.description && (
+                        <Typography variant="caption" color="text.secondary" sx={{
+                          display: 'block',
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                          whiteSpace: 'nowrap',
+                          maxWidth: '250px'
+                        }}>
+                          {task.description}
+                        </Typography>
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      <Chip 
+                        label={task.status} 
+                        size="small" 
+                        color={taskStatusColors[task.status] as any || 'default'} 
+                        sx={{ fontWeight: 500 }}
+                      />
+                    </TableCell>
+                    <TableCell>{getPriorityIndicator(task.priority)}</TableCell>
+                    <TableCell>{getAssigneeDisplay(task)}</TableCell>
+                    <TableCell sx={{ whiteSpace: 'nowrap' }}>
+                      {task.dueDate ? new Date(task.dueDate).toLocaleDateString() : '-'}
+                    </TableCell>
+                    <TableCell align="right">
+                      <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 1 }}>
+                        <Tooltip title="Edit Task">
                           <IconButton size="small" onClick={() => handleEditTask(task)}>
-                             <EditIcon fontSize="inherit" />
+                            <EditIcon fontSize="small" />
                           </IconButton>
-                       </Tooltip>
-                       <Tooltip title="Delete Task">
+                        </Tooltip>
+                        <Tooltip title="Delete Task">
                           <IconButton size="small" color="error" onClick={() => handleDeleteTask(task.id!)}>
-                              <DeleteIcon fontSize="inherit" />
+                            <DeleteIcon fontSize="small" />
                           </IconButton>
-                       </Tooltip>
-                     </TableCell>
+                        </Tooltip>
+                      </Box>
+                    </TableCell>
                   </TableRow>
                 ))
               )}
@@ -364,4 +521,4 @@ const ProjectTaskManager: React.FC<ProjectTaskManagerProps> = ({ project, onProj
   );
 };
 
-export default ProjectTaskManager; 
+export default ProjectTaskManager;

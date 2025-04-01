@@ -4,7 +4,6 @@ import {
   Button,
   Card,
   CardContent,
-  CardActions,
   Grid,
   Typography,
   LinearProgress,
@@ -14,13 +13,22 @@ import {
   Menu,
   MenuItem,
   Chip,
+  useTheme,
+  alpha,
+  useMediaQuery,
+  Stack,
+  Avatar,
+  Skeleton,
+  Divider,
+  Paper
 } from '@mui/material';
 import {
   Add as AddIcon,
   Search as SearchIcon,
   MoreVert as MoreVertIcon,
-  FilterList as FilterListIcon,
-  Build as BuildIcon,
+  CalendarToday as CalendarIcon,
+  AttachMoney as BudgetIcon,
+  LocationOn as LocationIcon,
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 
@@ -62,13 +70,18 @@ const mockProjects: Project[] = [
 
 const ProjectsList: React.FC = () => {
   const navigate = useNavigate();
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
   const [projects, setProjects] = useState<Project[]>(mockProjects);
   const [searchTerm, setSearchTerm] = useState('');
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
   const [selectedProject, setSelectedProject] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
 
   // Menu handlers
-  const handleMenuOpen = (event: React.MouseEvent<HTMLElement>) => {
+  const handleMenuOpen = (event: React.MouseEvent<HTMLElement>, projectId: string) => {
+    event.stopPropagation();
+    setSelectedProject(projectId);
     setAnchorEl(event.currentTarget);
   };
 
@@ -99,10 +112,10 @@ const ProjectsList: React.FC = () => {
   // Status chip color mapping
   const getStatusColor = (status: Project['status']) => {
     const colors = {
-      planning: 'info',
-      in_progress: 'warning',
-      completed: 'success',
-      on_hold: 'error',
+      planning: theme.palette.info.main,
+      in_progress: theme.palette.warning.main,
+      completed: theme.palette.success.main,
+      on_hold: theme.palette.error.main,
     };
     return colors[status];
   };
@@ -115,138 +128,359 @@ const ProjectsList: React.FC = () => {
     }).format(amount);
   };
 
-  return (
-    <Box sx={{ p: 3 }}>
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
-        <Typography variant="h4" component="h1">
-          Projects
-        </Typography>
-        <Box>
-          <Button
-            variant="contained"
-            startIcon={<BuildIcon />}
-            onClick={handleCreateProject}
-            sx={{ mr: 2 }}
-          >
-            New Project
-          </Button>
-          <IconButton onClick={handleMenuOpen}>
-            <MoreVertIcon />
-          </IconButton>
-        </Box>
-      </Box>
+  // Filter projects based on search term
+  const filteredProjects = projects.filter(project => 
+    project.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    project.description.toLowerCase().includes(searchTerm.toLowerCase())
+  );
 
-      <Box sx={{ mb: 3 }}>
-        <Grid container spacing={2}>
-          <Grid item xs={12} md={6}>
-            <TextField
-              fullWidth
+  return (
+    <Box sx={{ 
+      py: { xs: 1.5, sm: 2.5 }, 
+      px: { xs: 1, sm: 2, md: 3 },
+      maxWidth: '100%',
+      margin: '0 auto',
+      overflowX: 'hidden'
+    }}>
+      {/* Page Header */}
+      <Paper 
+        elevation={0}
+        sx={{ 
+          mb: { xs: 2, sm: 2.5 },
+          p: { xs: 1.5, sm: 2.5 },
+          borderRadius: 2,
+          border: '1px solid',
+          borderColor: alpha(theme.palette.divider, 0.1),
+          width: '100%'
+        }}
+      >
+        <Box sx={{ 
+          display: 'flex',
+          flexDirection: { xs: 'column', sm: 'row' },
+          justifyContent: 'space-between',
+          alignItems: { xs: 'stretch', sm: 'center' },
+          gap: { xs: 1.5, sm: 0 },
+          width: '100%'
+        }}>
+          <Typography 
+            variant="h4" 
+            component="h1" 
+            fontWeight={600}
+            sx={{ 
+              fontSize: { xs: '1.5rem', sm: '1.75rem' }
+            }}
+          >
+            Projects
+          </Typography>
+
+          <Box sx={{ 
+            display: 'flex',
+            flexDirection: { xs: 'column', sm: 'row' },
+            width: { xs: '100%', sm: 'auto' },
+            gap: { xs: 1, sm: 1.5 }
+          }}>
+            <TextField 
               placeholder="Search projects..."
+              size="small"
+              fullWidth
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               InputProps={{
                 startAdornment: (
                   <InputAdornment position="start">
-                    <SearchIcon />
+                    <SearchIcon fontSize="small" />
                   </InputAdornment>
                 ),
               }}
+              sx={{ 
+                width: { xs: '100%', sm: 220 },
+                '& .MuiOutlinedInput-root': {
+                  borderRadius: 1.5,
+                  backgroundColor: alpha(theme.palette.common.black, 0.02),
+                }
+              }}
             />
-          </Grid>
-          <Grid item xs={12} md={6}>
+            
             <Button
-              startIcon={<FilterListIcon />}
-              sx={{ ml: { xs: 0, md: 2 } }}
+              variant="contained"
+              color="primary"
+              startIcon={!isMobile && <AddIcon />}
+              onClick={handleCreateProject}
+              sx={{ 
+                height: 40, 
+                minWidth: { xs: '100%', sm: 'auto' },
+                px: { xs: 1.5, sm: 2 },
+                borderRadius: 1.5
+              }}
             >
-              Filter
+              {isMobile ? <AddIcon /> : "New Project"}
             </Button>
-          </Grid>
-        </Grid>
-      </Box>
+          </Box>
+        </Box>
+      </Paper>
 
-      <Grid container spacing={3}>
-        {projects.map((project) => (
-          <Grid item xs={12} md={6} lg={4} key={project.id}>
-            <Card>
-              <CardContent>
-                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                  <Typography variant="h6" component="h2" gutterBottom>
-                    {project.name}
-                  </Typography>
-                  <IconButton
-                    size="small"
-                    onClick={(e) => handleMenuOpen(e)}
-                  >
-                    <MoreVertIcon />
-                  </IconButton>
-                </Box>
-                
-                <Chip
-                  label={project.status.replace('_', ' ').toUpperCase()}
-                  color={getStatusColor(project.status) as any}
-                  size="small"
-                  sx={{ mb: 2 }}
+      {loading ? (
+        <Box sx={{ width: '100%', mt: 3 }}>
+          <Grid container spacing={3}>
+            {[...Array(3)].map((_, index) => (
+              <Grid item xs={12} sm={6} md={4} key={index}>
+                <Skeleton 
+                  variant="rectangular" 
+                  height={280} 
+                  sx={{ borderRadius: 2 }} 
+                />
+              </Grid>
+            ))}
+          </Grid>
+        </Box>
+      ) : filteredProjects.length === 0 ? (
+        <Paper 
+          elevation={0} 
+          sx={{ 
+            textAlign: 'center', 
+            py: 6, 
+            px: 3,
+            borderRadius: 2,
+            border: `1px solid ${alpha(theme.palette.divider, 0.1)}`
+          }}
+        >
+          <Typography variant="h6" fontWeight={500} gutterBottom>
+            No projects found
+          </Typography>
+          <Typography variant="body1" color="text.secondary" paragraph>
+            {searchTerm ? 'Try a different search term' : 'Get started by creating your first project'}
+          </Typography>
+          
+          {!searchTerm && (
+            <Button
+              variant="contained"
+              color="primary"
+              startIcon={<AddIcon />}
+              onClick={handleCreateProject}
+              sx={{ mt: 2 }}
+            >
+              Create Project
+            </Button>
+          )}
+        </Paper>
+      ) : (
+        <Grid container spacing={{ xs: 1.5, sm: 2, md: 3 }}>
+          {filteredProjects.map((project) => (
+            <Grid item xs={12} sm={6} lg={4} key={project.id} sx={{ width: '100%' }}>
+              <Card 
+                sx={{ 
+                  height: '100%',
+                  width: '100%',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  borderRadius: 2,
+                  boxShadow: '0px 2px 8px rgba(0,0,0,0.08)',
+                  border: `1px solid ${alpha(theme.palette.divider, 0.1)}`,
+                  transition: 'transform 0.2s, box-shadow 0.2s',
+                  '&:hover': {
+                    transform: 'translateY(-4px)',
+                    boxShadow: '0px 8px 16px rgba(0,0,0,0.12)',
+                    cursor: 'pointer'
+                  }
+                }}
+                onClick={() => handleViewProject(project.id)}
+              >
+                {/* Status indicator - top bar */}
+                <Box 
+                  sx={{ 
+                    height: 4, 
+                    width: '100%', 
+                    backgroundColor: getStatusColor(project.status) 
+                  }}
                 />
                 
-                <Typography variant="body2" color="text.secondary" gutterBottom>
-                  {project.description}
-                </Typography>
-
-                <Box sx={{ mt: 2 }}>
-                  <Typography variant="body2" color="text.secondary">
-                    Progress
+                <CardContent sx={{ 
+                  p: { xs: 1.5, sm: 2.5 }, 
+                  flexGrow: 1, 
+                  display: 'flex',
+                  flexDirection: 'column',
+                  '&:last-child': { pb: { xs: 1.5, sm: 2.5 } }
+                }}>
+                  {/* Header: Title and menu */}
+                  <Box sx={{ 
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'flex-start',
+                    mb: 2
+                  }}>
+                    <Typography 
+                      variant="h6" 
+                      component="h2" 
+                      fontWeight={600}
+                      sx={{ 
+                        lineHeight: 1.3,
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        display: '-webkit-box',
+                        WebkitLineClamp: 2,
+                        WebkitBoxOrient: 'vertical',
+                      }}
+                    >
+                      {project.name}
+                    </Typography>
+                    
+                    <IconButton
+                      size="small" 
+                      sx={{ ml: 1, flexShrink: 0 }}
+                      onClick={(e) => handleMenuOpen(e, project.id)}
+                    >
+                      <MoreVertIcon fontSize="small" />
+                    </IconButton>
+                  </Box>
+                  
+                  {/* Status chip */}
+                  <Box sx={{ mb: 2 }}>
+                    <Chip 
+                      label={project.status.replace('_', ' ').toUpperCase()} 
+                      size="small"
+                      sx={{ 
+                        fontWeight: 500,
+                        backgroundColor: alpha(getStatusColor(project.status), 0.12),
+                        color: getStatusColor(project.status),
+                        borderRadius: 1
+                      }}
+                    />
+                  </Box>
+                  
+                  {/* Description */}
+                  <Typography 
+                    variant="body2" 
+                    color="text.secondary" 
+                    sx={{
+                      mb: 2.5,
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      display: '-webkit-box',
+                      WebkitLineClamp: 2,
+                      WebkitBoxOrient: 'vertical'
+                    }}
+                  >
+                    {project.description}
                   </Typography>
-                  <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                    <Box sx={{ width: '100%', mr: 1 }}>
-                      <LinearProgress
-                        variant="determinate"
-                        value={project.progress}
-                        sx={{ height: 8, borderRadius: 4 }}
+                  
+                  {/* Progress Section */}
+                  <Box sx={{ mt: 'auto' }}>
+                    <Box sx={{ mb: 1 }}>
+                      <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
+                        <Typography variant="body2" color="text.secondary" fontWeight={500}>
+                          Progress
+                        </Typography>
+                        <Typography variant="body2" fontWeight={600}>
+                          {project.progress}%
+                        </Typography>
+                      </Box>
+                      
+                      <LinearProgress 
+                        variant="determinate" 
+                        value={project.progress} 
+                        sx={{ height: 6, borderRadius: 3 }}
                       />
                     </Box>
-                    <Typography variant="body2" color="text.secondary">
-                      {project.progress}%
-                    </Typography>
+                    
+                    <Divider sx={{ my: 2 }} />
+                    
+                    {/* Project details */}
+                    <Grid container spacing={2}>
+                      <Grid item xs={6}>
+                        <Stack direction="row" spacing={1} alignItems="center">
+                          <Avatar 
+                            sx={{ 
+                              width: 28, 
+                              height: 28, 
+                              bgcolor: alpha(theme.palette.primary.main, 0.1),
+                              color: theme.palette.primary.main
+                            }}
+                          >
+                            <CalendarIcon sx={{ fontSize: '0.85rem' }} />
+                          </Avatar>
+                          <Box>
+                            <Typography variant="caption" color="text.secondary">
+                              Due
+                            </Typography>
+                            <Typography variant="body2" fontWeight={500}>
+                              {new Date(project.endDate).toLocaleDateString()}
+                            </Typography>
+                          </Box>
+                        </Stack>
+                      </Grid>
+                      
+                      <Grid item xs={6}>
+                        <Stack direction="row" spacing={1} alignItems="center">
+                          <Avatar 
+                            sx={{ 
+                              width: 28, 
+                              height: 28, 
+                              bgcolor: alpha(theme.palette.success.main, 0.1),
+                              color: theme.palette.success.main
+                            }}
+                          >
+                            <BudgetIcon sx={{ fontSize: '0.85rem' }} />
+                          </Avatar>
+                          <Box>
+                            <Typography variant="caption" color="text.secondary">
+                              Budget
+                            </Typography>
+                            <Typography variant="body2" fontWeight={500}>
+                              {formatCurrency(project.budget)}
+                            </Typography>
+                          </Box>
+                        </Stack>
+                      </Grid>
+                    </Grid>
                   </Box>
-                </Box>
-
-                <Box sx={{ mt: 2 }}>
-                  <Typography variant="body2" color="text.secondary">
-                    Budget: {formatCurrency(project.budget)}
-                  </Typography>
-                </Box>
-              </CardContent>
-              
-              <CardActions>
-                <Button
-                  size="small"
-                  onClick={() => handleViewProject(project.id)}
-                >
-                  View Details
-                </Button>
-              </CardActions>
-            </Card>
-          </Grid>
-        ))}
-      </Grid>
+                </CardContent>
+              </Card>
+            </Grid>
+          ))}
+        </Grid>
+      )}
 
       <Menu
+        id="project-menu"
         anchorEl={anchorEl}
         open={Boolean(anchorEl)}
         onClose={handleMenuClose}
+        transformOrigin={{ horizontal: 'right', vertical: 'top' }}
+        anchorOrigin={{ horizontal: 'right', vertical: 'bottom' }}
+        PaperProps={{
+          elevation: 2,
+          sx: { 
+            mt: 0.5, 
+            minWidth: 150,
+            borderRadius: 1,
+            boxShadow: '0px 4px 12px rgba(0,0,0,0.1)'
+          }
+        }}
       >
-        <MenuItem onClick={() => selectedProject && handleEditProject(selectedProject)}>
+        <MenuItem onClick={() => {
+          handleViewProject(selectedProject || '');
+          handleMenuClose();
+        }}>
+          View Details
+        </MenuItem>
+        <MenuItem onClick={() => {
+          handleEditProject(selectedProject || '');
+          handleMenuClose();
+        }}>
           Edit
         </MenuItem>
-        <MenuItem onClick={() => selectedProject && handleDeleteProject(selectedProject)}>
+        <MenuItem 
+          onClick={() => {
+            handleDeleteProject(selectedProject || '');
+            handleMenuClose();
+          }}
+          sx={{ color: 'error.main' }}
+        >
           Delete
-        </MenuItem>
-        <MenuItem onClick={handleCreateProject}>
-          <AddIcon sx={{ mr: 1 }} /> New Project
         </MenuItem>
       </Menu>
     </Box>
   );
 };
 
-export default ProjectsList; 
+export default ProjectsList;
