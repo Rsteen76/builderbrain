@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
   Box, Typography, Button, Paper, Table, TableBody, TableCell, 
   TableContainer, TableHead, TableRow, IconButton, Chip, Alert, CircularProgress,
@@ -115,10 +115,14 @@ const BidManager: React.FC<BidManagerProps> = ({ project, userId, onProjectUpdat
   const [error, setError] = useState<string | null>(null);
   const [order, setOrder] = useState<Order>('asc');
   const [orderBy, setOrderBy] = useState<BidKeys>('scope'); // Default sort by scope
+  const [bids, setBids] = useState<Bid[]>(project.bids || []);
 
   const theme = useTheme(); // Get theme for styling
 
-  const bids = useMemo(() => project.bids || [], [project.bids]);
+  // Ensure we always have the latest bids from the project
+  useEffect(() => {
+    setBids(project.bids || []);
+  }, [project.bids]);
 
   const handleRequestSort = (event: React.MouseEvent<unknown>, property: BidKeys) => {
     const isAsc = orderBy === property && order === 'asc';

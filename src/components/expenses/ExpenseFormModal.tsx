@@ -100,6 +100,21 @@ const ExpenseFormModal: React.FC<ExpenseFormModalProps> = ({
       if (expense.receiptUrl) {
         setReceiptPreview(expense.receiptUrl);
       }
+    } else {
+      // Reset form data when creating a new expense
+      setFormData({
+        description: '',
+        amount: 0,
+        category: 'other' as Expense['category'],
+        date: new Date(),
+        status: 'pending',
+        projectId: '',
+        vendor: '',
+        notes: '',
+      });
+      setReceiptFile(null);
+      setReceiptPreview(null);
+      setErrors({});
     }
   }, [expense]);
 

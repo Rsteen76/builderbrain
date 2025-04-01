@@ -13,15 +13,17 @@ import {
   Select,
   InputAdornment,
   Autocomplete,
+  CircularProgress,
 } from '@mui/material';
 import { DatePicker } from '@mui/x-date-pickers/DatePicker';
 import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
 import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns';
 import { BidStatus } from '../../types/project.types';
-import { Bid } from '../../types';
+import { Bid, Subcontractor } from '../../types';
 import { v4 as uuidv4 } from 'uuid';
 import { TextFieldProps } from '@mui/material/TextField';
 import { BidService } from '../../services/bid';
+import { SubcontractorService } from '../../services/subcontractor';
 
 interface BidFormModalProps {
   open: boolean;
@@ -36,32 +38,84 @@ const bidStatuses: Bid['status'][] = ['draft', 'submitted', 'accepted', 'rejecte
 
 // Define common bid categories
 const commonBidCategories: string[] = [
-  'Plumbing',
-  'Electrical',
-  'HVAC',
+  // Site Work
+  'Site Preparation',
+  'Demolition',
+  'Excavation',
+  'Grading',
+  'Erosion Control',
+  'Utilities',
+  'Paving',
+  'Concrete',
+  'Fencing',
+  'Landscaping',
+  
+  // Structural
+  'Foundation',
+  'Concrete Foundation',
+  'Poured Foundation',
+  'Slab Foundation',
+  'Basement Foundation',
+  'Crawl Space Foundation',
+  'Pier and Beam Foundation',
+  'Pile Foundation',
+  'Masonry',
+  'Structural Steel',
   'Framing',
+  'Rough Carpentry',
+  'Finish Carpentry',
+  
+  // Exterior
   'Roofing',
   'Siding',
-  'Windows & Doors',
+  'Windows',
+  'Doors',
+  'Exterior Painting',
+  'Waterproofing',
   'Insulation',
+  
+  // Interior
   'Drywall',
-  'Painting',
+  'Plaster',
+  'Interior Painting',
   'Flooring',
+  'Tile',
   'Cabinetry',
   'Countertops',
-  'Landscaping',
-  'Concrete',
-  'Excavation',
-  'Demolition',
+  'Millwork',
+  'Trim Work',
+  
+  // Mechanical/Electrical/Plumbing
+  'Plumbing',
+  'HVAC',
+  'Electrical',
+  'Fire Protection',
+  'Security Systems',
+  'Low Voltage',
+  'Solar/Renewable Energy',
+  
+  // Specialty
+  'Elevator',
+  'Windows & Doors',
+  'Glass & Glazing',
+  'Acoustical',
+  'Specialty Finishes',
+  'Kitchen Equipment',
+  'Bathroom Fixtures',
+  
+  // Professional Services
+  'Architecture',
+  'Engineering',
+  'Surveying',
+  'Interior Design',
+  'Consulting',
+  
+  // General
+  'General Contractor',
+  'Construction Management',
+  'Labor Only',
+  'Materials Only',
   'Other',
-];
-
-// Mock data - replace with API call or context later
-const mockContractors = [
-  { id: 'c1', name: 'ABC Plumbing' },
-  { id: 'c2', name: 'XYZ Electricians' },
-  { id: 'c3', name: 'General Framers Inc.' },
-  { id: 'c4', name: 'Top Roofers Ltd.' },
 ];
 
 // Status display names
@@ -78,6 +132,8 @@ const STATUS_DISPLAY: Record<Bid['status'], string> = {
 const BidFormModal: React.FC<BidFormModalProps> = ({ open, onClose, onSubmit, initialData, userId, projectId }) => {
   const [bid, setBid] = useState<Partial<Bid>>({});
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [contractors, setContractors] = useState<Subcontractor[]>([]);
+  const [loadingContractors, setLoadingContractors] = useState<boolean>(false);
 
   useEffect(() => {
     if (open) {
@@ -93,6 +149,20 @@ const BidFormModal: React.FC<BidFormModalProps> = ({ open, onClose, onSubmit, in
         notes: '',
       });
       setErrors({});
+      
+      // Load real contractors data
+      const loadContractors = async () => {
+        setLoadingContractors(true);
+        try {
+          const data = await SubcontractorService.getSubcontractors(userId);
+          setContractors(data);
+        } catch (error) {
+          console.error("Error loading contractors:", error);
+        } finally {
+          setLoadingContractors(false);
+        }
+      };
+      loadContractors();
     } else {
       setBid({});
     }
@@ -194,11 +264,24 @@ const BidFormModal: React.FC<BidFormModalProps> = ({ open, onClose, onSubmit, in
             <Grid item xs={12} sm={6}>
               <Autocomplete
                 freeSolo
-                options={mockContractors}
-                getOptionLabel={(option) => typeof option === 'string' ? option : option.name}
+                options={contractors}
+                getOptionLabel={(option) => {
+                  if (typeof option === 'string') return option;
+                  return option.name;
+                }}
+                loading={loadingContractors}
                 value={bid.subcontractorName || ''}
                 onChange={(event, newValue) => {
-                  handleAutocompleteChange('subcontractorName', newValue);
+                  if (typeof newValue === 'string') {
+                    handleAutocompleteChange('subcontractorName', newValue);
+                  } else if (newValue && 'name' in newValue) {
+                    handleAutocompleteChange('subcontractorName', newValue.name);
+                    if (newValue.id) {
+                      setBid(prev => ({...prev, subcontractorId: newValue.id}));
+                    }
+                  } else {
+                    handleAutocompleteChange('subcontractorName', '');
+                  }
                 }}
                 onInputChange={(event, newInputValue) => {
                     setBid(prev => ({...prev, subcontractorName: newInputValue}));
@@ -211,6 +294,15 @@ const BidFormModal: React.FC<BidFormModalProps> = ({ open, onClose, onSubmit, in
                     error={!!errors.subcontractorName}
                     helperText={errors.subcontractorName}
                     required
+                    InputProps={{
+                      ...params.InputProps,
+                      endAdornment: (
+                        <>
+                          {loadingContractors ? <CircularProgress color="inherit" size={20} /> : null}
+                          {params.InputProps.endAdornment}
+                        </>
+                      ),
+                    }}
                   />
                 )}
               />
