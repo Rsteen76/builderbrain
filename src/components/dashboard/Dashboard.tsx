@@ -17,6 +17,12 @@ import {
   Divider,
   CircularProgress,
   Alert,
+  Container,
+  Stack,
+  Badge,
+  useMediaQuery,
+  Skeleton,
+  Button,
 } from '@mui/material';
 import {
   TrendingUp as TrendingUpIcon,
@@ -28,12 +34,18 @@ import {
   Build as BuildIcon,
   Notifications as NotificationsIcon,
   Refresh as RefreshIcon,
+  Dashboard as DashboardIcon,
+  Home as HomeIcon,
+  Speed as SpeedIcon,
+  Business as BusinessIcon,
+  Assignment as AssignmentIcon,
+  LocalAtm as LocalAtmIcon,
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 import { Project } from '../../types';
 import { ProjectService } from '../../services/project';
 import { useAuth } from '../../contexts/AuthContext';
-import { formatCurrency } from '../../utils/formatters';
+import { formatCurrency, formatDate } from '../../utils/formatters';
 
 interface StatCardProps {
   title: string;
@@ -55,41 +67,53 @@ const StatCard: React.FC<StatCardProps> = ({
   const theme = useTheme();
   return (
     <Card
+      elevation={0}
       sx={{
         height: '100%',
         cursor: onClick ? 'pointer' : 'default',
-        transition: 'all 0.3s ease',
+        transition: 'all 0.2s ease',
+        borderRadius: 2,
+        border: `1px solid ${alpha(theme.palette.divider, 0.1)}`,
+        boxShadow: `0 2px 8px ${alpha(theme.palette.common.black, 0.04)}`,
         '&:hover': {
-          transform: 'translateY(-4px)',
-          boxShadow: theme.shadows[4],
+          transform: onClick ? 'translateY(-4px)' : 'none',
+          boxShadow: onClick ? `0 4px 12px ${alpha(theme.palette.common.black, 0.08)}` : `0 2px 8px ${alpha(theme.palette.common.black, 0.04)}`,
         },
       }}
       onClick={onClick}
     >
       <CardContent>
-        <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 2 }}>
-          <Typography variant="h6" color="text.secondary">
-            {title}
-          </Typography>
-          <Box
+        <Stack direction="row" spacing={2} alignItems="center" sx={{ mb: 2 }}>
+          <Avatar
             sx={{
-              backgroundColor: alpha(color, 0.1),
-              borderRadius: '50%',
-              p: 1,
-              display: 'flex',
+              bgcolor: alpha(color, 0.1),
+              color: color,
+              width: 48,
+              height: 48,
             }}
           >
             {icon}
-          </Box>
-        </Box>
-        <Typography variant="h4" component="div" sx={{ mb: 1 }}>
+          </Avatar>
+          <Typography variant="h6" fontWeight={500}>
+            {title}
+          </Typography>
+        </Stack>
+        <Typography variant="h4" component="div" sx={{ mb: 1, fontWeight: 600 }}>
           {value}
         </Typography>
         {change && (
-          <Typography
-            variant="body2"
-            color={change.startsWith('+') ? 'success.main' : 'error.main'}
-            sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}
+          <Box 
+            sx={{ 
+              display: 'flex', 
+              alignItems: 'center', 
+              gap: 0.5,
+              bgcolor: alpha(change.startsWith('+') ? theme.palette.success.main : theme.palette.error.main, 0.1),
+              color: change.startsWith('+') ? theme.palette.success.main : theme.palette.error.main,
+              py: 0.5,
+              px: 1,
+              borderRadius: 1,
+              width: 'fit-content'
+            }}
           >
             <TrendingUpIcon
               sx={{
@@ -97,8 +121,10 @@ const StatCard: React.FC<StatCardProps> = ({
                 fontSize: 16,
               }}
             />
-            {change}
-          </Typography>
+            <Typography variant="body2" fontWeight={500}>
+              {change}
+            </Typography>
+          </Box>
         )}
       </CardContent>
     </Card>
@@ -114,6 +140,7 @@ interface ProjectCardProps {
   team: number;
   projectId?: string;
   onClick?: () => void;
+  location?: string;
 }
 
 const ProjectCard: React.FC<ProjectCardProps> = ({
@@ -124,9 +151,12 @@ const ProjectCard: React.FC<ProjectCardProps> = ({
   budget,
   team,
   projectId,
-  onClick
+  onClick,
+  location
 }) => {
   const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
+  
   const statusColors = {
     'on-track': theme.palette.success.main,
     'at-risk': theme.palette.warning.main,
@@ -135,37 +165,52 @@ const ProjectCard: React.FC<ProjectCardProps> = ({
 
   return (
     <Card
+      elevation={0}
       sx={{
         height: '100%',
-        transition: 'all 0.3s ease',
+        transition: 'all 0.2s ease',
         cursor: 'pointer',
+        borderRadius: 2,
+        border: `1px solid ${alpha(theme.palette.divider, 0.1)}`,
+        boxShadow: `0 2px 8px ${alpha(theme.palette.common.black, 0.04)}`,
         '&:hover': {
           transform: 'translateY(-4px)',
-          boxShadow: theme.shadows[4],
+          boxShadow: `0 4px 12px ${alpha(theme.palette.common.black, 0.08)}`,
         },
       }}
       onClick={onClick}
     >
       <CardContent>
-        <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 2 }}>
-          <Typography variant="h6" component="div">
-            {title}
-          </Typography>
+        <Stack direction="row" justifyContent="space-between" alignItems="flex-start" sx={{ mb: 2 }}>
+          <Stack spacing={1}>
+            <Typography variant="h6" component="div" fontWeight={600}>
+              {title}
+            </Typography>
+            {location && (
+              <Typography variant="body2" color="text.secondary" sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                <BusinessIcon fontSize="small" />
+                {location}
+              </Typography>
+            )}
+          </Stack>
           <Chip
             label={status.replace('-', ' ')}
             size="small"
             sx={{
               backgroundColor: alpha(statusColors[status], 0.1),
               color: statusColors[status],
+              fontWeight: 500,
+              borderRadius: '4px',
+              textTransform: 'capitalize',
             }}
           />
-        </Box>
+        </Stack>
         <Box sx={{ mb: 2 }}>
           <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
             <Typography variant="body2" color="text.secondary">
               Progress
             </Typography>
-            <Typography variant="body2" color="text.secondary">
+            <Typography variant="body2" fontWeight={500}>
               {progress}%
             </Typography>
           </Box>
@@ -182,26 +227,37 @@ const ProjectCard: React.FC<ProjectCardProps> = ({
             }}
           />
         </Box>
-        <Box sx={{ display: 'flex', gap: 2, justifyContent: 'space-between' }}>
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-            <ScheduleIcon sx={{ fontSize: 16, color: 'text.secondary' }} />
-            <Typography variant="body2" color="text.secondary">
-              {dueDate}
+        <Stack 
+          direction={isMobile ? "column" : "row"} 
+          spacing={isMobile ? 1 : 2} 
+          sx={{ mt: 2 }}
+          divider={isMobile ? null : <Divider orientation="vertical" flexItem />}
+        >
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            <Avatar sx={{ width: 24, height: 24, bgcolor: alpha(theme.palette.primary.main, 0.1) }}>
+              <ScheduleIcon sx={{ fontSize: 14, color: theme.palette.primary.main }} />
+            </Avatar>
+            <Typography variant="body2">
+              Due: {dueDate}
             </Typography>
           </Box>
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-            <MoneyIcon sx={{ fontSize: 16, color: 'text.secondary' }} />
-            <Typography variant="body2" color="text.secondary">
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            <Avatar sx={{ width: 24, height: 24, bgcolor: alpha(theme.palette.success.main, 0.1) }}>
+              <MoneyIcon sx={{ fontSize: 14, color: theme.palette.success.main }} />
+            </Avatar>
+            <Typography variant="body2">
               {budget}
             </Typography>
           </Box>
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-            <GroupIcon sx={{ fontSize: 16, color: 'text.secondary' }} />
-            <Typography variant="body2" color="text.secondary">
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            <Avatar sx={{ width: 24, height: 24, bgcolor: alpha(theme.palette.warning.main, 0.1) }}>
+              <GroupIcon sx={{ fontSize: 14, color: theme.palette.warning.main }} />
+            </Avatar>
+            <Typography variant="body2">
               {team} members
             </Typography>
           </Box>
-        </Box>
+        </Stack>
       </CardContent>
     </Card>
   );
@@ -211,6 +267,8 @@ const Dashboard: React.FC = () => {
   const theme = useTheme();
   const navigate = useNavigate();
   const { user } = useAuth();
+  const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
+  const isTablet = useMediaQuery(theme.breakpoints.down('md'));
   
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -248,11 +306,25 @@ const Dashboard: React.FC = () => {
         const uniqueTeamMembers = new Set<string>();
         projectsData.forEach(p => {
           if (p.team && Array.isArray(p.team)) {
-            p.team.forEach((member: string) => uniqueTeamMembers.add(member));
+            p.team.forEach(member => uniqueTeamMembers.add(member));
           }
         });
         
-        const tasksDue = Math.min(5, Math.floor(activeProjects * 1.5));
+        // Calculate tasks due in the next week
+        let tasksDue = 0;
+        projectsData.forEach(p => {
+          if (p.tasks && Array.isArray(p.tasks)) {
+            const today = new Date();
+            const nextWeek = new Date(today);
+            nextWeek.setDate(today.getDate() + 7);
+            
+            tasksDue += p.tasks.filter(t => {
+              if (!t.dueDate) return false;
+              const dueDate = new Date(t.dueDate);
+              return dueDate >= today && dueDate <= nextWeek && t.status !== 'completed';
+            }).length;
+          }
+        });
         
         setStats({
           activeProjects,
@@ -260,348 +332,313 @@ const Dashboard: React.FC = () => {
           teamMembers: uniqueTeamMembers.size,
           tasksDue
         });
+        
       } catch (err) {
         console.error('Error fetching dashboard data:', err);
-        setError('Failed to load dashboard data');
+        setError('Failed to load dashboard data. Please try again.');
       } finally {
         setLoading(false);
       }
     };
-
-    if (user?.uid) {
-        fetchDashboardData();
-    } else {
-        setLoading(false); 
-        setError('Waiting for user authentication...');
-    }
-
+    
+    fetchDashboardData();
   }, [user]);
   
   const refreshData = () => {
-      if (user?.uid) { 
-          const fetchDashboardData = async () => {
-                try {
-                    setLoading(true);
-                    setError(null);
-                    const projectsData: Project[] = await ProjectService.getProjects(user.uid);
-                    setProjects(projectsData);
-                    const activeProjects = projectsData.filter(p => 
-                        p.status === 'in_progress' || p.status === 'planning' || p.status === 'active'
-                    ).length;
-                    const totalBudget = projectsData.reduce((sum, p) => {
-                        const budgetValue = typeof p.budget === 'object' && p.budget !== null ? p.budget.total : (p.budget || 0);
-                        return sum + (typeof budgetValue === 'number' ? budgetValue : 0);
-                    }, 0);
-                    const uniqueTeamMembers = new Set<string>();
-                    projectsData.forEach(p => {
-                        if (p.team && Array.isArray(p.team)) {
-                            p.team.forEach((member: string) => uniqueTeamMembers.add(member));
-                        }
-                    });
-                    const tasksDue = Math.min(5, Math.floor(activeProjects * 1.5));
-                    setStats({
-                        activeProjects,
-                        totalBudget,
-                        teamMembers: uniqueTeamMembers.size,
-                        tasksDue
-                    });
-                } catch (err) {
-                    console.error('Error refreshing dashboard data:', err);
-                    setError('Failed to refresh dashboard data');
-                } finally {
-                    setLoading(false);
-                }
-          };
-          fetchDashboardData();
-      } else {
-          setError("Cannot refresh: User not authenticated.");
-      }
+    if (user?.uid) {
+      const fetchDashboardData = async () => {
+        try {
+          setLoading(true);
+          setError(null);
+          
+          const projectsData: Project[] = await ProjectService.getProjects(user.uid);
+          setProjects(projectsData);
+          
+          const activeProjects = projectsData.filter(p => 
+            p.status === 'in_progress' || p.status === 'planning' || p.status === 'active'
+          ).length;
+          
+          const totalBudget = projectsData.reduce((sum, p) => {
+              const budgetValue = typeof p.budget === 'object' && p.budget !== null ? p.budget.total : (p.budget || 0);
+              return sum + (typeof budgetValue === 'number' ? budgetValue : 0);
+          }, 0);
+          
+          const uniqueTeamMembers = new Set<string>();
+          projectsData.forEach(p => {
+            if (p.team && Array.isArray(p.team)) {
+              p.team.forEach(member => uniqueTeamMembers.add(member));
+            }
+          });
+          
+          // Calculate tasks due in the next week
+          let tasksDue = 0;
+          projectsData.forEach(p => {
+            if (p.tasks && Array.isArray(p.tasks)) {
+              const today = new Date();
+              const nextWeek = new Date(today);
+              nextWeek.setDate(today.getDate() + 7);
+              
+              tasksDue += p.tasks.filter(t => {
+                if (!t.dueDate) return false;
+                const dueDate = new Date(t.dueDate);
+                return dueDate >= today && dueDate <= nextWeek && t.status !== 'completed';
+              }).length;
+            }
+          });
+          
+          setStats({
+            activeProjects,
+            totalBudget,
+            teamMembers: uniqueTeamMembers.size,
+            tasksDue
+          });
+          
+        } catch (err) {
+          console.error('Error refreshing dashboard data:', err);
+          setError('Failed to refresh dashboard data. Please try again.');
+        } finally {
+          setLoading(false);
+        }
+      };
+      
+      fetchDashboardData();
+    }
   };
-
-  const dashboardStats = [
-    {
-      title: 'Active Projects',
-      value: stats.activeProjects,
-      change: stats.activeProjects > 0 ? `${stats.activeProjects} in progress` : 'No active projects',
-      icon: <BuildIcon sx={{ color: theme.palette.primary.main }} />,
-      color: theme.palette.primary.main,
-      onClick: () => navigate('/projects'),
-    },
-    {
-      title: 'Total Budget',
-      value: `$${stats.totalBudget.toLocaleString()}`,
-      change: '+15% vs last month',
-      icon: <MoneyIcon sx={{ color: theme.palette.success.main }} />,
-      color: theme.palette.success.main,
-      onClick: () => navigate('/finance'),
-    },
-    {
-      title: 'Team Members',
-      value: stats.teamMembers,
-      change: stats.teamMembers > 0 ? `${stats.teamMembers} members` : 'No team members',
-      icon: <GroupIcon sx={{ color: theme.palette.info.main }} />,
-      color: theme.palette.info.main,
-      onClick: () => navigate('/team'),
-    },
-    {
-      title: 'Tasks Due Soon',
-      value: stats.tasksDue,
-      change: stats.tasksDue > 0 ? `${Math.ceil(stats.tasksDue/2)} high priority` : 'No tasks due',
-      icon: <ScheduleIcon sx={{ color: theme.palette.warning.main }} />,
-      color: theme.palette.warning.main,
-      onClick: () => navigate('/tasks'),
-    },
-  ];
-
+  
+  // Format project data for display
   const formatProjectForDisplay = (project: Project) => {
+    // Determine project status
     let status: 'on-track' | 'at-risk' | 'completed' = 'on-track';
+    
     if (project.status === 'completed') {
       status = 'completed';
-    } else if (project.endDate && new Date(project.endDate) < new Date()) {
-      status = 'at-risk';
     } else if (project.status === 'on_hold' || project.status === 'cancelled') {
-        status = 'at-risk';
+      status = 'at-risk';
+    } else {
+      // Check if project is at risk based on end date
+      if (project.endDate) {
+        const endDate = new Date(project.endDate);
+        const today = new Date();
+        const oneWeekFromNow = new Date();
+        oneWeekFromNow.setDate(today.getDate() + 7);
+        
+        if (endDate < today) {
+          status = 'at-risk'; // Past due date
+        } else if (endDate <= oneWeekFromNow) {
+          status = 'at-risk'; // Due within a week
+        }
+      }
     }
     
-    const progress = project.status === 'completed' ? 100 : Math.floor(Math.random() * 80) + 10;
-
-    const budgetDisplay = typeof project.budget === 'object' && project.budget !== null 
-                          ? formatCurrency(project.budget.total)
-                          : formatCurrency(project.budget || 0);
-
+    // Calculate progress as percentage of completed tasks
+    let progress = 0;
+    if (project.tasks && project.tasks.length > 0) {
+      const completedTasks = project.tasks.filter(t => t.status === 'completed').length;
+      progress = Math.round((completedTasks / project.tasks.length) * 100);
+    }
+    
     return {
-      id: project.id,
       title: project.name,
-      progress: progress,
-      status: status,
-      dueDate: project.endDate ? new Date(project.endDate).toLocaleDateString() : 'N/A',
-      budget: budgetDisplay,
+      progress,
+      status,
+      dueDate: project.endDate ? formatDate(project.endDate) : 'No due date',
+      budget: formatCurrency(typeof project.budget === 'object' ? project.budget.total : (project.budget || 0)),
       team: project.team?.length || 0,
+      projectId: project.id,
+      location: typeof project.location === 'string' 
+                ? project.location 
+                : project.location?.address || `${project.location?.city || ''}, ${project.location?.state || ''}` || 'No location'
     };
   };
 
+  if (loading && projects.length === 0) {
+    return (
+      <Container maxWidth="xl" sx={{ mt: 3 }}>
+        <Box sx={{ mb: 3 }}>
+          <Stack direction="row" justifyContent="space-between" alignItems="center">
+            <Box>
+              <Skeleton variant="text" width={300} height={60} />
+              <Skeleton variant="text" width={200} height={24} sx={{ mt: 1 }} />
+            </Box>
+            <Skeleton variant="rectangular" width={120} height={40} sx={{ borderRadius: 1 }} />
+          </Stack>
+        </Box>
+        
+        <Grid container spacing={3} sx={{ mb: 4 }}>
+          {[...Array(4)].map((_, index) => (
+            <Grid item xs={12} sm={6} md={3} key={index}>
+              <Skeleton variant="rectangular" height={140} sx={{ borderRadius: 2 }} />
+            </Grid>
+          ))}
+        </Grid>
+        
+        <Skeleton variant="text" width={200} height={40} sx={{ mb: 2 }} />
+        
+        <Grid container spacing={3}>
+          {[...Array(3)].map((_, index) => (
+            <Grid item xs={12} sm={6} md={4} key={index}>
+              <Skeleton variant="rectangular" height={220} sx={{ borderRadius: 2 }} />
+            </Grid>
+          ))}
+        </Grid>
+      </Container>
+    );
+  }
+
   return (
-    <Box sx={{ p: 3 }}>
-      <Box
-        sx={{
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          mb: 4,
-        }}
+    <Container maxWidth="xl" sx={{ mt: { xs: 2, sm: 3 }, pb: 4 }}>
+      <Stack 
+        direction={{ xs: 'column', sm: 'row' }} 
+        justifyContent="space-between" 
+        alignItems={{ xs: 'flex-start', sm: 'center' }}
+        spacing={2}
+        sx={{ mb: 3 }}
       >
         <Box>
-          <Typography variant="h4" component="h1" sx={{ mb: 1 }}>
-            Dashboard
-          </Typography>
-          <Typography variant="body1" color="text.secondary">
-            Welcome back! Here's what's happening with your projects.
-          </Typography>
+          <Stack direction="row" spacing={1.5} alignItems="center">
+            <Avatar 
+              sx={{ 
+                bgcolor: alpha(theme.palette.primary.main, 0.1),
+                color: theme.palette.primary.main,
+                width: 44,
+                height: 44,
+              }}
+            >
+              <DashboardIcon />
+            </Avatar>
+            <Box>
+              <Typography variant={isMobile ? "h5" : "h4"} component="h1" fontWeight={600}>
+                Dashboard
+              </Typography>
+              <Typography variant="body2" color="text.secondary">
+                Welcome back, {user?.displayName || 'User'}
+              </Typography>
+            </Box>
+          </Stack>
         </Box>
-        <Box>
-          <Tooltip title="Refresh data">
-            <IconButton onClick={refreshData}>
-              <RefreshIcon />
-            </IconButton>
-          </Tooltip>
-          <Tooltip title="Notifications">
-            <IconButton>
-              <NotificationsIcon />
-            </IconButton>
-          </Tooltip>
-        </Box>
-      </Box>
-      
+        
+        <Button
+          variant="outlined"
+          startIcon={<RefreshIcon />}
+          onClick={refreshData}
+          disabled={loading}
+          sx={{ borderRadius: 2 }}
+        >
+          Refresh
+        </Button>
+      </Stack>
+
       {error && (
-        <Alert severity="error" sx={{ mb: 3 }}>
+        <Alert 
+          severity="error" 
+          sx={{ 
+            mb: 3, 
+            borderRadius: 2,
+            '& .MuiAlert-icon': { alignItems: 'center' }
+          }}
+        >
           {error}
         </Alert>
       )}
 
-      <Grid container spacing={3}>
-        {dashboardStats.map((stat, index) => (
-          <Grid item xs={12} sm={6} md={3} key={index}>
-            <StatCard {...stat} />
+      <Box sx={{ mb: 4 }}>
+        <Grid container spacing={3}>
+          <Grid item xs={12} sm={6} md={3}>
+            <StatCard
+              title="Active Projects"
+              value={stats.activeProjects}
+              icon={<HomeIcon />}
+              color={theme.palette.primary.main}
+              onClick={() => navigate('/projects')}
+            />
           </Grid>
-        ))}
-
-        <Grid item xs={12}>
-          <Paper
-            sx={{
-              p: 3,
-              background: `linear-gradient(135deg, ${alpha(
-                theme.palette.primary.main,
-                0.1
-              )} 0%, ${alpha(theme.palette.primary.main, 0.05)} 100%)`,
-            }}
-          >
-            <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 3 }}>
-              <Typography variant="h6">Active Projects</Typography>
-              <Chip
-                label="View All"
-                onClick={() => navigate('/projects')}
-                sx={{ cursor: 'pointer' }}
-              />
-            </Box>
-            
-            {loading ? (
-              <Box sx={{ display: 'flex', justifyContent: 'center', p: 4 }}>
-                <CircularProgress />
-              </Box>
-            ) : projects.length > 0 ? (
-              <Grid container spacing={3}>
-                {projects.slice(0, 3).map((project, index) => (
-                  <Grid item xs={12} md={4} key={project.id || index}>
-                    <ProjectCard 
-                        {...formatProjectForDisplay(project)} 
-                        onClick={() => navigate(`/projects/${project.id}`)}
-                    />
-                  </Grid>
-                ))}
-              </Grid>
-            ) : (
-              <Box sx={{ textAlign: 'center', py: 4 }}>
-                <Typography variant="body1" color="text.secondary">
-                  No projects found. Create your first project to get started.
-                </Typography>
-              </Box>
-            )}
-          </Paper>
+          <Grid item xs={12} sm={6} md={3}>
+            <StatCard
+              title="Total Budget"
+              value={formatCurrency(stats.totalBudget)}
+              icon={<MoneyIcon />}
+              color={theme.palette.success.main}
+              onClick={() => navigate('/expenses')}
+            />
+          </Grid>
+          <Grid item xs={12} sm={6} md={3}>
+            <StatCard
+              title="Team Members"
+              value={stats.teamMembers}
+              icon={<GroupIcon />}
+              color={theme.palette.warning.main}
+              onClick={() => navigate('/settings/team')}
+            />
+          </Grid>
+          <Grid item xs={12} sm={6} md={3}>
+            <StatCard
+              title="Tasks Due Soon"
+              value={stats.tasksDue}
+              change={stats.tasksDue > 3 ? '+' + (stats.tasksDue - 3) : '0'}
+              icon={<AssignmentIcon />}
+              color={theme.palette.error.main}
+              onClick={() => navigate('/tasks')}
+            />
+          </Grid>
         </Grid>
+      </Box>
 
-        <Grid item xs={12} md={6}>
-          <Paper sx={{ p: 3, height: '100%' }}>
-            <Typography variant="h6" sx={{ mb: 3 }}>
-              Recent Activity
-            </Typography>
-            {projects.length > 0 ? (
-              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                {projects.slice(0, 3).map((project, index) => (
-                  <Box
-                    key={project.id || index}
-                    sx={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: 2,
-                      p: 1,
-                      borderRadius: 1,
-                      cursor: 'pointer',
-                      '&:hover': {
-                        backgroundColor: alpha(theme.palette.primary.main, 0.05),
-                      },
-                    }}
+      <Stack direction="row" spacing={1.5} alignItems="center" sx={{ mb: 2 }}>
+        <Avatar 
+          sx={{ 
+            bgcolor: alpha(theme.palette.success.main, 0.1),
+            color: theme.palette.success.main,
+            width: 36,
+            height: 36,
+          }}
+        >
+          <BusinessIcon />
+        </Avatar>
+        <Typography variant="h6" component="h2" fontWeight={500}>
+          Recent Projects
+        </Typography>
+      </Stack>
+
+      <Grid container spacing={3}>
+        {projects.length === 0 ? (
+          <Grid item xs={12}>
+            <Alert 
+              severity="info" 
+              sx={{ 
+                borderRadius: 2,
+                bgcolor: alpha(theme.palette.info.main, 0.05),
+                py: 2,
+                '& .MuiAlert-icon': { alignItems: 'center' }
+              }}
+            >
+              No projects found. Create a new project to get started.
+            </Alert>
+          </Grid>
+        ) : (
+          projects
+            .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())
+            .slice(0, 6)
+            .map((project) => {
+              const displayProject = formatProjectForDisplay(project);
+              return (
+                <Grid item xs={12} sm={6} md={4} key={project.id}>
+                  <ProjectCard
+                    title={displayProject.title}
+                    progress={displayProject.progress}
+                    status={displayProject.status}
+                    dueDate={displayProject.dueDate}
+                    budget={displayProject.budget}
+                    team={displayProject.team}
+                    projectId={displayProject.projectId}
+                    location={displayProject.location}
                     onClick={() => navigate(`/projects/${project.id}`)}
-                  >
-                    <Box
-                      sx={{
-                        backgroundColor: alpha(theme.palette.primary.main, 0.1),
-                        borderRadius: '50%',
-                        p: 1,
-                        display: 'flex',
-                      }}
-                    >
-                      <CheckCircleIcon
-                        sx={{ color: theme.palette.primary.main, fontSize: 20 }}
-                      />
-                    </Box>
-                    <Box sx={{ flex: 1 }}>
-                      <Typography variant="body2">
-                        Project "{project.name}" {project.status === 'completed' ? 'completed' : 'updated'}
-                      </Typography>
-                      <Typography variant="caption" color="text.secondary">
-                        {new Date(project.updatedAt).toLocaleDateString('en-US', {
-                          year: 'numeric',
-                          month: 'short',
-                          day: 'numeric',
-                          hour: '2-digit',
-                          minute: '2-digit'
-                        })}
-                      </Typography>
-                    </Box>
-                  </Box>
-                ))}
-              </Box>
-            ) : (
-              <Box sx={{ textAlign: 'center', py: 4 }}>
-                <Typography variant="body1" color="text.secondary">
-                  No recent activity to display.
-                </Typography>
-              </Box>
-            )}
-          </Paper>
-        </Grid>
-
-        <Grid item xs={12} md={6}>
-          <Paper sx={{ p: 3, height: '100%' }}>
-            <Typography variant="h6" sx={{ mb: 3 }}>
-              Upcoming Milestones
-            </Typography>
-            {projects.length > 0 ? (
-              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                {projects.slice(0, 3).map((project, index) => {
-                  const milestone = project.keyMilestones && project.keyMilestones.length > 0 
-                    ? project.keyMilestones[0] 
-                    : { name: `${project.name} completion`, date: project.endDate ? new Date(project.endDate).toISOString().split('T')[0] : '' };
-                  
-                  const daysUntil = milestone.date 
-                    ? Math.ceil((new Date(milestone.date).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24))
-                    : 0;
-                    
-                  return (
-                    <Box
-                      key={project.id || index}
-                      sx={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: 2,
-                        p: 1,
-                        borderRadius: 1,
-                        cursor: 'pointer',
-                        '&:hover': {
-                          backgroundColor: alpha(theme.palette.primary.main, 0.05),
-                        },
-                      }}
-                      onClick={() => navigate(`/projects/${project.id}`)}
-                    >
-                      <Box
-                        sx={{
-                          backgroundColor: alpha(theme.palette.warning.main, 0.1),
-                          borderRadius: '50%',
-                          p: 1,
-                          display: 'flex',
-                        }}
-                      >
-                        <WarningIcon
-                          sx={{ color: theme.palette.warning.main, fontSize: 20 }}
-                        />
-                      </Box>
-                      <Box sx={{ flex: 1 }}>
-                        <Typography variant="body2">
-                          {milestone.name} - {project.name}
-                        </Typography>
-                        <Typography variant="caption" color="text.secondary">
-                          {daysUntil > 0 
-                            ? `Due in ${daysUntil} days` 
-                            : daysUntil === 0 
-                              ? 'Due today' 
-                              : `Overdue by ${Math.abs(daysUntil)} days`}
-                        </Typography>
-                      </Box>
-                    </Box>
-                  );
-                })}
-              </Box>
-            ) : (
-              <Box sx={{ textAlign: 'center', py: 4 }}>
-                <Typography variant="body1" color="text.secondary">
-                  No upcoming milestones.
-                </Typography>
-              </Box>
-            )}
-          </Paper>
-        </Grid>
+                  />
+                </Grid>
+              );
+            })
+        )}
       </Grid>
-    </Box>
+    </Container>
   );
 };
 

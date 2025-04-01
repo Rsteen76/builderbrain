@@ -97,6 +97,8 @@ export interface Bid {
   startDate?: Date | null;
   completionDate?: Date | null;
   totalAmount: number;
+  timeline?: number; // Duration in days
+  paymentTerms?: string;
   currentVersionId?: string;
   versions?: BidVersion[];
   tags?: string[];
@@ -110,6 +112,12 @@ export interface Bid {
   isPublic?: boolean;
   isApproved?: boolean;
   attachments?: { name: string; url: string }[] | string[];
+  paymentSchedule?: BidPaymentStage[];
+  paymentProgress?: {
+    paid: number;
+    pending: number;
+    remaining: number;
+  };
 }
 
 export interface BidVersion {
@@ -124,6 +132,7 @@ export interface BidVersion {
 
 export interface LineItem {
   id: string;
+  projectId?: string;
   description: string;
   category: 'material' | 'labor' | 'subcontractor' | 'equipment' | 'permit' | 'other';
   quantity: number;
@@ -131,6 +140,8 @@ export interface LineItem {
   unitCost?: number;
   totalCost: number;
   notes?: string;
+  createdAt?: Date;
+  updatedAt?: Date;
 }
 
 export interface Task {
@@ -216,6 +227,22 @@ export interface Subcontractor {
   } | null;
   projects?: string[];
   notes?: string;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface BidPaymentStage {
+  id: string;
+  name: string;
+  description?: string;
+  percentage: number;
+  amount: number;
+  dueDate?: Date;
+  status: 'pending' | 'in_progress' | 'completed' | 'paid' | 'overdue';
+  completionRequirements?: string;
+  expenseId?: string; // Allow string or undefined
+  invoiceId?: string; // Link to invoice if created
+  paymentDate?: Date;
   createdAt: Date;
   updatedAt: Date;
 } 

@@ -4,15 +4,30 @@ import {
   TableContainer, TableHead, TableRow, IconButton, Chip, Alert, CircularProgress,
   TableSortLabel,
   useTheme,
-  alpha
+  alpha,
+  Card,
+  CardContent,
+  Avatar,
+  useMediaQuery,
+  Grid,
+  Divider,
+  TablePagination,
+  Skeleton,
+  Stack,
+  Tooltip,
+  Badge,
+  Collapse
 } from '@mui/material';
-import { Add as AddIcon, Edit as EditIcon, Delete as DeleteIcon } from '@mui/icons-material';
+import { Add as AddIcon, Edit as EditIcon, Delete as DeleteIcon, KeyboardArrowDown as KeyboardArrowDownIcon, KeyboardArrowUp as KeyboardArrowUpIcon, MonetizationOn as MoneyIcon, AttachMoney as AttachMoneyIcon, Business as BusinessIcon, Event as EventIcon, Description as DescriptionIcon, Gavel as GavelIcon, Check as CheckIcon, Close as CloseIcon, CheckCircle as CheckCircleIcon, HourglassEmpty as HourglassEmptyIcon, ReceiptLong as ReceiptIcon } from '@mui/icons-material';
 import { ProjectService } from '../../services/project';
 import { BidService } from '../../services/bid';
 import { ExpenseService } from '../../services/expense';
 import { Project, Bid, Expense } from '../../types';
 import BidFormModal from './BidFormModal'; // Import the modal
+import BidPaymentSchedule from './BidPaymentSchedule'; // Import payment schedule component
 import { visuallyHidden } from '@mui/utils'; // For accessibility with sorting
+import { v4 as uuidv4 } from 'uuid';
+import { formatCurrency, formatDate } from '../../utils/formatters';
 
 // Define types for sorting
 type Order = 'asc' | 'desc';
@@ -112,14 +127,19 @@ function descendingComparator<T>(a: T, b: T, orderBy: keyof T) {
 const BidManager: React.FC<BidManagerProps> = ({ project, userId, onProjectUpdate }) => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingBid, setEditingBid] = useState<Bid | null>(null);
+  const [selectedBid, setSelectedBid] = useState<Bid | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [order, setOrder] = useState<Order>('asc');
   const [orderBy, setOrderBy] = useState<BidKeys>('scope'); // Default sort by scope
   const [bids, setBids] = useState<Bid[]>(project.bids || []);
-
   const theme = useTheme(); // Get theme for styling
+  const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
+  const isTablet = useMediaQuery(theme.breakpoints.down('md'));
+  const [expandedBids, setExpandedBids] = useState<{ [key: string]: boolean }>({});
+  const [page, setPage] = useState(0);
+  const [rowsPerPage, setRowsPerPage] = useState(5);
 
   // Ensure we always have the latest bids from the project
   useEffect(() => {
@@ -182,6 +202,24 @@ const BidManager: React.FC<BidManagerProps> = ({ project, userId, onProjectUpdat
     setEditingBid(bid);
     setIsModalOpen(true);
     setError(null);
+  };
+
+  const handleSelectBid = (bid: Bid) => {
+    setSelectedBid(selectedBid?.id === bid.id ? null : bid);
+  };
+
+  const handleBidUpdate = (updatedBid: Bid) => {
+    // Update the local bids array with the updated bid
+    const updatedBids = bids.map(b => b.id === updatedBid.id ? updatedBid : b);
+    setBids(updatedBids);
+    
+    // Update the selected bid if it's the one that was updated
+    if (selectedBid?.id === updatedBid.id) {
+      setSelectedBid(updatedBid);
+    }
+    
+    // Update the parent component
+    onProjectUpdate({ ...project, bids: updatedBids });
   };
 
   const handleCloseModal = () => {
@@ -279,28 +317,103 @@ const BidManager: React.FC<BidManagerProps> = ({ project, userId, onProjectUpdat
         expenseCategory = 'permits';
       }
       
-      // Create the expense object
-      const expenseData: Omit<Expense, 'id' | 'userId' | 'createdAt' | 'updatedAt' | 'createdBy'> = {
-        projectId: bid.projectId,
-        category: expenseCategory,
-        description: `Expense from accepted bid: ${bid.title || bid.scope || 'Unnamed bid'} - ${bid.subcontractorName || 'Unknown contractor'}`,
-        amount: bid.totalAmount,
-        date: new Date(),
-        status: 'pending',
-        vendor: bid.subcontractorName || '',
-        notes: `This expense was automatically created from an accepted bid (ID: ${bid.id}).\n\nOriginal bid notes: ${bid.notes || 'None'}`,
-      };
-      
-      // Create the expense
-      await ExpenseService.createExpense(userId, expenseData);
-      console.log('Created pending expense from accepted bid');
-      setSuccess(`Bid accepted and converted to a pending expense of $${bid.totalAmount.toLocaleString()}`);
+      // If bid doesn't have payment stages, create a default payment schedule
+      if (!bid.paymentSchedule || bid.paymentSchedule.length === 0) {
+        // Create default payment stages - Deposit (30%), Progress (40%), Final (30%)
+        const now = new Date();
+        
+        // Calculate payment amounts
+        const depositAmount = Math.round(bid.totalAmount * 0.3 * 100) / 100;
+        const progressAmount = Math.round(bid.totalAmount * 0.4 * 100) / 100;
+        const finalAmount = bid.totalAmount - depositAmount - progressAmount; // Ensures total adds up exactly
+        
+        // Create the default payment schedule
+        const paymentSchedule = [
+          {
+            id: uuidv4(),
+            name: 'Initial Deposit',
+            description: 'Upfront payment to begin work',
+            percentage: 30,
+            amount: depositAmount,
+            status: 'pending' as const,
+            completionRequirements: 'Upon contract signing',
+            expenseId: undefined as string | undefined,
+            createdAt: now,
+            updatedAt: now
+          },
+          {
+            id: uuidv4(),
+            name: 'Progress Payment',
+            description: 'Mid-project milestone payment',
+            percentage: 40,
+            amount: progressAmount,
+            status: 'pending' as const,
+            completionRequirements: '50% project completion',
+            createdAt: now,
+            updatedAt: now
+          },
+          {
+            id: uuidv4(),
+            name: 'Final Payment',
+            description: 'Final payment upon completion',
+            percentage: 30,
+            amount: finalAmount,
+            status: 'pending' as const,
+            completionRequirements: 'Upon project completion and final inspection',
+            createdAt: now,
+            updatedAt: now
+          }
+        ];
+        
+        // Create the payment progress tracker
+        const paymentProgress = {
+          paid: 0,
+          pending: bid.totalAmount,
+          remaining: bid.totalAmount
+        };
+        
+        // Update the bid with payment schedule
+        await BidService.updateBid(bid.id, {
+          paymentSchedule,
+          paymentProgress
+        });
+        
+        // Create an expense for the initial deposit
+        const expenseData: Omit<Expense, 'id' | 'userId' | 'createdAt' | 'updatedAt' | 'createdBy'> = {
+          projectId: bid.projectId,
+          category: expenseCategory,
+          description: `Initial Deposit (30%) - ${bid.title || bid.scope || 'Unnamed bid'} - ${bid.subcontractorName || 'Unknown contractor'}`,
+          amount: depositAmount,
+          date: new Date(),
+          status: 'pending',
+          vendor: bid.subcontractorName || '',
+          notes: `This expense is the initial payment (30%) for accepted bid (ID: ${bid.id}).\n\nOriginal bid notes: ${bid.notes || 'None'}`,
+        };
+        
+        // Create the expense
+        const expense = await ExpenseService.createExpense(userId, expenseData);
+        
+        // Update the payment stage with the expense ID
+        if (expense) {
+          const updatedSchedule = [...paymentSchedule];
+          updatedSchedule[0].expenseId = expense.id;
+          
+          await BidService.updateBid(bid.id, {
+            paymentSchedule: updatedSchedule
+          });
+        }
+        
+        setSuccess(`Bid accepted and payment schedule created. Initial deposit of $${depositAmount.toLocaleString()} added to pending expenses.`);
+      } else {
+        // The bid already has a payment schedule, just update the status
+        setSuccess(`Bid accepted with existing payment schedule.`);
+      }
       
       // Auto-clear success message after 5 seconds
       setTimeout(() => setSuccess(null), 5000);
       
     } catch (error) {
-      console.error('Error creating expense from bid:', error);
+      console.error('Error creating payment schedule from bid:', error);
       // Don't throw error - we don't want to fail the bid update if expense creation fails
     }
   };
@@ -332,113 +445,469 @@ const BidManager: React.FC<BidManagerProps> = ({ project, userId, onProjectUpdat
     }
   };
 
-  // Helper to format date
-  const formatDate = (date: Date | string | undefined) => {
-    if (!date) return 'N/A';
-    try {
-      return new Date(date).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
-    } catch (e) {
-        return 'Invalid Date';
+  const handleToggleExpand = (bidId: string) => {
+    setExpandedBids(prev => ({
+      ...prev,
+      [bidId]: !prev[bidId]
+    }));
+  };
+
+  const handleChangePage = (event: unknown, newPage: number) => {
+    setPage(newPage);
+  };
+
+  const handleChangeRowsPerPage = (event: React.ChangeEvent<HTMLInputElement>) => {
+    setRowsPerPage(parseInt(event.target.value, 10));
+    setPage(0);
+  };
+
+  const getStatusColor = (status: string) => {
+    switch(status.toLowerCase()) {
+      case 'approved': return theme.palette.success.main;
+      case 'pending': return theme.palette.warning.main;
+      case 'rejected': return theme.palette.error.main;
+      default: return theme.palette.grey[500];
     }
   };
 
+  const getStatusIcon = (status: string) => {
+    switch(status.toLowerCase()) {
+      case 'approved': return <CheckCircleIcon />;
+      case 'pending': return <HourglassEmptyIcon />;
+      case 'rejected': return <CloseIcon />;
+      default: return <HourglassEmptyIcon />;
+    }
+  };
+
+  const displayedBids = bids.slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage);
+  const lowestBidAmount = bids.length > 0 ? Math.min(...bids.map(bid => bid.totalAmount || 0)) : 0;
+  const highestBidAmount = bids.length > 0 ? Math.max(...bids.map(bid => bid.totalAmount || 0)) : 0;
+  const avgBidAmount = bids.length > 0 ? bids.reduce((sum, bid) => sum + (bid.totalAmount || 0), 0) / bids.length : 0;
+
+  if (loading && bids.length === 0) {
+    return (
+      <Box sx={{ p: 2 }}>
+        <Box sx={{ mb: 3 }}>
+          <Skeleton variant="text" width={300} height={40} />
+          <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 2 }}>
+            <Skeleton variant="text" width={200} height={24} />
+            <Skeleton variant="rectangular" width={100} height={36} sx={{ borderRadius: 1 }} />
+          </Stack>
+        </Box>
+        
+        <Card 
+          elevation={0} 
+          sx={{ 
+            borderRadius: 2,
+            border: `1px solid ${alpha(theme.palette.divider, 0.1)}`,
+            boxShadow: `0 2px 8px ${alpha(theme.palette.common.black, 0.04)}`,
+            mb: 3,
+          }}
+        >
+          <Skeleton variant="rectangular" height={150} sx={{ borderRadius: 2 }} />
+        </Card>
+        
+        <TableContainer component={Paper} sx={{ borderRadius: 2 }}>
+          <Skeleton variant="rectangular" height={53} />
+          {[...Array(3)].map((_, index) => (
+            <Skeleton key={index} variant="rectangular" height={70} sx={{ my: 0.5 }} />
+          ))}
+        </TableContainer>
+      </Box>
+    );
+  }
+
   return (
-    <Paper sx={{ p: 3, overflow: 'hidden' }}>
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-        <Typography variant="h6">Bids</Typography>
-        <Button variant="contained" startIcon={<AddIcon />} onClick={handleOpenAddModal} disabled={loading}>
-          Add Bid
-        </Button>
+    <>
+      <Box sx={{ mb: 3 }}>
+        <Card 
+          elevation={0} 
+          sx={{ 
+            borderRadius: 2,
+            border: `1px solid ${alpha(theme.palette.divider, 0.1)}`,
+            boxShadow: `0 2px 8px ${alpha(theme.palette.common.black, 0.04)}`,
+            mb: 3,
+          }}
+        >
+          <CardContent>
+            <Stack direction="row" spacing={1.5} alignItems="center" sx={{ mb: 2 }}>
+              <Avatar 
+                sx={{ 
+                  bgcolor: alpha(theme.palette.primary.main, 0.1),
+                  color: theme.palette.primary.main,
+                  width: 36,
+                  height: 36,
+                }}
+              >
+                <GavelIcon />
+              </Avatar>
+              <Typography variant="h6" fontWeight={500}>Bids Summary</Typography>
+            </Stack>
+            
+            <Grid container spacing={3} sx={{ px: 1 }}>
+              <Grid item xs={12} sm={6} md={3}>
+                <Box sx={{ p: 2, borderRadius: 2, bgcolor: alpha(theme.palette.background.default, 0.5) }}>
+                  <Typography variant="body2" color="text.secondary" gutterBottom>Total Bids</Typography>
+                  <Typography variant="h5" color="text.primary" fontWeight={600}>
+                    {bids.length}
+                  </Typography>
+                </Box>
+              </Grid>
+              <Grid item xs={12} sm={6} md={3}>
+                <Box sx={{ p: 2, borderRadius: 2, bgcolor: alpha(theme.palette.background.default, 0.5) }}>
+                  <Typography variant="body2" color="text.secondary" gutterBottom>Lowest Bid</Typography>
+                  <Typography variant="h5" color="text.primary" fontWeight={600}>
+                    {formatCurrency(lowestBidAmount)}
+                  </Typography>
+                </Box>
+              </Grid>
+              <Grid item xs={12} sm={6} md={3}>
+                <Box sx={{ p: 2, borderRadius: 2, bgcolor: alpha(theme.palette.background.default, 0.5) }}>
+                  <Typography variant="body2" color="text.secondary" gutterBottom>Highest Bid</Typography>
+                  <Typography variant="h5" color="text.primary" fontWeight={600}>
+                    {formatCurrency(highestBidAmount)}
+                  </Typography>
+                </Box>
+              </Grid>
+              <Grid item xs={12} sm={6} md={3}>
+                <Box sx={{ p: 2, borderRadius: 2, bgcolor: alpha(theme.palette.background.default, 0.5) }}>
+                  <Typography variant="body2" color="text.secondary" gutterBottom>Average Bid</Typography>
+                  <Typography variant="h5" color="text.primary" fontWeight={600}>
+                    {formatCurrency(avgBidAmount)}
+                  </Typography>
+                </Box>
+              </Grid>
+            </Grid>
+          </CardContent>
+        </Card>
+      
+        <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 2 }}>
+          <Stack direction="row" spacing={1.5} alignItems="center">
+            <Avatar 
+              sx={{ 
+                bgcolor: alpha(theme.palette.success.main, 0.1),
+                color: theme.palette.success.main,
+                width: 36,
+                height: 36,
+              }}
+            >
+              <BusinessIcon />
+            </Avatar>
+            <Typography variant="h6" fontWeight={500}>Contractor Bids</Typography>
+          </Stack>
+          <Button
+            variant="contained" 
+            startIcon={<AddIcon />}
+            onClick={() => handleOpenAddModal()}
+            sx={{ borderRadius: 2 }}
+          >
+            New Bid
+          </Button>
+        </Stack>
       </Box>
 
-      {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
-      {success && <Alert severity="success" sx={{ mb: 2 }}>{success}</Alert>}
-      {loading && <CircularProgress size={24} sx={{ mb: 2 }} />}
+      {error && (
+        <Alert 
+          severity="error" 
+          sx={{ 
+            mb: 2, 
+            borderRadius: 2,
+            '& .MuiAlert-icon': { alignItems: 'center' }
+          }}
+        >
+          {error}
+        </Alert>
+      )}
 
-      <TableContainer component={Paper} variant="outlined" sx={{ maxHeight: 600 }}>
-        <Table size="small" stickyHeader>
-          <TableHead>
-            <TableRow>
-              {headCells.map((headCell) => (
-                <TableCell
-                  key={headCell.id}
-                  align={headCell.numeric ? 'right' : 'left'}
-                  padding={'normal'}
-                  sortDirection={orderBy === headCell.id ? order : false}
-                  sx={{ fontWeight: 'bold', whiteSpace: 'nowrap', backgroundColor: 'background.paper' }}
-                >
-                  {headCell.sortable ? (
-                    <TableSortLabel
-                      active={orderBy === headCell.id}
-                      direction={orderBy === headCell.id ? order : 'asc'}
-                      onClick={(event) => handleRequestSort(event, headCell.id as BidKeys)}
-                    >
-                      {headCell.label}
-                      {orderBy === headCell.id ? (
-                        <Box component="span" sx={visuallyHidden}>
-                          {order === 'desc' ? 'sorted descending' : 'sorted ascending'}
+      {bids.length === 0 ? (
+        <Alert 
+          severity="info"
+          icon={<BusinessIcon color="info" />}
+          sx={{ 
+            borderRadius: 2,
+            bgcolor: alpha(theme.palette.info.main, 0.05),
+            py: 2,
+            '& .MuiAlert-icon': { alignItems: 'center' }
+          }}
+        >
+          No bids added yet. Click the "New Bid" button to create your first bid.
+        </Alert>
+      ) : (
+        <Paper 
+          elevation={0}
+          sx={{ 
+            width: '100%', 
+            borderRadius: 2,
+            border: `1px solid ${alpha(theme.palette.divider, 0.1)}`,
+            overflow: 'hidden',
+            mb: 3
+          }}
+        >
+          {isMobile ? (
+            // Mobile view
+            <Box>
+              {displayedBids.map((bid) => (
+                <Box key={bid.id}>
+                  <Card 
+                    elevation={0}
+                    sx={{ 
+                      mb: 0,
+                      borderRadius: 0,
+                      borderBottom: `1px solid ${alpha(theme.palette.divider, 0.1)}`,
+                    }}
+                  >
+                    <CardContent sx={{ pb: 1 }}>
+                      <Stack direction="row" justifyContent="space-between" alignItems="flex-start">
+                        <Stack spacing={1} sx={{ width: '70%' }}>
+                          <Typography variant="subtitle1" fontWeight={600} noWrap>
+                            {bid.subcontractorName || 'Unnamed Contractor'}
+                          </Typography>
+                          <Chip 
+                            label={bid.status?.toUpperCase() || 'PENDING'}
+                            size="small"
+                            icon={getStatusIcon(bid.status || 'pending')}
+                            sx={{
+                              width: 'fit-content',
+                              bgcolor: alpha(getStatusColor(bid.status || 'pending'), 0.1),
+                              color: getStatusColor(bid.status || 'pending'),
+                              fontWeight: 500,
+                              borderRadius: '4px',
+                              '& .MuiChip-icon': {
+                                fontSize: '0.9rem',
+                              }
+                            }}
+                          />
+                        </Stack>
+                        
+                        <Box sx={{ textAlign: 'right' }}>
+                          <Typography variant="h6" fontWeight={600}>
+                            {formatCurrency(bid.totalAmount || 0)}
+                          </Typography>
+                          <Typography variant="caption" color="text.secondary">
+                            {formatDate(bid.submissionDeadline)}
+                          </Typography>
                         </Box>
-                      ) : null}
-                    </TableSortLabel>
-                  ) : (
-                    headCell.label
-                  )}
-                </TableCell>
-              ))}
-            </TableRow>
-          </TableHead>
-          <TableBody>
-            {Object.keys(groupedBids).length === 0 && !loading ? (
-              <TableRow>
-                <TableCell colSpan={headCells.length} align="center">
-                  No bids added yet.
-                </TableCell>
-              </TableRow>
-            ) : (
-              Object.entries(groupedBids).map(([category, bidsInCategory]) => (
-                <React.Fragment key={category}>
-                  <TableRow sx={{ '& > *': { borderBottom: 'unset', backgroundColor: theme.palette.grey[100] } }}>
-                    <TableCell colSpan={headCells.length} sx={{ fontWeight: 'bold', py: 1 }}>
-                      {category}
-                    </TableCell>
-                  </TableRow>
-                  {bidsInCategory.map((bid) => {
-                     const isLowest =
-                        lowestBidsByCategory[category] !== undefined &&
-                        bid.totalAmount === lowestBidsByCategory[category] &&
-                        ['submitted', 'draft'].includes(bid.status); // Double check eligibility
-                     return (
-                        <TableRow
-                            key={bid.id}
-                            hover
-                            sx={ isLowest ? { backgroundColor: alpha(theme.palette.success.light, 0.2) } : {} }
+                      </Stack>
+                      
+                      <Stack direction="row" justifyContent="flex-end" spacing={0.5} sx={{ mt: 2 }}>
+                        <IconButton 
+                          size="small" 
+                          onClick={() => handleToggleExpand(bid.id!)}
+                          color="primary"
+                          sx={{ mx: 0.5 }}
                         >
-                        <TableCell>{bid.subcontractorName}</TableCell>
-                        <TableCell>{bid.scope || '-'}</TableCell> 
-                        <TableCell align="right" sx={isLowest ? { fontWeight: 'bold' } : {}}>
-                            ${bid.totalAmount?.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                        </TableCell>
-                        <TableCell>
-                            <Chip label={bid.status} color={getBidStatusColor(bid.status)} size="small" />
-                        </TableCell>
-                        <TableCell sx={{ whiteSpace: 'nowrap' }}>{formatDate(bid.submissionDeadline)}</TableCell>
-                        <TableCell align="center">
-                            <IconButton size="small" onClick={() => handleOpenEditModal(bid)} disabled={loading}>
-                                <EditIcon fontSize="inherit" />
+                          {expandedBids[bid.id!] ? <KeyboardArrowUpIcon /> : <KeyboardArrowDownIcon />}
+                        </IconButton>
+                        <IconButton 
+                          size="small" 
+                          onClick={() => handleOpenEditModal(bid)}
+                          color="primary"
+                          sx={{ mx: 0.5 }}
+                        >
+                          <EditIcon fontSize="small" />
+                        </IconButton>
+                        <IconButton 
+                          size="small" 
+                          onClick={() => handleDelete(bid.id!)}
+                          color="error"
+                          sx={{ mx: 0.5 }}
+                        >
+                          <DeleteIcon fontSize="small" />
+                        </IconButton>
+                      </Stack>
+                    </CardContent>
+                  </Card>
+                  <Collapse in={expandedBids[bid.id!]} timeout="auto" unmountOnExit>
+                    <Box sx={{ p: 2, bgcolor: alpha(theme.palette.background.default, 0.3) }}>
+                      <Grid container spacing={2}>
+                        <Grid item xs={12}>
+                          <Typography variant="subtitle2" fontWeight={500}>Scope of Work</Typography>
+                          <Typography variant="body2">
+                            {bid.scope || 'No scope of work provided'}
+                          </Typography>
+                        </Grid>
+                        
+                        <Grid item xs={12}>
+                          <Typography variant="subtitle2" fontWeight={500}>Timeline</Typography>
+                          <Typography variant="body2">
+                            {bid.timeline ? `${bid.timeline} days` : 'No timeline provided'}
+                          </Typography>
+                        </Grid>
+                        
+                        <Grid item xs={12}>
+                          <Divider sx={{ my: 1 }} />
+                          <BidPaymentSchedule bid={bid} projectId={project.id!} userId={userId} />
+                        </Grid>
+                      </Grid>
+                    </Box>
+                  </Collapse>
+                </Box>
+              ))}
+              
+              <TablePagination
+                component="div"
+                count={bids.length}
+                page={page}
+                onPageChange={handleChangePage}
+                rowsPerPage={rowsPerPage}
+                onRowsPerPageChange={handleChangeRowsPerPage}
+                sx={{
+                  borderTop: `1px solid ${alpha(theme.palette.divider, 0.1)}`,
+                }}
+              />
+            </Box>
+          ) : (
+            // Desktop view
+            <>
+              <TableContainer>
+                <Table>
+                  <TableHead sx={{ bgcolor: alpha(theme.palette.primary.main, 0.03) }}>
+                    <TableRow>
+                      <TableCell width="56px" />
+                      <TableCell sx={{ fontWeight: 600 }}>Contractor</TableCell>
+                      <TableCell align="right" sx={{ fontWeight: 600 }}>Bid Amount</TableCell>
+                      <TableCell align="center" sx={{ fontWeight: 600 }}>Status</TableCell>
+                      <TableCell align="right" sx={{ fontWeight: 600 }}>Submission Date</TableCell>
+                      <TableCell align="right" sx={{ fontWeight: 600 }}>Actions</TableCell>
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
+                    {displayedBids.map((bid) => (
+                      <React.Fragment key={bid.id}>
+                        <TableRow 
+                          hover
+                          sx={{ 
+                            '&:last-child td, &:last-child th': { border: 0 },
+                            '& > *': { borderBottom: expandedBids[bid.id!] ? 0 : undefined },
+                          }}
+                        >
+                          <TableCell>
+                            <IconButton
+                              size="small"
+                              onClick={() => handleToggleExpand(bid.id!)}
+                              aria-label="expand row"
+                            >
+                              {expandedBids[bid.id!] ? <KeyboardArrowUpIcon /> : <KeyboardArrowDownIcon />}
                             </IconButton>
-                            <IconButton size="small" color="error" onClick={() => handleDelete(bid.id)} disabled={loading}>
-                                <DeleteIcon fontSize="inherit" />
-                            </IconButton>
-                        </TableCell>
+                          </TableCell>
+                          <TableCell sx={{ fontWeight: 500 }}>
+                            {bid.subcontractorName || 'Unnamed Contractor'}
+                          </TableCell>
+                          <TableCell align="right">
+                            <Typography fontWeight={600}>
+                              {formatCurrency(bid.totalAmount || 0)}
+                            </Typography>
+                          </TableCell>
+                          <TableCell align="center">
+                            <Chip 
+                              label={bid.status?.toUpperCase() || 'PENDING'}
+                              size="small"
+                              icon={getStatusIcon(bid.status || 'pending')}
+                              sx={{
+                                bgcolor: alpha(getStatusColor(bid.status || 'pending'), 0.1),
+                                color: getStatusColor(bid.status || 'pending'),
+                                fontWeight: 500,
+                                borderRadius: '4px',
+                                '& .MuiChip-icon': {
+                                  fontSize: '0.9rem',
+                                }
+                              }}
+                            />
+                          </TableCell>
+                          <TableCell align="right">{formatDate(bid.submissionDeadline)}</TableCell>
+                          <TableCell align="right">
+                            <Stack direction="row" spacing={0.5} justifyContent="flex-end">
+                              <IconButton
+                                size="small"
+                                onClick={() => handleOpenEditModal(bid)}
+                                color="primary"
+                              >
+                                <EditIcon />
+                              </IconButton>
+                              <IconButton
+                                size="small"
+                                onClick={() => handleDelete(bid.id!)}
+                                color="error"
+                              >
+                                <DeleteIcon />
+                              </IconButton>
+                            </Stack>
+                          </TableCell>
                         </TableRow>
-                    );
-                  })}
-                </React.Fragment>
-              ))
-            )}
-          </TableBody>
-        </Table>
-      </TableContainer>
+                        <TableRow>
+                          <TableCell 
+                            colSpan={6} 
+                            sx={{ 
+                              py: expandedBids[bid.id!] ? 2 : 0,
+                              px: expandedBids[bid.id!] ? 3 : 2,
+                              borderBottom: expandedBids[bid.id!] ? `1px solid ${alpha(theme.palette.divider, 0.1)}` : 'none',
+                              bgcolor: alpha(theme.palette.background.default, 0.3),
+                            }}
+                          >
+                            <Collapse in={expandedBids[bid.id!]} timeout="auto" unmountOnExit>
+                              <Box sx={{ my: 1 }}>
+                                <Grid container spacing={3}>
+                                  <Grid item xs={12} md={4}>
+                                    <Box sx={{ p: 2, borderRadius: 2, bgcolor: theme.palette.background.paper }}>
+                                      <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 1 }}>
+                                        <DescriptionIcon color="primary" fontSize="small" />
+                                        <Typography variant="subtitle2" fontWeight={500}>Scope of Work</Typography>
+                                      </Stack>
+                                      <Typography variant="body2">
+                                        {bid.scope || 'No scope of work provided'}
+                                      </Typography>
+                                    </Box>
+                                  </Grid>
+                                  <Grid item xs={12} md={4}>
+                                    <Box sx={{ p: 2, borderRadius: 2, bgcolor: theme.palette.background.paper }}>
+                                      <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 1 }}>
+                                        <EventIcon color="primary" fontSize="small" />
+                                        <Typography variant="subtitle2" fontWeight={500}>Timeline</Typography>
+                                      </Stack>
+                                      <Typography variant="body2">
+                                        {bid.timeline ? `${bid.timeline} days` : 'No timeline provided'}
+                                      </Typography>
+                                    </Box>
+                                  </Grid>
+                                  <Grid item xs={12} md={4}>
+                                    <Box sx={{ p: 2, borderRadius: 2, bgcolor: theme.palette.background.paper }}>
+                                      <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 1 }}>
+                                        <MoneyIcon color="primary" fontSize="small" />
+                                        <Typography variant="subtitle2" fontWeight={500}>Payment Terms</Typography>
+                                      </Stack>
+                                      <Typography variant="body2">
+                                        {bid.paymentTerms || 'No payment terms provided'}
+                                      </Typography>
+                                    </Box>
+                                  </Grid>
+                                  <Grid item xs={12}>
+                                    <BidPaymentSchedule bid={bid} projectId={project.id!} userId={userId} />
+                                  </Grid>
+                                </Grid>
+                              </Box>
+                            </Collapse>
+                          </TableCell>
+                        </TableRow>
+                      </React.Fragment>
+                    ))}
+                  </TableBody>
+                </Table>
+              </TableContainer>
+              <TablePagination
+                component="div"
+                count={bids.length}
+                page={page}
+                onPageChange={handleChangePage}
+                rowsPerPage={rowsPerPage}
+                onRowsPerPageChange={handleChangeRowsPerPage}
+                sx={{
+                  borderTop: `1px solid ${alpha(theme.palette.divider, 0.1)}`,
+                }}
+              />
+            </>
+          )}
+        </Paper>
+      )}
 
       <BidFormModal
         open={isModalOpen}
@@ -448,7 +917,7 @@ const BidManager: React.FC<BidManagerProps> = ({ project, userId, onProjectUpdat
         userId={userId}
         projectId={project.id}
       />
-    </Paper>
+    </>
   );
 };
 

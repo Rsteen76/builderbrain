@@ -4,13 +4,12 @@
  * @param currency Currency code (default: USD)
  * @returns Formatted currency string
  */
-export const formatCurrency = (value: number, currency = 'USD'): string => {
+export const formatCurrency = (amount: number): string => {
   return new Intl.NumberFormat('en-US', {
     style: 'currency',
-    currency,
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 0,
-  }).format(value);
+    currency: 'USD',
+    minimumFractionDigits: 2
+  }).format(amount);
 };
 
 /**
@@ -19,20 +18,17 @@ export const formatCurrency = (value: number, currency = 'USD'): string => {
  * @param format Format style ('short', 'medium', 'long')
  * @returns Formatted date string
  */
-export const formatDate = (date: Date | string, format: 'short' | 'medium' | 'long' = 'medium'): string => {
-  const dateObj = typeof date === 'string' ? new Date(date) : date;
-  
-  const options: Intl.DateTimeFormatOptions = {
-    year: 'numeric',
-    month: format === 'short' ? 'short' : 'long',
-    day: 'numeric',
-  };
-  
-  if (format === 'long') {
-    options.weekday = 'long';
+export const formatDate = (date: Date | string | undefined): string => {
+  if (!date) return 'Not set';
+  try {
+    return new Date(date).toLocaleDateString('en-US', {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric'
+    });
+  } catch (e) {
+    return 'Invalid Date';
   }
-  
-  return new Intl.DateTimeFormat('en-US', options).format(dateObj);
 };
 
 /**
@@ -41,8 +37,12 @@ export const formatDate = (date: Date | string, format: 'short' | 'medium' | 'lo
  * @param decimals Number of decimal places
  * @returns Formatted percentage string
  */
-export const formatPercentage = (value: number, decimals = 0): string => {
-  return `${value.toFixed(decimals)}%`;
+export const formatPercentage = (value: number): string => {
+  return new Intl.NumberFormat('en-US', {
+    style: 'percent',
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 1
+  }).format(value);
 };
 
 /**
