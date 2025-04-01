@@ -136,6 +136,15 @@ interface QuickBid {
   description: string;
 }
 
+// Add interface for quick expense creation
+interface QuickExpense {
+  phaseId: string;
+  category: 'materials' | 'labor' | 'equipment' | 'permits' | 'other';
+  amount: number;
+  description: string;
+  date: string;
+}
+
 // Project detail page with phases, progress tracking, and expense breakdowns
 const ProjectDetailPage: React.FC = () => {
   const { projectId } = useParams<{ projectId: string }>();
@@ -151,17 +160,27 @@ const ProjectDetailPage: React.FC = () => {
   const [tabValue, setTabValue] = useState(0);
   const [phases, setPhases] = useState<ProjectPhase[]>([]);
   const [bids, setBids] = useState<Bid[]>([]);
+  const [expenses, setExpenses] = useState<Expense[]>([]);
   const [expensesData, setExpensesData] = useState<{ name: string; value: number; color: string }[]>([]);
   const [quickUpdateMode, setQuickUpdateMode] = useState(false);
   const [phasesBeingUpdated, setPhasesBeingUpdated] = useState<{ [id: string]: ProjectPhase }>({});
   const [menuAnchorEl, setMenuAnchorEl] = useState<null | HTMLElement>(null);
   const [newBidDialogOpen, setNewBidDialogOpen] = useState(false);
+  const [newExpenseDialogOpen, setNewExpenseDialogOpen] = useState(false);
   const [currentPhaseForBid, setCurrentPhaseForBid] = useState<string | null>(null);
+  const [currentPhaseForExpense, setCurrentPhaseForExpense] = useState<string | null>(null);
   const [quickBid, setQuickBid] = useState<QuickBid>({
     phaseId: '',
     contractorName: '',
     amount: 0,
     description: '',
+  });
+  const [quickExpense, setQuickExpense] = useState<QuickExpense>({
+    phaseId: '',
+    category: 'materials',
+    amount: 0,
+    description: '',
+    date: new Date().toISOString().split('T')[0],
   });
   
   // Fetch project data
@@ -562,6 +581,95 @@ const ProjectDetailPage: React.FC = () => {
     alert(`Bid from ${quickBid.contractorName} added successfully and phase cost updated.`);
   };
 
+  // Add this function to handle opening the expense dialog for a specific phase
+  const handleOpenQuickExpenseDialog = (phaseId: string) => {
+    setCurrentPhaseForExpense(phaseId);
+    setQuickExpense({
+      phaseId,
+      category: 'materials',
+      amount: 0,
+      description: '',
+      date: new Date().toISOString().split('T')[0],
+    });
+    setNewExpenseDialogOpen(true);
+  };
+
+  // Add this function to handle expense input changes
+  const handleQuickExpenseChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement> | SelectChangeEvent) => {
+    const { name, value } = e.target;
+    setQuickExpense(prev => ({
+      ...prev,
+      [name]: name === 'amount' ? parseFloat(value as string) || 0 : value
+    }));
+  };
+
+  // Add this function to handle adding the expense and updating the phase
+  const handleAddQuickExpense = () => {
+    // Only proceed if we have a valid phase ID and project
+    if (!currentPhaseForExpense || !project) return;
+    
+    // Create a new expense
+    const newExpense: Expense = {
+      id: crypto.randomUUID(),
+      userId: user?.uid || '',
+      projectId: project.id || '',
+      phaseId: currentPhaseForExpense,
+      category: quickExpense.category,
+      amount: quickExpense.amount,
+      description: quickExpense.description,
+      date: new Date(quickExpense.date),
+      status: 'pending', // Add required status property
+      createdBy: user?.uid || '', // Add required createdBy property
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+    
+    // Add the expense to our expenses array
+    setExpenses(prev => [...prev, newExpense]);
+    
+    // Update the expenses data for the pie chart
+    setExpensesData(prev => {
+      // Find if the category already exists
+      const categoryIndex = prev.findIndex(item => item.name === newExpense.category);
+      
+      if (categoryIndex >= 0) {
+        // Update existing category
+        const updatedData = [...prev];
+        updatedData[categoryIndex].value += newExpense.amount;
+        return updatedData;
+      } else {
+        // Add new category
+        const colors = ['#f44336', '#2196f3', '#4caf50', '#ff9800', '#9c27b0', '#795548'];
+        return [...prev, {
+          name: newExpense.category,
+          value: newExpense.amount,
+          color: colors[Math.floor(Math.random() * colors.length)]
+        }];
+      }
+    });
+    
+    // Update the phase actual cost to reflect the new expense
+    setPhasesBeingUpdated(prev => {
+      // Add the expense amount to the current actual cost of the phase
+      const updatedPhase = {
+        ...prev[currentPhaseForExpense],
+        actualCost: (prev[currentPhaseForExpense].actualCost || 0) + quickExpense.amount
+      };
+      
+      return {
+        ...prev,
+        [currentPhaseForExpense]: updatedPhase
+      };
+    });
+    
+    // Close the dialog
+    setNewExpenseDialogOpen(false);
+    setCurrentPhaseForExpense(null);
+    
+    // Show a success message or toast (if you have a toast system)
+    alert(`Expense of ${formatCurrency(quickExpense.amount)} for ${quickExpense.category} added successfully.`);
+  };
+
   if (loading) {
     return (
       <PageLayout title="Loading Project" icon={BusinessIcon}>
@@ -856,26 +964,129 @@ const ProjectDetailPage: React.FC = () => {
                             />
                           )}
                         </Typography>
-                        <Button
-                          size="small"
-                          variant="outlined"
-                          startIcon={<AddIcon fontSize="small" />}
-                          onClick={() => handleOpenQuickBidDialog(phase.id)}
-                          sx={{ 
-                            mt: 1, 
-                            height: 30, 
-                            fontSize: '0.75rem',
-                            borderRadius: 1
-                          }}
-                        >
-                          Add Bid
-                        </Button>
+                        <Box sx={{ display: 'flex', gap: 1 }}>
+                          <Button
+                            size="small"
+                            variant="outlined"
+                            startIcon={<ExpensesIcon fontSize="small" />}
+                            onClick={() => handleOpenQuickExpenseDialog(phase.id)}
+                            sx={{ 
+                              mt: 1, 
+                              height: 30, 
+                              fontSize: '0.75rem',
+                              borderRadius: 1
+                            }}
+                          >
+                            Add Expense
+                          </Button>
+                          <Button
+                            size="small"
+                            variant="outlined"
+                            startIcon={<AddIcon fontSize="small" />}
+                            onClick={() => handleOpenQuickBidDialog(phase.id)}
+                            sx={{ 
+                              mt: 1, 
+                              height: 30, 
+                              fontSize: '0.75rem',
+                              borderRadius: 1
+                            }}
+                          >
+                            Add Bid
+                          </Button>
+                        </Box>
                       </Box>
                     </Box>
                   </Card>
                 </Grid>
               ))}
             </Grid>
+          </Paper>
+        )}
+
+        {/* Recent Expenses in Quick Update Mode */}
+        {quickUpdateMode && expenses.length > 0 && (
+          <Paper 
+            elevation={0}
+            sx={{ 
+              p: 3, 
+              mb: 3, 
+              borderRadius: 2,
+              border: `1px solid ${alpha(theme.palette.primary.main, 0.3)}`,
+              bgcolor: alpha(theme.palette.success.main, 0.05)
+            }}
+          >
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+              <Typography variant="h5" fontWeight={600} color="success.main">Recent Expenses</Typography>
+            </Box>
+            
+            <Box sx={{ mb: 2 }}>
+              <Grid container spacing={2}>
+                {expenses.slice(-5).reverse().map((expense) => {
+                  const phaseName = phases.find(p => p.id === expense.phaseId)?.name || 'Unknown Phase';
+                  
+                  return (
+                    <Grid item xs={12} sm={6} md={4} key={expense.id}>
+                      <Card elevation={0} sx={{ 
+                        p: 2, 
+                        borderRadius: 2,
+                        border: `1px solid ${alpha(theme.palette.divider, 0.1)}`,
+                      }}>
+                        <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
+                          <Chip 
+                            label={expense.category} 
+                            size="small" 
+                            sx={{
+                              fontWeight: 500,
+                              borderRadius: 1,
+                              bgcolor: expense.category === 'materials' ? alpha(theme.palette.primary.main, 0.1) :
+                                       expense.category === 'labor' ? alpha(theme.palette.warning.main, 0.1) :
+                                       expense.category === 'permits' ? alpha(theme.palette.info.main, 0.1) :
+                                       expense.category === 'equipment' ? alpha(theme.palette.secondary.main, 0.1) :
+                                       alpha(theme.palette.grey[500], 0.1),
+                              color: expense.category === 'materials' ? theme.palette.primary.main :
+                                     expense.category === 'labor' ? theme.palette.warning.main :
+                                     expense.category === 'permits' ? theme.palette.info.main :
+                                     expense.category === 'equipment' ? theme.palette.secondary.main :
+                                     theme.palette.grey[700]
+                            }}
+                          />
+                          <Typography variant="body1" fontWeight={600}>
+                            {formatCurrency(expense.amount)}
+                          </Typography>
+                        </Box>
+                        
+                        <Typography variant="body2" sx={{ mb: 1 }}>
+                          {expense.description || '-'}
+                        </Typography>
+                        
+                        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <Typography variant="caption" color="text.secondary">
+                            Phase: {phaseName}
+                          </Typography>
+                          <Typography variant="caption" color="text.secondary">
+                            {expense.date instanceof Date 
+                              ? expense.date.toLocaleDateString() 
+                              : new Date(expense.date).toLocaleDateString()}
+                          </Typography>
+                        </Box>
+                      </Card>
+                    </Grid>
+                  );
+                })}
+              </Grid>
+            </Box>
+            
+            {expenses.length > 5 && (
+              <Box sx={{ display: 'flex', justifyContent: 'center' }}>
+                <Button 
+                  size="small" 
+                  onClick={() => setTabValue(3)} // Switch to Expenses tab
+                  endIcon={<ArrowBackIcon sx={{ transform: 'rotate(180deg)' }} />}
+                >
+                  View All Expenses
+                </Button>
+              </Box>
+            )}
           </Paper>
         )}
 
@@ -1834,29 +2045,31 @@ const ProjectDetailPage: React.FC = () => {
                   variant="outlined"
                   startIcon={<AddIcon />}
                   size="small"
+                  onClick={() => handleOpenQuickExpenseDialog('')}
                   sx={{ borderRadius: 1.5 }}
                 >
                   Add Expense
                 </Button>
               </Box>
               
-              {expensesData.length > 0 ? (
-                <Grid container spacing={3}>
-                  <Grid item xs={12} md={6}>
-                    <Paper 
-                      elevation={0} 
-                      sx={{ 
-                        p: 3, 
-                        borderRadius: 2,
-                        border: `1px solid ${alpha(theme.palette.divider, 0.1)}`
-                      }}
-                    >
-                      <Typography variant="subtitle1" fontWeight={600} gutterBottom>
-                        Expense Categories
-                      </Typography>
-                      <Divider sx={{ mb: 2 }} />
-                      
-                      <Box sx={{ height: 300 }}>
+              {/* Expense Charts */}
+              <Grid container spacing={3} sx={{ mb: 3 }}>
+                <Grid item xs={12} md={6}>
+                  <Paper 
+                    elevation={0} 
+                    sx={{ 
+                      p: 3, 
+                      borderRadius: 2,
+                      border: `1px solid ${alpha(theme.palette.divider, 0.1)}`
+                    }}
+                  >
+                    <Typography variant="subtitle1" fontWeight={600} gutterBottom>
+                      Expense Categories
+                    </Typography>
+                    <Divider sx={{ mb: 2 }} />
+                    
+                    <Box sx={{ height: 300 }}>
+                      {expensesData.length > 0 ? (
                         <ResponsiveContainer width="100%" height="100%">
                           <PieChart>
                             <Pie
@@ -1878,157 +2091,208 @@ const ProjectDetailPage: React.FC = () => {
                             <Legend />
                           </PieChart>
                         </ResponsiveContainer>
-                      </Box>
-                    </Paper>
-                  </Grid>
-                  
-                  <Grid item xs={12} md={6}>
-                    <Paper 
-                      elevation={0} 
-                      sx={{ 
-                        p: 3, 
-                        borderRadius: 2,
-                        border: `1px solid ${alpha(theme.palette.divider, 0.1)}`
-                      }}
-                    >
-                      <Typography variant="subtitle1" fontWeight={600} gutterBottom>
-                        Monthly Expenses
-                      </Typography>
-                      <Divider sx={{ mb: 2 }} />
-                      
-                      <Box sx={{ height: 300 }}>
-                        {expensesData.length > 0 ? (
-                          <ResponsiveContainer width="100%" height="100%">
-                            <AreaChart
-                              data={[]}
-                              margin={{ top: 10, right: 30, left: 0, bottom: 0 }}
-                            >
-                              <CartesianGrid strokeDasharray="3 3" />
-                              <XAxis dataKey="month" />
-                              <YAxis />
-                              <RechartsTooltip formatter={(value: any) => formatCurrency(value as number)} />
-                              <Area 
-                                type="monotone" 
-                                dataKey="expenses" 
-                                stroke={theme.palette.primary.main}
-                                fill={alpha(theme.palette.primary.main, 0.2)} 
-                              />
-                            </AreaChart>
-                          </ResponsiveContainer>
-                        ) : (
-                          <Box sx={{ 
-                            height: '100%', 
-                            display: 'flex', 
-                            flexDirection: 'column', 
-                            justifyContent: 'center', 
-                            alignItems: 'center'
-                          }}>
-                            <ExpensesIcon sx={{ fontSize: 40, color: 'text.secondary', opacity: 0.3, mb: 2 }} />
-                            <Typography variant="body1" color="text.secondary" align="center">
-                              No monthly expense data available
-                            </Typography>
-                          </Box>
-                        )}
-                      </Box>
-                    </Paper>
-                  </Grid>
-                  
-                  <Grid item xs={12}>
-                    <Paper 
-                      elevation={0} 
-                      sx={{ 
-                        p: 3, 
-                        borderRadius: 2,
-                        border: `1px solid ${alpha(theme.palette.divider, 0.1)}`
-                      }}
-                    >
-                      <Typography variant="subtitle1" fontWeight={600} gutterBottom>
-                        Phase Budget vs Actual
-                      </Typography>
-                      <Divider sx={{ mb: 2 }} />
-                      
-                      {phases.length > 0 ? (
-                        <Box sx={{ height: 300 }}>
-                          <ResponsiveContainer width="100%" height="100%">
-                            <BarChart
-                              data={phases.map(p => ({
-                                name: p.name,
-                                budget: p.budget,
-                                actual: p.actualCost,
-                                variance: p.budget - p.actualCost
-                              }))}
-                              margin={{ top: 20, right: 30, left: 20, bottom: 5 }}
-                            >
-                              <CartesianGrid strokeDasharray="3 3" />
-                              <XAxis dataKey="name" />
-                              <YAxis />
-                              <RechartsTooltip formatter={(value: any) => formatCurrency(value as number)} />
-                              <Legend />
-                              <Bar 
-                                dataKey="budget" 
-                                name="Budget" 
-                                stackId="a" 
-                                fill={theme.palette.primary.main}
-                                radius={[4, 4, 0, 0]}
-                              />
-                              <Bar 
-                                dataKey="actual" 
-                                name="Actual" 
-                                stackId="b" 
-                                fill={theme.palette.success.main}
-                                radius={[4, 4, 0, 0]}
-                              />
-                            </BarChart>
-                          </ResponsiveContainer>
-                        </Box>
                       ) : (
                         <Box sx={{ 
-                          height: 300, 
+                          height: '100%', 
                           display: 'flex', 
                           flexDirection: 'column', 
                           justifyContent: 'center', 
                           alignItems: 'center'
                         }}>
-                          <BudgetIcon sx={{ fontSize: 40, color: 'text.secondary', opacity: 0.3, mb: 2 }} />
+                          <ExpensesIcon sx={{ fontSize: 40, color: 'text.secondary', opacity: 0.3, mb: 2 }} />
                           <Typography variant="body1" color="text.secondary" align="center">
-                            No phase budget data available
+                            No expense data available
                           </Typography>
-                          <Button 
-                            variant="text" 
-                            size="small" 
-                            startIcon={<AddIcon />} 
-                            onClick={handleAddPhase}
-                            sx={{ mt: 1 }}
-                          >
-                            Add Project Phases
-                          </Button>
                         </Box>
                       )}
-                    </Paper>
-                  </Grid>
+                    </Box>
+                  </Paper>
                 </Grid>
-              ) : (
-                <Box sx={{ 
-                  display: 'flex', 
-                  flexDirection: 'column', 
-                  alignItems: 'center', 
-                  justifyContent: 'center', 
-                  py: 6 
-                }}>
-                  <ExpensesIcon sx={{ fontSize: 60, color: 'text.secondary', opacity: 0.3, mb: 2 }} />
-                  <Typography variant="h6" color="text.secondary">No expenses recorded</Typography>
-                  <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-                    Start by adding expenses to track your project costs
-                  </Typography>
-                  <Button 
-                    variant="contained" 
-                    startIcon={<AddIcon />}
-                    sx={{ borderRadius: 1.5 }}
+                
+                <Grid item xs={12} md={6}>
+                  <Paper 
+                    elevation={0} 
+                    sx={{ 
+                      p: 3, 
+                      borderRadius: 2,
+                      border: `1px solid ${alpha(theme.palette.divider, 0.1)}`
+                    }}
                   >
-                    Add Expense
-                  </Button>
-                </Box>
-              )}
+                    <Typography variant="subtitle1" fontWeight={600} gutterBottom>
+                      Phase Budget vs Actual
+                    </Typography>
+                    <Divider sx={{ mb: 2 }} />
+                    
+                    {phases.length > 0 ? (
+                      <Box sx={{ height: 300 }}>
+                        <ResponsiveContainer width="100%" height="100%">
+                          <BarChart
+                            data={phases.map(p => ({
+                              name: p.name,
+                              budget: p.budget,
+                              actual: p.actualCost,
+                              variance: p.budget - p.actualCost
+                            }))}
+                            margin={{ top: 20, right: 30, left: 20, bottom: 5 }}
+                          >
+                            <CartesianGrid strokeDasharray="3 3" />
+                            <XAxis dataKey="name" />
+                            <YAxis />
+                            <RechartsTooltip formatter={(value: any) => formatCurrency(value as number)} />
+                            <Legend />
+                            <Bar 
+                              dataKey="budget" 
+                              name="Budget" 
+                              stackId="a" 
+                              fill={theme.palette.primary.main}
+                              radius={[4, 4, 0, 0]}
+                            />
+                            <Bar 
+                              dataKey="actual" 
+                              name="Actual" 
+                              stackId="b" 
+                              fill={theme.palette.success.main}
+                              radius={[4, 4, 0, 0]}
+                            />
+                          </BarChart>
+                        </ResponsiveContainer>
+                      </Box>
+                    ) : (
+                      <Box sx={{ 
+                        height: 300, 
+                        display: 'flex', 
+                        flexDirection: 'column', 
+                        justifyContent: 'center', 
+                        alignItems: 'center'
+                      }}>
+                        <BudgetIcon sx={{ fontSize: 40, color: 'text.secondary', opacity: 0.3, mb: 2 }} />
+                        <Typography variant="body1" color="text.secondary" align="center">
+                          No phase budget data available
+                        </Typography>
+                      </Box>
+                    )}
+                  </Paper>
+                </Grid>
+              </Grid>
+              
+              {/* Expense List */}
+              <Paper 
+                elevation={0} 
+                sx={{ 
+                  p: 3, 
+                  borderRadius: 2,
+                  border: `1px solid ${alpha(theme.palette.divider, 0.1)}`
+                }}
+              >
+                <Typography variant="subtitle1" fontWeight={600} gutterBottom>
+                  All Expenses
+                </Typography>
+                <Divider sx={{ mb: 2 }} />
+                
+                {expenses.length > 0 ? (
+                  <Box>
+                    <Box sx={{ overflowX: 'auto' }}>
+                      <Box sx={{ minWidth: 750 }}>
+                        <Box sx={{ 
+                          display: 'grid', 
+                          gridTemplateColumns: '100px 1fr 200px 150px 150px',
+                          borderBottom: `1px solid ${theme.palette.divider}`,
+                          py: 1,
+                          fontWeight: 600
+                        }}>
+                          <Typography variant="body2">Category</Typography>
+                          <Typography variant="body2">Description</Typography>
+                          <Typography variant="body2">Phase</Typography>
+                          <Typography variant="body2">Date</Typography>
+                          <Typography variant="body2" align="right">Amount</Typography>
+                        </Box>
+                        
+                        {expenses.map((expense) => {
+                          const phaseName = phases.find(p => p.id === expense.phaseId)?.name || 'Unknown Phase';
+                          
+                          return (
+                            <Box 
+                              key={expense.id} 
+                              sx={{ 
+                                display: 'grid', 
+                                gridTemplateColumns: '100px 1fr 200px 150px 150px',
+                                py: 1.5,
+                                alignItems: 'center',
+                                borderBottom: `1px solid ${alpha(theme.palette.divider, 0.1)}`,
+                                '&:hover': {
+                                  bgcolor: alpha(theme.palette.primary.main, 0.03)
+                                }
+                              }}
+                            >
+                              <Box>
+                                <Chip 
+                                  label={expense.category} 
+                                  size="small" 
+                                  sx={{
+                                    fontWeight: 500,
+                                    borderRadius: 1,
+                                    bgcolor: expense.category === 'materials' ? alpha(theme.palette.primary.main, 0.1) :
+                                             expense.category === 'labor' ? alpha(theme.palette.warning.main, 0.1) :
+                                             expense.category === 'permits' ? alpha(theme.palette.info.main, 0.1) :
+                                             expense.category === 'equipment' ? alpha(theme.palette.secondary.main, 0.1) :
+                                             alpha(theme.palette.grey[500], 0.1),
+                                    color: expense.category === 'materials' ? theme.palette.primary.main :
+                                           expense.category === 'labor' ? theme.palette.warning.main :
+                                           expense.category === 'permits' ? theme.palette.info.main :
+                                           expense.category === 'equipment' ? theme.palette.secondary.main :
+                                           theme.palette.grey[700]
+                                  }}
+                                />
+                              </Box>
+                              <Typography variant="body2">{expense.description || '-'}</Typography>
+                              <Typography variant="body2">{phaseName}</Typography>
+                              <Typography variant="body2">
+                                {expense.date instanceof Date 
+                                  ? expense.date.toLocaleDateString() 
+                                  : new Date(expense.date).toLocaleDateString()}
+                              </Typography>
+                              <Typography variant="body2" fontWeight={600} align="right">
+                                {formatCurrency(expense.amount)}
+                              </Typography>
+                            </Box>
+                          );
+                        })}
+                      </Box>
+                    </Box>
+                    
+                    <Box sx={{ mt: 2, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <Typography variant="body2" color="text.secondary">
+                        {expenses.length} expense{expenses.length !== 1 ? 's' : ''} total
+                      </Typography>
+                      <Typography variant="body1" fontWeight={600}>
+                        Total: {formatCurrency(expenses.reduce((sum, expense) => sum + expense.amount, 0))}
+                      </Typography>
+                    </Box>
+                  </Box>
+                ) : (
+                  <Box sx={{ 
+                    py: 4, 
+                    display: 'flex', 
+                    flexDirection: 'column', 
+                    alignItems: 'center', 
+                    justifyContent: 'center'
+                  }}>
+                    <ExpensesIcon sx={{ fontSize: 40, color: 'text.secondary', opacity: 0.3, mb: 2 }} />
+                    <Typography variant="body1" color="text.secondary" align="center">
+                      No expenses have been added yet
+                    </Typography>
+                    <Button 
+                      variant="contained" 
+                      size="small"
+                      startIcon={<AddIcon />}
+                      onClick={() => handleOpenQuickExpenseDialog('')}
+                      sx={{ mt: 2, borderRadius: 1.5 }}
+                    >
+                      Add First Expense
+                    </Button>
+                  </Box>
+                )}
+              </Paper>
             </Box>
           )}
           
@@ -2133,6 +2397,93 @@ const ProjectDetailPage: React.FC = () => {
             disabled={!quickBid.contractorName || quickBid.amount <= 0}
           >
             Add Bid & Update Cost
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Expense Dialog */}
+      <Dialog open={newExpenseDialogOpen} onClose={() => setNewExpenseDialogOpen(false)} maxWidth="sm" fullWidth>
+        <DialogTitle>Add Expense</DialogTitle>
+        <DialogContent>
+          <DialogContentText sx={{ mb: 2 }}>
+            Enter the expense details to add to the project.
+          </DialogContentText>
+          
+          <Grid container spacing={2}>
+            <Grid item xs={12}>
+              <TextField
+                fullWidth
+                required
+                margin="dense"
+                label="Category"
+                name="category"
+                select
+                value={quickExpense.category}
+                onChange={handleQuickExpenseChange}
+              >
+                <MenuItem value="materials">Materials</MenuItem>
+                <MenuItem value="labor">Labor</MenuItem>
+                <MenuItem value="equipment">Equipment</MenuItem>
+                <MenuItem value="permits">Permits</MenuItem>
+                <MenuItem value="other">Other</MenuItem>
+              </TextField>
+            </Grid>
+            
+            <Grid item xs={12}>
+              <TextField
+                fullWidth
+                required
+                margin="dense"
+                label="Amount"
+                name="amount"
+                type="number"
+                value={quickExpense.amount}
+                onChange={handleQuickExpenseChange}
+                InputProps={{
+                  startAdornment: <InputAdornment position="start">$</InputAdornment>,
+                }}
+              />
+            </Grid>
+            
+            <Grid item xs={12}>
+              <TextField
+                fullWidth
+                multiline
+                rows={2}
+                margin="dense"
+                label="Description"
+                name="description"
+                value={quickExpense.description}
+                onChange={handleQuickExpenseChange}
+                placeholder="Description of the expense"
+              />
+            </Grid>
+            
+            <Grid item xs={12}>
+              <TextField
+                fullWidth
+                required
+                margin="dense"
+                label="Date"
+                name="date"
+                type="date"
+                value={quickExpense.date}
+                onChange={handleQuickExpenseChange}
+                InputLabelProps={{
+                  shrink: true,
+                }}
+              />
+            </Grid>
+          </Grid>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setNewExpenseDialogOpen(false)}>Cancel</Button>
+          <Button 
+            onClick={handleAddQuickExpense} 
+            variant="contained" 
+            disabled={!quickExpense.category || quickExpense.amount <= 0}
+          >
+            Add Expense
           </Button>
         </DialogActions>
       </Dialog>
