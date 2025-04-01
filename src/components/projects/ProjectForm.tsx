@@ -108,7 +108,7 @@ const ProjectForm: React.FC = () => {
         const projectData = await ProjectService.getProject(user.uid, id);
         if (projectData) {
           // Ensure the fetched data type matches the state type
-          setProject(projectData); 
+          setProject(projectData);
         } else {
           setError(`Project with ID ${id} not found or not accessible`);
         }
@@ -122,7 +122,7 @@ const ProjectForm: React.FC = () => {
     
     // Fetch only if id and user are present
     if (id && user?.uid) {
-        fetchProject();
+    fetchProject();
     } else if (!id) {
         // If creating new, ensure defaults are set (already done by useState)
         setProject(initialProject);
@@ -159,7 +159,7 @@ const ProjectForm: React.FC = () => {
     // Ensure user is authenticated
     if (!user?.uid) {
         setError("User authentication error. Cannot save project.");
-        return;
+      return;
     }
     if (!validateForm()) return;
 
@@ -174,7 +174,7 @@ const ProjectForm: React.FC = () => {
     delete projectPayload.userId;
     delete projectPayload.createdAt;
     delete projectPayload.updatedAt;
-
+    
     try {
       if (id) {
         // Update existing project - payload needs to match Partial<Omit<Project, 'id' | 'userId'>>
