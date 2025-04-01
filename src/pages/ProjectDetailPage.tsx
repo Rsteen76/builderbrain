@@ -184,6 +184,8 @@ const ProjectDetailPage: React.FC = () => {
         
         console.log('Project data retrieved:', projectData.name);
         console.log('Project phases from API:', projectData.phases?.length || 0);
+        console.log('Project start date:', projectData.startDate, typeof projectData.startDate);
+        console.log('Project end date:', projectData.endDate, typeof projectData.endDate);
         
         setProject(projectData);
         
@@ -309,6 +311,39 @@ const ProjectDetailPage: React.FC = () => {
 
   // Calculate timeline and progress
   const timeline = useMemo(() => {
+    // If we have a project with dates, use those directly
+    if (project?.startDate && project?.endDate) {
+      console.log('Using project dates for timeline calculation:', project.startDate, project.endDate);
+      
+      // Ensure dates are actual Date objects
+      const projectStartDate = project.startDate instanceof Date 
+        ? project.startDate 
+        : new Date(project.startDate);
+      
+      const projectEndDate = project.endDate instanceof Date 
+        ? project.endDate 
+        : new Date(project.endDate);
+      
+      const today = new Date();
+      
+      const totalDuration = projectEndDate.getTime() - projectStartDate.getTime();
+      const elapsedDuration = today.getTime() - projectStartDate.getTime();
+      
+      let percentComplete = 0;
+      if (totalDuration > 0) {
+        percentComplete = Math.max(0, Math.min(100, (elapsedDuration / totalDuration) * 100));
+      }
+      
+      return {
+        startDate: projectStartDate,
+        endDate: projectEndDate,
+        elapsedDays: Math.floor(elapsedDuration / (1000 * 60 * 60 * 24)),
+        totalDays: Math.ceil(totalDuration / (1000 * 60 * 60 * 24)),
+        percentComplete: Math.round(percentComplete),
+      };
+    }
+    
+    // Fallback to phase-based calculation if project dates aren't available or valid
     if (!phases.length) return { 
       startDate: new Date(), 
       endDate: new Date(), 
@@ -333,12 +368,12 @@ const ProjectDetailPage: React.FC = () => {
     const startDates = phases.map(p => parseDates(p.startDate));
     const endDates = phases.map(p => parseDates(p.endDate));
     
-    const projectStartDate = new Date(Math.min(...startDates));
-    const projectEndDate = new Date(Math.max(...endDates));
+    const phaseBasedStartDate = new Date(Math.min(...startDates));
+    const phaseBasedEndDate = new Date(Math.max(...endDates));
     const today = new Date();
     
-    const totalDuration = projectEndDate.getTime() - projectStartDate.getTime();
-    const elapsedDuration = today.getTime() - projectStartDate.getTime();
+    const totalDuration = phaseBasedEndDate.getTime() - phaseBasedStartDate.getTime();
+    const elapsedDuration = today.getTime() - phaseBasedStartDate.getTime();
     
     let percentComplete = 0;
     if (totalDuration > 0) {
@@ -346,13 +381,13 @@ const ProjectDetailPage: React.FC = () => {
     }
     
     return {
-      startDate: projectStartDate,
-      endDate: projectEndDate,
+      startDate: phaseBasedStartDate,
+      endDate: phaseBasedEndDate,
       elapsedDays: Math.floor(elapsedDuration / (1000 * 60 * 60 * 24)),
       totalDays: Math.ceil(totalDuration / (1000 * 60 * 60 * 24)),
       percentComplete: Math.round(percentComplete),
     };
-  }, [phases]);
+  }, [project?.startDate, project?.endDate, phases]);
   
   const handleTabChange = (event: React.SyntheticEvent, newValue: number) => {
     setTabValue(newValue);

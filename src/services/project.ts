@@ -380,6 +380,10 @@ export class ProjectService {
         ? projectData.budget
         : (projectData.budget?.total || 0);
       
+      // Get project start date from projectData or use today if not provided
+      const projectStartDate = projectData.startDate || new Date();
+      console.log("Using project start date:", projectStartDate);
+      
       // Define standard residential construction phases with percentage allocations
       const phaseAllocations = [
         { name: 'Pre-Construction', percentage: 0.05 }, // 5%
@@ -412,10 +416,10 @@ export class ProjectService {
         // Calculate exact budget based on percentage
         const phaseBudget = Math.round(totalBudget * allocation.percentage);
         
-        // Calculate phase duration and dates
+        // Calculate phase duration and dates based on project start date, not today
         const phaseStartDate = index === 0 
-          ? new Date() 
-          : this.addDays(new Date(), remainingDays);
+          ? new Date(projectStartDate) 
+          : this.addDays(new Date(projectStartDate), remainingDays);
         
         const phaseDuration = 30; // Each phase is roughly 30 days
         remainingDays += phaseDuration;
@@ -452,23 +456,36 @@ export class ProjectService {
         }
       });
       
+      // Calculate project end date based on the last phase's end date
+      const lastPhase = residentialPhases[residentialPhases.length - 1];
+      const projectEndDate = lastPhase 
+        ? (lastPhase.endDate instanceof Date 
+           ? lastPhase.endDate 
+           : new Date(lastPhase.endDate)) 
+        : this.addDays(new Date(projectStartDate), 270); // Default to ~9 months if no phases
+      
       console.log(`Collected ${allTasks.length} tasks from all phases`);
+      console.log(`Project timeline: ${projectStartDate.toISOString()} to ${projectEndDate.toISOString()}`);
       
       // Add phases to the project
       const updatedProject = {
         ...project,
         phases: residentialPhases,
-        tasks: [...(project.tasks || []), ...allTasks]
+        tasks: [...(project.tasks || []), ...allTasks],
+        startDate: projectStartDate instanceof Date ? projectStartDate : new Date(projectStartDate),
+        endDate: projectEndDate
       };
       
-      // Update project with phases and tasks
+      // Update project with phases, tasks, and updated dates
       await this.updateProject(project.id, { 
         phases: residentialPhases.map(phase => ({
           ...phase,
           id: phase.id || crypto.randomUUID(),
           projectId: project.id
         })),
-        tasks: updatedProject.tasks
+        tasks: updatedProject.tasks,
+        startDate: updatedProject.startDate,
+        endDate: updatedProject.endDate
       });
       
       console.log(`Residential project created with ${residentialPhases.length} phases and ${allTasks.length} tasks`);
