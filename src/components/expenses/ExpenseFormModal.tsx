@@ -150,18 +150,10 @@ const ExpenseFormModal: React.FC<ExpenseFormModalProps> = ({
     }
   };
 
-  const handleDateChange = (date: Date | null) => {
-    setFormData({
-      ...formData,
-      date: date || new Date(),
-    });
-
-    // Clear the date error if it exists
-    if (errors.date) {
-      setErrors({
-        ...errors,
-        date: undefined,
-      });
+  // Convert string dates to Date objects correctly
+  const handleDateChange = (newDate: Date | null) => {
+    if (newDate) {
+      setFormData(prev => ({ ...prev, date: newDate }));
     }
   };
 
@@ -344,7 +336,10 @@ const ExpenseFormModal: React.FC<ExpenseFormModalProps> = ({
             <LocalizationProvider dateAdapter={AdapterDateFns}>
               <DatePicker
                 label="Date"
-                value={formData.date}
+                value={formData.date instanceof Date ? 
+                  formData.date : 
+                  (formData.date ? new Date(formData.date) : null)
+                }
                 onChange={handleDateChange}
                 slotProps={{
                   textField: {
@@ -508,4 +503,4 @@ const ExpenseFormModal: React.FC<ExpenseFormModalProps> = ({
   );
 };
 
-export default ExpenseFormModal; 
+export default ExpenseFormModal;

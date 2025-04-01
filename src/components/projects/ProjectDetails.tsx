@@ -779,4 +779,4 @@ const calculateOverviewData = (project: Project | null) => {
     return { totalEstimate, tasksToDo, tasksInProgress, tasksDone, nextMilestone };
 };
 
-export default ProjectDetails; 
+export default ProjectDetails;

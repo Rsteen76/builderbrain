@@ -7,6 +7,7 @@ import theme from './theme';
 import MainLayout from './components/layout/MainLayout';
 import { AuthProvider } from './contexts/AuthContext';
 import ProtectedRoute from './components/auth/ProtectedRoute';
+import ProjectDetailPage from './pages/ProjectDetailPage';
 
 // Lazy load components
 const Dashboard = lazy(() => import('./components/dashboard/Dashboard'));
@@ -133,8 +134,8 @@ const App: React.FC = () => {
                   <Route path="dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
                   <Route path="projects" element={<ProtectedRoute><Projects /></ProtectedRoute>} />
                   <Route path="projects/new" element={<ProtectedRoute><ProjectSetupWizard /></ProtectedRoute>} />
-                  <Route path="projects/:id" element={<ProtectedRoute><ProjectDetails /></ProtectedRoute>} />
                   <Route path="projects/:id/edit" element={<ProtectedRoute><ProjectForm /></ProtectedRoute>} />
+                  <Route path="projects/:projectId" element={<ProtectedRoute><ProjectDetailPage /></ProtectedRoute>} />
                   <Route path="tasks" element={<ProtectedRoute><Tasks /></ProtectedRoute>} />
                   <Route path="expenses" element={<ProtectedRoute><Expenses /></ProtectedRoute>} />
                   <Route path="documents" element={<ProtectedRoute><Documents /></ProtectedRoute>} />

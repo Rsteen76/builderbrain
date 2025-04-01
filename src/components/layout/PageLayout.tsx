@@ -9,18 +9,22 @@ import {
   useTheme,
   useMediaQuery,
   SxProps,
-  Theme
+  Theme,
+  Breadcrumbs,
+  Link
 } from '@mui/material';
 import { SvgIconComponent } from '@mui/icons-material';
+import { Link as RouterLink } from 'react-router-dom';
 
-interface PageLayoutProps {
+export interface PageLayoutProps {
   title: string;
   subtitle?: string;
-  icon: SvgIconComponent;
+  icon: React.ElementType;
   children: React.ReactNode;
   actions?: React.ReactNode;
   maxWidth?: 'xs' | 'sm' | 'md' | 'lg' | 'xl' | false;
   sx?: SxProps<Theme>;
+  breadcrumbs?: Array<{ label: string; path: string }>;
 }
 
 const PageLayout: React.FC<PageLayoutProps> = ({
@@ -30,7 +34,8 @@ const PageLayout: React.FC<PageLayoutProps> = ({
   children,
   actions,
   maxWidth = 'xl',
-  sx
+  sx,
+  breadcrumbs
 }) => {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
@@ -44,6 +49,31 @@ const PageLayout: React.FC<PageLayoutProps> = ({
         ...sx
       }}
     >
+      {/* Breadcrumbs */}
+      {breadcrumbs && breadcrumbs.length > 0 && (
+        <Box sx={{ mb: 2, px: { xs: 1, sm: 2 } }}>
+          <Breadcrumbs aria-label="breadcrumb">
+            {breadcrumbs.map((crumb, index) => (
+              <Link
+                key={index}
+                component={RouterLink}
+                to={crumb.path}
+                color={index === breadcrumbs.length - 1 ? 'text.primary' : 'text.secondary'}
+                sx={{ 
+                  textDecoration: 'none',
+                  fontWeight: index === breadcrumbs.length - 1 ? 600 : 400,
+                  fontSize: '0.875rem',
+                  '&:hover': { textDecoration: 'underline' }
+                }}
+              >
+                {crumb.label}
+              </Link>
+            ))}
+          </Breadcrumbs>
+        </Box>
+      )}
+      
+      {/* Header Section */}
       <Stack 
         direction={{ xs: 'column', sm: 'row' }} 
         justifyContent="space-between" 
@@ -100,9 +130,11 @@ const PageLayout: React.FC<PageLayoutProps> = ({
           </Box>
         )}
       </Stack>
+      
+      {/* Main Content */}
       {children}
     </Container>
   );
 };
 
-export default PageLayout; 
+export default PageLayout;

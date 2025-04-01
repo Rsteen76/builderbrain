@@ -27,11 +27,16 @@ export class ExpenseService {
   static async createExpense(userId: string, expenseData: Omit<Expense, 'id' | 'userId' | 'createdAt' | 'updatedAt' | 'createdBy'>): Promise<Expense> {
     const now = new Date();
     
+    // Convert date to Timestamp if it's a string
+    const expenseDate = expenseData.date instanceof Date 
+      ? expenseData.date 
+      : new Date(expenseData.date);
+    
     const firestoreData: FirestoreExpense = {
       ...expenseData,
       userId: userId,
       createdBy: userId, // Default to the user creating the expense
-      date: Timestamp.fromDate(expenseData.date),
+      date: Timestamp.fromDate(expenseDate), // Fixed date type conversion
       createdAt: Timestamp.fromDate(now),
       updatedAt: Timestamp.fromDate(now),
     };
@@ -185,4 +190,4 @@ export class ExpenseService {
       updatedAt: data.updatedAt.toDate(),
     };
   }
-} 
+}

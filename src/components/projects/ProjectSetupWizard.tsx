@@ -31,7 +31,7 @@ import {
 import { useNavigate } from 'react-router-dom';
 import { ProjectService } from '../../services/project';
 import { useAuth } from '../../contexts/AuthContext';
-import { Project } from '../../types';
+import { Project, Phase } from '../../types';
 
 // Predefined options for various fields
 const projectTypes = [
@@ -183,12 +183,25 @@ const ProjectSetupWizard: React.FC = () => {
     }));
   };
 
-  const addPhase = (phase?: Required<Project>['phases'][0]) => {
+  // Fix the addPhase function to include all required fields
+  const addPhase = (phaseData?: Partial<Phase>) => {
+    const defaultPhase: Phase = {
+      name: '',
+      startDate: new Date(),
+      endDate: new Date(),
+      status: 'not_started',
+      progress: 0,
+      budget: 0,
+      actualCost: 0,
+      description: '',
+      tasks: []
+    };
+
     setProjectData(prev => ({
       ...prev,
       phases: [
         ...(prev.phases || []),
-        phase || { name: '', duration: '', description: '', dependencies: [] },
+        { ...defaultPhase, ...(phaseData || {}) }
       ],
     }));
   };
@@ -421,11 +434,20 @@ const ProjectSetupWizard: React.FC = () => {
                 Common Project Phases
               </Typography>
               <Grid container spacing={1}>
-                {commonPhases.map((phase) => (
-                  <Grid item key={phase.name}>
+                {commonPhases.map((phase, idx) => (
+                  <Grid item key={idx}>
                     <Chip
                       label={phase.name}
-                      onClick={() => addPhase(phase)}
+                      onClick={() => addPhase({
+                        name: phase.name,
+                        description: phase.description,
+                        startDate: new Date(),
+                        endDate: new Date(),
+                        status: 'not_started',
+                        progress: 0,
+                        budget: 0,
+                        actualCost: 0
+                      })}
                       sx={{ m: 0.5 }}
                     />
                   </Grid>
@@ -461,15 +483,21 @@ const ProjectSetupWizard: React.FC = () => {
                       <TextField
                         fullWidth
                         label="Duration (weeks)"
-                        value={phase.duration || ''}
+                        value={phase.description || ''}
                         onChange={(e) => {
                           const newPhases = [...(projectData.phases || [])];
-                          newPhases[index] = { ...newPhases[index], duration: e.target.value };
+                          newPhases[index] = { 
+                            ...newPhases[index], 
+                            description: e.target.value 
+                          };
                           setProjectData((prev) => ({
                             ...prev,
                             phases: newPhases,
                           }));
                         }}
+                        variant="outlined"
+                        size="small"
+                        sx={{ mb: 2 }}
                       />
                     </Grid>
                     <Grid item xs={12}>
@@ -769,4 +797,4 @@ const ProjectSetupWizard: React.FC = () => {
   );
 };
 
-export default ProjectSetupWizard; 
+export default ProjectSetupWizard;

@@ -44,12 +44,7 @@ export interface Project {
   team?: string[];
   projectType?: string;
   estimatedDuration?: string;
-  phases?: {
-    name: string;
-    duration: string;
-    description: string;
-    dependencies: string[];
-  }[];
+  phases?: Phase[];
   keyMilestones?: {
     name: string;
     date: Date | null;
@@ -66,20 +61,21 @@ export interface Project {
 }
 
 export interface Expense {
-  id: string;
+  id?: string;
   userId: string;
   projectId: string;
+  phaseId?: string; // Optional link to a specific phase
   category: 'labor' | 'materials' | 'equipment' | 'permits' | 'other';
   description: string;
   amount: number;
-  date: Date;
+  date: Date | string;
   receiptUrl?: string;
   vendor?: string;
   status: 'pending' | 'approved' | 'rejected' | 'paid';
   createdBy: string;
   approvedBy?: string;
-  createdAt: Date;
-  updatedAt: Date;
+  createdAt: Date | string;
+  updatedAt: Date | string;
   notes?: string;
 }
 
@@ -246,4 +242,22 @@ export interface BidPaymentStage {
   paymentDate?: Date;
   createdAt: Date;
   updatedAt: Date;
-} 
+}
+
+// Add or enhance the Phase interface
+export interface Phase {
+  id?: string;
+  name: string;
+  startDate: Date | string;
+  endDate: Date | string;
+  status: 'not_started' | 'in_progress' | 'completed' | 'delayed';
+  progress: number;
+  budget: number;
+  actualCost: number;
+  tasks?: Task[];
+  description?: string;
+  projectId?: string;
+  createdBy?: string;
+  createdAt?: Date | string;
+  updatedAt?: Date | string;
+}

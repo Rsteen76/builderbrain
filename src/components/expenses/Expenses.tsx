@@ -22,7 +22,9 @@ import {
   MenuItem,
   Avatar,
   useTheme,
+  Snackbar,
 } from '@mui/material';
+import MuiAlert, { AlertProps } from '@mui/material/Alert';
 import {
   Add as AddIcon,
   Search as SearchIcon,
@@ -40,7 +42,7 @@ import {
   Edit as EditIcon,
   Delete as DeleteIcon,
   CheckCircle as CheckCircleIcon,
-  DeleteOutline as Delete,
+  DeleteOutline as DeleteOutlineIcon,
   Business as BusinessIcon,
 } from '@mui/icons-material';
 import { ExpenseService } from '../../services/expense';
@@ -81,6 +83,16 @@ const Expenses: React.FC = () => {
   const [selectedExpense, setSelectedExpense] = useState<any>(null);
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
   const [selectedExpenseId, setSelectedExpenseId] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+  const [snackbar, setSnackbar] = useState<{
+    open: boolean;
+    message: string;
+    severity: 'success' | 'error' | 'info' | 'warning';
+  }>({
+    open: false,
+    message: '',
+    severity: 'success'
+  });
   
   useEffect(() => {
     if (user?.uid) {
@@ -141,10 +153,20 @@ const Expenses: React.FC = () => {
         .then(() => {
           setExpenses(expenses.filter(exp => exp.id !== selectedExpenseId));
           // Show success message if needed
+          setSnackbar({
+            open: true,
+            message: 'Expense deleted successfully',
+            severity: 'success'
+          });
         })
         .catch(err => {
           console.error('Error deleting expense:', err);
           setError('Failed to delete expense. Please try again.');
+          setSnackbar({
+            open: true,
+            message: 'Failed to delete expense',
+            severity: 'error'
+          });
         })
         .finally(() => {
           setLoading(false);
@@ -213,7 +235,7 @@ const Expenses: React.FC = () => {
   };
   
   const handleAddExpense = () => {
-    setSelectedExpense(null);  // Ensure we're creating a new expense
+    setSelectedExpense(null); // Ensure we're creating a new expense
     setExpenseModalOpen(true);
   };
   
@@ -222,7 +244,7 @@ const Expenses: React.FC = () => {
     setExpenseModalOpen(true);
   };
   
-  const handleCloseExpenseModal = () => {
+  const handleCloseModal = () => {
     setExpenseModalOpen(false);
     setSelectedExpense(null);
   };
@@ -244,42 +266,76 @@ const Expenses: React.FC = () => {
       ));
       
       setPaymentModalOpen(false);
-      // Success notification could be added
+      // Success notification
+      setSnackbar({
+        open: true,
+        message: 'Expense marked as paid',
+        severity: 'success'
+      });
     } catch (error) {
       console.error('Error marking expense as paid:', error);
       setError('Failed to mark expense as paid. Please try again.');
+      setSnackbar({
+        open: true,
+        message: 'Failed to mark expense as paid',
+        severity: 'error'
+      });
     }
   };
   
+  // Create a properly typed expense object
   const handleSaveExpense = async (expenseData: Partial<Expense>) => {
-    if (!user?.uid) return;
+    if (!user) return;
     
     try {
-      let savedExpense: Partial<Expense> & { id: string; projectId: string };
+      setSubmitting(true);
       
+      let savedExpense: Expense;
+      
+      // Ensure the expense has an ID for updating
       if (expenseData.id) {
         // Update existing expense
         await ExpenseService.updateExpense(expenseData.id, expenseData);
-        
-        // Update local state
-        setExpenses(prev => prev.map(e => 
-          e.id === expenseData.id ? { ...e, ...expenseData } : e
-        ));
-        
-        savedExpense = { ...expenseData } as Partial<Expense> & { id: string; projectId: string };
+        savedExpense = { ...expenseData } as Expense;
       } else {
-        // Create new expense
-        savedExpense = await ExpenseService.createExpense(user.uid, expenseData as any);
+        // Create new expense with required fields
+        const newExpenseData: Omit<Expense, 'id' | 'createdAt' | 'updatedAt' | 'createdBy'> = {
+          userId: user.uid,
+          projectId: expenseData.projectId!,
+          category: expenseData.category || 'other',
+          description: expenseData.description || '',
+          amount: expenseData.amount || 0,
+          date: expenseData.date || new Date(),
+          status: expenseData.status || 'pending',
+          vendor: expenseData.vendor || '',
+          receiptUrl: expenseData.receiptUrl
+        };
         
-        // Add to local state with project name
-        const projectName = projects.find(p => p.id === savedExpense.projectId)?.name || 'Unknown Project';
-        setExpenses(prev => [...prev, { ...savedExpense, projectName }]);
+        savedExpense = await ExpenseService.createExpense(user.uid, newExpenseData);
       }
       
-      // Success notification could be added here
-    } catch (error) {
-      console.error('Error saving expense:', error);
-      setError('Failed to save expense. Please try again.');
+      // Add to local state with project name
+      const projectName = projects.find(p => p.id === savedExpense.projectId)?.name || 'Unknown Project';
+      
+      // Close modal and refresh data
+      handleCloseModal();
+      fetchExpenses();
+      
+      // Show success message
+      setSnackbar({
+        open: true,
+        message: `Expense ${expenseData.id ? 'updated' : 'created'} successfully`,
+        severity: 'success'
+      });
+    } catch (err) {
+      console.error('Error saving expense:', err);
+      setSnackbar({
+        open: true,
+        message: `Failed to ${expenseData.id ? 'update' : 'create'} expense`,
+        severity: 'error'
+      });
+    } finally {
+      setSubmitting(false);
     }
   };
   
@@ -406,7 +462,7 @@ const Expenses: React.FC = () => {
             endAdornment: searchTerm && (
               <InputAdornment position="end">
                 <IconButton size="small" onClick={() => setSearchTerm('')}>
-                  <DeleteIcon fontSize="small" />
+                  <DeleteOutlineIcon fontSize="small" />
                 </IconButton>
               </InputAdornment>
             ),
@@ -600,7 +656,7 @@ const Expenses: React.FC = () => {
       {/* Expense Form Modal */}
       <ExpenseFormModal
         open={expenseModalOpen}
-        onClose={handleCloseExpenseModal}
+        onClose={handleCloseModal}
         expense={selectedExpense}
         onSave={handleSaveExpense}
         projects={projects}
@@ -617,8 +673,24 @@ const Expenses: React.FC = () => {
           }
         }}
       />
+      
+      {/* Add Snackbar for notifications */}
+      <Snackbar 
+        open={snackbar.open} 
+        autoHideDuration={6000} 
+        onClose={() => setSnackbar(prev => ({ ...prev, open: false }))}
+      >
+        <MuiAlert 
+          elevation={6} 
+          variant="filled" 
+          severity={snackbar.severity}
+          onClose={() => setSnackbar(prev => ({ ...prev, open: false }))}
+        >
+          {snackbar.message}
+        </MuiAlert>
+      </Snackbar>
     </Box>
   );
 };
 
-export default Expenses; 
+export default Expenses;
