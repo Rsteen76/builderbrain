@@ -83,9 +83,12 @@ export interface Bid {
   id: string;
   userId: string;
   projectId: string;
+  phaseId?: string;
   projectName?: string;
   subcontractorId?: string;
   subcontractorName?: string;
+  contractorName?: string;
+  bidAmount?: number;
   title?: string;
   scope?: string;
   status: 'draft' | 'submitted' | 'accepted' | 'rejected' | 'expired' | 'withdrawn' | 'revision_requested';
