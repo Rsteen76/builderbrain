@@ -31,41 +31,49 @@ export class SubcontractorService {
   static async createSubcontractor(userId: string, subcontractorData: Omit<Subcontractor, 'id' | 'userId' | 'createdAt' | 'updatedAt'>): Promise<Subcontractor> {
     const now = new Date();
     
+    // Create a clean version of the data without undefined values
+    const cleanData = JSON.parse(JSON.stringify(subcontractorData));
+    
     const firestoreData: FirestoreSubcontractor = {
-      ...subcontractorData,
+      ...cleanData,
       userId: userId,
       createdAt: Timestamp.fromDate(now),
       updatedAt: Timestamp.fromDate(now),
-      lastBid: subcontractorData.lastBid?.date 
-        ? { ...subcontractorData.lastBid, date: Timestamp.fromDate(subcontractorData.lastBid.date) } 
-        : undefined,
+      // Handle lastBid carefully to avoid undefined values
+      lastBid: cleanData.lastBid?.date 
+        ? { ...cleanData.lastBid, date: Timestamp.fromDate(cleanData.lastBid.date) } 
+        : null, // Use null instead of undefined
     };
     
     const docRef = await addDoc(this.collection, firestoreData);
 
     return {
-      ...subcontractorData,
+      ...cleanData,
       userId: userId,
       id: docRef.id,
       createdAt: now,
       updatedAt: now,
-      lastBid: subcontractorData.lastBid?.date 
-        ? { ...subcontractorData.lastBid, date: new Date(subcontractorData.lastBid.date) }
-        : undefined,
+      lastBid: cleanData.lastBid?.date 
+        ? { ...cleanData.lastBid, date: new Date(cleanData.lastBid.date) }
+        : null, // Use null instead of undefined
     };
   }
 
   static async updateSubcontractor(id: string, subcontractorData: Partial<Omit<Subcontractor, 'id' | 'userId' | 'createdAt'>>): Promise<void> {
     const subcontractorRef = doc(this.collection, id);
     const { userId, createdAt, ...updatePayload } = subcontractorData as any;
+    
+    // Create a clean version without undefined values using JSON stringify/parse
+    const cleanPayload = JSON.parse(JSON.stringify(updatePayload));
+    
     const firestoreUpdateData: Partial<FirestoreSubcontractor> = {
       updatedAt: Timestamp.fromDate(new Date()),
     };
 
-    for (const key in updatePayload) {
-      if (Object.prototype.hasOwnProperty.call(updatePayload, key)) {
-        const typedKey = key as keyof typeof updatePayload;
-        const value = updatePayload[typedKey];
+    for (const key in cleanPayload) {
+      if (Object.prototype.hasOwnProperty.call(cleanPayload, key)) {
+        const typedKey = key as keyof typeof cleanPayload;
+        const value = cleanPayload[typedKey];
 
         if (typedKey === 'lastBid' && value && typeof value === 'object' && 'date' in value && value.date instanceof Date) {
           firestoreUpdateData.lastBid = {
@@ -144,7 +152,7 @@ export class SubcontractorService {
       updatedAt: updatedAt.toDate(),
       lastBid: lastBid?.date 
         ? { ...lastBid, date: lastBid.date.toDate() } 
-        : undefined,
+        : null,
       rating: data.rating ?? 0,
       totalProjects: data.totalProjects ?? 0,
       contact: data.contact ?? {},

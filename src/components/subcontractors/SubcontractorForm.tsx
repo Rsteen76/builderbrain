@@ -31,6 +31,15 @@ const specialties = [
   'Flooring',
   'Foundation',
   'Concrete',
+  'Excavation',
+  'Demolition',
+  'Insulation',
+  'Glazing',
+  'Structural Steel',
+  'Framing',
+  'Siding',
+  'Waterproofing',
+  'Tile',
   'Landscaping',
   'Other'
 ];
@@ -65,6 +74,7 @@ const SubcontractorForm: React.FC = () => {
       employees: 0,
       license: '',
     },
+    lastBid: null,
     projects: [],
     notes: '',
   };
@@ -204,10 +214,11 @@ const SubcontractorForm: React.FC = () => {
           contact: { ...emptySubcontractor.contact, ...formData.contact },
           performance: { ...emptySubcontractor.performance, ...formData.performance },
           companyInfo: { ...emptySubcontractor.companyInfo, ...formData.companyInfo },
+          lastBid: formData.lastBid || null,
       };
 
       if (isEditMode && id) {
-        const updatePayload: Partial<Omit<Subcontractor, 'id' | 'userId' | 'createdAt'>> = formData;
+        const updatePayload = JSON.parse(JSON.stringify(formData));
         await SubcontractorService.updateSubcontractor(id, updatePayload);
         setSuccess('Subcontractor updated successfully');
       } else {

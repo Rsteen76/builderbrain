@@ -288,12 +288,12 @@ const Subcontractors: React.FC = () => {
       case 1: filter = 'Electrical'; break;
       case 2: filter = 'Plumbing'; break;
       case 3: filter = 'HVAC'; break;
-      case 4: filter = 'Framing'; break; // Changed Carpentry to Framing for consistency?
-      case 5: filter = 'Drywall'; break; // New
-      case 6: filter = 'Painting'; break; // New
-      case 7: filter = 'Roofing'; break; // New
-      case 8: filter = 'Siding'; break; // New
-      case 9: filter = 'Concrete'; break; // New
+      case 4: filter = 'Framing'; break;
+      case 5: filter = 'Excavation'; break;
+      case 6: filter = 'Concrete'; break;
+      case 7: filter = 'Drywall'; break;
+      case 8: filter = 'Painting'; break;
+      case 9: filter = 'Roofing'; break;
       // Add more cases as needed
       default: filter = null;
     }
@@ -474,11 +474,11 @@ const Subcontractors: React.FC = () => {
           <Tab label="Plumbing" />
           <Tab label="HVAC" />
           <Tab label="Framing" />
+          <Tab label="Excavation" />
+          <Tab label="Concrete" />
           <Tab label="Drywall" />
           <Tab label="Painting" />
           <Tab label="Roofing" />
-          <Tab label="Siding" />
-          <Tab label="Concrete" />
         </Tabs>
       </Box>
       

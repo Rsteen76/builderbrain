@@ -197,7 +197,7 @@ export interface Subcontractor {
     date: Date;
     amount: number;
     projectId?: string;
-  };
+  } | null;
   contact: {
     phone?: string;
     email?: string;
@@ -207,13 +207,13 @@ export interface Subcontractor {
     onTime?: number;
     quality?: number;
     communication?: number;
-  };
+  } | null;
   companyInfo?: {
     website?: string;
     founded?: string;
     employees?: number;
     license?: string;
-  };
+  } | null;
   projects?: string[];
   notes?: string;
   createdAt: Date;
