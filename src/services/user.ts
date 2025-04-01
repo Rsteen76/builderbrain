@@ -92,14 +92,22 @@ export class UserService {
    * Get a user by their ID
    */
   static async getUser(userId: string): Promise<User | null> {
+    console.log(`UserService: Getting user with ID: ${userId}`);
+    if (!userId) {
+      console.error("UserService: No userId provided to getUser");
+      return null;
+    }
+    
     const userRef = doc(this.collection, userId);
     const userDoc = await getDoc(userRef);
 
     if (!userDoc.exists()) {
+      console.log(`UserService: User with ID ${userId} not found`);
       return null;
     }
 
     const data = userDoc.data() as FirestoreUser;
+    console.log(`UserService: Found user with ID ${userId}: ${data.displayName}`);
     return this.convertFirestoreData(data);
   }
 
@@ -109,9 +117,11 @@ export class UserService {
   static async getCurrentUser(): Promise<User | null> {
     const currentUser = auth.currentUser;
     if (!currentUser) {
+      console.log("UserService: No authenticated user found");
       return null;
     }
 
+    console.log(`UserService: Current authenticated user: ${currentUser.uid} (${currentUser.email})`);
     return this.getUser(currentUser.uid);
   }
 

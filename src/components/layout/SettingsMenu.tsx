@@ -13,6 +13,8 @@ import {
   Button,
   alpha,
   useTheme,
+  Divider,
+  Tooltip,
 } from '@mui/material';
 import {
   Settings as SettingsIcon,
@@ -23,6 +25,7 @@ import {
   ColorLens as ThemeIcon,
   Brightness4 as DarkModeIcon,
   Brightness7 as LightModeIcon,
+  ClearAll as ClearAllIcon,
 } from '@mui/icons-material';
 import { useAuth } from '../../contexts/AuthContext';
 import { DataResetService } from '../../services/data-reset';
@@ -35,7 +38,9 @@ interface SettingsMenuProps {
 const SettingsMenu: React.FC<SettingsMenuProps> = ({ onThemeToggle, isDarkMode }) => {
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
   const [resetDialogOpen, setResetDialogOpen] = useState(false);
+  const [cacheDialogOpen, setCacheDialogOpen] = useState(false);
   const [isResetting, setIsResetting] = useState(false);
+  const [isClearing, setIsClearing] = useState(false);
   const theme = useTheme();
   const { user, logout } = useAuth();
   
@@ -63,20 +68,36 @@ const SettingsMenu: React.FC<SettingsMenuProps> = ({ onThemeToggle, isDarkMode }
     }
   };
   
+  const handleClearCache = () => {
+    setIsClearing(true);
+    try {
+      DataResetService.clearLocalStorageData();
+      setCacheDialogOpen(false);
+      window.location.reload(); // Reload to ensure clean state
+    } catch (error) {
+      console.error('Error clearing cache:', error);
+      alert('Failed to clear cache. Please try again.');
+    } finally {
+      setIsClearing(false);
+    }
+  };
+  
   return (
     <>
-      <IconButton 
-        color="inherit" 
-        onClick={handleMenuOpen}
-        sx={{ 
-          bgcolor: anchorEl ? alpha(theme.palette.primary.main, 0.1) : 'transparent',
-          '&:hover': {
-            bgcolor: alpha(theme.palette.primary.main, 0.1)
-          }
-        }}
-      >
-        <SettingsIcon />
-      </IconButton>
+      <Tooltip title="Settings">
+        <IconButton 
+          color="inherit" 
+          onClick={handleMenuOpen}
+          sx={{ 
+            bgcolor: anchorEl ? alpha(theme.palette.primary.main, 0.1) : 'transparent',
+            '&:hover': {
+              bgcolor: alpha(theme.palette.primary.main, 0.1)
+            }
+          }}
+        >
+          <SettingsIcon />
+        </IconButton>
+      </Tooltip>
       
       <Menu
         anchorEl={anchorEl}
@@ -99,6 +120,18 @@ const SettingsMenu: React.FC<SettingsMenuProps> = ({ onThemeToggle, isDarkMode }
           </ListItemIcon>
           <ListItemText primary={isDarkMode ? "Light Mode" : "Dark Mode"} />
         </MenuItem>
+        
+        <MenuItem onClick={() => {
+          handleMenuClose();
+          setCacheDialogOpen(true);
+        }}>
+          <ListItemIcon>
+            <ClearAllIcon fontSize="small" color="warning" />
+          </ListItemIcon>
+          <ListItemText primary="Clear Cache" />
+        </MenuItem>
+        
+        <Divider />
         
         <MenuItem onClick={() => {
           handleMenuClose();
@@ -152,6 +185,42 @@ const SettingsMenu: React.FC<SettingsMenuProps> = ({ onThemeToggle, isDarkMode }
             startIcon={isResetting ? <SyncIcon className="rotating" /> : <DeleteIcon />}
           >
             {isResetting ? "Resetting..." : "Reset All Data"}
+          </Button>
+        </DialogActions>
+      </Dialog>
+      
+      {/* Cache Clear Confirmation Dialog */}
+      <Dialog
+        open={cacheDialogOpen}
+        onClose={() => !isClearing && setCacheDialogOpen(false)}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle>Clear Application Cache?</DialogTitle>
+        <DialogContent>
+          <DialogContentText>
+            This will clear all locally stored application data, which can help fix display
+            issues like stale data or incorrect recent activity. Your actual project data 
+            will remain intact in the database.
+            
+            The application will reload after clearing the cache.
+          </DialogContentText>
+        </DialogContent>
+        <DialogActions>
+          <Button 
+            onClick={() => setCacheDialogOpen(false)} 
+            disabled={isClearing}
+          >
+            Cancel
+          </Button>
+          <Button 
+            onClick={handleClearCache} 
+            color="primary" 
+            variant="contained"
+            disabled={isClearing}
+            startIcon={isClearing ? <SyncIcon className="rotating" /> : <ClearAllIcon />}
+          >
+            {isClearing ? "Clearing..." : "Clear Cache"}
           </Button>
         </DialogActions>
       </Dialog>

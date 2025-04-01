@@ -212,15 +212,35 @@ const Expenses: React.FC = () => {
       if (categoryFilter) filters.category = categoryFilter;
       if (projectFilter) filters.projectId = projectFilter;
       
+      // First get projects to ensure we have them for the expense lookup
+      const fetchedProjects = await ProjectService.getProjects(user.uid);
+      setProjects(fetchedProjects.map(project => ({
+        id: project.id,
+        name: project.name
+      })));
+      
+      // Project ID to name lookup map for faster lookups
+      const projectMap = fetchedProjects.reduce((map, project) => {
+        map[project.id] = project.name;
+        return map;
+      }, {} as Record<string, string>);
+      
+      // Then get expenses
       const fetchedExpenses = await ExpenseService.getExpenses(user.uid, filters);
       
       // Add projectName to each expense
-      const enhancedExpenses = fetchedExpenses.map((expense: Expense) => ({
-        ...expense,
-        projectName: projects.find(p => p.id === expense.projectId)?.name || 'Unknown Project',
-        vendor: expense.vendor || '' // Ensure vendor is always a string
-      }));
+      const enhancedExpenses = fetchedExpenses.map((expense: Expense) => {
+        // Look up project name from our map
+        const projectName = projectMap[expense.projectId] || 'Unknown Project';
+        
+        return {
+          ...expense,
+          projectName,
+          vendor: expense.vendor || '' // Ensure vendor is always a string
+        };
+      });
       
+      console.log('Enhanced expenses with project names:', enhancedExpenses);
       setExpenses(enhancedExpenses);
     } catch (err) {
       console.error('Error fetching expenses:', err);

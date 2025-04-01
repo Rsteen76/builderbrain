@@ -44,6 +44,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
+      console.log("Auth state changed:", firebaseUser ? `User: ${firebaseUser.uid}` : "User signed out");
       setUser(firebaseUser);
       
       if (firebaseUser) {
@@ -53,7 +54,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           
           // If user document doesn't exist in Firestore yet, create it
           if (!userDoc) {
+            console.log(`Creating new user document for uid: ${firebaseUser.uid}`);
             userDoc = await UserService.createUser(firebaseUser);
+          } else {
+            console.log(`Found existing user data:`, userDoc);
           }
           
           setUserData(userDoc);

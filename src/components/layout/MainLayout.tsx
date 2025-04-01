@@ -37,6 +37,7 @@ import {
   Construction as ConstructionIcon,
 } from '@mui/icons-material';
 import { useAuth } from '../../contexts/AuthContext';
+import SettingsMenu from './SettingsMenu';
 
 const drawerWidth = 280;
 
@@ -49,6 +50,10 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
   const [mobileOpen, setMobileOpen] = useState(false);
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
+  const [darkMode, setDarkMode] = useState(() => {
+    const savedMode = localStorage.getItem('darkMode');
+    return savedMode === 'true';
+  });
   const { user, logout } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
@@ -68,6 +73,13 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
 
   const handleMenuClose = () => {
     setAnchorEl(null);
+  };
+  
+  const toggleDarkMode = () => {
+    const newMode = !darkMode;
+    setDarkMode(newMode);
+    localStorage.setItem('darkMode', String(newMode));
+    window.location.reload(); // Reload to apply theme changes
   };
 
   const handleSignOut = async () => {
@@ -194,60 +206,11 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
           <Typography variant="h6" noWrap component="div" sx={{ flexGrow: 1 }}>
             Construction Manager
           </Typography>
-          <IconButton
-            onClick={handleMenuOpen}
-            sx={{
-              p: 1,
-              '&:hover': {
-                bgcolor: alpha(theme.palette.primary.main, 0.04),
-              },
-            }}
-          >
-            <Avatar
-              src={user?.photoURL || undefined}
-              alt={user?.displayName || 'User'}
-              sx={{
-                width: 32,
-                height: 32,
-                bgcolor: alpha(theme.palette.primary.main, 0.1),
-                color: theme.palette.primary.main,
-              }}
-            >
-              {user?.displayName?.[0] || 'U'}
-            </Avatar>
-          </IconButton>
-          <Menu
-            anchorEl={anchorEl}
-            open={Boolean(anchorEl)}
-            onClose={handleMenuClose}
-            PaperProps={{
-              sx: {
-                mt: 1.5,
-                borderRadius: 2,
-                boxShadow: '0 4px 20px rgba(0,0,0,0.1)',
-              },
-            }}
-          >
-            <MenuItem onClick={handleMenuClose}>
-              <ListItemIcon>
-                <PersonIcon fontSize="small" />
-              </ListItemIcon>
-              Profile
-            </MenuItem>
-            <MenuItem onClick={handleMenuClose}>
-              <ListItemIcon>
-                <SettingsIcon fontSize="small" />
-              </ListItemIcon>
-              Settings
-            </MenuItem>
-            <Divider />
-            <MenuItem onClick={handleSignOut}>
-              <ListItemIcon>
-                <LogoutIcon fontSize="small" sx={{ color: theme.palette.error.main }} />
-              </ListItemIcon>
-              <Typography color="error">Sign Out</Typography>
-            </MenuItem>
-          </Menu>
+          
+          <SettingsMenu 
+            onThemeToggle={toggleDarkMode}
+            isDarkMode={darkMode}
+          />
         </Toolbar>
       </AppBar>
       <Box

@@ -334,7 +334,7 @@ const Subcontractors: React.FC = () => {
     setLoading(true);
     setError(null);
     try {
-      const currentFilters = { specialty: specialtyFilter || undefined };
+      const currentFilters = { specialtyArea: specialtyFilter || undefined };
       const data = await SubcontractorService.getSubcontractors(currentUserId, currentFilters);
       const filteredData = data.filter(sub => 
         sub.name.toLowerCase().includes(searchTerm.toLowerCase()) || 

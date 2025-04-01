@@ -28,7 +28,23 @@ export class DataResetService {
       return;
     }
     
-    const collections = ['projects', 'expenses', 'bids', 'subcontractors'];
+    // Extended collection list to include any potential activity logs
+    const collections = [
+      'projects', 
+      'expenses', 
+      'bids', 
+      'subcontractors',
+      'activity',
+      'logs',
+      'notifications',
+      'tasks',
+      'events',
+      'messages',
+      'comments',
+      'phases',
+      'documents'
+    ];
+    
     const deletionPromises = collections.map(collectionName => 
       this.deleteUserDocumentsInCollection(userId, collectionName)
     );
@@ -36,6 +52,10 @@ export class DataResetService {
     try {
       await Promise.all(deletionPromises);
       console.log('All user data has been reset');
+      
+      // Clear any local storage that might be keeping activity data
+      localStorage.removeItem('recentActivity');
+      localStorage.removeItem('lastProjects');
       
       // Reload the page after deletion to ensure clean state
       window.location.href = '/';
@@ -52,32 +72,37 @@ export class DataResetService {
    * @returns Promise that resolves when deletion is complete
    */
   private static async deleteUserDocumentsInCollection(userId: string, collectionName: string): Promise<void> {
-    const coll = collection(db, collectionName);
-    const q = query(coll, where('userId', '==', userId));
-    const snapshot = await getDocs(q);
-    
-    if (snapshot.empty) {
-      console.log(`No documents found in ${collectionName} for user ${userId}`);
-      return;
-    }
-    
-    // Use batched writes for more efficient deletion
-    const batchSize = 500; // Firestore limit is 500 operations per batch
-    let numDeleted = 0;
-    
-    for (let i = 0; i < snapshot.docs.length; i += batchSize) {
-      const batch = writeBatch(db);
-      const currentBatch = snapshot.docs.slice(i, i + batchSize);
+    try {
+      const coll = collection(db, collectionName);
+      const q = query(coll, where('userId', '==', userId));
+      const snapshot = await getDocs(q);
       
-      currentBatch.forEach(document => {
-        batch.delete(doc(db, collectionName, document.id));
-      });
+      if (snapshot.empty) {
+        console.log(`No documents found in ${collectionName} for user ${userId}`);
+        return;
+      }
       
-      await batch.commit();
-      numDeleted += currentBatch.length;
+      // Use batched writes for more efficient deletion
+      const batchSize = 500; // Firestore limit is 500 operations per batch
+      let numDeleted = 0;
+      
+      for (let i = 0; i < snapshot.docs.length; i += batchSize) {
+        const batch = writeBatch(db);
+        const currentBatch = snapshot.docs.slice(i, i + batchSize);
+        
+        currentBatch.forEach(document => {
+          batch.delete(doc(db, collectionName, document.id));
+        });
+        
+        await batch.commit();
+        numDeleted += currentBatch.length;
+      }
+      
+      console.log(`Deleted ${numDeleted} documents from ${collectionName}`);
+    } catch (error) {
+      // If collection doesn't exist, just log and continue
+      console.log(`Error with collection ${collectionName}: ${error}`);
     }
-    
-    console.log(`Deleted ${numDeleted} documents from ${collectionName}`);
   }
   
   /**
@@ -112,5 +137,22 @@ export class DataResetService {
     
     await batch.commit();
     console.log(`Deleted ${snapshot.docs.length} documents from ${collectionName} for project ${projectId}`);
+  }
+  
+  /**
+   * Clears all local storage items related to app data
+   * Useful for ensuring all cached data is removed
+   */
+  static clearLocalStorageData(): void {
+    const keysToKeep = ['darkMode', 'authUser'];
+    
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (key && !keysToKeep.includes(key)) {
+        localStorage.removeItem(key);
+      }
+    }
+    
+    console.log('Local storage data cleared');
   }
 } 

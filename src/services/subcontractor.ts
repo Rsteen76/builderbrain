@@ -114,31 +114,42 @@ export class SubcontractorService {
   }
 
   static async getSubcontractors(userId: string, filters?: {
-    specialty?: string;
-    minRating?: number;
-    projectId?: string;
+    specialtyArea?: string;
+    companyName?: string;
+    active?: boolean;
   }): Promise<Subcontractor[]> {
+    console.log(`SubcontractorService: Fetching subcontractors for user: ${userId}, with filters:`, filters);
+    
+    if (!userId) {
+      console.error("SubcontractorService: No userId provided to getSubcontractors");
+      return [];
+    }
+    
     let q = query(this.collection, where('userId', '==', userId));
 
-    if (filters?.specialty) {
-      q = query(q, where('specialty', '==', filters.specialty));
+    if (filters?.specialtyArea) {
+      q = query(q, where('specialtyArea', '==', filters.specialtyArea));
     }
 
-    if (filters?.minRating) {
-      q = query(q, where('rating', '>=', filters.minRating));
+    if (filters?.companyName) {
+      q = query(q, where('companyName', '==', filters.companyName));
     }
 
-    if (filters?.projectId) {
-      q = query(q, where('projects', 'array-contains', filters.projectId));
+    if (filters?.active !== undefined) {
+      q = query(q, where('active', '==', filters.active));
     }
 
-    q = query(q, orderBy('name', 'asc'));
+    q = query(q, orderBy('createdAt', 'desc'));
 
-    const querySnapshot = await getDocs(q);
-    return querySnapshot.docs.map(doc => {
-      const data = doc.data() as FirestoreSubcontractor;
-      return this.convertFirestoreData(data, doc.id);
-    });
+    const snapshot = await getDocs(q);
+    console.log(`SubcontractorService: Found ${snapshot.docs.length} subcontractors`);
+    
+    if (snapshot.empty) {
+      console.log("SubcontractorService: No subcontractors found for user:", userId);
+      return [];
+    }
+
+    return snapshot.docs.map(doc => this.convertFirestoreData(doc.data() as FirestoreSubcontractor, doc.id));
   }
 
   private static convertFirestoreData(data: FirestoreSubcontractor, id: string): Subcontractor {

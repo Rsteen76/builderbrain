@@ -26,6 +26,12 @@ export class ExpenseService {
 
   static async createExpense(userId: string, expenseData: Omit<Expense, 'id' | 'userId' | 'createdAt' | 'updatedAt' | 'createdBy'>): Promise<Expense> {
     const now = new Date();
+    console.log(`ExpenseService: Creating expense for user: ${userId}`);
+    
+    if (!userId) {
+      console.error("ExpenseService: No userId provided to createExpense");
+      throw new Error("User ID is required to create an expense");
+    }
     
     // Convert date to Timestamp if it's a string
     const expenseDate = expenseData.date instanceof Date 
@@ -41,7 +47,15 @@ export class ExpenseService {
       updatedAt: Timestamp.fromDate(now),
     };
     
+    console.log("Saving expense to Firestore with data:", JSON.stringify({
+      ...firestoreData,
+      date: firestoreData.date.toDate().toISOString(),
+      createdAt: firestoreData.createdAt.toDate().toISOString(),
+      updatedAt: firestoreData.updatedAt.toDate().toISOString(),
+    }));
+    
     const docRef = await addDoc(this.collection, firestoreData);
+    console.log(`Expense created with ID: ${docRef.id}`);
 
     return {
       ...expenseData,
@@ -103,20 +117,33 @@ export class ExpenseService {
   }
 
   static async getExpenses(userId: string, filters?: {
+    status?: Expense['status'];
     projectId?: string;
     phaseId?: string;
-    category?: Expense['category'];
-    status?: Expense['status'];
+    subcontractorId?: string;
+    category?: string;
+    minAmount?: number;
+    maxAmount?: number;
     startDate?: Date;
     endDate?: Date;
-    vendor?: string;
-    subcontractorId?: string;
   }): Promise<Expense[]> {
-    // Query expenses where user is either the owner or the creator
+    console.log(`ExpenseService: Fetching expenses for user: ${userId}, with filters:`, filters);
+    
+    if (!userId) {
+      console.error("ExpenseService: No userId provided to getExpenses");
+      return [];
+    }
+    
+    // Start with basic userId query
     let q = query(
-      this.collection, 
+      this.collection,
       where('userId', '==', userId)
     );
+
+    // Add filters
+    if (filters?.status) {
+      q = query(q, where('status', '==', filters.status));
+    }
 
     if (filters?.projectId) {
       q = query(q, where('projectId', '==', filters.projectId));
@@ -126,20 +153,12 @@ export class ExpenseService {
       q = query(q, where('phaseId', '==', filters.phaseId));
     }
 
-    if (filters?.category) {
-      q = query(q, where('category', '==', filters.category));
-    }
-
-    if (filters?.status) {
-      q = query(q, where('status', '==', filters.status));
-    }
-
-    if (filters?.vendor) {
-      q = query(q, where('vendor', '==', filters.vendor));
-    }
-
     if (filters?.subcontractorId) {
       q = query(q, where('subcontractorId', '==', filters.subcontractorId));
+    }
+
+    if (filters?.category) {
+      q = query(q, where('category', '==', filters.category));
     }
 
     if (filters?.startDate) {
@@ -150,13 +169,19 @@ export class ExpenseService {
       q = query(q, where('date', '<=', Timestamp.fromDate(filters.endDate)));
     }
 
-    // Order by date (most recent first)
+    // Order by date descending (most recent first)
     q = query(q, orderBy('date', 'desc'));
 
-    const querySnapshot = await getDocs(q);
-    return querySnapshot.docs.map(doc => {
-      const data = doc.data() as any;
-      return this.convertFirestoreData(data, doc.id);
+    const snapshot = await getDocs(q);
+    console.log(`ExpenseService: Found ${snapshot.docs.length} expenses`);
+    
+    if (snapshot.empty) {
+      console.log("ExpenseService: No expenses found for user:", userId);
+      return [];
+    }
+
+    return snapshot.docs.map(doc => {
+      return this.convertFirestoreData(doc.data(), doc.id);
     });
   }
 

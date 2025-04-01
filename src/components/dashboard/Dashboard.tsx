@@ -50,6 +50,7 @@ import {
   Add as AddIcon,
   House as HouseIcon,
   Construction as ConstructionIcon,
+  ClearAll as ClearAllIcon,
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 import { Project } from '../../types';
@@ -395,35 +396,7 @@ const Dashboard: React.FC = () => {
     teamMembers: 0,
     tasksDue: 0
   });
-
-  // Sample recent activity data
-  const recentActivity: RecentActivity[] = [
-    {
-      title: "New project created",
-      time: "2 hours ago",
-      icon: <BuildIcon />
-    },
-    {
-      title: "Task completed",
-      time: "4 hours ago",
-      icon: <CheckCircleIcon />
-    },
-    {
-      title: "Budget updated",
-      time: "1 day ago",
-      icon: <MoneyIcon />
-    },
-    {
-      title: "Team member added",
-      time: "2 days ago",
-      icon: <GroupIcon />
-    },
-    {
-      title: "Project status changed",
-      time: "3 days ago",
-      icon: <AssessmentIcon />
-    }
-  ];
+  const [recentActivity, setRecentActivity] = useState<RecentActivity[]>([]);
 
   useEffect(() => {
     const fetchDashboardData = async () => {
@@ -477,6 +450,19 @@ const Dashboard: React.FC = () => {
           teamMembers: uniqueTeamMembers.size,
           tasksDue
         });
+        
+        // Try to fetch real activity data if it exists in the database
+        try {
+          // This is a placeholder - replace with your actual activity service when implemented
+          // const activityData = await ActivityService.getRecentActivity(user.uid, 5);
+          // setRecentActivity(activityData);
+          
+          // For now, we'll set it to empty to avoid showing fake data
+          setRecentActivity([]);
+        } catch (activityErr) {
+          console.log('No activity data found:', activityErr);
+          setRecentActivity([]);
+        }
         
       } catch (err) {
         console.error('Error fetching dashboard data:', err);
@@ -537,6 +523,9 @@ const Dashboard: React.FC = () => {
             teamMembers: uniqueTeamMembers.size,
             tasksDue
           });
+          
+          // Reset activity data to empty
+          setRecentActivity([]);
           
         } catch (err) {
           console.error('Error refreshing dashboard data:', err);
@@ -815,41 +804,66 @@ const Dashboard: React.FC = () => {
             <Typography variant="h6" sx={{ mb: 2, fontWeight: 600 }}>
               Recent Activity
             </Typography>
-            <List sx={{ p: 0 }}>
-              {recentActivity.map((activity, index) => (
-                <ListItem
-                  key={index}
-                  sx={{
-                    px: 0,
-                    py: 1.5,
-                    borderBottom: index < recentActivity.length - 1 ? `1px solid ${alpha(theme.palette.divider, 0.1)}` : 'none',
-                  }}
-                >
-                  <ListItemAvatar>
-                    <Avatar
-                      sx={{
-                        bgcolor: alpha(theme.palette.primary.main, 0.1),
-                        color: theme.palette.primary.main,
-                        width: 32,
-                        height: 32,
+            {recentActivity.length > 0 ? (
+              <List sx={{ p: 0 }}>
+                {recentActivity.map((activity, index) => (
+                  <ListItem
+                    key={index}
+                    sx={{
+                      px: 0,
+                      py: 1.5,
+                      borderBottom: index < recentActivity.length - 1 ? `1px solid ${alpha(theme.palette.divider, 0.1)}` : 'none',
+                    }}
+                  >
+                    <ListItemAvatar>
+                      <Avatar
+                        sx={{
+                          bgcolor: alpha(theme.palette.primary.main, 0.1),
+                          color: theme.palette.primary.main,
+                          width: 32,
+                          height: 32,
+                        }}
+                      >
+                        {activity.icon}
+                      </Avatar>
+                    </ListItemAvatar>
+                    <ListItemText
+                      primary={activity.title}
+                      secondary={activity.time}
+                      primaryTypographyProps={{
+                        sx: { fontSize: '0.875rem', fontWeight: 500 }
                       }}
-                    >
-                      {activity.icon}
-                    </Avatar>
-                  </ListItemAvatar>
-                  <ListItemText
-                    primary={activity.title}
-                    secondary={activity.time}
-                    primaryTypographyProps={{
-                      sx: { fontSize: '0.875rem', fontWeight: 500 }
-                    }}
-                    secondaryTypographyProps={{
-                      sx: { fontSize: '0.75rem', color: 'text.secondary' }
-                    }}
-                  />
-                </ListItem>
-              ))}
-            </List>
+                      secondaryTypographyProps={{
+                        sx: { fontSize: '0.75rem', color: 'text.secondary' }
+                      }}
+                    />
+                  </ListItem>
+                ))}
+              </List>
+            ) : (
+              <Box sx={{ 
+                display: 'flex', 
+                flexDirection: 'column', 
+                alignItems: 'center', 
+                justifyContent: 'center',
+                height: '200px' 
+              }}>
+                <ClearAllIcon 
+                  sx={{ 
+                    fontSize: '3rem', 
+                    color: alpha(theme.palette.text.secondary, 0.3),
+                    mb: 1
+                  }} 
+                />
+                <Typography 
+                  variant="body2" 
+                  color="text.secondary"
+                  align="center"
+                >
+                  No recent activity to display
+                </Typography>
+              </Box>
+            )}
           </Paper>
         </Grid>
 

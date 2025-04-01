@@ -33,6 +33,7 @@ export class ProjectService {
 
   static async createProject(userId: string, projectData: Omit<Project, 'id' | 'userId' | 'createdAt' | 'updatedAt'>): Promise<Project> {
     const now = new Date();
+    console.log(`ProjectService: Creating project for user: ${userId}`);
     
     const budgetValue = typeof projectData.budget === 'object' && projectData.budget !== null 
                         ? projectData.budget.total 
@@ -52,7 +53,16 @@ export class ProjectService {
       updatedAt: Timestamp.fromDate(now),
     };
 
+    console.log("Saving project to Firestore with data:", JSON.stringify({
+      ...projectToSave,
+      startDate: projectToSave.startDate.toDate().toISOString(),
+      endDate: projectToSave.endDate ? projectToSave.endDate.toDate().toISOString() : null,
+      createdAt: projectToSave.createdAt.toDate().toISOString(),
+      updatedAt: projectToSave.updatedAt.toDate().toISOString(),
+    }));
+
     const docRef = await addDoc(this.collection, projectToSave);
+    console.log(`Project created with ID: ${docRef.id}`);
 
     return {
       ...projectData,
@@ -166,6 +176,13 @@ export class ProjectService {
     startDate?: Date;
     endDate?: Date;
   }): Promise<Project[]> {
+    console.log(`ProjectService: Fetching projects for user: ${userId}, with filters:`, filters);
+    
+    if (!userId) {
+      console.error("ProjectService: No userId provided to getProjects");
+      return [];
+    }
+    
     let q = query(this.collection, where('userId', '==', userId));
 
     if (filters?.status) {
@@ -187,6 +204,13 @@ export class ProjectService {
     q = query(q, orderBy('createdAt', 'desc'));
 
     const querySnapshot = await getDocs(q);
+    console.log(`ProjectService: Found ${querySnapshot.docs.length} projects`);
+    
+    if (querySnapshot.empty) {
+      console.log("ProjectService: No projects found for user:", userId);
+      return [];
+    }
+    
     return querySnapshot.docs.map(doc => {
       const data = doc.data() as FirestoreProject;
       return this.convertFirestoreData(data, doc.id);
