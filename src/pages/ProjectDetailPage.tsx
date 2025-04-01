@@ -37,6 +37,7 @@ import {
   SelectChangeEvent,
   TextField,
   InputAdornment,
+  Snackbar,
 } from '@mui/material';
 import {
   Edit as EditIcon,
@@ -66,10 +67,13 @@ import {
 } from '@mui/icons-material';
 import { useAuth } from '../contexts/AuthContext';
 import { ProjectService } from '../services/project';
+import { ExpenseService } from '../services/expense';
+import { BidService } from '../services/bid';
+import { SubcontractorService } from '../services/subcontractor';
 import { formatCurrency, formatDate } from '../utils/formatters';
 import PageLayout from '../components/layout/PageLayout';
 import ProjectTaskManager from '../components/projects/ProjectTaskManager';
-import { Project, Task, Phase, Expense, Bid } from '../types';
+import { Project, Task, Phase, Expense, Bid, Subcontractor } from '../types';
 
 // Import recharts components
 import {
@@ -143,32 +147,40 @@ interface QuickExpense {
   amount: number;
   description: string;
   date: string;
+  subcontractorId?: string;
+  subcontractorName?: string;
+  vendor?: string;
 }
 
 // Project detail page with phases, progress tracking, and expense breakdowns
 const ProjectDetailPage: React.FC = () => {
-  const { projectId } = useParams<{ projectId: string }>();
+  const { projectId } = useParams();
   const navigate = useNavigate();
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
   const isSmall = useMediaQuery(theme.breakpoints.down('sm'));
+  
+  // Auth context for user information
   const { user } = useAuth();
   
-  const [project, setProject] = useState<Project | null>(null);
+  // State variables
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [tabValue, setTabValue] = useState(0);
+  const [project, setProject] = useState<Project | null>(null);
   const [phases, setPhases] = useState<ProjectPhase[]>([]);
+  const [phasesBeingUpdated, setPhasesBeingUpdated] = useState<{ [id: string]: ProjectPhase }>({});
   const [bids, setBids] = useState<Bid[]>([]);
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [expensesData, setExpensesData] = useState<{ name: string; value: number; color: string }[]>([]);
-  const [quickUpdateMode, setQuickUpdateMode] = useState(false);
-  const [phasesBeingUpdated, setPhasesBeingUpdated] = useState<{ [id: string]: ProjectPhase }>({});
+  const [tabValue, setTabValue] = useState(0);
   const [menuAnchorEl, setMenuAnchorEl] = useState<null | HTMLElement>(null);
+  const [quickUpdateMode, setQuickUpdateMode] = useState(false);
+  const [subcontractors, setSubcontractors] = useState<Subcontractor[]>([]);
+  
+  // State for quick bid and expense dialogs
   const [newBidDialogOpen, setNewBidDialogOpen] = useState(false);
   const [newExpenseDialogOpen, setNewExpenseDialogOpen] = useState(false);
   const [currentPhaseForBid, setCurrentPhaseForBid] = useState<string | null>(null);
-  const [currentPhaseForExpense, setCurrentPhaseForExpense] = useState<string | null>(null);
   const [quickBid, setQuickBid] = useState<QuickBid>({
     phaseId: '',
     contractorName: '',
@@ -177,45 +189,120 @@ const ProjectDetailPage: React.FC = () => {
   });
   const [quickExpense, setQuickExpense] = useState<QuickExpense>({
     phaseId: '',
-    category: 'materials',
+    category: 'other',
     amount: 0,
     description: '',
     date: new Date().toISOString().split('T')[0],
   });
+  const [snackbar, setSnackbar] = useState<{
+    open: boolean;
+    message: string;
+    severity: 'success' | 'error' | 'info' | 'warning';
+  }>({
+    open: false,
+    message: '',
+    severity: 'info'
+  });
+  
+  // Function to fetch expenses
+  const fetchExpenses = async (projectId: string) => {
+    if (!user?.uid) return;
+    
+    try {
+      const expenseData = await ExpenseService.getProjectExpenses(user.uid, projectId);
+      setExpenses(expenseData);
+      
+      // Process expense data for charts - group by category
+      const expensesByCategory = expenseData.reduce((acc, expense) => {
+        const category = expense.category;
+        acc[category] = (acc[category] || 0) + expense.amount;
+        return acc;
+      }, {} as Record<string, number>);
+      
+      // Convert to chart format
+      const chartData = Object.entries(expensesByCategory).map(([name, value], index) => {
+        // Define a set of colors for categories
+        const colors = ['#f44336', '#2196f3', '#4caf50', '#ff9800', '#9c27b0', '#795548'];
+        return {
+          name,
+          value,
+          color: colors[index % colors.length]
+        };
+      });
+      
+      setExpensesData(chartData);
+    } catch (err) {
+      console.error('Error fetching expenses:', err);
+    }
+  };
   
   // Fetch project data
   useEffect(() => {
+    // Fetch project and related data when projectId changes
     const fetchProject = async () => {
       if (!projectId || !user?.uid) return;
       
+      setLoading(true);
+      setError(null);
+      
       try {
-        setLoading(true);
-        setError(null);
-        
-        console.log(`Fetching project with ID: ${projectId} for user ${user.uid}`);
         const projectData = await ProjectService.getProject(projectId, user.uid);
-        
         if (!projectData) {
-          console.error(`Project not found with ID: ${projectId}`);
-          setError(`Project with ID ${projectId} not found. Please check the URL and try again.`);
+          setError('Project not found');
+          setLoading(false);
           return;
         }
         
-        console.log('Project data retrieved:', projectData.name);
-        console.log('Project phases from API:', projectData.phases?.length || 0);
-        console.log('Project start date:', projectData.startDate, typeof projectData.startDate);
-        console.log('Project end date:', projectData.endDate, typeof projectData.endDate);
-        
         setProject(projectData);
         
-        // Initialize phases from project data if available
-        if (projectData.phases && projectData.phases.length > 0) {
+        // Fetch project phases
+        await fetchPhases(projectId);
+        
+        // Fetch project bids
+        await fetchBids(projectId);
+        
+        // Fetch project expenses
+        await fetchExpenses(projectId);
+        
+        // Fetch subcontractors
+        if (user?.uid) {
+          await fetchSubcontractors(user.uid);
+        }
+        
+        setLoading(false);
+      } catch (err) {
+        console.error('Error fetching project:', err);
+        setError('Failed to load project');
+        setLoading(false);
+      }
+    };
+
+    // Function to fetch subcontractors
+    const fetchSubcontractors = async (userId: string) => {
+      try {
+        console.log('Fetching subcontractors...');
+        const data = await SubcontractorService.getSubcontractors(userId);
+        console.log(`Fetched ${data.length} subcontractors`);
+        setSubcontractors(data);
+      } catch (err) {
+        console.error('Error fetching subcontractors:', err);
+      }
+    };
+    
+    // Additional fetch functions that would make API calls in a real implementation
+    const fetchPhases = async (projectId: string) => {
+      if (!user?.uid) return;
+      
+      try {
+        // Fetch the project to get phases from it
+        const projectData = await ProjectService.getProject(projectId, user.uid);
+        if (projectData && projectData.phases && projectData.phases.length > 0) {
           console.log('Setting phases from project data:', projectData.phases);
           setPhases(projectData.phases as ProjectPhase[]);
           
           // Also initialize the phases being updated
           const phasesMap: { [id: string]: ProjectPhase } = {};
-          projectData.phases.forEach(phase => {
+          projectData.phases.forEach((phase) => {
             if (phase.id) {
               phasesMap[phase.id] = phase as ProjectPhase;
             }
@@ -225,46 +312,20 @@ const ProjectDetailPage: React.FC = () => {
           console.log('No phases found in project data');
           setPhases([]);
         }
-        
-        // In a real implementation, these would be API calls
-        // fetchPhases(projectId);
-        // fetchBids(projectId);
-        // fetchExpenses(projectId);
-        
-      } catch (err) {
-        console.error('Error fetching project:', err);
-        setError(`Failed to load project details: ${err instanceof Error ? err.message : 'Unknown error'}`);
-      } finally {
-        setLoading(false);
-      }
-    };
-    
-    // Additional fetch functions that would make API calls in a real implementation
-    const fetchPhases = async (projectId: string) => {
-      try {
-        // const phaseData = await PhaseService.getPhasesByProject(projectId);
-        // setPhases(phaseData);
       } catch (err) {
         console.error('Error fetching phases:', err);
       }
     };
     
     const fetchBids = async (projectId: string) => {
+      if (!user?.uid) return;
+      
       try {
-        // const bidData = await BidService.getBidsByProject(projectId);
-        // setBids(bidData);
+        const bidFilters = { projectId };
+        const bidData = await BidService.getBids(user.uid, bidFilters);
+        setBids(bidData);
       } catch (err) {
         console.error('Error fetching bids:', err);
-      }
-    };
-    
-    const fetchExpenses = async (projectId: string) => {
-      try {
-        // const expenseData = await ExpenseService.getExpensesByProject(projectId);
-        // Process expense data for charts
-        // setExpensesData(processExpensesForCharts(expenseData));
-      } catch (err) {
-        console.error('Error fetching expenses:', err);
       }
     };
     
@@ -583,13 +644,15 @@ const ProjectDetailPage: React.FC = () => {
 
   // Add this function to handle opening the expense dialog for a specific phase
   const handleOpenQuickExpenseDialog = (phaseId: string) => {
-    setCurrentPhaseForExpense(phaseId);
     setQuickExpense({
       phaseId,
       category: 'materials',
       amount: 0,
       description: '',
       date: new Date().toISOString().split('T')[0],
+      subcontractorId: '',
+      subcontractorName: '',
+      vendor: ''
     });
     setNewExpenseDialogOpen(true);
   };
@@ -603,71 +666,119 @@ const ProjectDetailPage: React.FC = () => {
     }));
   };
 
-  // Add this function to handle adding the expense and updating the phase
-  const handleAddQuickExpense = () => {
-    // Only proceed if we have a valid phase ID and project
-    if (!currentPhaseForExpense || !project) return;
+  // Add this helper function for notifications
+  const showNotification = (message: string, severity: 'success' | 'error' | 'info' | 'warning') => {
+    setSnackbar({
+      open: true,
+      message,
+      severity
+    });
+  };
+
+  // Handle snackbar close
+  const handleSnackbarClose = () => {
+    setSnackbar({ ...snackbar, open: false });
+  };
+
+  // Fix the handleAddQuickExpense function to update phases and project
+  const handleAddQuickExpense = async () => {
+    if (!project || !user?.uid) return;
     
-    // Create a new expense
-    const newExpense: Expense = {
-      id: crypto.randomUUID(),
-      userId: user?.uid || '',
-      projectId: project.id || '',
-      phaseId: currentPhaseForExpense,
-      category: quickExpense.category,
-      amount: quickExpense.amount,
-      description: quickExpense.description,
-      date: new Date(quickExpense.date),
-      status: 'pending', // Add required status property
-      createdBy: user?.uid || '', // Add required createdBy property
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    };
-    
-    // Add the expense to our expenses array
-    setExpenses(prev => [...prev, newExpense]);
-    
-    // Update the expenses data for the pie chart
-    setExpensesData(prev => {
-      // Find if the category already exists
-      const categoryIndex = prev.findIndex(item => item.name === newExpense.category);
+    try {
+      const newExpense: Omit<Expense, 'id' | 'userId' | 'createdAt' | 'updatedAt' | 'createdBy'> = {
+        projectId: project.id,
+        phaseId: quickExpense.phaseId,
+        phaseName: phases.find(p => p.id === quickExpense.phaseId)?.name || '',
+        category: quickExpense.category || 'other', // Default to 'other' if empty
+        amount: quickExpense.amount,
+        description: quickExpense.description,
+        date: quickExpense.date,
+        subcontractorId: quickExpense.subcontractorId || null,
+        subcontractorName: quickExpense.subcontractorName || null,
+        vendor: quickExpense.vendor || null,
+        status: 'pending'
+      };
       
-      if (categoryIndex >= 0) {
-        // Update existing category
-        const updatedData = [...prev];
-        updatedData[categoryIndex].value += newExpense.amount;
-        return updatedData;
-      } else {
-        // Add new category
-        const colors = ['#f44336', '#2196f3', '#4caf50', '#ff9800', '#9c27b0', '#795548'];
-        return [...prev, {
-          name: newExpense.category,
-          value: newExpense.amount,
-          color: colors[Math.floor(Math.random() * colors.length)]
-        }];
+      console.log('Adding new expense:', newExpense);
+      
+      const savedExpense = await ExpenseService.createExpense(user.uid, newExpense);
+      
+      // Update the expenses state
+      setExpenses(prevExpenses => [...prevExpenses, savedExpense]);
+      
+      // Find and update the phase with the new expense
+      if (quickExpense.phaseId) {
+        const phaseToUpdate = phases.find(p => p.id === quickExpense.phaseId);
+        if (phaseToUpdate) {
+          const newTotalActualCost = (phaseToUpdate.actualCost || 0) + quickExpense.amount;
+          
+          // Update phases in the project object
+          const updatedPhases = phases.map(phase => {
+            if (phase.id === quickExpense.phaseId) {
+              return { ...phase, actualCost: newTotalActualCost };
+            }
+            return phase;
+          });
+          
+          setPhases(updatedPhases);
+          
+          // Update project with the new phases
+          if (project) {
+            const updatedProject = { 
+              ...project,
+              phases: updatedPhases 
+            };
+            
+            // Update project in the database
+            await ProjectService.updateProject(project.id, {
+              phases: updatedPhases
+            });
+            
+            setProject(updatedProject);
+          }
+        }
       }
-    });
-    
-    // Update the phase actual cost to reflect the new expense
-    setPhasesBeingUpdated(prev => {
-      // Add the expense amount to the current actual cost of the phase
-      const updatedPhase = {
-        ...prev[currentPhaseForExpense],
-        actualCost: (prev[currentPhaseForExpense].actualCost || 0) + quickExpense.amount
-      };
       
-      return {
-        ...prev,
-        [currentPhaseForExpense]: updatedPhase
-      };
-    });
-    
-    // Close the dialog
-    setNewExpenseDialogOpen(false);
-    setCurrentPhaseForExpense(null);
-    
-    // Show a success message or toast (if you have a toast system)
-    alert(`Expense of ${formatCurrency(quickExpense.amount)} for ${quickExpense.category} added successfully.`);
+      // Also update the project actual cost in the database
+      if (project) {
+        const newProjectActualCost = (project.actualCost || 0) + quickExpense.amount;
+        
+        // Update project in database
+        await ProjectService.updateProject(project.id, {
+          actualCost: newProjectActualCost
+        });
+        
+        // Update local state while preserving type safety
+        setProject(prev => {
+          if (!prev) return prev;
+          return {
+            ...prev,
+            actualCost: newProjectActualCost
+          };
+        });
+      }
+      
+      // Fetch updated expense data
+      await fetchExpenses(project.id);
+      
+      // Reset the form and close dialog
+      setQuickExpense({
+        category: 'other', // Set a valid default category
+        amount: 0,
+        description: '',
+        date: new Date().toISOString().split('T')[0],
+        phaseId: '',
+        subcontractorId: '',
+        subcontractorName: '',
+        vendor: ''
+      });
+      setNewExpenseDialogOpen(false);
+      
+      showNotification('Expense added successfully', 'success');
+    } catch (error) {
+      console.error('Error adding expense:', error);
+      showNotification('Failed to add expense', 'error');
+    }
   };
 
   if (loading) {
@@ -2434,6 +2545,23 @@ const ProjectDetailPage: React.FC = () => {
                 fullWidth
                 required
                 margin="dense"
+                label="Phase"
+                name="phaseId"
+                select
+                value={quickExpense.phaseId}
+                onChange={handleQuickExpenseChange}
+              >
+                {phases.map(phase => (
+                  <MenuItem key={phase.id} value={phase.id}>{phase.name}</MenuItem>
+                ))}
+              </TextField>
+            </Grid>
+            
+            <Grid item xs={12}>
+              <TextField
+                fullWidth
+                required
+                margin="dense"
                 label="Amount"
                 name="amount"
                 type="number"
@@ -2462,6 +2590,44 @@ const ProjectDetailPage: React.FC = () => {
             <Grid item xs={12}>
               <TextField
                 fullWidth
+                margin="dense"
+                label="Vendor"
+                name="vendor"
+                value={quickExpense.vendor || ''}
+                onChange={handleQuickExpenseChange}
+                placeholder="Vendor or supplier name"
+              />
+            </Grid>
+            
+            <Grid item xs={12}>
+              <TextField
+                fullWidth
+                margin="dense"
+                label="Subcontractor"
+                name="subcontractorId"
+                select
+                value={quickExpense.subcontractorId || ''}
+                onChange={(e) => {
+                  const subId = e.target.value;
+                  const subName = subcontractors.find(s => s.id === subId)?.name || '';
+                  handleQuickExpenseChange(e);
+                  setQuickExpense(prev => ({
+                    ...prev,
+                    subcontractorId: subId,
+                    subcontractorName: subName
+                  }));
+                }}
+              >
+                <MenuItem value="">None</MenuItem>
+                {subcontractors.map(sub => (
+                  <MenuItem key={sub.id} value={sub.id}>{sub.name}</MenuItem>
+                ))}
+              </TextField>
+            </Grid>
+            
+            <Grid item xs={12}>
+              <TextField
+                fullWidth
                 required
                 margin="dense"
                 label="Date"
@@ -2481,12 +2647,24 @@ const ProjectDetailPage: React.FC = () => {
           <Button 
             onClick={handleAddQuickExpense} 
             variant="contained" 
-            disabled={!quickExpense.category || quickExpense.amount <= 0}
+            disabled={!quickExpense.category || quickExpense.amount <= 0 || !quickExpense.phaseId}
           >
             Add Expense
           </Button>
         </DialogActions>
       </Dialog>
+      
+      {/* Add Snackbar for notifications */}
+      <Snackbar
+        open={snackbar.open}
+        autoHideDuration={6000}
+        onClose={handleSnackbarClose}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+      >
+        <Alert onClose={handleSnackbarClose} severity={snackbar.severity}>
+          {snackbar.message}
+        </Alert>
+      </Snackbar>
     </>
   );
 };

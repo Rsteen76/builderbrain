@@ -33,6 +33,7 @@ export interface Project {
     spent: number;
     remaining: number;
   } | number;
+  actualCost?: number;
   location: {
     address: string;
     city: string;
@@ -65,12 +66,15 @@ export interface Expense {
   userId: string;
   projectId: string;
   phaseId?: string; // Optional link to a specific phase
+  phaseName?: string; // Name of the phase
   category: 'labor' | 'materials' | 'equipment' | 'permits' | 'other';
   description: string;
   amount: number;
   date: Date | string;
   receiptUrl?: string;
-  vendor?: string;
+  vendor?: string | null;
+  subcontractorId?: string | null; // Link to a subcontractor
+  subcontractorName?: string | null; // Name of the subcontractor
   status: 'pending' | 'approved' | 'rejected' | 'paid';
   createdBy: string;
   approvedBy?: string;

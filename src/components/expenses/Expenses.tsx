@@ -159,7 +159,7 @@ const Expenses: React.FC = () => {
             severity: 'success'
           });
         })
-        .catch(err => {
+        .catch((err: any) => {
           console.error('Error deleting expense:', err);
           setError('Failed to delete expense. Please try again.');
           setSnackbar({
@@ -215,7 +215,7 @@ const Expenses: React.FC = () => {
       const fetchedExpenses = await ExpenseService.getExpenses(user.uid, filters);
       
       // Add projectName to each expense
-      const enhancedExpenses = fetchedExpenses.map(expense => ({
+      const enhancedExpenses = fetchedExpenses.map((expense: Expense) => ({
         ...expense,
         projectName: projects.find(p => p.id === expense.projectId)?.name || 'Unknown Project',
         vendor: expense.vendor || '' // Ensure vendor is always a string
@@ -256,59 +256,61 @@ const Expenses: React.FC = () => {
   const handleMarkAsPaid = async (expenseId: string) => {
     if (!user?.uid) return;
     
+    setSubmitting(true);
+    
     try {
       // Update status to paid
       await ExpenseService.markAsPaid(expenseId);
       
       // Update local state
       setExpenses(prev => prev.map(e => 
-        e.id === expenseId ? { ...e, status: 'paid' } : e
+        e.id === expenseId 
+          ? { ...e, status: 'paid' } 
+          : e
       ));
       
-      setPaymentModalOpen(false);
-      // Success notification
       setSnackbar({
         open: true,
         message: 'Expense marked as paid',
         severity: 'success'
       });
-    } catch (error) {
-      console.error('Error marking expense as paid:', error);
-      setError('Failed to mark expense as paid. Please try again.');
+    } catch (err) {
+      console.error('Error marking expense as paid:', err);
       setSnackbar({
         open: true,
         message: 'Failed to mark expense as paid',
         severity: 'error'
       });
+    } finally {
+      setSubmitting(false);
     }
   };
   
   // Create a properly typed expense object
   const handleSaveExpense = async (expenseData: Partial<Expense>) => {
-    if (!user) return;
+    if (!user?.uid) return;
+    
+    setSubmitting(true);
+    let savedExpense: Expense;
     
     try {
-      setSubmitting(true);
-      
-      let savedExpense: Expense;
-      
-      // Ensure the expense has an ID for updating
       if (expenseData.id) {
         // Update existing expense
         await ExpenseService.updateExpense(expenseData.id, expenseData);
         savedExpense = { ...expenseData } as Expense;
       } else {
         // Create new expense with required fields
-        const newExpenseData: Omit<Expense, 'id' | 'createdAt' | 'updatedAt' | 'createdBy'> = {
-          userId: user.uid,
-          projectId: expenseData.projectId!,
+        const newExpenseData: Omit<Expense, 'id' | 'userId' | 'createdAt' | 'updatedAt' | 'createdBy'> = {
+          projectId: expenseData.projectId || '',
           category: expenseData.category || 'other',
           description: expenseData.description || '',
           amount: expenseData.amount || 0,
           date: expenseData.date || new Date(),
           status: expenseData.status || 'pending',
-          vendor: expenseData.vendor || '',
-          receiptUrl: expenseData.receiptUrl
+          vendor: expenseData.vendor || null,
+          subcontractorId: expenseData.subcontractorId || null,
+          subcontractorName: expenseData.subcontractorName || null,
+          notes: expenseData.notes
         };
         
         savedExpense = await ExpenseService.createExpense(user.uid, newExpenseData);
@@ -316,6 +318,10 @@ const Expenses: React.FC = () => {
       
       // Add to local state with project name
       const projectName = projects.find(p => p.id === savedExpense.projectId)?.name || 'Unknown Project';
+      const updatedExpense = {
+        ...savedExpense,
+        projectName
+      };
       
       // Close modal and refresh data
       handleCloseModal();

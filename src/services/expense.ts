@@ -32,11 +32,11 @@ export class ExpenseService {
       ? expenseData.date 
       : new Date(expenseData.date);
     
-    const firestoreData: FirestoreExpense = {
+    const firestoreData: any = {
       ...expenseData,
       userId: userId,
-      createdBy: userId, // Default to the user creating the expense
-      date: Timestamp.fromDate(expenseDate), // Fixed date type conversion
+      createdBy: userId,
+      date: Timestamp.fromDate(expenseDate),
       createdAt: Timestamp.fromDate(now),
       updatedAt: Timestamp.fromDate(now),
     };
@@ -57,7 +57,7 @@ export class ExpenseService {
     const expenseRef = doc(this.collection, id);
     const { userId, createdAt, ...updatePayload } = expenseData as any;
 
-    const firestoreUpdateData: Partial<FirestoreExpense> = {
+    const firestoreUpdateData: any = {
       updatedAt: Timestamp.fromDate(new Date()),
     };
 
@@ -69,7 +69,7 @@ export class ExpenseService {
         if (typedKey === 'date' && value instanceof Date) {
           firestoreUpdateData.date = Timestamp.fromDate(value);
         } else {
-          (firestoreUpdateData as any)[typedKey] = value;
+          firestoreUpdateData[typedKey] = value;
         }
       }
     }
@@ -91,7 +91,7 @@ export class ExpenseService {
       return null;
     }
 
-    const data = expenseDoc.data() as FirestoreExpense;
+    const data = expenseDoc.data() as any;
 
     // Check authorization - only the expense owner or the one who created it can access
     if (data.userId !== userId && data.createdBy !== userId) {
@@ -104,11 +104,13 @@ export class ExpenseService {
 
   static async getExpenses(userId: string, filters?: {
     projectId?: string;
+    phaseId?: string;
     category?: Expense['category'];
     status?: Expense['status'];
     startDate?: Date;
     endDate?: Date;
     vendor?: string;
+    subcontractorId?: string;
   }): Promise<Expense[]> {
     // Query expenses where user is either the owner or the creator
     let q = query(
@@ -118,6 +120,10 @@ export class ExpenseService {
 
     if (filters?.projectId) {
       q = query(q, where('projectId', '==', filters.projectId));
+    }
+
+    if (filters?.phaseId) {
+      q = query(q, where('phaseId', '==', filters.phaseId));
     }
 
     if (filters?.category) {
@@ -130,6 +136,10 @@ export class ExpenseService {
 
     if (filters?.vendor) {
       q = query(q, where('vendor', '==', filters.vendor));
+    }
+
+    if (filters?.subcontractorId) {
+      q = query(q, where('subcontractorId', '==', filters.subcontractorId));
     }
 
     if (filters?.startDate) {
@@ -145,7 +155,7 @@ export class ExpenseService {
 
     const querySnapshot = await getDocs(q);
     return querySnapshot.docs.map(doc => {
-      const data = doc.data() as FirestoreExpense;
+      const data = doc.data() as any;
       return this.convertFirestoreData(data, doc.id);
     });
   }
@@ -155,9 +165,19 @@ export class ExpenseService {
     return this.getExpenses(userId, { projectId });
   }
 
+  // Get phase-specific expenses
+  static async getPhaseExpenses(userId: string, projectId: string, phaseId: string): Promise<Expense[]> {
+    return this.getExpenses(userId, { projectId, phaseId });
+  }
+
   // Get expenses by status
   static async getExpensesByStatus(userId: string, status: Expense['status']): Promise<Expense[]> {
     return this.getExpenses(userId, { status });
+  }
+
+  // Get expenses for a subcontractor
+  static async getSubcontractorExpenses(userId: string, subcontractorId: string): Promise<Expense[]> {
+    return this.getExpenses(userId, { subcontractorId });
   }
 
   // Approve an expense
@@ -181,7 +201,7 @@ export class ExpenseService {
     return this.updateExpense(id, { status: 'paid' });
   }
 
-  private static convertFirestoreData(data: FirestoreExpense, id: string): Expense {
+  private static convertFirestoreData(data: any, id: string): Expense {
     return {
       ...data,
       id,
