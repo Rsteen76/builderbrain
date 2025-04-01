@@ -9,7 +9,8 @@ import {
 import { Add as AddIcon, Edit as EditIcon, Delete as DeleteIcon } from '@mui/icons-material';
 import { ProjectService } from '../../services/project';
 import { BidService } from '../../services/bid';
-import { Project, Bid } from '../../types';
+import { ExpenseService } from '../../services/expense';
+import { Project, Bid, Expense } from '../../types';
 import BidFormModal from './BidFormModal'; // Import the modal
 import { visuallyHidden } from '@mui/utils'; // For accessibility with sorting
 
@@ -113,6 +114,7 @@ const BidManager: React.FC<BidManagerProps> = ({ project, userId, onProjectUpdat
   const [editingBid, setEditingBid] = useState<Bid | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
   const [order, setOrder] = useState<Order>('asc');
   const [orderBy, setOrderBy] = useState<BidKeys>('scope'); // Default sort by scope
   const [bids, setBids] = useState<Bid[]>(project.bids || []);
@@ -201,10 +203,14 @@ const BidManager: React.FC<BidManagerProps> = ({ project, userId, onProjectUpdat
     try {
       let savedBid: Bid;
       let updatedBidsList: Bid[];
-
+      let wasAccepted = false;
+      
       if (editingBid?.id) {
         const bidIdToUpdate = editingBid.id;
         const { id, createdAt, updatedAt, ...updatePayload } = submittedBidData as any;
+        
+        // Check if status is being changed to 'accepted'
+        wasAccepted = editingBid.status !== 'accepted' && updatePayload.status === 'accepted';
         
         await BidService.updateBid(bidIdToUpdate, updatePayload);
         
@@ -218,8 +224,17 @@ const BidManager: React.FC<BidManagerProps> = ({ project, userId, onProjectUpdat
           ...submittedBidData,
           userId // Add userId from props
         };
+        
+        // Check if new bid is being created with 'accepted' status
+        wasAccepted = createPayload.status === 'accepted';
+        
         savedBid = await BidService.createBid(userId, createPayload);
         updatedBidsList = [...bids, savedBid];
+      }
+
+      // If bid was accepted, create a pending expense
+      if (wasAccepted) {
+        await createPendingExpenseFromBid(savedBid);
       }
 
       const sortedBids = updatedBidsList.sort((a, b) => (a.scope || '').localeCompare(b.scope || ''));
@@ -231,6 +246,62 @@ const BidManager: React.FC<BidManagerProps> = ({ project, userId, onProjectUpdat
       setError(err instanceof Error ? err.message : "Failed to save bid. Please try again.");
     } finally {
       setLoading(false);
+    }
+  };
+
+  // Function to create a pending expense from an accepted bid
+  const createPendingExpenseFromBid = async (bid: Bid) => {
+    try {
+      // Map bid category to expense category
+      let expenseCategory: 'labor' | 'materials' | 'equipment' | 'permits' | 'other' = 'other';
+      
+      // Determine best category based on bid scope
+      const scope = bid.scope?.toLowerCase() || '';
+      if (scope.includes('labor') || 
+          scope.includes('framing') || 
+          scope.includes('install') ||
+          scope.includes('carpentry')) {
+        expenseCategory = 'labor';
+      } else if (scope.includes('material') || 
+                scope.includes('supplies') || 
+                scope.includes('concrete') || 
+                scope.includes('lumber')) {
+        expenseCategory = 'materials';
+      } else if (scope.includes('equipment') || 
+                scope.includes('machinery') || 
+                scope.includes('tools') ||
+                scope.includes('rental')) {
+        expenseCategory = 'equipment';
+      } else if (scope.includes('permit') || 
+                scope.includes('inspection') || 
+                scope.includes('license') ||
+                scope.includes('certification')) {
+        expenseCategory = 'permits';
+      }
+      
+      // Create the expense object
+      const expenseData: Omit<Expense, 'id' | 'userId' | 'createdAt' | 'updatedAt' | 'createdBy'> = {
+        projectId: bid.projectId,
+        category: expenseCategory,
+        description: `Expense from accepted bid: ${bid.title || bid.scope || 'Unnamed bid'} - ${bid.subcontractorName || 'Unknown contractor'}`,
+        amount: bid.totalAmount,
+        date: new Date(),
+        status: 'pending',
+        vendor: bid.subcontractorName || '',
+        notes: `This expense was automatically created from an accepted bid (ID: ${bid.id}).\n\nOriginal bid notes: ${bid.notes || 'None'}`,
+      };
+      
+      // Create the expense
+      await ExpenseService.createExpense(userId, expenseData);
+      console.log('Created pending expense from accepted bid');
+      setSuccess(`Bid accepted and converted to a pending expense of $${bid.totalAmount.toLocaleString()}`);
+      
+      // Auto-clear success message after 5 seconds
+      setTimeout(() => setSuccess(null), 5000);
+      
+    } catch (error) {
+      console.error('Error creating expense from bid:', error);
+      // Don't throw error - we don't want to fail the bid update if expense creation fails
     }
   };
 
@@ -281,6 +352,7 @@ const BidManager: React.FC<BidManagerProps> = ({ project, userId, onProjectUpdat
       </Box>
 
       {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
+      {success && <Alert severity="success" sx={{ mb: 2 }}>{success}</Alert>}
       {loading && <CircularProgress size={24} sx={{ mb: 2 }} />}
 
       <TableContainer component={Paper} variant="outlined" sx={{ maxHeight: 600 }}>
