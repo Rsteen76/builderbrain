@@ -244,6 +244,16 @@ const ExpenseFormModal: React.FC<ExpenseFormModalProps> = ({
     }
   };
 
+  const handlePhaseChange = (event: SelectChangeEvent<string>) => {
+    const phaseId = event.target.value;
+    const selectedPhase = PHASE_OPTIONS.find(phase => phase.value === phaseId);
+    setFormData(prev => ({
+      ...prev,
+      phaseId: phaseId || undefined,
+      phaseName: selectedPhase?.label || undefined, // Set name based on selected ID
+    }));
+  };
+
   const handleSubcontractorChange = (subcontractorId: string, subcontractorName: string) => {
     setFormData({
       ...formData,
@@ -740,30 +750,35 @@ const ExpenseFormModal: React.FC<ExpenseFormModalProps> = ({
         
           {/* Building Phase + Category Row */}
         <Grid item xs={12} sm={6}>
-            <FormControl fullWidth variant="outlined" size="small">
-              <InputLabel id="phase-name-label">Phase</InputLabel>
+          <FormControl fullWidth size="small" error={!!errors.phaseName}>
+            <InputLabel id="phase-label">Phase</InputLabel>
             <Select
-                labelId="phase-name-label"
-                id="phaseName"
-                name="phaseName"
-                value={formData.phaseName || ''}
-              onChange={handleSelectChange}
-                label="Phase"
+              labelId="phase-label"
+              id="phaseName"
+              name="phaseName" // Keep name for potential form libraries, but use onChange
+              value={formData.phaseId || ''} // Value should be the phaseId
+              label="Phase"
+              onChange={handlePhaseChange} // Use the specific phase handler
               startAdornment={
                 <InputAdornment position="start">
-                    <BuildingPhaseIcon fontSize="small" color="primary" />
+                  <BuildingPhaseIcon fontSize="small" color="action" />
                 </InputAdornment>
               }
+              disabled={PHASE_OPTIONS.length === 0 || !formData.projectId}
             >
-                <MenuItem value="">
-                  <Typography variant="body2" color="text.secondary">Select a phase (optional)</Typography>
+              <MenuItem value="">
+                <em>{formData.projectId ? 'None' : 'Select a Project First'}</em>
+              </MenuItem>
+              {PHASE_OPTIONS.map((option) => (
+                <MenuItem key={option.value} value={option.value}>
+                  {option.label}
                 </MenuItem>
-                {PHASE_OPTIONS.map((phase) => (
-                  <MenuItem key={phase.value} value={phase.value}>
-                    {phase.label}
-                  </MenuItem>
-                ))}
+              ))}
             </Select>
+            {errors.phaseName && <FormHelperText>{errors.phaseName}</FormHelperText>}
+            {PHASE_OPTIONS.length === 0 && formData.projectId && (
+              <FormHelperText>No phases defined for this project.</FormHelperText>
+            )}
           </FormControl>
         </Grid>
         

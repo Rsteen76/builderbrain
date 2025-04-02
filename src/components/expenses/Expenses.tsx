@@ -73,9 +73,17 @@ const CATEGORY_ICONS = {
   other: <Avatar sx={{ bgcolor: '#ECEFF1', color: '#607D8B' }}><DescriptionIcon /></Avatar>,
 };
 
+// Define ProjectPhase locally or import if defined elsewhere
+interface ProjectPhase {
+  id: string;  // Changed from string | undefined to string
+  name: string;
+  // Add other relevant phase properties if needed
+}
+
 interface Project {
   id: string;
   name: string;
+  phases?: ProjectPhase[]; // Add phases here
 }
 
 const Expenses: React.FC = () => {
@@ -95,6 +103,7 @@ const Expenses: React.FC = () => {
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
   const [selectedExpenseId, setSelectedExpenseId] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [selectedProjectPhases, setSelectedProjectPhases] = useState<ProjectPhase[]>([]); // New state for phases
   const [snackbar, setSnackbar] = useState<{
     open: boolean;
     message: string;
@@ -143,6 +152,9 @@ const Expenses: React.FC = () => {
       const expenseToEdit = expenses.find(exp => exp.id === selectedExpenseId);
       if (expenseToEdit) {
         setSelectedExpense(expenseToEdit);
+        // Find the project and its phases
+        const project = projects.find(p => p.id === expenseToEdit.projectId);
+        setSelectedProjectPhases(project?.phases || []); // Set phases for the modal
         setExpenseModalOpen(true);
       }
     }
@@ -196,7 +208,11 @@ const Expenses: React.FC = () => {
       const fetchedProjects = await ProjectService.getProjects(user.uid);
       setProjects(fetchedProjects.map(project => ({
         id: project.id,
-        name: project.name
+        name: project.name,
+        phases: (project.phases || []).map(phase => ({
+          id: phase.id || '', // Ensure id is always a string
+          name: phase.name
+        }))
       })));
     } catch (err) {
       console.error('Error fetching projects:', err);
@@ -230,7 +246,11 @@ const Expenses: React.FC = () => {
       const fetchedProjects = await ProjectService.getProjects(user.uid);
       setProjects(fetchedProjects.map(project => ({
         id: project.id,
-        name: project.name
+        name: project.name,
+        phases: (project.phases || []).map(phase => ({
+          id: phase.id || '', // Ensure id is always a string
+          name: phase.name
+        }))
       })));
       
       // Project ID to name lookup map for faster lookups
@@ -250,7 +270,7 @@ const Expenses: React.FC = () => {
         return {
           ...expense,
           projectName,
-          vendor: expense.vendor || '' // Ensure vendor is always a string
+          vendor: expense.vendor || '', // Ensure vendor is always a string
         };
       });
       
@@ -270,11 +290,15 @@ const Expenses: React.FC = () => {
   
   const handleAddExpense = () => {
     setSelectedExpense(null); // Ensure we're creating a new expense
+    setSelectedProjectPhases([]); // Reset phases for a new expense (or set based on default/context)
     setExpenseModalOpen(true);
   };
   
   const handleViewExpense = (expense: any) => {
     setSelectedExpense(expense);
+    // Find the project and its phases
+    const project = projects.find(p => p.id === expense.projectId);
+    setSelectedProjectPhases(project?.phases || []); // Set phases for the modal
     setExpenseModalOpen(true);
   };
   
@@ -405,7 +429,12 @@ const Expenses: React.FC = () => {
           vendor: expenseData.vendor || null,
           subcontractorId: expenseData.subcontractorId || null,
           subcontractorName: expenseData.subcontractorName || null,
-          notes: expenseData.notes
+          notes: expenseData.notes,
+          phaseId: expenseData.phaseId || undefined,
+          phaseName: expenseData.phaseName || undefined,
+          tags: expenseData.tags || [],
+          lineItems: expenseData.lineItems || undefined,
+          paymentDetails: expenseData.paymentDetails || undefined,
         };
         
         savedExpense = await ExpenseService.createExpense(user.uid, newExpenseData);
@@ -416,7 +445,7 @@ const Expenses: React.FC = () => {
         // Add to local state right away with project name
         const enhancedExpense = {
           ...savedExpense,
-          projectName
+          projectName,
         };
         
         console.log('Adding new expense to local state:', enhancedExpense);
@@ -928,6 +957,7 @@ const Expenses: React.FC = () => {
         expense={selectedExpense}
         onSave={handleSaveExpense}
         projects={projects}
+        projectPhases={selectedProjectPhases}
       />
       
       {/* Payment Modal */}
