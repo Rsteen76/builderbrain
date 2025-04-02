@@ -20,7 +20,6 @@ import {
   Card,
   CardContent,
   Tooltip,
-  Alert,
   Avatar,
   Menu,
   MenuItem,
@@ -39,6 +38,16 @@ import {
   InputAdornment,
   Snackbar,
   Slider,
+  TableContainer,
+  Table,
+  TableHead,
+  TableRow,
+  TableCell,
+  TableBody,
+  List,
+  ListItem,
+  ListItemText,
+  Alert,
 } from '@mui/material';
 import {
   Edit as EditIcon,
@@ -84,17 +93,18 @@ import {
   Assessment as AssessmentIcon,
   Task as TaskIcon,
   ReceiptLong as ReceiptLongIcon,
+  Compare as CompareIcon,
 } from '@mui/icons-material';
 import { useAuth } from '../contexts/AuthContext';
 import { ProjectService } from '../services/project';
 import { ExpenseService } from '../services/expense';
 import { BidService } from '../services/bid';
 import { SubcontractorService } from '../services/subcontractor';
-import { formatCurrency, formatDate } from '../utils/formatters';
+import { formatCurrency, formatDate, formatPercentage } from '../utils/formatters';
 import PageLayout from '../components/layout/PageLayout';
 import ProjectTaskManager from '../components/projects/ProjectTaskManager';
 import TemplateAdjuster from '../components/projects/TemplateAdjuster';
-import { Project, Task, Phase, Expense, Bid, Subcontractor } from '../types';
+import { Project, Task, Phase, Expense, Bid, Subcontractor, BidPaymentStage } from '../types';
 import { v4 as uuidv4 } from 'uuid';
 
 // Import recharts components
@@ -121,6 +131,7 @@ import ExpenseFormModal from '../components/expenses/ExpenseFormModal';
 import { DatePicker } from '@mui/x-date-pickers/DatePicker';
 import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
 import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns';
+import Autocomplete from '@mui/material/Autocomplete';
 
 // Type definitions for phases and progress tracking
 interface ProjectPhase extends Phase {
@@ -180,6 +191,30 @@ interface QuickExpense {
   subcontractorName?: string;
   vendor?: string;
 }
+
+// Add a constant for construction specialties near the top of the file where other constants are defined
+const CONSTRUCTION_SPECIALTIES = [
+  'General Contractor',
+  'Electrical',
+  'Plumbing',
+  'HVAC',
+  'Carpentry',
+  'Masonry',
+  'Drywall',
+  'Painting',
+  'Roofing',
+  'Flooring',
+  'Concrete',
+  'Excavation',
+  'Demolition',
+  'Landscaping',
+  'Glass & Windows',
+  'Insulation',
+  'Site Work',
+  'Steel & Metal',
+  'Tile & Stone',
+  'Other'
+];
 
 // Project detail page with phases, progress tracking, and expense breakdowns
 const ProjectDetailPage: React.FC = () => {
@@ -446,8 +481,28 @@ const ProjectDetailPage: React.FC = () => {
   };
 
   const handleAddBid = () => {
-    // Navigate to bid creation or open modal
-    handleMenuClose();
+    // Reset form and open modal
+    setBidForm({
+      title: '',
+      subcontractorName: '',
+      subcontractorId: '',
+      totalAmount: 0,
+      // Set default phaseId and phaseName if phases exist
+      phaseId: phases.length > 0 ? phases[0].id : '',
+      phaseName: phases.length > 0 ? phases[0].name : '',
+      scope: '',
+      timeline: 30,
+      paymentTerms: {
+        downPaymentPercent: 20,
+        installments: [
+          {id: uuidv4(), name: 'Final Payment', percent: 80, milestoneDescription: 'Upon completion'}
+        ]
+      },
+      notes: '',
+      status: 'submitted',
+      attachments: []
+    });
+    setBidFormOpen(true);
   };
   
   const handleEditBid = (bidId: string) => {
@@ -985,7 +1040,14 @@ const ProjectDetailPage: React.FC = () => {
       totalBudget = phases.reduce((sum, phase) => sum + phase.budget, 0);
     }
     
-    const totalActual = phases.reduce((sum, phase) => sum + phase.actualCost, 0);
+    // Calculate actual costs from expenses instead of phases
+    const totalActual = expenses.reduce((sum, expense) => {
+      // Only count paid and approved expenses as "spent"
+      if (expense.status === 'paid' || expense.status === 'approved') {
+        return sum + (typeof expense.amount === 'number' ? expense.amount : 0);
+      }
+      return sum;
+    }, 0);
     
     return {
       totalBudget,
@@ -993,7 +1055,7 @@ const ProjectDetailPage: React.FC = () => {
       difference: totalBudget - totalActual,
       percentUsed: totalBudget > 0 ? (totalActual / totalBudget) * 100 : 0
     };
-  }, [phases, project?.budget]);
+  }, [phases, project?.budget, expenses]);
 
   // Generate combined expenses for charts
   const combinedExpenses = useMemo(() => {
@@ -1093,6 +1155,325 @@ const ProjectDetailPage: React.FC = () => {
   };
 
   const [isSaving, setIsSaving] = useState(false);
+
+  // Add a new useMemo for expense breakdown
+  const expenseBreakdown = useMemo(() => {
+    const breakdown = {
+      pending: 0,
+      approved: 0,
+      paid: 0,
+      rejected: 0
+    };
+    
+    expenses.forEach(expense => {
+      const amount = typeof expense.amount === 'number' ? expense.amount : 0;
+      if (expense.status === 'pending') {
+        breakdown.pending += amount;
+      } else if (expense.status === 'approved') {
+        breakdown.approved += amount;
+      } else if (expense.status === 'paid') {
+        breakdown.paid += amount;
+      } else if (expense.status === 'rejected') {
+        breakdown.rejected += amount;
+      }
+    });
+    
+    return breakdown;
+  }, [expenses]);
+
+  // Update the state with proper bid form fields
+  const [bidFormOpen, setBidFormOpen] = useState(false);
+  const [bidForm, setBidForm] = useState<{
+    title: string;
+    subcontractorName: string;
+    subcontractorId?: string;
+    totalAmount: number;
+    phaseId?: string;
+    phaseName?: string;
+    scope: string;
+    timeline: number;
+    submissionDeadline?: Date;
+    paymentTerms: {
+      downPaymentPercent: number;
+      installments: {id: string; name: string; percent: number; milestoneDescription: string}[];
+    };
+    notes: string;
+    status: 'draft' | 'submitted' | 'accepted' | 'rejected' | 'expired';
+    attachments: {name: string; url: string}[];
+  }>({
+    title: '',
+    subcontractorName: '',
+    totalAmount: 0,
+    scope: '',
+    timeline: 30,
+    paymentTerms: {
+      downPaymentPercent: 20,
+      installments: [
+        {id: uuidv4(), name: 'Final Payment', percent: 80, milestoneDescription: 'Upon completion'}
+      ]
+    },
+    notes: '',
+    status: 'submitted',
+    attachments: []
+  });
+
+  // Add a list of recently added bids for comparison
+  const [recentBids, setRecentBids] = useState<Bid[]>([]);
+
+  const handleCloseBidForm = () => {
+    setBidFormOpen(false);
+  };
+
+  const handleChangeBidForm = (field: string, value: any) => {
+    setBidForm(prev => ({
+      ...prev,
+      [field]: value
+    }));
+  };
+
+  const handleChangePaymentTerms = (field: string, value: any) => {
+    setBidForm(prev => ({
+      ...prev,
+      paymentTerms: {
+        ...prev.paymentTerms,
+        [field]: value
+      }
+    }));
+  };
+
+  const handleAddInstallment = () => {
+    setBidForm(prev => ({
+      ...prev,
+      paymentTerms: {
+        ...prev.paymentTerms,
+        installments: [
+          ...prev.paymentTerms.installments,
+          {id: uuidv4(), name: `Installment ${prev.paymentTerms.installments.length + 1}`, percent: 0, milestoneDescription: ''}
+        ]
+      }
+    }));
+  };
+
+  const handleChangeInstallment = (id: string, field: string, value: any) => {
+    setBidForm(prev => ({
+      ...prev,
+      paymentTerms: {
+        ...prev.paymentTerms,
+        installments: prev.paymentTerms.installments.map(item => 
+          item.id === id ? {...item, [field]: value} : item
+        )
+      }
+    }));
+  };
+
+  const handleRemoveInstallment = (id: string) => {
+    setBidForm(prev => ({
+      ...prev,
+      paymentTerms: {
+        ...prev.paymentTerms,
+        installments: prev.paymentTerms.installments.filter(item => item.id !== id)
+      }
+    }));
+  };
+
+  // Modify the handleSubmitBid function to validate phaseId before submission
+  const handleSubmitBid = async () => {
+    if (!user || !project?.id) return;
+    
+    // Validate required fields
+    if (!bidForm.title) {
+      showNotification('Please enter a title for the bid', 'error');
+      return;
+    }
+    
+    if (!bidForm.subcontractorName) {
+      showNotification('Please select or enter a subcontractor name', 'error');
+      return;
+    }
+    
+    if (!bidForm.phaseId && phases.length > 0) {
+      // If phaseId is not set but phases exist, use the first phase as default
+      handleChangeBidForm('phaseId', phases[0].id);
+      handleChangeBidForm('phaseName', phases[0].name);
+      showNotification('No phase selected - using first project phase by default', 'info');
+    } else if (!bidForm.phaseId) {
+      showNotification('Please select a phase for this bid', 'error');
+      return;
+    }
+    
+    try {
+      setIsSaving(true);
+      
+      // Calculate total percentage to ensure it adds up to 100%
+      const downPaymentPercent = bidForm.paymentTerms.downPaymentPercent;
+      const installmentsTotal = bidForm.paymentTerms.installments.reduce((sum, item) => sum + item.percent, 0);
+      const totalPercent = downPaymentPercent + installmentsTotal;
+      
+      if (totalPercent !== 100) {
+        showNotification('Payment percentages must add up to 100%', 'error');
+        setIsSaving(false);
+        return;
+      }
+      
+      // Create payment schedule for bid
+      const paymentSchedule = [
+        {
+          id: uuidv4(),
+          name: 'Down Payment',
+          percentage: downPaymentPercent,
+          amount: (bidForm.totalAmount * downPaymentPercent) / 100,
+          status: 'pending',
+          dueDate: new Date(),
+          description: 'Initial payment to start work',
+          createdAt: new Date(),
+          updatedAt: new Date()
+        } as BidPaymentStage,
+        ...bidForm.paymentTerms.installments.map(installment => ({
+          id: uuidv4(),
+          name: installment.name,
+          percentage: installment.percent,
+          amount: (bidForm.totalAmount * installment.percent) / 100,
+          status: 'pending',
+          dueDate: new Date(),
+          description: installment.milestoneDescription,
+          createdAt: new Date(),
+          updatedAt: new Date()
+        } as BidPaymentStage))
+      ] as BidPaymentStage[];
+      
+      // Create new bid
+      const newBid: Bid = {
+        id: uuidv4(),
+        userId: user.uid,
+        projectId: project.id,
+        title: bidForm.title,
+        subcontractorName: bidForm.subcontractorName,
+        subcontractorId: bidForm.subcontractorId,
+        phaseId: bidForm.phaseId,
+        phaseName: bidForm.phaseName,
+        totalAmount: bidForm.totalAmount,
+        scope: bidForm.scope,
+        timeline: bidForm.timeline,
+        submissionDeadline: bidForm.submissionDeadline,
+        notes: bidForm.notes,
+        status: bidForm.status,
+        attachments: bidForm.attachments,
+        paymentSchedule: paymentSchedule,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        paymentProgress: {
+          paid: 0,
+          pending: bidForm.totalAmount,
+          remaining: bidForm.totalAmount
+        }
+      };
+      
+      // Save bid to database
+      await BidService.createBid(user.uid, newBid);
+      
+      // Add to local state
+      setBids(prev => [...prev, newBid]);
+      
+      // Add to recent bids for easy comparison
+      setRecentBids(prev => [newBid, ...prev].slice(0, 5));
+      
+      // Close dialog
+      setBidFormOpen(false);
+      
+      // Show success notification
+      showNotification('Bid added successfully', 'success');
+    } catch (error) {
+      console.error('Error saving bid:', error);
+      showNotification('Failed to save bid: ' + (error instanceof Error ? error.message : 'Unknown error'), 'error');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  // Add additional state variables for subcontractor management
+  const [subcontractors, setSubcontractors] = useState<Subcontractor[]>([]);
+  const [subcontractorSearchQuery, setSubcontractorSearchQuery] = useState('');
+  const [showQuickAddSubcontractor, setShowQuickAddSubcontractor] = useState(false);
+  const [newSubcontractor, setNewSubcontractor] = useState({
+    name: '',
+    specialty: '',
+    contact: {
+      phone: '',
+      email: ''
+    }
+  });
+
+  // Add a function to fetch subcontractors
+  const fetchSubcontractors = async () => {
+    if (!user?.uid) return;
+    
+    try {
+      const fetchedSubcontractors = await SubcontractorService.getSubcontractors(user.uid);
+      setSubcontractors(fetchedSubcontractors);
+    } catch (err) {
+      console.error('Error fetching subcontractors:', err);
+    }
+  };
+
+  // Fetch subcontractors when bid form opens
+  useEffect(() => {
+    if (bidFormOpen) {
+      fetchSubcontractors();
+    }
+  }, [bidFormOpen, user?.uid]);
+
+  // Function to handle quick add of a new subcontractor
+  const handleQuickAddSubcontractor = async () => {
+    if (!user?.uid) return;
+    
+    try {
+      setIsSaving(true);
+      
+      // Create basic subcontractor
+      const subcontractorData: Omit<Subcontractor, 'id' | 'userId' | 'createdAt' | 'updatedAt'> = {
+        name: newSubcontractor.name,
+        specialty: newSubcontractor.specialty,
+        contact: {
+          phone: newSubcontractor.contact.phone,
+          email: newSubcontractor.contact.email
+        },
+        rating: 0,
+        totalProjects: 0
+        // Remove createdAt and updatedAt as they're added by the service
+      };
+      
+      const createdSubcontractor = await SubcontractorService.createSubcontractor(user.uid, subcontractorData);
+      
+      // Add to local state
+      setSubcontractors(prev => [createdSubcontractor, ...prev]);
+      
+      // Update bid form with the new subcontractor
+      setBidForm(prev => ({
+        ...prev,
+        subcontractorName: createdSubcontractor.name,
+        subcontractorId: createdSubcontractor.id
+      }));
+      
+      // Reset and close quick add form
+      setNewSubcontractor({
+        name: '',
+        specialty: '',
+        contact: {
+          phone: '',
+          email: ''
+        }
+      });
+      setShowQuickAddSubcontractor(false);
+      
+      // Show success notification
+      showNotification('Subcontractor added successfully', 'success');
+    } catch (error) {
+      console.error('Error adding subcontractor:', error);
+      showNotification('Failed to add subcontractor: ' + (error instanceof Error ? error.message : 'Unknown error'), 'error');
+    } finally {
+      setIsSaving(false);
+    }
+  };
 
   if (loading) {
     return (
@@ -2039,25 +2420,61 @@ const ProjectDetailPage: React.FC = () => {
                   </Box>
                 </Box>
                 
-                <Box sx={{ mt: 1.5 }}>
+                {/* Expense Breakdown */}
+                <Box sx={{ mt: 2, mb: 1 }}>
+                  <Grid container spacing={1}>
+                    <Grid item xs={7}>
+                      <Typography variant="caption" color="text.secondary">
+                        Pending
+                      </Typography>
+                    </Grid>
+                    <Grid item xs={5}>
+                      <Typography variant="caption" align="right" display="block" color="warning.main" fontWeight={500}>
+                        {formatCurrency(expenseBreakdown.pending)}
+                      </Typography>
+                    </Grid>
+                    
+                    <Grid item xs={7}>
+                      <Typography variant="caption" color="text.secondary">
+                        Approved
+                      </Typography>
+                    </Grid>
+                    <Grid item xs={5}>
+                      <Typography variant="caption" align="right" display="block" color="info.main" fontWeight={500}>
+                        {formatCurrency(expenseBreakdown.approved)}
+                      </Typography>
+                    </Grid>
+                    
+                    <Grid item xs={7}>
+                      <Typography variant="caption" color="text.secondary">
+                        Paid
+                      </Typography>
+                    </Grid>
+                    <Grid item xs={5}>
+                      <Typography variant="caption" align="right" display="block" color="success.main" fontWeight={500}>
+                        {formatCurrency(expenseBreakdown.paid)}
+                      </Typography>
+                    </Grid>
+                  </Grid>
+                </Box>
+                
+                <Box sx={{ mt: 2 }}>
                   <LinearProgress 
                     variant="determinate" 
-                    value={budgetData.percentUsed} 
+                    value={Math.min(budgetData.percentUsed, 100)}
+                    color={budgetData.percentUsed > 100 ? 'error' : 'success'}
                     sx={{ 
-                      height: 10, 
-                      borderRadius: 5,
-                      backgroundColor: alpha(theme.palette.primary.main, 0.1),
-                      '& .MuiLinearProgress-bar': {
-                        backgroundColor: budgetData.percentUsed > 100 
-                          ? theme.palette.error.main 
-                          : budgetData.percentUsed > 90 
-                          ? theme.palette.warning.main 
-                          : theme.palette.success.main
-                      }
-                    }} 
+                      height: 8, 
+                      borderRadius: 4,
+                      backgroundColor: alpha(
+                        budgetData.percentUsed > 100 ? theme.palette.error.main : theme.palette.success.main, 
+                        0.1
+                      ),
+                      mb: 0.5
+                    }}
                   />
-                  <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.5 }}>
-                    {budgetData.percentUsed.toFixed(0)}% of budget used
+                  <Typography variant="caption" color="text.secondary">
+                    {formatPercentage(budgetData.percentUsed / 100)} of budget used
                   </Typography>
                 </Box>
               </CardContent>
@@ -2774,6 +3191,88 @@ const ProjectDetailPage: React.FC = () => {
                 </Button>
               </Box>
               
+              {/* Bid Comparison Section */}
+              {recentBids.length > 0 && (
+                <Paper 
+                  elevation={0} 
+                  sx={{ 
+                    p: 3, 
+                    mb: 3, 
+                    borderRadius: 2, 
+                    border: `1px solid ${alpha(theme.palette.primary.main, 0.1)}`
+                  }}
+                >
+                  <Typography variant="h6" gutterBottom sx={{ display: 'flex', alignItems: 'center' }}>
+                    <CompareIcon sx={{ mr: 1 }} /> Bid Comparison
+                  </Typography>
+                  <Divider sx={{ mb: 2 }} />
+                  
+                  <TableContainer>
+                    <Table size="small">
+                      <TableHead>
+                        <TableRow>
+                          <TableCell>Contractor</TableCell>
+                          <TableCell>Total Amount</TableCell>
+                          <TableCell>Timeline</TableCell>
+                          <TableCell>Down Payment</TableCell>
+                          <TableCell>Status</TableCell>
+                          <TableCell>Actions</TableCell>
+                        </TableRow>
+                      </TableHead>
+                      <TableBody>
+                        {recentBids.map((bid) => {
+                          // Calculate down payment from payment schedule
+                          const downPayment = bid.paymentSchedule?.[0]?.amount || 0;
+                          
+                          return (
+                            <TableRow key={bid.id} hover>
+                              <TableCell>{bid.subcontractorName}</TableCell>
+                              <TableCell>{formatCurrency(bid.totalAmount)}</TableCell>
+                              <TableCell>{bid.timeline} days</TableCell>
+                              <TableCell>{formatCurrency(downPayment)}</TableCell>
+                              <TableCell>
+                                <Chip
+                                  label={bid.status.replace('_', ' ')}
+                                  size="small"
+                                  sx={{
+                                    fontSize: '0.7rem',
+                                    fontWeight: 600,
+                                    borderRadius: '12px',
+                                    bgcolor: alpha(
+                                      bid.status === 'accepted' ? theme.palette.success.main : 
+                                      bid.status === 'rejected' ? theme.palette.error.main : 
+                                      bid.status === 'draft' ? theme.palette.grey[500] :
+                                      bid.status === 'submitted' ? theme.palette.info.main : 
+                                      theme.palette.warning.main, 0.1
+                                    ),
+                                    color: bid.status === 'accepted' ? theme.palette.success.main : 
+                                          bid.status === 'rejected' ? theme.palette.error.main : 
+                                          bid.status === 'draft' ? theme.palette.grey[700] :
+                                          bid.status === 'submitted' ? theme.palette.info.main : 
+                                          theme.palette.warning.main,
+                                    textTransform: 'capitalize'
+                                  }}
+                                />
+                              </TableCell>
+                              <TableCell>
+                                <Button 
+                                  size="small" 
+                                  variant="outlined"
+                                  onClick={() => handleEditBid(bid.id)}
+                                  sx={{ mr: 1, borderRadius: 1.5 }}
+                                >
+                                  View
+                                </Button>
+                              </TableCell>
+                            </TableRow>
+                          );
+                        })}
+                      </TableBody>
+                    </Table>
+                  </TableContainer>
+                </Paper>
+              )}
+              
               <Grid container spacing={3}>
                 {bids.map((bid) => (
                   <Grid item xs={12} md={6} lg={4} key={bid.id}>
@@ -2791,7 +3290,7 @@ const ProjectDetailPage: React.FC = () => {
                     }}>
                       <CardContent sx={{ flexGrow: 1 }}>
                         <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 2 }}>
-                          <Typography variant="h6" fontWeight={600}>{bid.title}</Typography>
+                          <Typography variant="h6" fontWeight={600}>{bid.title || `Bid from ${bid.subcontractorName}`}</Typography>
                           <Chip
                             label={bid.status.replace('_', ' ')}
                             size="small"
@@ -2826,9 +3325,37 @@ const ProjectDetailPage: React.FC = () => {
                         </Box>
                         
                         <Box sx={{ mb: 2 }}>
-                          <Typography variant="body2" color="text.secondary">Submission Date</Typography>
-                          <Typography variant="body1" fontWeight={600}>{formatDate(bid.createdAt)}</Typography>
+                          <Typography variant="body2" color="text.secondary">Timeline</Typography>
+                          <Typography variant="body1">{bid.timeline} days</Typography>
                         </Box>
+                        
+                        <Box sx={{ mb: 2 }}>
+                          <Typography variant="body2" color="text.secondary">Submission Date</Typography>
+                          <Typography variant="body1">{formatDate(bid.createdAt)}</Typography>
+                        </Box>
+                        
+                        {/* Payment Terms Section */}
+                        {bid.paymentSchedule && bid.paymentSchedule.length > 0 && (
+                          <Box sx={{ mb: 2 }}>
+                            <Typography variant="body2" color="text.secondary" gutterBottom>Payment Terms</Typography>
+                            <List dense disablePadding>
+                              {bid.paymentSchedule.map((payment, index) => (
+                                <ListItem key={index} disablePadding sx={{ py: 0.5 }}>
+                                  <ListItemText
+                                    primary={
+                                      <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                                        <Typography variant="body2">{payment.name}</Typography>
+                                        <Typography variant="body2" fontWeight={600}>{formatCurrency(payment.amount)}</Typography>
+                                      </Box>
+                                    }
+                                    secondary={payment.description}
+                                    secondaryTypographyProps={{ variant: 'caption' }}
+                                  />
+                                </ListItem>
+                              ))}
+                            </List>
+                          </Box>
+                        )}
                         
                         {bid.notes && (
                           <Box sx={{ mb: 2 }}>
@@ -3310,6 +3837,362 @@ const ProjectDetailPage: React.FC = () => {
         project={project as Project}
         onUpdateProject={handleProjectUpdate}
       />
+
+      {/* Bid Form Dialog */}
+      <Dialog 
+        open={bidFormOpen} 
+        onClose={handleCloseBidForm} 
+        maxWidth="md" 
+        fullWidth
+      >
+        <DialogTitle>
+          <Typography variant="h6" fontWeight={600}>
+            Add New Bid
+          </Typography>
+        </DialogTitle>
+        
+        <DialogContent dividers>
+          <Grid container spacing={3}>
+            <Grid item xs={12} sm={6}>
+              <TextField
+                fullWidth
+                required
+                label="Bid Title"
+                value={bidForm.title}
+                onChange={(e) => handleChangeBidForm('title', e.target.value)}
+              />
+            </Grid>
+            
+            {/* Add Project Phase selector dropdown */}
+            <Grid item xs={12}>
+              <FormControl fullWidth required>
+                <InputLabel id="phase-select-label">Project Phase</InputLabel>
+                <Select
+                  labelId="phase-select-label"
+                  id="phase-select"
+                  value={bidForm.phaseId || ''}
+                  label="Project Phase"
+                  onChange={(e) => {
+                    const phaseId = e.target.value;
+                    const phase = phases.find(p => p.id === phaseId);
+                    handleChangeBidForm('phaseId', phaseId);
+                    handleChangeBidForm('phaseName', phase?.name || '');
+                  }}
+                >
+                  {phases.map((phase) => (
+                    <MenuItem key={phase.id} value={phase.id}>
+                      {phase.name}
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+            </Grid>
+            
+            <Grid item xs={12} sm={6}>
+              <Autocomplete
+                fullWidth
+                options={subcontractors}
+                getOptionLabel={(option) => option.name}
+                value={subcontractors.find(s => s.id === bidForm.subcontractorId) || null}
+                onChange={(_, newValue) => {
+                  if (newValue) {
+                    handleChangeBidForm('subcontractorName', newValue.name);
+                    handleChangeBidForm('subcontractorId', newValue.id);
+                  } else {
+                    handleChangeBidForm('subcontractorName', '');
+                    handleChangeBidForm('subcontractorId', '');
+                  }
+                }}
+                renderInput={(params) => (
+                  <TextField
+                    {...params}
+                    label="Subcontractor"
+                    required
+                  />
+                )}
+              />
+              <Button
+                size="small"
+                color="primary"
+                onClick={() => setShowQuickAddSubcontractor(true)}
+                sx={{ mt: 1 }}
+                startIcon={<AddIcon />}
+              >
+                Add New Subcontractor
+              </Button>
+            </Grid>
+            
+            <Grid item xs={12} sm={6}>
+              <TextField
+                fullWidth
+                required
+                label="Total Amount"
+                type="number"
+                value={bidForm.totalAmount}
+                onChange={(e) => handleChangeBidForm('totalAmount', parseFloat(e.target.value) || 0)}
+                InputProps={{
+                  startAdornment: <InputAdornment position="start">$</InputAdornment>,
+                }}
+              />
+            </Grid>
+            
+            <Grid item xs={12} sm={6}>
+              <TextField
+                fullWidth
+                required
+                label="Timeline (days)"
+                type="number"
+                value={bidForm.timeline}
+                onChange={(e) => handleChangeBidForm('timeline', parseInt(e.target.value) || 30)}
+              />
+            </Grid>
+            
+            <Grid item xs={12}>
+              <TextField
+                fullWidth
+                required
+                multiline
+                rows={3}
+                label="Scope of Work"
+                value={bidForm.scope}
+                onChange={(e) => handleChangeBidForm('scope', e.target.value)}
+              />
+            </Grid>
+            
+            <Grid item xs={12}>
+              <FormControl fullWidth>
+                <InputLabel>Status</InputLabel>
+                <Select
+                  value={bidForm.status}
+                  onChange={(e) => handleChangeBidForm('status', e.target.value as 'draft' | 'submitted' | 'accepted' | 'rejected' | 'expired')}
+                  label="Status"
+                >
+                  <MenuItem value="draft">Draft</MenuItem>
+                  <MenuItem value="submitted">Submitted</MenuItem>
+                  <MenuItem value="accepted">Accepted</MenuItem>
+                  <MenuItem value="rejected">Rejected</MenuItem>
+                  <MenuItem value="expired">Expired</MenuItem>
+                </Select>
+              </FormControl>
+            </Grid>
+            
+            <Grid item xs={12}>
+              <Typography variant="subtitle1" gutterBottom sx={{ mt: 2 }}>
+                Payment Terms
+              </Typography>
+              <Divider sx={{ mb: 2 }} />
+              
+              <Grid container spacing={2}>
+                <Grid item xs={12} sm={6}>
+                  <TextField
+                    fullWidth
+                    required
+                    label="Down Payment (%)"
+                    type="number"
+                    value={bidForm.paymentTerms.downPaymentPercent}
+                    onChange={(e) => handleChangePaymentTerms('downPaymentPercent', parseInt(e.target.value) || 0)}
+                    helperText={`$${((bidForm.totalAmount * bidForm.paymentTerms.downPaymentPercent) / 100).toFixed(2)}`}
+                  />
+                </Grid>
+                
+                <Grid item xs={12}>
+                  <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 2 }}>
+                    <Typography variant="subtitle2">Installments</Typography>
+                    <Button 
+                      size="small" 
+                      startIcon={<AddIcon />}
+                      onClick={handleAddInstallment}
+                    >
+                      Add Installment
+                    </Button>
+                  </Box>
+                  
+                  {bidForm.paymentTerms.installments.map((installment, index) => (
+                    <Box 
+                      key={installment.id} 
+                      sx={{ 
+                        p: 2, 
+                        mb: 2, 
+                        border: `1px solid ${alpha(theme.palette.divider, 0.2)}`,
+                        borderRadius: 1,
+                        position: 'relative'
+                      }}
+                    >
+                      <IconButton 
+                        size="small" 
+                        sx={{ position: 'absolute', top: 4, right: 4 }}
+                        onClick={() => handleRemoveInstallment(installment.id)}
+                      >
+                        <DeleteIcon fontSize="small" />
+                      </IconButton>
+                      
+                      <Grid container spacing={2}>
+                        <Grid item xs={12} sm={6}>
+                          <TextField
+                            fullWidth
+                            required
+                            label="Installment Name"
+                            value={installment.name}
+                            onChange={(e) => handleChangeInstallment(installment.id, 'name', e.target.value)}
+                          />
+                        </Grid>
+                        
+                        <Grid item xs={12} sm={6}>
+                          <TextField
+                            fullWidth
+                            required
+                            label="Percentage (%)"
+                            type="number"
+                            value={installment.percent}
+                            onChange={(e) => handleChangeInstallment(installment.id, 'percent', parseInt(e.target.value) || 0)}
+                            helperText={`$${((bidForm.totalAmount * installment.percent) / 100).toFixed(2)}`}
+                          />
+                        </Grid>
+                        
+                        <Grid item xs={12}>
+                          <TextField
+                            fullWidth
+                            label="Milestone Description"
+                            value={installment.milestoneDescription}
+                            onChange={(e) => handleChangeInstallment(installment.id, 'milestoneDescription', e.target.value)}
+                          />
+                        </Grid>
+                      </Grid>
+                    </Box>
+                  ))}
+                  
+                  <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 2 }}>
+                    <Typography>Total</Typography>
+                    <Typography fontWeight={600}>
+                      {bidForm.paymentTerms.downPaymentPercent + bidForm.paymentTerms.installments.reduce((sum, i) => sum + i.percent, 0)}%
+                    </Typography>
+                  </Box>
+                  
+                  {(bidForm.paymentTerms.downPaymentPercent + bidForm.paymentTerms.installments.reduce((sum, i) => sum + i.percent, 0)) !== 100 && (
+                    <Alert severity="warning" sx={{ mt: 1 }}>
+                      Payment percentages must add up to 100%
+                    </Alert>
+                  )}
+                </Grid>
+              </Grid>
+            </Grid>
+            
+            <Grid item xs={12}>
+              <TextField
+                fullWidth
+                multiline
+                rows={3}
+                label="Notes"
+                value={bidForm.notes}
+                onChange={(e) => handleChangeBidForm('notes', e.target.value)}
+              />
+            </Grid>
+          </Grid>
+        </DialogContent>
+        
+        <DialogActions sx={{ p: 2, justifyContent: 'space-between' }}>
+          <Button onClick={handleCloseBidForm}>Cancel</Button>
+          <Button 
+            variant="contained" 
+            onClick={handleSubmitBid}
+            disabled={
+              !bidForm.title || 
+              !bidForm.subcontractorName || 
+              !bidForm.totalAmount || 
+              !bidForm.scope || 
+              (bidForm.paymentTerms.downPaymentPercent + bidForm.paymentTerms.installments.reduce((sum, i) => sum + i.percent, 0)) !== 100
+            }
+          >
+            Submit Bid
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Quick Add Subcontractor Dialog */}
+      <Dialog
+        open={showQuickAddSubcontractor}
+        onClose={() => setShowQuickAddSubcontractor(false)}
+        maxWidth="xs"
+        fullWidth
+      >
+        <DialogTitle>Add New Subcontractor</DialogTitle>
+        <DialogContent>
+          <Grid container spacing={2} sx={{ mt: 0.5 }}>
+            <Grid item xs={12}>
+              <TextField
+                fullWidth
+                required
+                label="Name"
+                value={newSubcontractor.name}
+                onChange={(e) => setNewSubcontractor(prev => ({
+                  ...prev,
+                  name: e.target.value
+                }))}
+              />
+            </Grid>
+            <Grid item xs={12}>
+              <FormControl fullWidth>
+                <InputLabel id="specialty-select-label">Specialty</InputLabel>
+                <Select
+                  labelId="specialty-select-label"
+                  id="specialty-select"
+                  value={newSubcontractor.specialty}
+                  label="Specialty"
+                  onChange={(e) => setNewSubcontractor(prev => ({
+                    ...prev,
+                    specialty: e.target.value
+                  }))}
+                >
+                  {CONSTRUCTION_SPECIALTIES.map((specialty) => (
+                    <MenuItem key={specialty} value={specialty}>
+                      {specialty}
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+            </Grid>
+            <Grid item xs={12}>
+              <TextField
+                fullWidth
+                label="Phone"
+                value={newSubcontractor.contact.phone}
+                onChange={(e) => setNewSubcontractor(prev => ({
+                  ...prev,
+                  contact: {
+                    ...prev.contact,
+                    phone: e.target.value
+                  }
+                }))}
+              />
+            </Grid>
+            <Grid item xs={12}>
+              <TextField
+                fullWidth
+                label="Email"
+                type="email"
+                value={newSubcontractor.contact.email}
+                onChange={(e) => setNewSubcontractor(prev => ({
+                  ...prev,
+                  contact: {
+                    ...prev.contact,
+                    email: e.target.value
+                  }
+                }))}
+              />
+            </Grid>
+          </Grid>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setShowQuickAddSubcontractor(false)}>Cancel</Button>
+          <Button 
+            variant="contained" 
+            onClick={handleQuickAddSubcontractor}
+            disabled={!newSubcontractor.name || isSaving}
+          >
+            {isSaving ? <CircularProgress size={24} /> : 'Add'}
+          </Button>
+        </DialogActions>
+      </Dialog>
     </>
   );
 };

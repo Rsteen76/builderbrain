@@ -59,6 +59,7 @@ export interface Project {
   lineItems?: LineItem[];
   bids?: Bid[];
   tasks?: Task[];
+  expenses?: Expense[];
 }
 
 export interface Expense {
@@ -99,6 +100,7 @@ export interface Bid {
   userId: string;
   projectId: string;
   phaseId?: string;
+  phaseName?: string;
   projectName?: string;
   subcontractorId?: string;
   subcontractorName?: string;

@@ -62,6 +62,7 @@ import {
   AccountTree as AccountTreeIcon,
 } from '@mui/icons-material';
 import { ProjectService } from '../../services/project';
+import { ExpenseService } from '../../services/expense';
 import { Project, LineItem, Task, Bid } from '../../types';
 import { useAuth } from '../../contexts/AuthContext';
 import LineItemManager from './LineItemManager';
@@ -98,6 +99,14 @@ const ProjectDetails: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [project, setProject] = useState<Project | null>(null);
+  const [totalExpenses, setTotalExpenses] = useState<number>(0);
+  const [expenseBreakdown, setExpenseBreakdown] = useState({
+    approved: 0,
+    pending: 0,
+    paid: 0,
+    rejected: 0,
+    total: 0
+  });
   
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
   const isTablet = useMediaQuery(theme.breakpoints.down('md'));
@@ -172,6 +181,58 @@ const ProjectDetails: React.FC = () => {
         else if (!user) setError('Authenticating...');
     }
   }, [id, user]);
+
+  useEffect(() => {
+    const fetchExpenses = async () => {
+      if (!user?.uid || !project?.id) return;
+      
+      try {
+        // Get all expenses for this project, regardless of status
+        const expenses = await ExpenseService.getExpenses(user.uid, {
+          projectId: project.id
+        });
+        
+        console.log(`Found ${expenses.length} expenses for project ${project.id}`);
+        
+        // Calculate totals by status
+        const breakdown = {
+          approved: 0,
+          pending: 0, 
+          paid: 0,
+          rejected: 0,
+          total: 0
+        };
+        
+        expenses.forEach(expense => {
+          // Ensure we have a valid numeric amount
+          const amount = typeof expense.amount === 'number' ? expense.amount : 0;
+          console.log(`Expense: ${expense.description}, Amount: ${amount}, Status: ${expense.status}`);
+          
+          // Add to total
+          breakdown.total += amount;
+          
+          // Add to appropriate status bucket
+          if (expense.status === 'approved') {
+            breakdown.approved += amount;
+          } else if (expense.status === 'pending') {
+            breakdown.pending += amount;
+          } else if (expense.status === 'paid') {
+            breakdown.paid += amount;
+          } else if (expense.status === 'rejected') {
+            breakdown.rejected += amount;
+          }
+        });
+        
+        console.log('Expense breakdown:', breakdown);
+        setExpenseBreakdown(breakdown);
+        setTotalExpenses(breakdown.total);
+      } catch (err) {
+        console.error('Error fetching expenses:', err);
+      }
+    };
+
+    fetchExpenses();
+  }, [user?.uid, project?.id]);
 
   const handleTabChange = (event: React.SyntheticEvent, newValue: number) => {
     setActiveTab(newValue);
@@ -549,37 +610,81 @@ const ProjectDetails: React.FC = () => {
                             <Typography variant="h6" fontWeight={500}>Budget</Typography>
                           </Stack>
                           <Typography variant="h4" fontWeight={600}>{formatCurrency(budgetTotal)}</Typography>
-                          <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
-                            Estimated Cost: {formatCurrency(estimatedCost)}
-                          </Typography>
-                          <Tooltip title={`Estimated Cost (${formatCurrency(estimatedCost)}) / Budget (${formatCurrency(budgetTotal)})`}>
-                            <Box>
-                              <LinearProgress 
-                                variant="determinate" 
-                                value={Math.min(estimateVsBudgetProgress, 100)} // Cap at 100%
-                                color={estimateVsBudgetProgress > 100 ? 'error' : 'success'}
-                                sx={{ 
-                                  height: 8, 
-                                  borderRadius: 4,
-                                  backgroundColor: alpha(
-                                    estimateVsBudgetProgress > 100 ? theme.palette.error.main : theme.palette.success.main, 
-                                    0.1
-                                  ),
-                                  mb: 0.5
-                                }}
-                              />
-                              <Typography 
-                                variant="caption" 
-                                sx={{ 
-                                  fontWeight: 'bold',
-                                  color: estimateVsBudgetProgress > 100 ? theme.palette.error.main : theme.palette.success.dark 
-                                }}
-                              >
-                                {formatPercentage(estimateVsBudgetProgress / 100)} Est. Used
-                                {estimateVsBudgetProgress > 100 && ` (${formatCurrency(estimatedCost - budgetTotal)} Over)`}
-                              </Typography>
-                            </Box>
-                          </Tooltip>
+                          
+                          <Box sx={{ mt: 2, mb: 1 }}>
+                            <Grid container spacing={1}>
+                              <Grid item xs={8}>
+                                <Typography variant="body2" color="text.secondary">
+                                  Total Expenses:
+                                </Typography>
+                              </Grid>
+                              <Grid item xs={4}>
+                                <Typography variant="body2" fontWeight={600} align="right">
+                                  {formatCurrency(expenseBreakdown.total)}
+                                </Typography>
+                              </Grid>
+                              
+                              <Grid item xs={8}>
+                                <Typography variant="body2" color="text.secondary">
+                                  Paid:
+                                </Typography>
+                              </Grid>
+                              <Grid item xs={4}>
+                                <Typography variant="body2" fontWeight={500} align="right" color="success.main">
+                                  {formatCurrency(expenseBreakdown.paid)}
+                                </Typography>
+                              </Grid>
+                              
+                              <Grid item xs={8}>
+                                <Typography variant="body2" color="text.secondary">
+                                  Approved:
+                                </Typography>
+                              </Grid>
+                              <Grid item xs={4}>
+                                <Typography variant="body2" fontWeight={500} align="right" color="info.main">
+                                  {formatCurrency(expenseBreakdown.approved)}
+                                </Typography>
+                              </Grid>
+                              
+                              <Grid item xs={8}>
+                                <Typography variant="body2" color="text.secondary">
+                                  Pending:
+                                </Typography>
+                              </Grid>
+                              <Grid item xs={4}>
+                                <Typography variant="body2" fontWeight={500} align="right" color="warning.main">
+                                  {formatCurrency(expenseBreakdown.pending)}
+                                </Typography>
+                              </Grid>
+                            </Grid>
+                          </Box>
+                          
+                          <Box>
+                            <LinearProgress 
+                              variant="determinate" 
+                              value={Math.min((expenseBreakdown.total / budgetTotal) * 100, 100)}
+                              color={(expenseBreakdown.total / budgetTotal) * 100 > 100 ? 'error' : 'success'}
+                              sx={{ 
+                                height: 8, 
+                                borderRadius: 4,
+                                backgroundColor: alpha(
+                                  (expenseBreakdown.total / budgetTotal) * 100 > 100 ? theme.palette.error.main : theme.palette.success.main, 
+                                  0.1
+                                ),
+                                mb: 0.5
+                              }}
+                            />
+                            <Typography 
+                              variant="caption" 
+                              sx={{ 
+                                fontWeight: 'bold',
+                                color: (expenseBreakdown.total / budgetTotal) * 100 > 100 ? theme.palette.error.main : theme.palette.success.dark 
+                              }}
+                            >
+                              {formatPercentage(expenseBreakdown.total / budgetTotal)} Used
+                              {(expenseBreakdown.total / budgetTotal) * 100 > 100 && ` (${formatCurrency(expenseBreakdown.total - budgetTotal)} Over)`}
+                            </Typography>
+                          </Box>
                         </CardContent>
                       </Card>
                     </Grid>
@@ -758,9 +863,9 @@ const ProjectDetails: React.FC = () => {
 
 // Function to calculate overview data (simple version)
 const calculateOverviewData = (project: Project | null) => {
-    if (!project) return { totalEstimate: 0, tasksToDo: 0, tasksInProgress: 0, tasksDone: 0, nextMilestone: null };
+    if (!project) return { totalEstimate: 0, totalExpenses: 0, tasksToDo: 0, tasksInProgress: 0, tasksDone: 0, nextMilestone: null };
 
-    // Use line items for estimate, or bids if no line items?
+    // Use line items for estimate
     const totalEstimate = project.lineItems?.reduce((sum: number, item: LineItem) => sum + (item.totalCost || 0), 0) || 0;
     
     const tasks = project.tasks || [];
@@ -776,7 +881,7 @@ const calculateOverviewData = (project: Project | null) => {
         .sort((a: any, b: any) => a.dateObj.getTime() - b.dateObj.getTime());
     const nextMilestone = upcomingMilestones?.[0] || null;
 
-    return { totalEstimate, tasksToDo, tasksInProgress, tasksDone, nextMilestone };
+    return { totalEstimate, totalExpenses: 0, tasksToDo, tasksInProgress, tasksDone, nextMilestone };
 };
 
 export default ProjectDetails;
