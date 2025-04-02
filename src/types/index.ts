@@ -81,6 +81,7 @@ export interface Expense {
   createdAt: Date | string;
   updatedAt: Date | string;
   notes?: string;
+  buildingPhase?: string; // Current construction phase of the project
   lineItems?: LineItem[]; // Add support for itemized expenses
   paymentDetails?: {
     method: string;

@@ -251,13 +251,88 @@ export class ExpenseService {
   static async rejectExpense(id: string, notes?: string): Promise<void> {
     return this.updateExpense(id, { 
       status: 'rejected',
-      notes: notes 
+      notes: notes || undefined
     });
   }
 
   // Mark an expense as paid
   static async markAsPaid(id: string): Promise<void> {
     return this.updateExpense(id, { status: 'paid' });
+  }
+
+  // Check for potential duplicate expenses
+  static async checkForDuplicates(
+    userId: string, 
+    expenseData: Partial<Expense>,
+    threshold: number = 1 // Default to 1 day threshold
+  ): Promise<Expense[]> {
+    // Only proceed if we have enough data to check for duplicates
+    if (!userId || !expenseData.projectId || !expenseData.amount || !expenseData.date) {
+      return [];
+    }
+    
+    const expenseDate = expenseData.date instanceof Date 
+      ? expenseData.date 
+      : new Date(expenseData.date);
+      
+    // Calculate date range for threshold
+    const startDate = new Date(expenseDate);
+    startDate.setDate(startDate.getDate() - threshold);
+    
+    const endDate = new Date(expenseDate);
+    endDate.setDate(endDate.getDate() + threshold);
+    
+    console.log(`Checking for duplicates within date range: ${startDate.toISOString()} to ${endDate.toISOString()}`);
+    
+    // Create a query for expenses that match the criteria
+    let q = query(
+      this.collection,
+      where('userId', '==', userId),
+      where('projectId', '==', expenseData.projectId),
+      where('date', '>=', Timestamp.fromDate(startDate)),
+      where('date', '<=', Timestamp.fromDate(endDate))
+    );
+    
+    try {
+      const snapshot = await getDocs(q);
+      
+      if (snapshot.empty) {
+        return [];
+      }
+      
+      // Filter potential duplicates by amount (exact match) and if vendor or description match
+      const potentialDuplicates = snapshot.docs
+        .map(doc => {
+          const data = doc.data();
+          return this.convertFirestoreData(data, doc.id);
+        })
+        .filter(expense => {
+          // Skip the current expense being edited if it has an ID
+          if (expenseData.id && expense.id === expenseData.id) {
+            return false;
+          }
+          
+          // If the amount is the same (or very close)
+          const amountMatches = Math.abs(expense.amount - (expenseData.amount || 0)) < 0.01;
+          
+          // Check for matching description or vendor
+          const descriptionMatches = expenseData.description && 
+            expense.description.toLowerCase().includes(expenseData.description.toLowerCase());
+          
+          const vendorMatches = expenseData.vendor && expense.vendor &&
+            expense.vendor.toLowerCase().includes(expenseData.vendor.toLowerCase());
+          
+          const categoryMatches = expense.category === expenseData.category;
+          
+          // Return true if amount matches AND either description or vendor matches
+          return amountMatches && (descriptionMatches || vendorMatches || categoryMatches);
+        });
+      
+      return potentialDuplicates;
+    } catch (error) {
+      console.error("Error checking for duplicate expenses:", error);
+      return [];
+    }
   }
 
   private static convertFirestoreData(data: any, id: string): Expense {

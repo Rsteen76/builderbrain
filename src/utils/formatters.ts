@@ -1,34 +1,123 @@
 /**
- * Format a number as currency
- * @param value Number to format as currency
- * @param currency Currency code (default: USD)
+ * Format a number as currency (USD)
+ * @param value The number to format
+ * @param options Formatting options
  * @returns Formatted currency string
  */
-export const formatCurrency = (amount: number): string => {
-  return new Intl.NumberFormat('en-US', {
+export const formatCurrency = (
+  value: number | string, 
+  options: { 
+    locale?: string; 
+    currency?: string;
+    minimumFractionDigits?: number;
+    maximumFractionDigits?: number;
+  } = {}
+): string => {
+  if (value === null || value === undefined) {
+    return '$0.00';
+  }
+  
+  const numericValue = typeof value === 'string' ? parseFloat(value) : value;
+  
+  if (isNaN(numericValue)) {
+    return '$0.00';
+  }
+  
+  const {
+    locale = 'en-US',
+    currency = 'USD',
+    minimumFractionDigits = 2,
+    maximumFractionDigits = 2
+  } = options;
+  
+  return new Intl.NumberFormat(locale, {
     style: 'currency',
-    currency: 'USD',
-    minimumFractionDigits: 2
-  }).format(amount);
+    currency,
+    minimumFractionDigits,
+    maximumFractionDigits
+  }).format(numericValue);
 };
 
 /**
- * Format a date in a user-friendly format
- * @param date Date to format
- * @param format Format style ('short', 'medium', 'long')
+ * Format a date string or Date object to a localized date string
+ * @param date The date to format
+ * @param options Formatting options
  * @returns Formatted date string
  */
-export const formatDate = (date: Date | string | undefined): string => {
-  if (!date) return 'Not set';
-  try {
-    return new Date(date).toLocaleDateString('en-US', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric'
-    });
-  } catch (e) {
-    return 'Invalid Date';
+export const formatDate = (
+  date: Date | string | undefined,
+  options: {
+    locale?: string;
+    format?: 'short' | 'medium' | 'long' | 'full';
+  } = {}
+): string => {
+  if (!date) return '';
+  
+  const dateObj = typeof date === 'string' ? new Date(date) : date;
+  
+  if (isNaN(dateObj.getTime())) {
+    return '';
   }
+  
+  const { locale = 'en-US', format = 'medium' } = options;
+  
+  return dateObj.toLocaleDateString(locale, {
+    dateStyle: format
+  } as Intl.DateTimeFormatOptions);
+};
+
+/**
+ * Format a number with thousand separators and decimal places
+ * @param value The number to format
+ * @param options Formatting options
+ * @returns Formatted number string
+ */
+export const formatNumber = (
+  value: number | string,
+  options: {
+    locale?: string;
+    minimumFractionDigits?: number;
+    maximumFractionDigits?: number;
+  } = {}
+): string => {
+  if (value === null || value === undefined) {
+    return '0';
+  }
+  
+  const numericValue = typeof value === 'string' ? parseFloat(value) : value;
+  
+  if (isNaN(numericValue)) {
+    return '0';
+  }
+  
+  const {
+    locale = 'en-US',
+    minimumFractionDigits = 0,
+    maximumFractionDigits = 2
+  } = options;
+  
+  return new Intl.NumberFormat(locale, {
+    minimumFractionDigits,
+    maximumFractionDigits
+  }).format(numericValue);
+};
+
+/**
+ * Format a file size in bytes to a human-readable string (KB, MB, GB)
+ * @param bytes The file size in bytes
+ * @param decimals Number of decimal places
+ * @returns Formatted file size string
+ */
+export const formatFileSize = (bytes: number, decimals = 2): string => {
+  if (bytes === 0) return '0 Bytes';
+
+  const k = 1024;
+  const dm = decimals < 0 ? 0 : decimals;
+  const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB', 'PB', 'EB', 'ZB', 'YB'];
+
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+
+  return parseFloat((bytes / Math.pow(k, i)).toFixed(dm)) + ' ' + sizes[i];
 };
 
 /**
