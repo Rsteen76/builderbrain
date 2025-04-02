@@ -79,6 +79,7 @@ import { SubcontractorService } from '../services/subcontractor';
 import { formatCurrency, formatDate } from '../utils/formatters';
 import PageLayout from '../components/layout/PageLayout';
 import ProjectTaskManager from '../components/projects/ProjectTaskManager';
+import TemplateAdjuster from '../components/projects/TemplateAdjuster';
 import { Project, Task, Phase, Expense, Bid, Subcontractor } from '../types';
 
 // Import recharts components
@@ -182,6 +183,7 @@ const ProjectDetailPage: React.FC = () => {
   const [menuAnchorEl, setMenuAnchorEl] = useState<null | HTMLElement>(null);
   const [quickUpdateMode, setQuickUpdateMode] = useState(false);
   const [subcontractors, setSubcontractors] = useState<Subcontractor[]>([]);
+  const [templateAdjusterOpen, setTemplateAdjusterOpen] = useState(false);
   
   // State for quick bid and expense dialogs
   const [newBidDialogOpen, setNewBidDialogOpen] = useState(false);
@@ -899,6 +901,16 @@ const ProjectDetailPage: React.FC = () => {
       percentComplete: Math.round(percentComplete),
     };
   }, [project?.startDate, project?.endDate, phases]);
+
+  // Handle opening the template adjuster modal
+  const handleOpenTemplateAdjuster = () => {
+    setTemplateAdjusterOpen(true);
+  };
+
+  // Handle closing the template adjuster modal
+  const handleCloseTemplateAdjuster = () => {
+    setTemplateAdjusterOpen(false);
+  };
 
   if (loading) {
     return (
@@ -2194,19 +2206,27 @@ const ProjectDetailPage: React.FC = () => {
           {/* Phases Tab */}
           {tabValue === 1 && (
             <Box>
-              <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 2 }}>
-                <Typography variant="h6">
-                  Project Phases ({phases.length})
-                </Typography>
-                <Button
-                  variant="outlined"
-                  startIcon={<AddIcon />}
-                  size="small"
-                  onClick={handleAddPhase}
-                  sx={{ borderRadius: 1.5 }}
-                >
-                  Add Phase
-                </Button>
+              <Box display="flex" justifyContent="space-between" alignItems="center" mb={2}>
+                <Typography variant="h6">Project Phases</Typography>
+                <Box display="flex" gap={1}>
+                  <Tooltip title="Adjust project template phases">
+                    <Button
+                      startIcon={<EditIcon />}
+                      size="small"
+                      color="secondary"
+                      onClick={handleOpenTemplateAdjuster}
+                    >
+                      Adjust Template
+                    </Button>
+                  </Tooltip>
+                  <Button
+                    startIcon={<AddIcon />}
+                    size="small"
+                    onClick={handleAddPhase}
+                  >
+                    Add Phase
+                  </Button>
+                </Box>
               </Box>
               
               {/* Phase List */}
@@ -3109,6 +3129,14 @@ const ProjectDetailPage: React.FC = () => {
           {snackbar.message}
         </Alert>
       </Snackbar>
+      
+      {/* Template Adjuster Modal */}
+      <TemplateAdjuster 
+        open={templateAdjusterOpen}
+        onClose={handleCloseTemplateAdjuster}
+        project={project as Project}
+        onUpdateProject={handleProjectUpdate}
+      />
     </>
   );
 };
