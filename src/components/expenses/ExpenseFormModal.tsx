@@ -519,6 +519,16 @@ const ExpenseFormModal: React.FC<ExpenseFormModalProps> = ({
       // Add updatedAt timestamp
       expenseToSave.updatedAt = new Date();
       
+      // Make sure subcontractorName is included when subcontractorId is set
+      if (expenseToSave.subcontractorId && !expenseToSave.subcontractorName) {
+        // Look up the name from our loaded subcontractors
+        const selectedSubcontractor = subcontractors.find(s => s.id === expenseToSave.subcontractorId);
+        if (selectedSubcontractor) {
+          expenseToSave.subcontractorName = selectedSubcontractor.name;
+          console.log('Added missing subcontractorName:', selectedSubcontractor.name);
+        }
+      }
+      
       // Handle receipt upload if there's a file
       if (receiptFile) {
         // Upload logic would go here

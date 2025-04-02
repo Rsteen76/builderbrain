@@ -71,6 +71,8 @@ export class ExpenseService {
     const expenseRef = doc(this.collection, id);
     const { userId, createdAt, ...updatePayload } = expenseData as any;
 
+    console.log(`ExpenseService: Updating expense ${id} with data:`, expenseData);
+
     const firestoreUpdateData: any = {
       updatedAt: Timestamp.fromDate(new Date()),
     };
@@ -80,6 +82,12 @@ export class ExpenseService {
         const typedKey = key as keyof typeof updatePayload;
         const value = updatePayload[typedKey];
 
+        // Skip undefined values - Firestore doesn't accept them
+        if (value === undefined) {
+          console.log(`ExpenseService: Skipping undefined value for field ${String(typedKey)}`);
+          continue;
+        }
+
         if (typedKey === 'date' && value instanceof Date) {
           firestoreUpdateData.date = Timestamp.fromDate(value);
         } else {
@@ -88,7 +96,15 @@ export class ExpenseService {
       }
     }
 
-    await updateDoc(expenseRef, firestoreUpdateData);
+    console.log(`ExpenseService: Prepared update payload:`, firestoreUpdateData);
+    
+    try {
+      await updateDoc(expenseRef, firestoreUpdateData);
+      console.log(`ExpenseService: Successfully updated expense ${id}`);
+    } catch (error) {
+      console.error(`ExpenseService: Error updating expense ${id}:`, error);
+      throw error;
+    }
   }
 
   static async deleteExpense(id: string): Promise<void> {

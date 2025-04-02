@@ -23,6 +23,16 @@ import {
   Avatar,
   useTheme,
   Snackbar,
+  FormControl,
+  InputLabel,
+  Select,
+  TableContainer,
+  Table,
+  TableHead,
+  TableBody,
+  TableRow,
+  TableCell,
+  alpha,
 } from '@mui/material';
 import MuiAlert, { AlertProps } from '@mui/material/Alert';
 import {
@@ -95,12 +105,15 @@ const Expenses: React.FC = () => {
     severity: 'success'
   });
   
+  // NEW: Grouping functionality
+  const [groupBy, setGroupBy] = useState<'none' | 'project' | 'category' | 'vendor' | 'subcontractor'>('none');
+  
   useEffect(() => {
     if (user?.uid) {
       fetchProjects();
       fetchExpenses();
     }
-  }, [user, tabValue]);
+  }, [user, tabValue, submitting]);
   
   // Calculate summary data based on expenses
   const totalExpenses = expenses.reduce((sum, expense) => sum + expense.amount, 0);
@@ -317,19 +330,66 @@ const Expenses: React.FC = () => {
     try {
       if (expenseData.id) {
         // Update existing expense
+        console.log('Before update - expense data:', expenseData);
+        console.log('Before update - existing expense:', expenses.find(e => e.id === expenseData.id));
+        
         await ExpenseService.updateExpense(expenseData.id, expenseData);
         
         // Update in local state
-        setExpenses(prevExpenses => prevExpenses.map(exp => 
-          exp.id === expenseData.id 
-            ? {
-                ...exp,
-                ...expenseData,
-                // Make sure we don't lose the project name
-                projectName: exp.projectName
+        setExpenses(prevExpenses => {
+          const updatedExpenses = prevExpenses.map(exp => {
+            if (exp.id === expenseData.id) {
+              // Find the updated project name if the project has changed
+              let updatedProjectName = exp.projectName;
+              if (expenseData.projectId && expenseData.projectId !== exp.projectId) {
+                // Project changed, get the new project name
+                const newProject = projects.find(p => p.id === expenseData.projectId);
+                if (newProject) {
+                  updatedProjectName = newProject.name;
+                }
               }
-            : exp
-        ));
+              
+              // Create a complete updated expense object
+              const updatedExp = {
+                ...exp,              // Keep all original fields
+                ...expenseData,      // Apply all updates
+                projectName: updatedProjectName, // Use correct project name
+              };
+              
+              // Ensure subcontractorName is preserved if it exists in the form data
+              // This handles the case where a subcontractor was added or changed
+              if (expenseData.subcontractorId && !expenseData.subcontractorName) {
+                console.log('Found subcontractorId but no name, trying to look it up:', expenseData.subcontractorId);
+                
+                // If we have the ID but not the name, try to find it
+                // The subcontractorName might be missing if only the ID was sent from the form
+                // This can happen especially when selecting from a dropdown
+                
+                // First check if the expense being updated already has the same subcontractor
+                if (exp.subcontractorId === expenseData.subcontractorId && exp.subcontractorName) {
+                  updatedExp.subcontractorName = exp.subcontractorName;
+                }
+                // Otherwise, we need to fetch the subcontractor on the next render
+                // For now, set a placeholder
+                else {
+                  updatedExp.subcontractorName = 'Loading...';
+                  
+                  // This will trigger a re-fetch of expenses which should include the correct name
+                  setTimeout(() => {
+                    setSubmitting(prev => !prev); // Toggle submitting to trigger a refresh
+                  }, 500);
+                }
+              }
+              
+              console.log('After update - updated expense:', updatedExp);
+              return updatedExp;
+            }
+            return exp;
+          });
+          
+          console.log('After update - all expenses:', updatedExpenses);
+          return updatedExpenses;
+        });
         
         console.log('Updated expense in local state', expenseData.id);
         savedExpense = { ...expenseData } as Expense;
@@ -397,9 +457,24 @@ const Expenses: React.FC = () => {
       }
     } catch (err) {
       console.error('Error saving expense:', err);
+      
+      // Extract more meaningful error messages for Firebase errors
+      let errorMessage = `Failed to ${expenseData.id ? 'update' : 'create'} expense`;
+      
+      if (err instanceof Error) {
+        // Add more specific error details if available
+        if (err.message.includes('invalid data')) {
+          errorMessage += ': Invalid data format';
+        } else if (err.message.includes('permission-denied')) {
+          errorMessage += ': Permission denied';
+        } else if (err.message) {
+          errorMessage += `: ${err.message}`;
+        }
+      }
+      
       setSnackbar({
         open: true,
-        message: `Failed to ${expenseData.id ? 'update' : 'create'} expense`,
+        message: errorMessage,
         severity: 'error'
       });
     } finally {
@@ -418,6 +493,57 @@ const Expenses: React.FC = () => {
       expense.subcontractorName?.toLowerCase().includes(searchTerm.toLowerCase())
     );
   });
+
+  // Group expenses based on selected grouping
+  const groupedExpenses = React.useMemo(() => {
+    if (groupBy === 'none') {
+      return { 'All Expenses': filteredExpenses };
+    }
+    
+    const groups: Record<string, any[]> = {};
+    
+    filteredExpenses.forEach(expense => {
+      let groupKey = '';
+      
+      switch (groupBy) {
+        case 'project':
+          groupKey = expense.projectName || 'No Project';
+          break;
+        case 'category':
+          groupKey = expense.category ? 
+            expense.category.charAt(0).toUpperCase() + expense.category.slice(1) : 
+            'Other';
+          break;
+        case 'vendor':
+          groupKey = expense.vendor || 'No Vendor';
+          break;
+        case 'subcontractor':
+          groupKey = expense.subcontractorName || 'No Subcontractor';
+          break;
+        default:
+          groupKey = 'All Expenses';
+      }
+      
+      if (!groups[groupKey]) {
+        groups[groupKey] = [];
+      }
+      
+      groups[groupKey].push(expense);
+    });
+    
+    return groups;
+  }, [filteredExpenses, groupBy, expenses]);
+
+  // Calculate group totals
+  const groupTotals = React.useMemo(() => {
+    const totals: Record<string, number> = {};
+    
+    Object.entries(groupedExpenses).forEach(([groupName, groupExpenses]) => {
+      totals[groupName] = groupExpenses.reduce((sum, expense) => sum + expense.amount, 0);
+    });
+    
+    return totals;
+  }, [groupedExpenses, expenses]);
 
   return (
     <Box sx={{ maxWidth: 1200, mx: 'auto', p: { xs: 2, sm: 3 } }}>
@@ -496,7 +622,7 @@ const Expenses: React.FC = () => {
         </Grid>
       </Grid>
       
-      {/* Tabs and search */}
+      {/* Tabs, search, and group controls */}
       <Box sx={{ mb: 3, display: 'flex', flexDirection: { xs: 'column', md: 'row' }, gap: 2, alignItems: { xs: 'stretch', md: 'center' } }}>
         <Box sx={{ flexGrow: 1 }}>
           <Tabs 
@@ -515,53 +641,56 @@ const Expenses: React.FC = () => {
           </Tabs>
         </Box>
         
-        <TextField
-          placeholder="Search expenses..."
-          value={searchTerm}
-          onChange={(e) => setSearchTerm(e.target.value)}
-          variant="outlined"
-          size="small"
-          sx={{ width: { xs: '100%', md: '300px' } }}
-          InputProps={{
-            startAdornment: (
-              <InputAdornment position="start">
-                <SearchIcon color="action" />
-              </InputAdornment>
-            ),
-            endAdornment: searchTerm && (
-              <InputAdornment position="end">
-                <IconButton size="small" onClick={() => setSearchTerm('')}>
-                  <DeleteOutlineIcon fontSize="small" />
-                </IconButton>
-              </InputAdornment>
-            ),
-          }}
-        />
+        <Box sx={{ display: 'flex', gap: 2, flexWrap: { xs: 'wrap', md: 'nowrap' }, width: { xs: '100%', md: 'auto' } }}>
+          <TextField
+            placeholder="Search expenses..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            variant="outlined"
+            size="small"
+            sx={{ flexGrow: 1, minWidth: { xs: '100%', md: '200px' } }}
+            InputProps={{
+              startAdornment: (
+                <InputAdornment position="start">
+                  <SearchIcon color="action" />
+                </InputAdornment>
+              ),
+              endAdornment: searchTerm && (
+                <InputAdornment position="end">
+                  <IconButton size="small" onClick={() => setSearchTerm('')}>
+                    <DeleteOutlineIcon fontSize="small" />
+                  </IconButton>
+                </InputAdornment>
+              ),
+            }}
+          />
+          <FormControl variant="outlined" size="small" sx={{ minWidth: { xs: '100%', md: '150px' } }}>
+            <InputLabel id="group-by-label">Group By</InputLabel>
+            <Select
+              labelId="group-by-label"
+              value={groupBy}
+              onChange={(e) => setGroupBy(e.target.value as any)}
+              label="Group By"
+              startAdornment={
+                <InputAdornment position="start">
+                  <FilterListIcon fontSize="small" />
+                </InputAdornment>
+              }
+            >
+              <MenuItem value="none">No Grouping</MenuItem>
+              <MenuItem value="project">Project</MenuItem>
+              <MenuItem value="category">Category</MenuItem>
+              <MenuItem value="vendor">Vendor</MenuItem>
+              <MenuItem value="subcontractor">Subcontractor</MenuItem>
+            </Select>
+          </FormControl>
+        </Box>
       </Box>
       
-      {/* Expenses list */}
+      {/* Expenses table */}
       {loading ? (
-        <Box sx={{ mt: 4 }}>
-          <Grid container spacing={3}>
-            {[1, 2, 3, 4].map((item) => (
-              <Grid item xs={12} md={6} lg={4} key={item}>
-                <Card sx={{ height: '100%' }}>
-                  <CardContent>
-                    <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 2 }}>
-                      <CircularProgress size={20} />
-                      <CircularProgress size={20} />
-                    </Box>
-                    <Box sx={{ bgcolor: 'grey.100', height: 80, borderRadius: 1 }} />
-                    <Divider sx={{ my: 2 }} />
-                    <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
-                      <CircularProgress size={20} />
-                      <CircularProgress size={20} />
-                    </Box>
-                  </CardContent>
-                </Card>
-              </Grid>
-            ))}
-          </Grid>
+        <Box sx={{ display: 'flex', justifyContent: 'center', py: 5 }}>
+          <CircularProgress />
         </Box>
       ) : filteredExpenses.length === 0 ? (
         <Box sx={{ p: 4, textAlign: 'center', mt: 4, bgcolor: 'background.paper', borderRadius: 2 }}>
@@ -574,166 +703,171 @@ const Expenses: React.FC = () => {
           </Typography>
         </Box>
       ) : (
-        <Grid container spacing={3} sx={{ mt: 1 }}>
-          {filteredExpenses.map((expense) => (
-            <Grid item xs={12} md={6} lg={4} key={expense.id}>
-              <Card 
+        <>
+          {Object.entries(groupedExpenses).map(([groupName, groupItems]) => (
+            <Box key={groupName} sx={{ mb: 4 }}>
+              {/* Group header - only shown when grouping is enabled */}
+              {groupBy !== 'none' && (
+                <Box 
+                  sx={{ 
+                    display: 'flex', 
+                    justifyContent: 'space-between', 
+                    alignItems: 'center',
+                    p: 2,
+                    bgcolor: 'background.paper',
+                    borderTopLeftRadius: 8,
+                    borderTopRightRadius: 8,
+                    borderBottom: `1px solid ${theme.palette.divider}`,
+                  }}
+                >
+                  <Typography variant="h6" color="text.primary">
+                    {groupName}
+                  </Typography>
+                  <Typography variant="h6" color="text.secondary">
+                    {formatCurrency(groupTotals[groupName])}
+                  </Typography>
+                </Box>
+              )}
+              
+              {/* Table */}
+              <TableContainer 
+                component={Paper} 
                 sx={{ 
-                  height: '100%',
-                  transition: 'transform 0.2s, box-shadow 0.2s',
-                  '&:hover': {
-                    transform: 'translateY(-4px)',
-                    boxShadow: '0 8px 16px rgba(0,0,0,0.1)',
-                    cursor: 'pointer'
-                  },
-                  position: 'relative',
-                  overflow: 'visible'
+                  boxShadow: 3,
+                  ...(groupBy !== 'none' && {
+                    borderTopLeftRadius: 0,
+                    borderTopRightRadius: 0,
+                  })
                 }}
               >
-                {expense.status === 'paid' && (
-                  <Box
-                    sx={{
-                      position: 'absolute',
-                      top: -10,
-                      right: -10,
-                      bgcolor: 'success.main',
-                      color: 'white',
-                      borderRadius: '50%',
-                      width: 36,
-                      height: 36,
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      boxShadow: '0 2px 4px rgba(0,0,0,0.2)',
-                      zIndex: 1
-                    }}
-                  >
-                    <PaidIcon />
-                  </Box>
-                )}
-                
-                <CardContent onClick={() => handleViewExpense(expense)}>
-                  <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 2 }}>
-                    <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                      {CATEGORY_ICONS[expense.category as keyof typeof CATEGORY_ICONS] || CATEGORY_ICONS.other}
-                      <Box sx={{ ml: 2 }}>
-                        <Typography variant="h6" sx={{ mb: 0 }}>
-                          {formatCurrency(expense.amount)}
-                        </Typography>
-                        <Chip 
-                          label={expense.status === 'paid' ? 'Paid' : 'Needs Payment'} 
-                          size="small"
-                          color={expense.status === 'paid' ? 'success' : 'warning'}
-                        />
-                      </Box>
-                    </Box>
-                    <IconButton
-                      size="small"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleMenuOpen(e, expense.id);
-                      }}
-                    >
-                      <MoreVertIcon />
-                    </IconButton>
-                  </Box>
-                  
-                  <Typography sx={{ mb: 2, fontWeight: 'medium' }}>
-                    {expense.description}
-                  </Typography>
-                  
-                  {/* Line items section */}
-                  {expense.lineItems && expense.lineItems.length > 0 && (
-                    <Box sx={{ my: 2 }}>
-                      <Typography variant="subtitle2" color="text.secondary" sx={{ mb: 1 }}>
-                        Line Items
-                      </Typography>
-                      <Paper variant="outlined" sx={{ p: 1 }}>
-                        {expense.lineItems.map((item: LineItem, index: number) => (
-                          <Box key={item.id || index} sx={{ 
-                            display: 'flex', 
-                            justifyContent: 'space-between',
-                            py: 0.5,
-                            ...(index !== 0 && { borderTop: `1px solid ${theme.palette.divider}`, mt: 0.5 })
-                          }}>
-                            <Box sx={{ display: 'flex', flexDirection: 'column' }}>
-                              <Typography variant="body2" noWrap sx={{ maxWidth: '150px' }}>
-                                {item.description}
-                              </Typography>
-                              <Typography variant="caption" color="text.secondary">
-                                {item.quantity} x {formatCurrency(item.unitCost || 0)}
-                              </Typography>
-                            </Box>
-                            <Typography variant="body2" fontWeight="medium">
-                              {formatCurrency(item.totalCost || 0)}
+                <Table aria-label="expenses table">
+                  <TableHead>
+                    <TableRow sx={{ '& th': { fontWeight: 'bold' } }}>
+                      <TableCell>Description</TableCell>
+                      <TableCell align="right">Amount</TableCell>
+                      <TableCell>Date</TableCell>
+                      <TableCell>Status</TableCell>
+                      {groupBy !== 'project' && <TableCell>Project</TableCell>}
+                      {groupBy !== 'category' && <TableCell>Category</TableCell>}
+                      {groupBy !== 'vendor' && <TableCell>Vendor</TableCell>}
+                      {groupBy !== 'subcontractor' && <TableCell>Subcontractor</TableCell>}
+                      <TableCell align="center">Actions</TableCell>
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
+                    {groupItems.map((expense) => (
+                      <TableRow 
+                        key={expense.id}
+                        hover
+                        onClick={() => handleViewExpense(expense)}
+                        sx={{ 
+                          cursor: 'pointer',
+                          '&:last-child td, &:last-child th': { border: 0 },
+                          ...(expense.status === 'paid' && { 
+                            bgcolor: alpha(theme.palette.success.light, 0.1),
+                          })
+                        }}
+                      >
+                        <TableCell component="th" scope="row">
+                          <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                            {CATEGORY_ICONS[expense.category as keyof typeof CATEGORY_ICONS] || CATEGORY_ICONS.other}
+                            <Typography sx={{ ml: 1.5, fontWeight: 'medium' }}>
+                              {expense.description}
                             </Typography>
                           </Box>
-                        ))}
-                      </Paper>
-                    </Box>
-                  )}
-                  
-                  <Divider sx={{ my: 2 }} />
-                  
-                  <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-                    <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                      <CalendarIcon fontSize="small" sx={{ mr: 1, color: 'text.secondary' }} />
-                      <Typography variant="body2">{formatDate(expense.date)}</Typography>
-                    </Box>
+                          {expense.lineItems && expense.lineItems.length > 0 && (
+                            <Chip 
+                              size="small" 
+                              label={`${expense.lineItems.length} item${expense.lineItems.length > 1 ? 's' : ''}`} 
+                              color="primary" 
+                              variant="outlined"
+                              sx={{ mt: 0.5 }}
+                            />
+                          )}
+                        </TableCell>
+                        <TableCell align="right">
+                          <Typography fontWeight="medium">
+                            {formatCurrency(expense.amount)}
+                          </Typography>
+                        </TableCell>
+                        <TableCell>{formatDate(expense.date)}</TableCell>
+                        <TableCell>
+                          <Chip 
+                            label={expense.status === 'paid' ? 'Paid' : 'Needs Payment'} 
+                            size="small"
+                            color={expense.status === 'paid' ? 'success' : 'warning'}
+                          />
+                        </TableCell>
+                        {groupBy !== 'project' && <TableCell>{expense.projectName}</TableCell>}
+                        {groupBy !== 'category' && (
+                          <TableCell>
+                            {expense.category.charAt(0).toUpperCase() + expense.category.slice(1)}
+                          </TableCell>
+                        )}
+                        {groupBy !== 'vendor' && <TableCell>{expense.vendor || '-'}</TableCell>}
+                        {groupBy !== 'subcontractor' && <TableCell>{expense.subcontractorName || '-'}</TableCell>}
+                        <TableCell align="center">
+                          <Box sx={{ display: 'flex', justifyContent: 'center' }}>
+                            <IconButton 
+                              size="small"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setSelectedExpense(expense);
+                                setExpenseModalOpen(true);
+                              }}
+                            >
+                              <EditIcon fontSize="small" />
+                            </IconButton>
+                            
+                            {expense.status !== 'paid' && (
+                              <IconButton
+                                size="small"
+                                color="success"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setSelectedExpense(expense);
+                                  setPaymentModalOpen(true);
+                                }}
+                              >
+                                <PaidIcon fontSize="small" />
+                              </IconButton>
+                            )}
+                            
+                            <IconButton
+                              size="small"
+                              color="default"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleMenuOpen(e, expense.id);
+                              }}
+                            >
+                              <MoreVertIcon fontSize="small" />
+                            </IconButton>
+                          </Box>
+                        </TableCell>
+                      </TableRow>
+                    ))}
                     
-                    {expense.vendor && (
-                      <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                        <VendorIcon fontSize="small" sx={{ mr: 1, color: 'text.secondary' }} />
-                        <Typography variant="body2">{expense.vendor}</Typography>
-                      </Box>
+                    {/* Group total row */}
+                    {groupBy !== 'none' && (
+                      <TableRow sx={{ bgcolor: alpha(theme.palette.primary.light, 0.1) }}>
+                        <TableCell component="th" scope="row">
+                          <Typography variant="subtitle2">Group Total</Typography>
+                        </TableCell>
+                        <TableCell align="right">
+                          <Typography fontWeight="bold">
+                            {formatCurrency(groupTotals[groupName])}
+                          </Typography>
+                        </TableCell>
+                        <TableCell colSpan={7} />
+                      </TableRow>
                     )}
-                    
-                    {expense.subcontractorName && (
-                      <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                        <EngineeringIcon fontSize="small" sx={{ mr: 1, color: 'text.secondary' }} />
-                        <Typography variant="body2">{expense.subcontractorName}</Typography>
-                      </Box>
-                    )}
-                    
-                    <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                      <ProjectIcon fontSize="small" sx={{ mr: 1, color: 'text.secondary' }} />
-                      <Typography variant="body2">{expense.projectName}</Typography>
-                    </Box>
-                  </Box>
-                </CardContent>
-                
-                <CardActions sx={{ justifyContent: 'space-between', borderTop: `1px solid ${theme.palette.divider}`, px: 2 }}>
-                  <Button 
-                    size="small" 
-                    startIcon={<EditIcon />}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setSelectedExpense(expense);
-                      setExpenseModalOpen(true);
-                    }}
-                  >
-                    Edit
-                  </Button>
-                  
-                  {expense.status !== 'paid' && (
-                    <Button 
-                      size="small" 
-                      color="success"
-                      startIcon={<PaidIcon />}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setSelectedExpense(expense);
-                        setPaymentModalOpen(true);
-                      }}
-                    >
-                      Mark as Paid
-                    </Button>
-                  )}
-                </CardActions>
-              </Card>
-            </Grid>
+                  </TableBody>
+                </Table>
+              </TableContainer>
+            </Box>
           ))}
-        </Grid>
+        </>
       )}
 
       {/* Action Menu */}
@@ -762,6 +896,7 @@ const Expenses: React.FC = () => {
 
       {/* Expense Form Modal */}
       <ExpenseFormModal
+        key={`expense-form-${selectedExpense?.id || 'new'}-${selectedExpense?.updatedAt || Date.now()}`}
         open={expenseModalOpen}
         onClose={handleCloseModal}
         expense={selectedExpense}
