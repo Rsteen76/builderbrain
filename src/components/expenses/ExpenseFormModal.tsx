@@ -284,7 +284,7 @@ const ExpenseFormModal: React.FC<ExpenseFormModalProps> = ({
   // Line item handlers
   const handleAddLineItem = () => {
     const newItem: ExpenseLineItemForm = {
-      id: crypto.randomUUID(),
+      id: uuidv4(),
       description: '',
       quantity: 1,
       unitPrice: 0,
@@ -364,7 +364,8 @@ const ExpenseFormModal: React.FC<ExpenseFormModalProps> = ({
       validationErrors.projectId = 'Project is required';
     }
 
-    if (formData.amount === undefined || formData.amount <= 0) {
+    // Only validate amount if not using line items
+    if (!showLineItems && (formData.amount === undefined || formData.amount <= 0)) {
       validationErrors.amount = 'Amount must be greater than 0';
     }
 
@@ -374,9 +375,10 @@ const ExpenseFormModal: React.FC<ExpenseFormModalProps> = ({
 
     // Validate line items if they are shown
     if (showLineItems && lineItems.length > 0) {
-      validationErrors.lineItems = {} as FormErrors['lineItems'];
+      let hasLineItemErrors = false;
+      const lineItemErrors: FormErrors['lineItems'] = {};
       
-      lineItems.forEach((item, index) => {
+      lineItems.forEach(item => {
         const itemErrors: { description?: string; quantity?: string; unitPrice?: string } = {};
         let hasItemError = false;
         
@@ -396,13 +398,23 @@ const ExpenseFormModal: React.FC<ExpenseFormModalProps> = ({
         }
         
         if (hasItemError) {
-          // Ensure lineItems is properly cast to a non-undefined type
-          if (!validationErrors.lineItems) {
-            validationErrors.lineItems = {} as NonNullable<FormErrors['lineItems']>;
-          }
-          validationErrors.lineItems[item.id] = itemErrors;
+          lineItemErrors[item.id] = itemErrors;
+          hasLineItemErrors = true;
         }
       });
+      
+      if (hasLineItemErrors) {
+        validationErrors.lineItems = lineItemErrors;
+      }
+      
+      // If using line items, ensure the total is greater than 0
+      const totalAmount = calculateTotalFromLineItems();
+      if (totalAmount <= 0) {
+        if (!validationErrors.lineItems) {
+          validationErrors.lineItems = {};
+        }
+        validationErrors.lineItems.general = 'Total amount must be greater than 0';
+      }
     }
 
     setErrors(validationErrors);
