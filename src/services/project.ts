@@ -14,6 +14,7 @@ import {
   DocumentData,
 } from 'firebase/firestore';
 import { Project, LineItem, Bid, Task, Phase } from '../types';
+import { v4 as uuidv4 } from 'uuid';
 
 interface FirestoreProject extends Omit<Project, 'id' | 'startDate' | 'endDate' | 'createdAt' | 'updatedAt' | 'budget' | 'location' | 'lineItems' | 'bids' | 'tasks'> {
   userId: string;
@@ -286,7 +287,7 @@ export class ProjectService {
     
     // Common task structure
     const createTask = (title: string, priority: 'low' | 'medium' | 'high' = 'medium'): Task => ({
-      id: crypto.randomUUID(),
+      id: uuidv4(),
       userId,
       projectId,
       title,
@@ -452,7 +453,7 @@ export class ProjectService {
         
         // Create the phase
         const phase: Phase = {
-          id: crypto.randomUUID(),
+          id: uuidv4(),
           projectId: project.id,
           name: allocation.name,
           startDate: phaseStartDate,
@@ -504,7 +505,7 @@ export class ProjectService {
       await this.updateProject(project.id, { 
         phases: residentialPhases.map(phase => ({
           ...phase,
-          id: phase.id || crypto.randomUUID(),
+          id: phase.id || uuidv4(),
           projectId: project.id
         })),
         tasks: updatedProject.tasks,

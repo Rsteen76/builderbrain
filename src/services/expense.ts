@@ -38,8 +38,15 @@ export class ExpenseService {
       ? expenseData.date 
       : new Date(expenseData.date);
     
+    // Standardize on phaseName field - if buildingPhase exists but phaseName doesn't, use buildingPhase value
+    const dataWithStandardizedPhase = { ...expenseData };
+    if (!dataWithStandardizedPhase.phaseName && dataWithStandardizedPhase.buildingPhase) {
+      console.log(`ExpenseService: Standardizing on phaseName instead of buildingPhase: ${dataWithStandardizedPhase.buildingPhase}`);
+      dataWithStandardizedPhase.phaseName = dataWithStandardizedPhase.buildingPhase;
+    }
+    
     const firestoreData: any = {
-      ...expenseData,
+      ...dataWithStandardizedPhase,
       userId: userId,
       createdBy: userId,
       date: Timestamp.fromDate(expenseDate),
@@ -58,7 +65,7 @@ export class ExpenseService {
     console.log(`Expense created with ID: ${docRef.id}`);
 
     return {
-      ...expenseData,
+      ...dataWithStandardizedPhase,
       id: docRef.id,
       userId: userId,
       createdBy: userId,
@@ -73,23 +80,58 @@ export class ExpenseService {
 
     console.log(`ExpenseService: Updating expense ${id} with data:`, expenseData);
 
+    // Standardize on phaseName field
+    const standardizedPayload = { ...updatePayload };
+    if (updatePayload.buildingPhase && !updatePayload.phaseName) {
+      console.log(`ExpenseService: Standardizing on phaseName instead of buildingPhase: ${updatePayload.buildingPhase}`);
+      standardizedPayload.phaseName = updatePayload.buildingPhase;
+    }
+
     const firestoreUpdateData: any = {
       updatedAt: Timestamp.fromDate(new Date()),
     };
 
-    for (const key in updatePayload) {
-      if (Object.prototype.hasOwnProperty.call(updatePayload, key)) {
-        const typedKey = key as keyof typeof updatePayload;
-        const value = updatePayload[typedKey];
+    // Helper function to clean undefined values from an object
+    const cleanObject = (obj: any): any => {
+      if (Array.isArray(obj)) {
+        return obj.map(v => cleanObject(v));
+      }
+      if (obj !== null && typeof obj === 'object') {
+        const cleaned: any = {};
+        for (const key in obj) {
+          if (Object.prototype.hasOwnProperty.call(obj, key)) {
+            const value = cleanObject(obj[key]);
+            if (value !== undefined) {
+              cleaned[key] = value;
+            }
+          }
+        }
+        return cleaned;
+      }
+      return obj;
+    };
 
-        // Skip undefined values - Firestore doesn't accept them
+    // Process each field in the update payload
+    for (const key in standardizedPayload) {
+      if (Object.prototype.hasOwnProperty.call(standardizedPayload, key)) {
+        const typedKey = key as keyof typeof standardizedPayload;
+        let value = standardizedPayload[typedKey];
+
+        // Skip undefined values
         if (value === undefined) {
           console.log(`ExpenseService: Skipping undefined value for field ${String(typedKey)}`);
           continue;
         }
 
+        // Handle Date objects
         if (typedKey === 'date' && value instanceof Date) {
           firestoreUpdateData.date = Timestamp.fromDate(value);
+        } else if (typeof value === 'object' && value !== null) {
+          // Clean nested objects of undefined values
+          const cleanedValue = cleanObject(value);
+          if (Object.keys(cleanedValue).length > 0) {
+            firestoreUpdateData[typedKey] = cleanedValue;
+          }
         } else {
           firestoreUpdateData[typedKey] = value;
         }

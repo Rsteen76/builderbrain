@@ -117,7 +117,7 @@ const PAYMENT_METHODS = [
   { value: 'other', label: 'Other' },
 ];
 
-const BUILDING_PHASES = [
+const PHASE_OPTIONS = [
   { value: 'planning', label: 'Planning' },
   { value: 'foundation', label: 'Foundation' },
   { value: 'framing', label: 'Framing' },
@@ -151,7 +151,7 @@ const ExpenseFormModal: React.FC<ExpenseFormModalProps> = ({
     notes: '',
     subcontractorId: '',
     subcontractorName: '',
-    buildingPhase: '',
+    phaseName: '',
   });
   const [errors, setErrors] = useState<FormErrors>({});
   const [backendError, setBackendError] = useState<string | null>(null);
@@ -168,49 +168,13 @@ const ExpenseFormModal: React.FC<ExpenseFormModalProps> = ({
 
   const isEditMode = !!expense?.id;
 
-  // Initialize form data when expense changes
+  // Update form data when expense prop changes
   useEffect(() => {
     if (expense) {
       setFormData({
-        ...formData,
         ...expense,
+        date: expense.date ? new Date(expense.date) : new Date(),
       });
-
-      if (expense.receiptUrl) {
-        setReceiptPreview(expense.receiptUrl);
-      }
-
-      // If expense has line items, initialize them
-      if (expense.lineItems && Array.isArray(expense.lineItems) && expense.lineItems.length > 0) {
-        setLineItems(expense.lineItems.map((item: LineItem) => ({
-          id: item.id || crypto.randomUUID(),
-          description: item.description || '',
-          quantity: item.quantity || 1,
-          unitPrice: item.unitCost || 0,
-          totalPrice: item.totalCost || 0,
-        } as ExpenseLineItemForm)));
-        setShowLineItems(true);
-      }
-    } else {
-      // Reset form data when creating a new expense
-      setFormData({
-        description: '',
-        amount: 0,
-        category: 'other' as Expense['category'],
-        date: new Date(),
-        status: 'pending',
-        projectId: '',
-        vendor: '',
-        notes: '',
-        subcontractorId: '',
-        subcontractorName: '',
-        buildingPhase: '',
-      });
-      setReceiptFile(null);
-      setReceiptPreview(null);
-      setErrors({});
-      setLineItems([]);
-      setShowLineItems(false);
     }
   }, [expense]);
 
@@ -252,10 +216,34 @@ const ExpenseFormModal: React.FC<ExpenseFormModalProps> = ({
     }
   };
 
-  const handleDateChange = (newDate: Date | null) => {
-    if (newDate) {
-      setFormData(prev => ({ ...prev, date: newDate }));
+  const handleSubcontractorChange = (subcontractorId: string, subcontractorName: string) => {
+    setFormData({
+      ...formData,
+      subcontractorId,
+      subcontractorName,
+    });
+  };
+
+  const handleDateChange = (date: Date | null) => {
+    if (date) {
+      setFormData(prev => ({
+        ...prev,
+        date: date,
+      }));
     }
+  };
+
+  const handleCategoryChange = (event: SelectChangeEvent<Expense['category']>) => {
+    const category = event.target.value as Expense['category'];
+    setFormData(prev => ({
+      ...prev,
+      category,
+      // Reset subcontractor fields when category changes
+      ...(category !== 'subcontractor' && {
+        subcontractorId: '',
+        subcontractorName: '',
+      }),
+    }));
   };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -372,6 +360,11 @@ const ExpenseFormModal: React.FC<ExpenseFormModalProps> = ({
     if (!formData.date) {
       validationErrors.date = 'Date is required';
     }
+    
+    // Validate subcontractor is selected when category is 'subcontractor'
+    if (formData.category === 'subcontractor' && !formData.subcontractorId) {
+      validationErrors.subcontractorId = 'Subcontractor is required';
+    }
 
     // Validate line items if they are shown
     if (showLineItems && lineItems.length > 0) {
@@ -475,10 +468,10 @@ const ExpenseFormModal: React.FC<ExpenseFormModalProps> = ({
       // Add payment details if status is paid
       if (formData.status === 'paid') {
         updatedFormData.paymentDetails = {
-          method: paymentMethod,
-          date: paymentDate,
-          referenceNumber: referenceNumber || undefined,
-          notes: paymentNotes || undefined,
+          method: paymentMethod || '',
+          date: paymentDate || new Date().toISOString().split('T')[0],
+          referenceNumber: referenceNumber || '',
+          notes: paymentNotes || '',
         };
       }
 
@@ -552,10 +545,10 @@ const ExpenseFormModal: React.FC<ExpenseFormModalProps> = ({
 
     if (formData.status === 'paid') {
       updatedFormData.paymentDetails = {
-        method: paymentMethod,
-        date: paymentDate,
-        referenceNumber: referenceNumber || undefined,
-        notes: paymentNotes || undefined,
+        method: paymentMethod || '',
+        date: paymentDate || new Date().toISOString().split('T')[0],
+        referenceNumber: referenceNumber || '',
+        notes: paymentNotes || '',
       };
     }
 
@@ -589,699 +582,693 @@ const ExpenseFormModal: React.FC<ExpenseFormModalProps> = ({
 
   return (
     <>
-      <Dialog 
-        open={open} 
-        onClose={onClose} 
-        maxWidth="md" 
-        fullWidth
-        PaperProps={{
-          sx: {
-            borderRadius: '12px',
-            maxHeight: '95vh',
-            background: '#ffffff',
-            boxShadow: '0 8px 24px rgba(0,0,0,0.1)',
-            overflow: 'hidden',
-          },
+    <Dialog
+      open={open}
+      onClose={onClose}
+      maxWidth="md"
+      fullWidth
+      disableEnforceFocus
+      disableScrollLock
+    >
+      <DialogTitle sx={{ p: 2.5, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <Typography 
+          variant="h6" 
+          fontWeight="600" 
+        >
+          {isEditMode ? 'Edit Expense' : 'New Expense'}
+        </Typography>
+        
+        <IconButton 
+          onClick={onClose} 
+          aria-label="close"
+          size="small"
+          sx={{
+            color: 'text.secondary',
+          }}
+        >
+          <CloseIcon />
+        </IconButton>
+      </DialogTitle>
+
+      <DialogContent 
+        sx={{ 
+          p: 2.5,
+          overflow: 'auto',
         }}
       >
-        {/* Header */}
-        <Box 
-          sx={{ 
-            position: 'relative',
-            py: 1.5,
-            px: 2.5,
-            borderBottom: '1px solid',
-            borderColor: 'divider',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between'
-          }}
-        >
-          <Typography 
-            variant="h6" 
-            fontWeight="600" 
-          >
-            {isEditMode ? 'Edit Expense' : 'New Expense'}
-          </Typography>
-          
-          <IconButton 
-            onClick={onClose} 
-            aria-label="close"
-            size="small"
-            sx={{
-              color: 'text.secondary',
-            }}
-          >
-            <CloseIcon />
-          </IconButton>
-        </Box>
-
-        <DialogContent 
-          sx={{ 
-            p: 2.5,
-            overflow: 'auto',
-          }}
-        >
-          <Grid container spacing={2}>
-            {/* Project + Date Row */}
-            <Grid item xs={12} md={6}>
-              <FormControl 
-                fullWidth 
-                error={!!errors.projectId}
-                variant="outlined"
-                size="small"
+        <Grid container spacing={2}>
+          {/* Project + Date Row */}
+          <Grid item xs={12} md={6}>
+            <FormControl 
+            fullWidth
+              error={!!errors.projectId}
+              variant="outlined"
+              size="small"
+            >
+              <InputLabel id="project-label">Project</InputLabel>
+            <Select
+                labelId="project-label"
+                id="projectId"
+                name="projectId"
+                value={formData.projectId || ''}
+              onChange={handleSelectChange}
+                label="Project"
+                displayEmpty
+              startAdornment={
+                <InputAdornment position="start">
+                    <ProjectIcon fontSize="small" color="primary" />
+                </InputAdornment>
+              }
               >
-                <InputLabel id="project-label">Project</InputLabel>
-                <Select
-                  labelId="project-label"
-                  id="projectId"
-                  name="projectId"
-                  value={formData.projectId || ''}
-                  onChange={handleSelectChange}
-                  label="Project"
-                  displayEmpty
-                  startAdornment={
-                    <InputAdornment position="start">
-                      <ProjectIcon fontSize="small" color="primary" />
-                    </InputAdornment>
-                  }
-                >
-                  <MenuItem value="" disabled>
-                    <Typography variant="body2" color="text.secondary">Select a project</Typography>
+                <MenuItem value="" disabled>
+                  <Typography variant="body2" color="text.secondary">Select a project</Typography>
+                </MenuItem>
+                {projects.map((project) => (
+                  <MenuItem key={project.id} value={project.id}>
+                    {project.name}
                   </MenuItem>
-                  {projects.map((project) => (
-                    <MenuItem key={project.id} value={project.id}>
-                      {project.name}
-                    </MenuItem>
-                  ))}
-                </Select>
-                {errors.projectId && (
-                  <FormHelperText error>{errors.projectId}</FormHelperText>
-                )}
-              </FormControl>
-            </Grid>
-            
-            <Grid item xs={12} md={6}>
-              <LocalizationProvider dateAdapter={AdapterDateFns}>
-                <DatePicker
-                  label="Date"
-                  value={typeof formData.date === 'string' ? new Date(formData.date) : formData.date || null}
-                  onChange={handleDateChange}
-                  slotProps={{
-                    textField: {
-                      fullWidth: true,
-                      error: !!errors.date,
-                      helperText: errors.date,
-                      size: "small",
-                      InputProps: {
-                        startAdornment: (
-                          <InputAdornment position="start">
-                            <CalendarIcon fontSize="small" color="primary" />
-                          </InputAdornment>
-                        )
-                      }
-                    },
-                  }}
-                />
-              </LocalizationProvider>
-            </Grid>
-            
-            {/* Description */}
-            <Grid item xs={12}>
-              <TextField
-                fullWidth
-                id="description"
-                name="description"
-                label="Description"
-                value={formData.description || ''}
-                onChange={handleChange}
-                error={!!errors.description}
-                helperText={errors.description || null}
-                placeholder="What is this expense for?"
-                size="small"
-                InputProps={{
-                  startAdornment: (
-                    <InputAdornment position="start">
-                      <DescriptionIcon fontSize="small" color="primary" />
-                    </InputAdornment>
-                  )
-                }}
-              />
-            </Grid>
-          
-            {/* Building Phase + Category Row */}
-            <Grid item xs={12} sm={6}>
-              <FormControl fullWidth variant="outlined" size="small">
-                <InputLabel id="building-phase-label">Building Phase</InputLabel>
-                <Select
-                  labelId="building-phase-label"
-                  id="buildingPhase"
-                  name="buildingPhase"
-                  value={formData.buildingPhase || ''}
-                  onChange={handleSelectChange}
-                  label="Building Phase"
-                  startAdornment={
-                    <InputAdornment position="start">
-                      <BuildingPhaseIcon fontSize="small" color="primary" />
-                    </InputAdornment>
-                  }
-                >
-                  <MenuItem value="">
-                    <Typography variant="body2" color="text.secondary">Select a phase (optional)</Typography>
-                  </MenuItem>
-                  {BUILDING_PHASES.map((phase) => (
-                    <MenuItem key={phase.value} value={phase.value}>
-                      {phase.label}
-                    </MenuItem>
-                  ))}
-                </Select>
-              </FormControl>
-            </Grid>
-            
-            <Grid item xs={12} sm={6}>
-              <FormControl fullWidth error={!!errors.category} variant="outlined" size="small">
-                <InputLabel id="category-label">Category</InputLabel>
-                <Select
-                  labelId="category-label"
-                  id="category"
-                  name="category"
-                  value={formData.category || 'other'}
-                  onChange={handleSelectChange}
-                  label="Category"
-                  startAdornment={
-                    <InputAdornment position="start">
-                      <CategoryIcon fontSize="small" color="primary" />
-                    </InputAdornment>
-                  }
-                >
-                  {[
-                    { value: 'labor', icon: '👷', label: 'Labor' },
-                    { value: 'materials', icon: '🧰', label: 'Materials' },
-                    { value: 'equipment', icon: '🚜', label: 'Equipment' },
-                    { value: 'permits', icon: '📄', label: 'Permits' },
-                    { value: 'other', icon: '📎', label: 'Other' },
-                  ].map((category) => (
-                    <MenuItem key={category.value} value={category.value}>
-                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                        <span role="img" aria-label={category.label}>
-                          {category.icon}
-                        </span>
-                        {category.label}
-                      </Box>
-                    </MenuItem>
-                  ))}
-                </Select>
-                {errors.category && <FormHelperText error>{errors.category}</FormHelperText>}
-              </FormControl>
-            </Grid>
-            
-            <Grid item xs={12} sm={6}>
-              <TextField
-                fullWidth
-                id="vendor"
-                name="vendor"
-                label="Vendor / Supplier"
-                value={formData.vendor || ''}
-                onChange={handleChange}
-                placeholder="Who provided the goods/services?"
-                size="small"
-                InputProps={{
-                  startAdornment: (
-                    <InputAdornment position="start">
-                      <VendorIcon fontSize="small" color="primary" />
-                    </InputAdornment>
-                  )
-                }}
-              />
-            </Grid>
-            
-            {/* Divider */}
-            <Grid item xs={12}>
-              <Divider sx={{ my: 1 }} />
-            </Grid>
-            
-            {/* Amount Section */}
-            <Grid item xs={12}>
-              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
-                <Typography variant="subtitle2" fontWeight={600} color="text.primary">
-                  Amount Details
-                </Typography>
-                
-                <FormControlLabel
-                  control={
-                    <Switch
-                      checked={showLineItems}
-                      onChange={toggleLineItems}
-                      color="primary"
-                      size="small"
-                    />
-                  }
-                  label={<Typography variant="caption">{showLineItems ? 'Itemized' : 'Simple'}</Typography>}
-                  sx={{ m: 0 }}
-                />
-              </Box>
-
-              {!showLineItems ? (
-                <TextField
-                  fullWidth
-                  id="amount"
-                  name="amount"
-                  label="Amount"
-                  type="number"
-                  value={formData.amount || ''}
-                  onChange={handleChange}
-                  error={!!errors.amount}
-                  helperText={errors.amount || null}
-                  size="small"
-                  InputProps={{
+                ))}
+            </Select>
+              {errors.projectId && (
+                <FormHelperText error>{errors.projectId}</FormHelperText>
+              )}
+          </FormControl>
+        </Grid>
+        
+          <Grid item xs={12} md={6}>
+          <LocalizationProvider dateAdapter={AdapterDateFns}>
+            <DatePicker
+              label="Date"
+                value={typeof formData.date === 'string' ? new Date(formData.date) : formData.date || null}
+              onChange={handleDateChange}
+              slotProps={{
+                textField: {
+                  fullWidth: true,
+                  error: !!errors.date,
+                  helperText: errors.date,
+                    size: "small",
+                  InputProps: {
                     startAdornment: (
                       <InputAdornment position="start">
-                        <MoneyIcon fontSize="small" color="primary" />
+                          <CalendarIcon fontSize="small" color="primary" />
                       </InputAdornment>
-                    )
-                  }}
-                />
-              ) : (
-                <Box>
-                  <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
-                    <Button
-                      variant="outlined"
-                      color="primary"
-                      startIcon={<AddIcon />}
-                      onClick={handleAddLineItem}
-                      size="small"
-                      sx={{ 
-                        textTransform: 'none',
-                      }}
-                    >
-                      Add Item
-                    </Button>
-                    
-                    <Typography variant="subtitle2" fontWeight={600} color="success.main">
-                      Total: ${calculateTotalFromLineItems().toFixed(2)}
-                    </Typography>
-                  </Box>
-                  
-                  <Box sx={{ 
-                    maxHeight: 220, 
-                    overflowY: 'auto',
-                  }}>
-                    {lineItems.length === 0 ? (
-                      <Typography variant="body2" color="text.secondary" align="center" sx={{ py: 2 }}>
-                        No line items yet. Add some!
-                      </Typography>
-                    ) : (
-                      <TableContainer component={Paper} variant="outlined" sx={{ mt: 1 }}>
-                        <Table size="small">
-                          <TableHead>
-                            <TableRow>
-                              <TableCell>Description</TableCell>
-                              <TableCell align="right">Qty</TableCell>
-                              <TableCell align="right">Unit Price</TableCell>
-                              <TableCell align="right">Total</TableCell>
-                              <TableCell padding="checkbox"></TableCell>
-                            </TableRow>
-                          </TableHead>
-                          <TableBody>
-                            {lineItems.map((item: ExpenseLineItemForm, index) => (
-                              <TableRow key={item.id}>
-                                <TableCell>
-                                  <TextField
-                                    fullWidth
-                                    placeholder="Description"
-                                    value={item.description}
-                                    onChange={(e) => handleLineItemChange(item.id, 'description', e.target.value)}
-                                    error={!!errors.lineItems?.[item.id]?.description}
-                                    helperText={errors.lineItems?.[item.id]?.description}
-                                    variant="standard"
-                                    size="small"
-                                  />
-                                </TableCell>
-                                <TableCell align="right">
-                                  <TextField
-                                    type="number"
-                                    value={item.quantity}
-                                    onChange={(e) => handleLineItemChange(item.id, 'quantity', parseFloat(e.target.value) || 0)}
-                                    error={!!errors.lineItems?.[item.id]?.quantity}
-                                    inputProps={{ min: 0, step: 0.01, style: { textAlign: 'right' } }}
-                                    variant="standard"
-                                    size="small"
-                                    sx={{ width: 70 }}
-                                  />
-                                </TableCell>
-                                <TableCell align="right">
-                                  <TextField
-                                    type="number"
-                                    value={item.unitPrice}
-                                    onChange={(e) => handleLineItemChange(item.id, 'unitPrice', parseFloat(e.target.value) || 0)}
-                                    error={!!errors.lineItems?.[item.id]?.unitPrice}
-                                    InputProps={{
-                                      startAdornment: <InputAdornment position="start">$</InputAdornment>,
-                                    }}
-                                    inputProps={{ min: 0, step: 0.01, style: { textAlign: 'right' } }}
-                                    variant="standard"
-                                    size="small"
-                                    sx={{ width: 90 }}
-                                  />
-                                </TableCell>
-                                <TableCell align="right">
-                                  ${item.totalPrice.toFixed(2)}
-                                </TableCell>
-                                <TableCell padding="checkbox">
-                                  <IconButton
-                                    size="small"
-                                    onClick={() => handleRemoveLineItem(item.id)}
-                                    color="error"
-                                  >
-                                    <DeleteIcon fontSize="small" />
-                                  </IconButton>
-                                </TableCell>
-                              </TableRow>
-                            ))}
-                          </TableBody>
-                        </Table>
-                      </TableContainer>
-                    )}
-                  </Box>
-                </Box>
-              )}
-            </Grid>
-            
-            {/* Divider */}
-            <Grid item xs={12}>
-              <Divider sx={{ my: 1 }} />
-            </Grid>
-            
-            {/* Payment & Receipt Row */}
-            <Grid item xs={12} sm={6}>
-              <Typography variant="subtitle2" fontWeight={600} color="text.primary" gutterBottom>
-                Payment Details
-              </Typography>
-              
-              <FormControl fullWidth sx={{ mb: 1.5 }} size="small">
-                <InputLabel id="status-label">Status</InputLabel>
-                <Select
-                  labelId="status-label"
-                  id="status"
-                  name="status"
-                  value={formData.status || 'pending'}
-                  onChange={handleStatusChange}
-                  label="Status"
-                  startAdornment={
-                    <InputAdornment position="start">
-                      <PaymentIcon fontSize="small" color="primary" />
-                    </InputAdornment>
-                  }
-                >
-                  <MenuItem value="pending">
+                      )
+                    }
+                },
+              }}
+            />
+          </LocalizationProvider>
+        </Grid>
+        
+          {/* Description */}
+          <Grid item xs={12}>
+            <TextField
+              fullWidth
+              id="description"
+              name="description"
+              label="Description"
+              value={formData.description || ''}
+              onChange={handleChange}
+              error={!!errors.description}
+              helperText={errors.description || null}
+              placeholder="What is this expense for?"
+              size="small"
+              InputProps={{
+                startAdornment: (
+                  <InputAdornment position="start">
+                    <DescriptionIcon fontSize="small" color="primary" />
+                  </InputAdornment>
+                )
+              }}
+            />
+          </Grid>
+        
+          {/* Building Phase + Category Row */}
+        <Grid item xs={12} sm={6}>
+            <FormControl fullWidth variant="outlined" size="small">
+              <InputLabel id="phase-name-label">Phase</InputLabel>
+            <Select
+                labelId="phase-name-label"
+                id="phaseName"
+                name="phaseName"
+                value={formData.phaseName || ''}
+              onChange={handleSelectChange}
+                label="Phase"
+              startAdornment={
+                <InputAdornment position="start">
+                    <BuildingPhaseIcon fontSize="small" color="primary" />
+                </InputAdornment>
+              }
+            >
+                <MenuItem value="">
+                  <Typography variant="body2" color="text.secondary">Select a phase (optional)</Typography>
+                </MenuItem>
+                {PHASE_OPTIONS.map((phase) => (
+                  <MenuItem key={phase.value} value={phase.value}>
+                    {phase.label}
+                  </MenuItem>
+                ))}
+            </Select>
+          </FormControl>
+        </Grid>
+        
+          <Grid item xs={12} sm={6}>
+            <FormControl fullWidth error={!!errors.category} variant="outlined" size="small">
+              <InputLabel id="category-label">Category</InputLabel>
+              <Select
+                labelId="category-label"
+                id="category"
+                name="category"
+                value={formData.category || 'other'}
+                onChange={handleCategoryChange}
+                label="Category"
+                startAdornment={
+                  <InputAdornment position="start">
+                    <CategoryIcon fontSize="small" color="primary" />
+                  </InputAdornment>
+                }
+              >
+                {[
+                  { value: 'labor', icon: '👷', label: 'Labor' },
+                  { value: 'materials', icon: '🧰', label: 'Materials' },
+                  { value: 'equipment', icon: '🚜', label: 'Equipment' },
+                  { value: 'permits', icon: '📄', label: 'Permits' },
+                  { value: 'subcontractor', icon: '🤝', label: 'Subcontractor' },
+                  { value: 'other', icon: '📎', label: 'Other' },
+                ].map((category) => (
+                  <MenuItem key={category.value} value={category.value}>
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                      <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: 'warning.main' }} />
-                      Pending
+                      <span role="img" aria-label={category.label}>
+                        {category.icon}
+                      </span>
+                      {category.label}
                     </Box>
                   </MenuItem>
-                  <MenuItem value="paid">
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                      <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: 'success.main' }} />
-                      Paid
-                    </Box>
-                  </MenuItem>
-                </Select>
-              </FormControl>
-
-              {formData.status === 'paid' && (
-                <Grid container spacing={1.5}>
-                  <Grid item xs={12}>
-                    <FormControl fullWidth size="small">
-                      <InputLabel id="payment-method-label">Method</InputLabel>
-                      <Select
-                        labelId="payment-method-label"
-                        value={paymentMethod}
-                        onChange={(e) => setPaymentMethod(e.target.value)}
-                        label="Method"
-                        startAdornment={
-                          <InputAdornment position="start">
-                            <BankIcon fontSize="small" color="primary" />
-                          </InputAdornment>
-                        }
-                      >
-                        {PAYMENT_METHODS.map((method) => (
-                          <MenuItem key={method.value} value={method.value}>
-                            {method.label}
-                          </MenuItem>
-                        ))}
-                      </Select>
-                    </FormControl>
-                  </Grid>
-                  
-                  <Grid item xs={6}>
-                    <TextField
-                      fullWidth
-                      label="Payment Date"
-                      type="date"
-                      value={paymentDate}
-                      onChange={(e) => setPaymentDate(e.target.value)}
-                      size="small"
-                    />
-                  </Grid>
-                  
-                  <Grid item xs={6}>
-                    <TextField
-                      fullWidth
-                      label="Reference #"
-                      value={referenceNumber}
-                      onChange={(e) => setReferenceNumber(e.target.value)}
-                      placeholder="Optional"
-                      size="small"
-                    />
-                  </Grid>
-                </Grid>
-              )}
-            </Grid>
-            
+                ))}
+              </Select>
+              {errors.category && <FormHelperText error>{errors.category}</FormHelperText>}
+            </FormControl>
+          </Grid>
+          
+          <Grid item xs={12} sm={6}>
+          <TextField
+            fullWidth
+              id="vendor"
+            name="vendor"
+              label="Vendor / Supplier"
+            value={formData.vendor || ''}
+            onChange={handleChange}
+              placeholder="Who provided the goods/services?"
+              size="small"
+            InputProps={{
+              startAdornment: (
+                <InputAdornment position="start">
+                    <VendorIcon fontSize="small" color="primary" />
+                </InputAdornment>
+                )
+            }}
+          />
+        </Grid>
+        
+          {/* Subcontractor Selector - only visible when category is 'subcontractor' */}
+          {formData.category === 'subcontractor' && (
             <Grid item xs={12} sm={6}>
-              <Typography variant="subtitle2" fontWeight={600} color="text.primary" gutterBottom>
-                Receipt
-              </Typography>
-              
-              {receiptPreview ? (
-                <Box sx={{ position: 'relative', height: 120, display: 'flex', justifyContent: 'center' }}>
-                  <img
-                    src={receiptPreview}
-                    alt="Receipt preview"
-                    style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }}
-                  />
-                  <IconButton
-                    onClick={handleRemoveReceipt}
+              <SubcontractorSelector
+                value={formData.subcontractorId || ''}
+                onChange={handleSubcontractorChange}
+                error={!!errors.subcontractorId}
+                helperText={errors.subcontractorId}
+              />
+            </Grid>
+          )}
+          
+          {/* Divider */}
+        <Grid item xs={12}>
+          <Divider sx={{ my: 1 }} />
+          </Grid>
+          
+          {/* Amount Section */}
+          <Grid item xs={12}>
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
+              <Typography variant="subtitle2" fontWeight={600} color="text.primary">
+                Amount Details
+          </Typography>
+          
+              <FormControlLabel
+                control={
+                  <Switch
+                    checked={showLineItems}
+                    onChange={toggleLineItems}
+                    color="primary"
                     size="small"
-                    sx={{
-                      position: 'absolute',
-                      top: 0,
-                      right: 0,
-                      bgcolor: 'error.main',
-                      color: 'white',
-                      '&:hover': { bgcolor: 'error.dark' },
+                  />
+                }
+                label={<Typography variant="caption">{showLineItems ? 'Itemized' : 'Simple'}</Typography>}
+                sx={{ m: 0 }}
+              />
+            </Box>
+
+            {!showLineItems ? (
+              <TextField
+                fullWidth
+                id="amount"
+                name="amount"
+                label="Amount"
+                type="number"
+                value={formData.amount || ''}
+                onChange={handleChange}
+                error={!!errors.amount}
+                helperText={errors.amount || null}
+                size="small"
+                InputProps={{
+                  startAdornment: (
+                    <InputAdornment position="start">
+                      <MoneyIcon fontSize="small" color="primary" />
+                    </InputAdornment>
+                  )
+                }}
+              />
+            ) : (
+              <Box>
+                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
+                <Button
+                  variant="outlined"
+                    color="primary"
+                    startIcon={<AddIcon />}
+                    onClick={handleAddLineItem}
+                  size="small"
+                    sx={{ 
+                      textTransform: 'none',
                     }}
                   >
-                    <DeleteIcon fontSize="small" />
-                  </IconButton>
+                    Add Item
+                </Button>
+                  
+                  <Typography variant="subtitle2" fontWeight={600} color="success.main">
+                    Total: ${calculateTotalFromLineItems().toFixed(2)}
+                  </Typography>
                 </Box>
-              ) : (
+                
                 <Box sx={{ 
-                  display: 'flex',
-                  flexDirection: 'column',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  border: '2px dashed',
-                  borderColor: alpha(theme.palette.primary.main, 0.2),
-                  borderRadius: '6px',
-                  p: 2,
-                  height: 120,
-                  backgroundColor: alpha(theme.palette.primary.main, 0.03),
+                  maxHeight: 220, 
+                  overflowY: 'auto',
                 }}>
-                  <input
-                    accept="image/*,application/pdf"
-                    id="receipt-file"
-                    type="file"
-                    style={{ display: 'none' }}
-                    onChange={handleFileChange}
-                  />
-                  <label htmlFor="receipt-file" style={{ width: '100%', textAlign: 'center' }}>
-                    <Button
-                      component="span"
-                      startIcon={<UploadIcon />}
-                      sx={{ textTransform: 'none' }}
-                    >
-                      Upload Receipt
-                    </Button>
-                    <Typography variant="caption" display="block" color="text.secondary">
-                      Drag & drop or click to browse
+                  {lineItems.length === 0 ? (
+                    <Typography variant="body2" color="text.secondary" align="center" sx={{ py: 2 }}>
+                      No line items yet. Add some!
                     </Typography>
-                  </label>
+                  ) : (
+                    <TableContainer component={Paper} variant="outlined" sx={{ mt: 1 }}>
+                      <Table size="small">
+                        <TableHead>
+                          <TableRow>
+                            <TableCell>Description</TableCell>
+                            <TableCell align="right">Qty</TableCell>
+                            <TableCell align="right">Unit Price</TableCell>
+                            <TableCell align="right">Total</TableCell>
+                            <TableCell padding="checkbox"></TableCell>
+                          </TableRow>
+                        </TableHead>
+                        <TableBody>
+                          {lineItems.map((item: ExpenseLineItemForm, index) => (
+                            <TableRow key={item.id}>
+                              <TableCell>
+                                <TextField
+                                  fullWidth
+                                  placeholder="Description"
+                                  value={item.description}
+                                  onChange={(e) => handleLineItemChange(item.id, 'description', e.target.value)}
+                                  error={!!errors.lineItems?.[item.id]?.description}
+                                  helperText={errors.lineItems?.[item.id]?.description}
+                                  variant="standard"
+                                  size="small"
+                                />
+                              </TableCell>
+                              <TableCell align="right">
+                                <TextField
+                                  type="number"
+                                  value={item.quantity}
+                                  onChange={(e) => handleLineItemChange(item.id, 'quantity', parseFloat(e.target.value) || 0)}
+                                  error={!!errors.lineItems?.[item.id]?.quantity}
+                                  inputProps={{ min: 0, step: 0.01, style: { textAlign: 'right' } }}
+                                  variant="standard"
+                                  size="small"
+                                  sx={{ width: 70 }}
+                                />
+                              </TableCell>
+                              <TableCell align="right">
+                                <TextField
+                                  type="number"
+                                  value={item.unitPrice}
+                                  onChange={(e) => handleLineItemChange(item.id, 'unitPrice', parseFloat(e.target.value) || 0)}
+                                  error={!!errors.lineItems?.[item.id]?.unitPrice}
+                                  InputProps={{
+                                    startAdornment: <InputAdornment position="start">$</InputAdornment>,
+                                  }}
+                                  inputProps={{ min: 0, step: 0.01, style: { textAlign: 'right' } }}
+                                  variant="standard"
+                                  size="small"
+                                  sx={{ width: 90 }}
+                                />
+                              </TableCell>
+                              <TableCell align="right">
+                                ${item.totalPrice.toFixed(2)}
+                              </TableCell>
+                              <TableCell padding="checkbox">
+                                <IconButton
+                                  size="small"
+                                  onClick={() => handleRemoveLineItem(item.id)}
+                                  color="error"
+                                >
+                                  <DeleteIcon fontSize="small" />
+                                </IconButton>
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </TableContainer>
+                  )}
                 </Box>
-              )}
-            </Grid>
+              </Box>
+            )}
+          </Grid>
+          
+          {/* Divider */}
+          <Grid item xs={12}>
+            <Divider sx={{ my: 1 }} />
+          </Grid>
+          
+          {/* Payment & Receipt Row */}
+          <Grid item xs={12} sm={6}>
+            <Typography variant="subtitle2" fontWeight={600} color="text.primary" gutterBottom>
+              Payment Details
+            </Typography>
             
-            {/* Notes (optional) */}
-            <Grid item xs={12}>
-              <Accordion
-                disableGutters
-                elevation={0}
-                sx={{ 
-                  '&:before': { display: 'none' },
-                  border: '1px solid',
-                  borderColor: 'divider',
-                  borderRadius: 1,
-                  mt: 1
-                }}
+            <FormControl fullWidth sx={{ mb: 1.5 }} size="small">
+              <InputLabel id="status-label">Status</InputLabel>
+              <Select
+                labelId="status-label"
+                id="status"
+                name="status"
+                value={formData.status || 'pending'}
+                onChange={handleStatusChange}
+                label="Status"
+                startAdornment={
+                  <InputAdornment position="start">
+                    <PaymentIcon fontSize="small" color="primary" />
+                  </InputAdornment>
+                }
               >
-                <AccordionSummary expandIcon={<ExpandMoreIcon />}>
-                  <Typography variant="subtitle2">Additional Notes</Typography>
-                </AccordionSummary>
-                <AccordionDetails>
+                <MenuItem value="pending">
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                    <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: 'warning.main' }} />
+                    Pending
+                  </Box>
+                </MenuItem>
+                <MenuItem value="paid">
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                    <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: 'success.main' }} />
+                    Paid
+                  </Box>
+                </MenuItem>
+              </Select>
+            </FormControl>
+
+            {formData.status === 'paid' && (
+              <Grid container spacing={1.5}>
+                <Grid item xs={12}>
+                  <FormControl fullWidth size="small">
+                    <InputLabel id="payment-method-label">Method</InputLabel>
+                    <Select
+                      labelId="payment-method-label"
+                      value={paymentMethod}
+                      onChange={(e) => setPaymentMethod(e.target.value)}
+                      label="Method"
+                      startAdornment={
+                        <InputAdornment position="start">
+                          <BankIcon fontSize="small" color="primary" />
+                        </InputAdornment>
+                      }
+                    >
+                      {PAYMENT_METHODS.map((method) => (
+                        <MenuItem key={method.value} value={method.value}>
+                          {method.label}
+                        </MenuItem>
+                      ))}
+                    </Select>
+                  </FormControl>
+                </Grid>
+                
+                <Grid item xs={6}>
                   <TextField
                     fullWidth
-                    id="notes"
-                    name="notes"
-                    multiline
-                    rows={3}
-                    value={formData.notes || ''}
-                    onChange={handleChange}
-                    placeholder="Enter any additional notes here..."
+                    label="Payment Date"
+                    type="date"
+                    value={paymentDate}
+                    onChange={(e) => setPaymentDate(e.target.value)}
                     size="small"
                   />
-                </AccordionDetails>
-              </Accordion>
-            </Grid>
-            
-            {/* Error message area */}
-            {backendError && (
-              <Grid item xs={12}>
-                <Typography 
-                  variant="body2" 
-                  color="error" 
-                  sx={{ 
-                    bgcolor: alpha(theme.palette.error.main, 0.1),
-                    p: 1,
-                    borderRadius: 1,
-                  }}
-                >
-                  {backendError}
-                </Typography>
+                </Grid>
+                
+                <Grid item xs={6}>
+                  <TextField
+                    fullWidth
+                    label="Reference #"
+                    value={referenceNumber}
+                    onChange={(e) => setReferenceNumber(e.target.value)}
+                    placeholder="Optional"
+                    size="small"
+                  />
+                </Grid>
               </Grid>
             )}
           </Grid>
-        </DialogContent>
-        
-        {/* Footer */}
-        <DialogActions sx={{ px: 2.5, py: 1.5, borderTop: '1px solid', borderColor: 'divider' }}>
-          <Button 
-            onClick={onClose} 
-            variant="outlined"
-            sx={{ 
-              borderRadius: '4px',
-              textTransform: 'none',
-            }}
-          >
-            Cancel
-          </Button>
           
-          <Button
-            onClick={handleSave}
-            variant="contained"
-            color="primary"
-            disabled={isLoading}
-            startIcon={isLoading ? <CircularProgress size={16} color="inherit" /> : null}
-            sx={{ 
-              borderRadius: '4px',
-              textTransform: 'none',
-            }}
-          >
-            {isEditMode ? 'Update' : 'Save'}
-          </Button>
-        </DialogActions>
-      </Dialog>
-
-      {/* Duplicate Warning Dialog */}
-      <Dialog
-        open={showDuplicateWarning}
-        onClose={() => setShowDuplicateWarning(false)}
-        aria-labelledby="duplicate-warning-title"
-        maxWidth="sm"
-        fullWidth
-      >
-        <DialogTitle id="duplicate-warning-title">
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" color="#f59e0b">
-              <circle cx="12" cy="12" r="10"></circle>
-              <line x1="12" y1="8" x2="12" y2="12"></line>
-              <line x1="12" y1="16" x2="12.01" y2="16"></line>
-            </svg>
-            <Typography variant="h6">Potential Duplicate Expense</Typography>
-          </Box>
-        </DialogTitle>
-        <DialogContent>
-          <DialogContentText sx={{ mb: 2 }}>
-            We found {duplicateExpenses.length} similar expense{duplicateExpenses.length > 1 ? 's' : ''} that might be duplicates:
-          </DialogContentText>
-          
-          <List sx={{ 
-            bgcolor: 'background.paper', 
-            borderRadius: 1,
-            border: '1px solid',
-            borderColor: 'divider',
-            mb: 2,
-          }}>
-            {duplicateExpenses.map((expense) => (
-              <ListItem key={expense.id} divider>
-                <ListItemText
-                  primary={
-                    <Typography variant="subtitle2">{expense.description}</Typography>
-                  }
-                  secondary={
-                    <Box sx={{ mt: 0.5 }}>
-                      <Typography variant="body2" color="text.secondary" component="span">
-                        {new Date(expense.date).toLocaleDateString()} • {formatCurrency(expense.amount)}
-                      </Typography>
-                      {expense.vendor && (
-                        <Typography variant="body2" color="text.secondary" component="span">
-                          {' • '}{expense.vendor}
-                        </Typography>
-                      )}
-                    </Box>
-                  }
+          <Grid item xs={12} sm={6}>
+            <Typography variant="subtitle2" fontWeight={600} color="text.primary" gutterBottom>
+              Receipt
+            </Typography>
+            
+            {receiptPreview ? (
+              <Box sx={{ position: 'relative', height: 120, display: 'flex', justifyContent: 'center' }}>
+                <img
+                  src={receiptPreview}
+                  alt="Receipt preview"
+                  style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }}
                 />
-              </ListItem>
-            ))}
-          </List>
+                <IconButton
+                  onClick={handleRemoveReceipt}
+                  size="small"
+                  sx={{
+                    position: 'absolute',
+                    top: 0,
+                    right: 0,
+                    bgcolor: 'error.main',
+                    color: 'white',
+                    '&:hover': { bgcolor: 'error.dark' },
+                  }}
+                >
+                  <DeleteIcon fontSize="small" />
+                </IconButton>
+              </Box>
+            ) : (
+              <Box sx={{ 
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                justifyContent: 'center',
+                border: '2px dashed',
+                borderColor: alpha(theme.palette.primary.main, 0.2),
+                borderRadius: '6px',
+                p: 2,
+                height: 120,
+                backgroundColor: alpha(theme.palette.primary.main, 0.03),
+              }}>
+              <input
+                  accept="image/*,application/pdf"
+                  id="receipt-file"
+                type="file"
+                  style={{ display: 'none' }}
+                onChange={handleFileChange}
+              />
+                <label htmlFor="receipt-file" style={{ width: '100%', textAlign: 'center' }}>
+                  <Button
+                    component="span"
+                    startIcon={<UploadIcon />}
+                    sx={{ textTransform: 'none' }}
+                  >
+                    Upload Receipt
+            </Button>
+                  <Typography variant="caption" display="block" color="text.secondary">
+                    Drag & drop or click to browse
+                  </Typography>
+                </label>
+              </Box>
+          )}
+        </Grid>
+        
+          {/* Notes (optional) */}
+        <Grid item xs={12}>
+            <Accordion
+              disableGutters
+              elevation={0}
+              sx={{ 
+                '&:before': { display: 'none' },
+                border: '1px solid',
+                borderColor: 'divider',
+                borderRadius: 1,
+                mt: 1
+              }}
+            >
+              <AccordionSummary expandIcon={<ExpandMoreIcon />}>
+                <Typography variant="subtitle2">Additional Notes</Typography>
+              </AccordionSummary>
+              <AccordionDetails>
+              <TextField
+                fullWidth
+                      id="notes"
+                      name="notes"
+                multiline
+                rows={3}
+                value={formData.notes || ''}
+                onChange={handleChange}
+                      placeholder="Enter any additional notes here..."
+                      size="small"
+              />
+              </AccordionDetails>
+            </Accordion>
+        </Grid>
           
-          <DialogContentText>
-            Do you still want to save this expense? If this is not a duplicate, please continue.
-          </DialogContentText>
-        </DialogContent>
-        <DialogActions sx={{ px: 3, py: 2 }}>
-          <Button 
-            onClick={() => setShowDuplicateWarning(false)} 
-            variant="outlined"
-          >
-            Go Back and Edit
-          </Button>
-          <Button 
-            onClick={handleContinueSaveWithDuplicates} 
-            variant="contained" 
-            color="primary"
-            startIcon={
-              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <polyline points="9 11 12 14 22 4"></polyline>
-                <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"></path>
-              </svg>
-            }
-          >
-            Save Anyway
-          </Button>
-        </DialogActions>
-      </Dialog>
-    </>
-  );
+          {/* Error message area */}
+          {backendError && (
+            <Grid item xs={12}>
+              <Typography 
+                variant="body2" 
+                color="error" 
+                sx={{ 
+                  bgcolor: alpha(theme.palette.error.main, 0.1),
+                  p: 1,
+                  borderRadius: 1,
+                }}
+              >
+                {backendError}
+              </Typography>
+            </Grid>
+          )}
+      </Grid>
+    </DialogContent>
+    
+      {/* Footer */}
+      <DialogActions sx={{ px: 2.5, py: 1.5, borderTop: '1px solid', borderColor: 'divider' }}>
+      <Button 
+        onClick={onClose}
+          variant="outlined"
+          sx={{ 
+            borderRadius: '4px',
+            textTransform: 'none',
+          }}
+      >
+        Cancel
+      </Button>
+        
+      <Button
+          onClick={handleSave}
+        variant="contained"
+          color="primary"
+          disabled={isLoading}
+          startIcon={isLoading ? <CircularProgress size={16} color="inherit" /> : null}
+        sx={{ 
+            borderRadius: '4px',
+            textTransform: 'none',
+          }}
+        >
+          {isEditMode ? 'Update' : 'Save'}
+      </Button>
+    </DialogActions>
+  </Dialog>
+
+    {/* Duplicate Warning Dialog */}
+    <Dialog
+      open={showDuplicateWarning}
+      onClose={() => setShowDuplicateWarning(false)}
+      aria-labelledby="duplicate-warning-title"
+      maxWidth="sm"
+      fullWidth
+    >
+      <DialogTitle id="duplicate-warning-title">
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+          <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" color="#f59e0b">
+            <circle cx="12" cy="12" r="10"></circle>
+            <line x1="12" y1="8" x2="12" y2="12"></line>
+            <line x1="12" y1="16" x2="12.01" y2="16"></line>
+          </svg>
+          <Typography variant="h6">Potential Duplicate Expense</Typography>
+        </Box>
+      </DialogTitle>
+      <DialogContent>
+        <DialogContentText sx={{ mb: 2 }}>
+          We found {duplicateExpenses.length} similar expense{duplicateExpenses.length > 1 ? 's' : ''} that might be duplicates:
+        </DialogContentText>
+        
+        <List sx={{ 
+          bgcolor: 'background.paper', 
+          borderRadius: 1,
+          border: '1px solid',
+          borderColor: 'divider',
+          mb: 2,
+        }}>
+          {duplicateExpenses.map((expense) => (
+            <ListItem key={expense.id} divider>
+              <ListItemText
+                primary={
+                  <Typography variant="subtitle2">{expense.description}</Typography>
+                }
+                secondary={
+                  <Box sx={{ mt: 0.5 }}>
+                    <Typography variant="body2" color="text.secondary" component="span">
+                      {new Date(expense.date).toLocaleDateString()} • {formatCurrency(expense.amount)}
+                    </Typography>
+                    {expense.vendor && (
+                      <Typography variant="body2" color="text.secondary" component="span">
+                        {' • '}{expense.vendor}
+                      </Typography>
+                    )}
+                  </Box>
+                }
+              />
+            </ListItem>
+          ))}
+        </List>
+        
+        <DialogContentText>
+          Do you still want to save this expense? If this is not a duplicate, please continue.
+        </DialogContentText>
+      </DialogContent>
+      <DialogActions sx={{ px: 3, py: 2 }}>
+        <Button 
+          onClick={() => setShowDuplicateWarning(false)} 
+          variant="outlined"
+        >
+          Go Back and Edit
+        </Button>
+        <Button 
+          onClick={handleContinueSaveWithDuplicates} 
+          variant="contained" 
+          color="primary"
+          startIcon={
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <polyline points="9 11 12 14 22 4"></polyline>
+              <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"></path>
+            </svg>
+          }
+        >
+          Save Anyway
+        </Button>
+      </DialogActions>
+    </Dialog>
+  </>
+);
 };
 
 export default ExpenseFormModal;

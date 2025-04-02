@@ -231,7 +231,14 @@ const TaskFormModal: React.FC<TaskFormModalProps> = ({ open, onClose, onSubmitSu
 
   return (
     <LocalizationProvider dateAdapter={AdapterDateFns}>
-      <Dialog open={open} onClose={onClose} maxWidth="md" fullWidth>
+      <Dialog 
+        open={open} 
+        onClose={onClose} 
+        maxWidth="md" 
+        fullWidth
+        disableEnforceFocus
+        disableScrollLock
+      >
         <DialogTitle>{initialData ? 'Edit Task' : 'Add New Task'}</DialogTitle>
         <DialogContent dividers>
           {submitError && <Alert severity="error" sx={{ mb: 2 }}>{submitError}</Alert>}

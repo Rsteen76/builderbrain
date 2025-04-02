@@ -42,6 +42,7 @@ import {
 import { useAuth } from '../../contexts/AuthContext';
 import { ProjectService } from '../../services/project';
 import { Project, Template } from '../../types';
+import { v4 as uuidv4 } from 'uuid';
 
 // Mock templates data structure until we implement backend storage
 const INITIAL_TEMPLATES = [
@@ -205,7 +206,7 @@ const ProjectTemplates: React.FC = () => {
   const handleDuplicateTemplate = (template: Template) => {
     const newTemplate: Template = {
       ...template,
-      id: crypto.randomUUID(),
+      id: uuidv4(),
       name: `${template.name} (Copy)`,
       createdBy: user?.uid || 'unknown',
       createdAt: new Date(),
@@ -319,7 +320,7 @@ const ProjectTemplates: React.FC = () => {
     } else {
       // Create new template
       const newTemplate: Template = {
-        id: crypto.randomUUID(),
+        id: uuidv4(),
         name: formData.name,
         description: formData.description,
         icon: formData.icon,

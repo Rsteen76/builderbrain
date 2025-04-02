@@ -67,7 +67,7 @@ export interface Expense {
   projectId: string;
   phaseId?: string; // Optional link to a specific phase
   phaseName?: string; // Name of the phase
-  category: 'labor' | 'materials' | 'equipment' | 'permits' | 'other';
+  category: 'labor' | 'materials' | 'equipment' | 'permits' | 'subcontractor' | 'other';
   description: string;
   amount: number;
   date: Date | string;
@@ -81,6 +81,7 @@ export interface Expense {
   createdAt: Date | string;
   updatedAt: Date | string;
   notes?: string;
+  /** @deprecated Use phaseName instead */
   buildingPhase?: string; // Current construction phase of the project
   lineItems?: LineItem[]; // Add support for itemized expenses
   paymentDetails?: {

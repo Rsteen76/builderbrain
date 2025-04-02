@@ -15,6 +15,8 @@ import {
   useTheme,
   Divider,
   Tooltip,
+  Snackbar,
+  Alert,
 } from '@mui/material';
 import {
   Settings as SettingsIcon,
@@ -26,9 +28,11 @@ import {
   Brightness4 as DarkModeIcon,
   Brightness7 as LightModeIcon,
   ClearAll as ClearAllIcon,
+  BugReport as BugReportIcon,
 } from '@mui/icons-material';
 import { useAuth } from '../../contexts/AuthContext';
 import { DataResetService } from '../../services/data-reset';
+import { migrateExpenseBuildingPhaseToPhaseNames } from '../../utils/migrations';
 
 interface SettingsMenuProps {
   onThemeToggle?: () => void;
@@ -41,8 +45,13 @@ const SettingsMenu: React.FC<SettingsMenuProps> = ({ onThemeToggle, isDarkMode }
   const [cacheDialogOpen, setCacheDialogOpen] = useState(false);
   const [isResetting, setIsResetting] = useState(false);
   const [isClearing, setIsClearing] = useState(false);
+  const [isMigrating, setIsMigrating] = useState(false);
+  const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'info' as 'info' | 'success' | 'error' });
   const theme = useTheme();
   const { user, logout } = useAuth();
+  
+  // Determine if we're in development mode
+  const isDevelopment = process.env.NODE_ENV === 'development';
   
   const handleMenuOpen = (event: React.MouseEvent<HTMLElement>) => {
     setAnchorEl(event.currentTarget);
@@ -79,6 +88,31 @@ const SettingsMenu: React.FC<SettingsMenuProps> = ({ onThemeToggle, isDarkMode }
       alert('Failed to clear cache. Please try again.');
     } finally {
       setIsClearing(false);
+    }
+  };
+  
+  // Add migration handler
+  const handleRunMigration = async () => {
+    if (!user?.uid) return;
+    
+    setIsMigrating(true);
+    try {
+      handleMenuClose();
+      await migrateExpenseBuildingPhaseToPhaseNames();
+      setSnackbar({
+        open: true,
+        message: 'Successfully migrated expense phase data',
+        severity: 'success'
+      });
+    } catch (error) {
+      console.error('Error during migration:', error);
+      setSnackbar({
+        open: true,
+        message: 'Migration failed: ' + (error instanceof Error ? error.message : 'Unknown error'),
+        severity: 'error'
+      });
+    } finally {
+      setIsMigrating(false);
     }
   };
   
@@ -130,6 +164,16 @@ const SettingsMenu: React.FC<SettingsMenuProps> = ({ onThemeToggle, isDarkMode }
           </ListItemIcon>
           <ListItemText primary="Clear Cache" />
         </MenuItem>
+        
+        {/* Display migration option only in development mode */}
+        {isDevelopment && (
+          <MenuItem onClick={handleRunMigration} disabled={isMigrating}>
+            <ListItemIcon>
+              {isMigrating ? <SyncIcon className="rotating" fontSize="small" /> : <BugReportIcon fontSize="small" color="info" />}
+            </ListItemIcon>
+            <ListItemText primary={isMigrating ? "Migrating..." : "Migrate Expense Data"} />
+          </MenuItem>
+        )}
         
         <Divider />
         
@@ -224,6 +268,23 @@ const SettingsMenu: React.FC<SettingsMenuProps> = ({ onThemeToggle, isDarkMode }
           </Button>
         </DialogActions>
       </Dialog>
+      
+      {/* Snackbar for migration results */}
+      <Snackbar 
+        open={snackbar.open} 
+        autoHideDuration={6000} 
+        onClose={() => setSnackbar({ ...snackbar, open: false })}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+      >
+        <Alert 
+          onClose={() => setSnackbar({ ...snackbar, open: false })} 
+          severity={snackbar.severity}
+          variant="filled"
+          sx={{ width: '100%' }}
+        >
+          {snackbar.message}
+        </Alert>
+      </Snackbar>
     </>
   );
 };

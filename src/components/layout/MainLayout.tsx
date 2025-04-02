@@ -220,18 +220,14 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
       >
         <Drawer
           variant="temporary"
+          anchor="left"
           open={mobileOpen}
           onClose={handleDrawerToggle}
           ModalProps={{
             keepMounted: true,
-            disableScrollLock: true,
             disableEnforceFocus: true,
-            disableAutoFocus: true,
-            sx: {
-              '& .MuiBackdrop-root': {
-                bgcolor: alpha(theme.palette.common.black, 0.2),
-              },
-            },
+            disableScrollLock: true,
+            disablePortal: true,
           }}
           sx={{
             display: { xs: 'block', sm: 'none' },

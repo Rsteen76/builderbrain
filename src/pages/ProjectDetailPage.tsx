@@ -95,6 +95,7 @@ import PageLayout from '../components/layout/PageLayout';
 import ProjectTaskManager from '../components/projects/ProjectTaskManager';
 import TemplateAdjuster from '../components/projects/TemplateAdjuster';
 import { Project, Task, Phase, Expense, Bid, Subcontractor } from '../types';
+import { v4 as uuidv4 } from 'uuid';
 
 // Import recharts components
 import {
@@ -227,6 +228,19 @@ const ProjectDetailPage: React.FC = () => {
   // State for expense dialog
   const [newExpenseDialogOpen, setNewExpenseDialogOpen] = useState(false);
   const [currentPhaseForExpense, setCurrentPhaseForExpense] = useState<string | null>(null);
+  const [currentExpenseData, setCurrentExpenseData] = useState({
+    phaseId: '',
+    category: 'other' as const,
+    amount: 0,
+    description: '',
+    date: new Date(),
+    status: 'pending' as const,
+    projectId: '',
+    vendor: '',
+    notes: '',
+    subcontractorId: '',
+    subcontractorName: '',
+  });
   
   // Function to fetch expenses
   const fetchExpenses = async (projectId: string) => {
@@ -452,74 +466,50 @@ const ProjectDetailPage: React.FC = () => {
   const handleCancelQuickUpdates = () => {
     setQuickUpdateMode(false);
     setPhasesBeingUpdated({});
-    
-    // Force refresh data when exiting quick update mode
-    if (project?.id && user?.uid) {
-      fetchPhases(project.id);
-      fetchExpenses(project.id);
-    }
   };
   
   // Initialize phases for quick update
   const handleEnterQuickUpdateMode = () => {
-    // Reset and re-fetch expenses before entering quick update mode
-    if (project?.id && user?.uid) {
-      console.log('Refreshing expenses before entering quick update mode');
-      fetchExpenses(project.id).then(() => {
-        console.log('Expenses refreshed, now entering quick update mode');
-        
-        // Initialize phase updates after expenses are refreshed
-        const phaseUpdates = phases.reduce((acc, phase) => {
-          acc[phase.id] = { ...phase };
-          return acc;
-        }, {} as { [id: string]: ProjectPhase });
-        
-        setPhasesBeingUpdated(phaseUpdates);
-        setQuickUpdateMode(true);
-      });
-    } else {
-      // Fallback if project or user isn't available
-      const phaseUpdates = phases.reduce((acc, phase) => {
-        acc[phase.id] = { ...phase };
-        return acc;
-      }, {} as { [id: string]: ProjectPhase });
-      
-      setPhasesBeingUpdated(phaseUpdates);
-      setQuickUpdateMode(true);
-    }
+    setQuickUpdateMode(true);
   };
   
   // Add a useEffect to refresh expenses when quick update mode is activated
   useEffect(() => {
-    if (quickUpdateMode && project) {
-      // Force a re-render of expenses in the phase cards
+    // Whenever quick update mode changes, ensure expenses are fresh
+    if (quickUpdateMode && project?.id && user?.uid) {
       console.log('Quick update mode active, refreshing phase expenses');
-      const expensesByPhase = expenses.reduce((acc, expense) => {
-        if (expense.phaseId) {
-          if (!acc[expense.phaseId]) {
-            acc[expense.phaseId] = [];
-          }
-          acc[expense.phaseId].push(expense);
-        }
-        return acc;
-      }, {} as Record<string, Expense[]>);
-      
-      // Log how many expenses are associated with each phase
-      Object.entries(expensesByPhase).forEach(([phaseId, phaseExpenses]) => {
-        console.log(`Phase ${phaseId} has ${phaseExpenses.length} expenses`);
-      });
+      refreshPhaseExpenses();
     }
-  }, [quickUpdateMode, expenses, project]);
+  }, [quickUpdateMode, project?.id, user?.uid]); // Remove expenses and phases from dependencies
 
   // Save all phase updates at once
-  const handleSaveQuickUpdates = () => {
-    // Convert back to array format
-    const updatedPhases = Object.values(phasesBeingUpdated);
-    setPhases(updatedPhases);
-    setQuickUpdateMode(false);
+  const handleSaveQuickUpdates = async () => {
+    if (!project?.id || !user?.uid) return;
     
-    // Here you would normally save to backend
-    // ProjectService.updateProjectPhases(projectId, updatedPhases);
+    try {
+      // Show loading state
+      setIsSaving(true);
+      
+      // Convert back to array format
+      const updatedPhases = Object.values(phasesBeingUpdated);
+      
+      // Save to database
+      await ProjectService.updateProject(project.id, {
+        phases: updatedPhases
+      });
+      
+      // Update local state
+      setPhases(updatedPhases);
+      setQuickUpdateMode(false);
+      
+      // Show success notification
+      showNotification('All phase updates saved successfully', 'success');
+    } catch (error) {
+      console.error('Error saving phase updates:', error);
+      showNotification('Failed to save updates: ' + (error instanceof Error ? error.message : 'Unknown error'), 'error');
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   // Update a specific phase in the quick update mode
@@ -531,6 +521,51 @@ const ProjectDetailPage: React.FC = () => {
         [field]: value
       }
     }));
+    
+    // If the field is 'status', auto-save this specific change
+    if (field === 'status') {
+      handleAutoSavePhase(phaseId, field, value);
+    }
+  };
+  
+  // Auto-save a phase update to the database
+  const handleAutoSavePhase = async (phaseId: string, field: string, value: any) => {
+    if (!project?.id || !user?.uid) return;
+    
+    try {
+      // Set loading state for feedback
+      setIsSaving(true);
+      
+      // Get the updated phase
+      const updatedPhase = {
+        ...phasesBeingUpdated[phaseId],
+        [field]: value,
+        updatedAt: new Date()
+      };
+      
+      // Update the phases array in the project
+      const updatedPhases = phases.map(phase => 
+        phase.id === phaseId ? updatedPhase : phase
+      );
+      
+      // Save to database
+      await ProjectService.updateProject(project.id, {
+        phases: updatedPhases
+      });
+      
+      // Update local state
+      setPhases(updatedPhases);
+      
+      // Show success notification
+      showNotification(`Phase ${updatedPhase.name} updated successfully`, 'success');
+      
+      console.log(`Auto-saved phase update: ${phaseId}, ${field} = ${value}`);
+    } catch (error) {
+      console.error('Error auto-saving phase update:', error);
+      showNotification('Failed to save phase update: ' + (error instanceof Error ? error.message : 'Unknown error'), 'error');
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   // Add this function to handle opening the bid dialog for a specific phase
@@ -561,7 +596,7 @@ const ProjectDetailPage: React.FC = () => {
     
     // Create a new bid
     const newBid: Bid = {
-      id: crypto.randomUUID(),
+      id: uuidv4(),
       userId: user?.uid || '',
       projectId: project.id || '',
       phaseId: currentPhaseForBid,
@@ -601,6 +636,11 @@ const ProjectDetailPage: React.FC = () => {
 
   // Add this function to handle opening the expense dialog for a specific phase
   const handleOpenQuickExpenseDialog = (phaseId: string) => {
+    setCurrentExpenseData(prev => ({
+      ...prev,
+      phaseId: phaseId || '',
+      projectId: project?.id || '',
+    }));
     setCurrentPhaseForExpense(phaseId);
     setNewExpenseDialogOpen(true);
   };
@@ -624,21 +664,28 @@ const ProjectDetailPage: React.FC = () => {
     if (!project || !user?.uid) return;
     
     try {
+      // Ensure we have a valid date
+      const expenseDate = expense.date instanceof Date 
+        ? expense.date 
+        : new Date(expense.date || new Date());
+
       const newExpense: Omit<Expense, 'id' | 'userId' | 'createdAt' | 'updatedAt' | 'createdBy'> = {
         ...expense,
         projectId: project.id,
         phaseId: currentPhaseForExpense || expense.phaseId || '',
         phaseName: phases.find(p => p.id === (currentPhaseForExpense || expense.phaseId))?.name || '',
+        // Set buildingPhase to the same value as phaseName for backward compatibility
+        buildingPhase: phases.find(p => p.id === (currentPhaseForExpense || expense.phaseId))?.name || '',
         status: expense.status || 'pending',
         amount: expense.amount || 0,
         description: expense.description || '',
         category: expense.category || 'other',
-        date: expense.date || new Date().toISOString().split('T')[0],
-        vendor: expense.vendor || undefined,
-        notes: expense.notes || undefined,
-        subcontractorId: expense.subcontractorId || undefined,
-        subcontractorName: expense.subcontractorName || undefined,
-        receiptUrl: expense.receiptUrl || undefined,
+        date: expenseDate,
+        vendor: expense.vendor || '',
+        notes: expense.notes || '',
+        subcontractorId: expense.subcontractorId || '',
+        subcontractorName: expense.subcontractorName || '',
+        receiptUrl: expense.receiptUrl || '',
         lineItems: expense.lineItems || [],
         paymentDetails: expense.status === 'paid' ? expense.paymentDetails : undefined
       };
@@ -656,26 +703,36 @@ const ProjectDetailPage: React.FC = () => {
         if (phaseToUpdate) {
           const newTotalActualCost = (phaseToUpdate.actualCost || 0) + newExpense.amount;
           
-          // Update phases in the project object
-          const updatedPhases = phases.map(phase => {
-            if (phase.id === newExpense.phaseId) {
-              return { ...phase, actualCost: newTotalActualCost };
-            }
-            return phase;
-          });
+          // Update phases in both the main phases state and phasesBeingUpdated
+          const updatedPhase = { ...phaseToUpdate, actualCost: newTotalActualCost };
           
-          setPhases(updatedPhases);
+          setPhases(prevPhases => 
+            prevPhases.map(phase => 
+              phase.id === newExpense.phaseId ? updatedPhase : phase
+            )
+          );
+          
+          if (quickUpdateMode) {
+            // Add type check to ensure phaseId is a valid string
+            const phaseId = String(newExpense.phaseId);
+            setPhasesBeingUpdated(prev => ({
+              ...prev,
+              [phaseId]: updatedPhase
+            }));
+          }
           
           // Update project with the new phases
           if (project) {
             const updatedProject = { 
               ...project,
-              phases: updatedPhases 
+              phases: phases.map(phase => 
+                phase.id === newExpense.phaseId ? updatedPhase : phase
+              )
             };
             
             // Update project in the database
             await ProjectService.updateProject(project.id, {
-              phases: updatedPhases
+              phases: updatedProject.phases
             });
             
             setProject(updatedProject);
@@ -712,20 +769,119 @@ const ProjectDetailPage: React.FC = () => {
       showNotification('Expense added successfully', 'success');
     } catch (error) {
       console.error('Error adding expense:', error);
-      showNotification('Failed to add expense', 'error');
+      showNotification('Failed to add expense: ' + (error instanceof Error ? error.message : 'Unknown error'), 'error');
     }
   };
 
+  // Update the refreshPhaseExpenses function to properly handle quick update mode
+  const refreshPhaseExpenses = useCallback(() => {
+    if (!project?.id || !user?.uid) return;
+    
+    // Log all phases and expenses for debugging
+    console.log('Phases:', phases);
+    console.log('Expenses:', expenses);
+    
+    // Create a map of phase IDs to names for lookup
+    const phaseNameMap = phases.reduce((acc, phase) => {
+      acc[phase.id] = phase.name;
+      return acc;
+    }, {} as Record<string, string>);
+    
+    const expensesByPhase = expenses.reduce((acc, expense) => {
+      // First try to get phaseId directly
+      let phaseId = expense.phaseId;
+      
+      // If no phaseId, try to find a matching phase by name
+      if (!phaseId) {
+        // Use phaseName or fall back to buildingPhase
+        const phaseName = expense.phaseName || expense.buildingPhase;
+        if (phaseName) {
+          // Find the phase with a matching name (try exact match first)
+          let matchingPhase = phases.find(p => 
+            p.name.toLowerCase() === phaseName.toLowerCase()
+          );
+          
+          // If no exact match, try partial matching
+          if (!matchingPhase) {
+            matchingPhase = phases.find(p => 
+              p.name.toLowerCase().includes(phaseName.toLowerCase()) || 
+              phaseName.toLowerCase().includes(p.name.toLowerCase())
+            );
+          }
+          
+          if (matchingPhase) {
+            phaseId = matchingPhase.id;
+            console.log(`Matched expense ${expense.id} to phase ${phaseId} by name "${phaseName}" -> "${matchingPhase.name}"`);
+          } else {
+            console.warn(`No matching phase found for expense with phase name "${phaseName}"`, 
+              { expense, availablePhases: phases.map(p => p.name) });
+          }
+        }
+      }
+      
+      if (phaseId) {
+        if (!acc[phaseId]) {
+          acc[phaseId] = [];
+        }
+        acc[phaseId].push(expense);
+      } else {
+        console.warn(`Expense ${expense.id} has no associated phase`, expense);
+      }
+      
+      return acc;
+    }, {} as Record<string, Expense[]>);
+    
+    // Calculate total expenses for each phase
+    const phaseTotals = Object.entries(expensesByPhase).reduce((acc, [phaseId, phaseExpenses]) => {
+      acc[phaseId] = phaseExpenses.reduce((sum, expense) => sum + (expense.amount || 0), 0);
+      return acc;
+    }, {} as Record<string, number>);
+    
+    // Update phasesBeingUpdated with new expense totals
+    if (quickUpdateMode) {
+      setPhasesBeingUpdated(prev => {
+        const updated = { ...prev };
+        Object.entries(phaseTotals).forEach(([phaseId, total]) => {
+          if (updated[phaseId]) {
+            updated[phaseId] = {
+              ...updated[phaseId],
+              actualCost: total
+            };
+          } else {
+            console.warn(`Phase ID ${phaseId} from expenses not found in phasesBeingUpdated`);
+          }
+        });
+        
+        // Debug: log the result
+        console.log('Updated phasesBeingUpdated:', updated);
+        return updated;
+      });
+    }
+    
+    // Log how many expenses are associated with each phase
+    Object.entries(expensesByPhase).forEach(([phaseId, phaseExpenses]) => {
+      const phaseName = phaseNameMap[phaseId] || 'Unknown';
+      console.log(`Phase "${phaseName}" (${phaseId}) has ${phaseExpenses.length} expenses, total: ${phaseTotals[phaseId]}`);
+    });
+  }, [project?.id, user?.uid, expenses, quickUpdateMode, phases]);
+
   // Add a useEffect to reset and refresh expenses when toggling quick update mode
   useEffect(() => {
-    // Whenever quick update mode changes, ensure expenses are fresh
+    // Only run this effect when quick update mode changes
     if (quickUpdateMode && project?.id && user?.uid) {
       console.log('Quick update mode toggled, refreshing expense data');
       
-      // Debug: Log all expenses and their phaseIds
+      // Debug: Log all expenses and their phase information
       console.log('All expenses:', expenses);
-      console.log('Expense phaseIds:', expenses.map(e => ({ id: e.id, phaseId: e.phaseId })));
-      console.log('All phase IDs:', phases.map(p => p.id));
+      console.log('Expense phase info:', expenses.map(e => ({ 
+        id: e.id, 
+        phaseId: e.phaseId,
+        phaseName: e.phaseName,
+        buildingPhase: e.buildingPhase,
+        description: e.description,
+        amount: e.amount
+      })));
+      console.log('All phases:', phases.map(p => ({ id: p.id, name: p.name, budget: p.budget })));
       
       // Check for phase ID mismatches
       const phaseIdsSet = new Set(phases.map(p => p.id));
@@ -734,11 +890,57 @@ const ProjectDetailPage: React.FC = () => {
         console.warn('Found expenses with phaseIds that don\'t match any phases:', orphanedExpenses);
       }
       
-      // Force a re-render by making a new array
-      setExpenses(prevExpenses => [...prevExpenses]);
+      // Initialize phase updates with all expenses properly matched
+      // First create a map of all phases
+      const phaseUpdates = phases.reduce((acc, phase) => {
+        acc[phase.id] = { ...phase, actualCost: 0 }; // Reset actual cost to recalculate
+        return acc;
+      }, {} as { [id: string]: ProjectPhase });
+      
+      // Then assign expenses to phases
+      for (const expense of expenses) {
+        // Try to match by phase ID first
+        let matchedPhaseId = expense.phaseId;
+        
+        // If no direct ID match, try to match by name
+        if (!matchedPhaseId || !phaseUpdates[matchedPhaseId]) {
+          const expPhaseName = expense.phaseName || expense.buildingPhase;
+          if (expPhaseName) {
+            // Find a matching phase by name
+            const matchingPhase = phases.find(p => 
+              p.name.toLowerCase() === expPhaseName.toLowerCase() ||
+              p.name.toLowerCase().includes(expPhaseName.toLowerCase()) ||
+              expPhaseName.toLowerCase().includes(p.name.toLowerCase())
+            );
+            
+            if (matchingPhase) {
+              matchedPhaseId = matchingPhase.id;
+              console.log(`Matched expense "${expense.description}" ($${expense.amount}) to phase "${matchingPhase.name}" via name matching`);
+            }
+          }
+        }
+        
+        // Update the phase's actual cost if we found a match
+        if (matchedPhaseId && phaseUpdates[matchedPhaseId]) {
+          phaseUpdates[matchedPhaseId].actualCost += expense.amount || 0;
+          console.log(`Added expense $${expense.amount} to phase "${phaseUpdates[matchedPhaseId].name}"`);
+        }
+      }
+      
+      // Log the resulting phase costs
+      console.log('Phase costs after expense calculation:',
+        Object.entries(phaseUpdates).map(([id, phase]) => ({
+          id,
+          name: phase.name,
+          budget: phase.budget,
+          actualCost: phase.actualCost
+        }))
+      );
+      
+      setPhasesBeingUpdated(phaseUpdates);
     }
-  }, [quickUpdateMode, project?.id, user?.uid, expenses, phases]);
-  
+  }, [quickUpdateMode, project?.id, user?.uid, phases, expenses]);
+
   // Add rendering key to phase cards to force re-render when quick update mode changes
   const renderingKey = useMemo(() => {
     // Generate a new key when quick update mode changes to force component re-rendering
@@ -890,6 +1092,8 @@ const ProjectDetailPage: React.FC = () => {
     setTemplateAdjusterOpen(false);
   };
 
+  const [isSaving, setIsSaving] = useState(false);
+
   if (loading) {
     return (
       <PageLayout title="Loading Project" icon={BusinessIcon}>
@@ -996,13 +1200,14 @@ const ProjectDetailPage: React.FC = () => {
                 <Button
                   variant="contained"
                   size={isMobile ? "small" : "medium"}
-                  startIcon={<SaveIcon />}
+                  startIcon={isSaving ? <CircularProgress size={16} color="inherit" /> : <SaveIcon />}
                   onClick={handleSaveQuickUpdates}
+                  disabled={isSaving}
                   sx={{ 
                     borderRadius: 1.5,
                   }}
                 >
-                  Save Updates
+                  {isSaving ? 'Saving...' : 'Save Updates'}
                 </Button>
               </>
             )}
@@ -1249,7 +1454,21 @@ const ProjectDetailPage: React.FC = () => {
                               Expenses
                             </Typography>
                             <Chip
-                              label={expenses.filter(e => e.phaseId === phase.id).length}
+                              label={expenses.filter(e => {
+                                // Check direct phaseId match first
+                                if (e.phaseId === phase.id) return true;
+                                
+                                // If no direct match, try to match by name
+                                const expPhaseName = e.phaseName || e.buildingPhase;
+                                if (expPhaseName && phase.name) {
+                                  return (
+                                    phase.name.toLowerCase() === expPhaseName.toLowerCase() ||
+                                    phase.name.toLowerCase().includes(expPhaseName.toLowerCase()) ||
+                                    expPhaseName.toLowerCase().includes(phase.name.toLowerCase())
+                                  );
+                                }
+                                return false;
+                              }).length}
                               size="small"
                               sx={{
                                 height: 20,
@@ -1285,7 +1504,21 @@ const ProjectDetailPage: React.FC = () => {
                           </Button>
                         </Box>
                         
-                        {expenses.filter(e => e.phaseId === phase.id).length > 0 ? (
+                        {expenses.filter(e => {
+                          // Check direct phaseId match first
+                          if (e.phaseId === phase.id) return true;
+                          
+                          // If no direct match, try to match by name
+                          const expPhaseName = e.phaseName || e.buildingPhase;
+                          if (expPhaseName && phase.name) {
+                            return (
+                              phase.name.toLowerCase() === expPhaseName.toLowerCase() ||
+                              phase.name.toLowerCase().includes(expPhaseName.toLowerCase()) ||
+                              expPhaseName.toLowerCase().includes(phase.name.toLowerCase())
+                            );
+                          }
+                          return false;
+                        }).length > 0 ? (
                           <Box sx={{ 
                             display: 'flex', 
                             flexDirection: 'column',
@@ -1305,7 +1538,21 @@ const ProjectDetailPage: React.FC = () => {
                             },
                           }}>
                             {expenses
-                              .filter(e => e.phaseId === phase.id)
+                              .filter(e => {
+                                // Check direct phaseId match first
+                                if (e.phaseId === phase.id) return true;
+                                
+                                // If no direct match, try to match by name
+                                const expPhaseName = e.phaseName || e.buildingPhase;
+                                if (expPhaseName && phase.name) {
+                                  return (
+                                    phase.name.toLowerCase() === expPhaseName.toLowerCase() ||
+                                    phase.name.toLowerCase().includes(expPhaseName.toLowerCase()) ||
+                                    expPhaseName.toLowerCase().includes(phase.name.toLowerCase())
+                                  );
+                                }
+                                return false;
+                              })
                               .map(expense => (
                                 <Paper
                                   key={expense.id}
@@ -1544,7 +1791,11 @@ const ProjectDetailPage: React.FC = () => {
             <Box sx={{ mb: 2 }}>
               <Grid container spacing={2}>
                 {expenses.slice(-6).reverse().map((expense) => {
-                  const phaseName = phases.find(p => p.id === expense.phaseId)?.name || 'Unknown Phase';
+                  // Get phase name from various possible sources
+                  const phaseName = expense.phaseName || 
+                                   phases.find(p => p.id === expense.phaseId)?.name || 
+                                   expense.buildingPhase || 
+                                   'Unknown Phase';
                   
                   return (
                     <Grid item xs={12} sm={6} md={6} lg={4} key={expense.id}>
@@ -2779,7 +3030,10 @@ const ProjectDetailPage: React.FC = () => {
                         </Box>
                         
                         {expenses.map((expense) => {
-                          const phaseName = phases.find(p => p.id === expense.phaseId)?.name || 'Unknown Phase';
+                          const phaseName = expense.phaseName || 
+                                           phases.find(p => p.id === expense.phaseId)?.name || 
+                                           expense.buildingPhase || 
+                                           'Unknown Phase';
                           
                           return (
                             <Box 
@@ -2909,7 +3163,14 @@ const ProjectDetailPage: React.FC = () => {
       </PageLayout>
 
       {/* Bid Dialog */}
-      <Dialog open={newBidDialogOpen} onClose={() => setNewBidDialogOpen(false)} maxWidth="sm" fullWidth>
+      <Dialog 
+        open={newBidDialogOpen} 
+        onClose={() => setNewBidDialogOpen(false)} 
+        maxWidth="sm" 
+        fullWidth
+        disableEnforceFocus
+        disableScrollLock
+      >
         <DialogTitle>Add Contractor Bid</DialogTitle>
         <DialogContent>
           <DialogContentText sx={{ mb: 2 }}>
@@ -2981,19 +3242,7 @@ const ProjectDetailPage: React.FC = () => {
         }}
         onSave={handleAddQuickExpense}
         projects={[{ id: project?.id || '', name: project?.name || '' }]}
-        expense={{
-          phaseId: currentPhaseForExpense || '',
-          category: 'other',
-          amount: 0,
-          description: '',
-          date: new Date(),
-          status: 'pending',
-          projectId: project?.id || '',
-          vendor: '',
-          notes: '',
-          subcontractorId: '',
-          subcontractorName: '',
-        }}
+        expense={currentExpenseData}
       />
       
       {/* Add Snackbar for notifications */}
