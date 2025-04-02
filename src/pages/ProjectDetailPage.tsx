@@ -1617,6 +1617,29 @@ const ProjectDetailPage: React.FC = () => {
                                           {expense.description}
                                         </Typography>
                                       </Box>
+                                      
+                                      {/* Display tags if they exist */}
+                                      {expense.tags && expense.tags.length > 0 && (
+                                        <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5, mt: 0.5 }}>
+                                          {expense.tags.map((tag, index) => (
+                                            <Chip
+                                              key={index}
+                                              label={tag}
+                                              size="small"
+                                              sx={{
+                                                height: 18,
+                                                fontSize: '0.6rem',
+                                                bgcolor: alpha(theme.palette.primary.main, 0.1),
+                                                color: theme.palette.primary.main,
+                                                '& .MuiChip-label': {
+                                                  px: 0.75,
+                                                }
+                                              }}
+                                            />
+                                          ))}
+                                        </Box>
+                                      )}
+                                      
                                       <Box sx={{ 
                                         display: 'flex', 
                                         alignItems: 'center', 
@@ -1866,6 +1889,28 @@ const ProjectDetailPage: React.FC = () => {
                           >
                             {expense.description || 'No description'}
                           </Typography>
+                          
+                          {/* Display tags if they exist */}
+                          {expense.tags && expense.tags.length > 0 && (
+                            <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5, mb: 1 }}>
+                              {expense.tags.map((tag, index) => (
+                                <Chip
+                                  key={index}
+                                  label={tag}
+                                  size="small"
+                                  sx={{
+                                    height: 18,
+                                    fontSize: '0.6rem',
+                                    bgcolor: alpha(theme.palette.primary.main, 0.1),
+                                    color: theme.palette.primary.main,
+                                    '& .MuiChip-label': {
+                                      px: 0.75,
+                                    }
+                                  }}
+                                />
+                              ))}
+                            </Box>
+                          )}
                           
                           <Box sx={{ 
                             display: 'flex', 
@@ -3243,6 +3288,7 @@ const ProjectDetailPage: React.FC = () => {
         onSave={handleAddQuickExpense}
         projects={[{ id: project?.id || '', name: project?.name || '' }]}
         expense={currentExpenseData}
+        projectPhases={phases} // Pass the phases from the project
       />
       
       {/* Add Snackbar for notifications */}

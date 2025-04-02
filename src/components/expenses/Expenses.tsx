@@ -545,6 +545,123 @@ const Expenses: React.FC = () => {
     return totals;
   }, [groupedExpenses, expenses]);
 
+  const renderExpenseRow = (expense: Expense) => {
+    return (
+      <TableRow 
+        key={expense.id}
+        hover
+        onClick={() => handleViewExpense(expense)}
+        sx={{ 
+          cursor: 'pointer',
+          '&:last-child td, &:last-child th': { border: 0 },
+          ...(expense.status === 'paid' && { 
+            bgcolor: alpha(theme.palette.success.light, 0.1),
+          })
+        }}
+      >
+        <TableCell component="th" scope="row">
+          <Box sx={{ display: 'flex', alignItems: 'center' }}>
+            {CATEGORY_ICONS[expense.category as keyof typeof CATEGORY_ICONS] || CATEGORY_ICONS.other}
+            <Typography sx={{ ml: 1.5, fontWeight: 'medium' }}>
+              {expense.description}
+            </Typography>
+            
+            {/* Display tags if they exist */}
+            {expense.tags && expense.tags.length > 0 && (
+              <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5, mt: 0.5 }}>
+                {expense.tags.map((tag, index) => (
+                  <Chip
+                    key={index}
+                    label={tag}
+                    size="small"
+                    sx={{
+                      height: 20,
+                      fontSize: '0.6rem',
+                      bgcolor: alpha(theme.palette.primary.main, 0.1),
+                      color: theme.palette.primary.main,
+                      '& .MuiChip-label': {
+                        px: 1,
+                      }
+                    }}
+                  />
+                ))}
+              </Box>
+            )}
+          </Box>
+          {expense.lineItems && expense.lineItems.length > 0 && (
+            <Chip 
+              size="small" 
+              label={`${expense.lineItems.length} item${expense.lineItems.length > 1 ? 's' : ''}`} 
+              color="primary" 
+              variant="outlined"
+              sx={{ mt: 0.5 }}
+            />
+          )}
+        </TableCell>
+        <TableCell align="right">
+          <Typography fontWeight="medium">
+            {formatCurrency(expense.amount)}
+          </Typography>
+        </TableCell>
+        <TableCell>{formatDate(expense.date)}</TableCell>
+        <TableCell>
+          <Chip 
+            label={expense.status === 'paid' ? 'Paid' : 'Needs Payment'} 
+            size="small"
+            color={expense.status === 'paid' ? 'success' : 'warning'}
+          />
+        </TableCell>
+        {groupBy !== 'project' && <TableCell>{expense.projectName}</TableCell>}
+        {groupBy !== 'category' && (
+          <TableCell>
+            {expense.category.charAt(0).toUpperCase() + expense.category.slice(1)}
+          </TableCell>
+        )}
+        {groupBy !== 'vendor' && <TableCell>{expense.vendor || '-'}</TableCell>}
+        {groupBy !== 'subcontractor' && <TableCell>{expense.subcontractorName || '-'}</TableCell>}
+        <TableCell align="center">
+          <Box sx={{ display: 'flex', justifyContent: 'center' }}>
+            <IconButton 
+              size="small"
+              onClick={(e) => {
+                e.stopPropagation();
+                setSelectedExpense(expense);
+                setExpenseModalOpen(true);
+              }}
+            >
+              <EditIcon fontSize="small" />
+            </IconButton>
+            
+            {expense.status !== 'paid' && (
+              <IconButton
+                size="small"
+                color="success"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setSelectedExpense(expense);
+                  setPaymentModalOpen(true);
+                }}
+              >
+                <PaidIcon fontSize="small" />
+              </IconButton>
+            )}
+            
+            <IconButton
+              size="small"
+              color="default"
+              onClick={(e) => {
+                e.stopPropagation();
+                handleMenuOpen(e, expense.id || '');
+              }}
+            >
+              <MoreVertIcon fontSize="small" />
+            </IconButton>
+          </Box>
+        </TableCell>
+      </TableRow>
+    );
+  };
+
   return (
     <Box sx={{ maxWidth: 1200, mx: 'auto', p: { xs: 2, sm: 3 } }}>
       {/* Header section */}
@@ -755,98 +872,7 @@ const Expenses: React.FC = () => {
                     </TableRow>
                   </TableHead>
                   <TableBody>
-                    {groupItems.map((expense) => (
-                      <TableRow 
-                        key={expense.id}
-                        hover
-                        onClick={() => handleViewExpense(expense)}
-                        sx={{ 
-                          cursor: 'pointer',
-                          '&:last-child td, &:last-child th': { border: 0 },
-                          ...(expense.status === 'paid' && { 
-                            bgcolor: alpha(theme.palette.success.light, 0.1),
-                          })
-                        }}
-                      >
-                        <TableCell component="th" scope="row">
-                          <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                            {CATEGORY_ICONS[expense.category as keyof typeof CATEGORY_ICONS] || CATEGORY_ICONS.other}
-                            <Typography sx={{ ml: 1.5, fontWeight: 'medium' }}>
-                              {expense.description}
-                            </Typography>
-                          </Box>
-                          {expense.lineItems && expense.lineItems.length > 0 && (
-                            <Chip 
-                              size="small" 
-                              label={`${expense.lineItems.length} item${expense.lineItems.length > 1 ? 's' : ''}`} 
-                              color="primary" 
-                              variant="outlined"
-                              sx={{ mt: 0.5 }}
-                            />
-                          )}
-                        </TableCell>
-                        <TableCell align="right">
-                          <Typography fontWeight="medium">
-                            {formatCurrency(expense.amount)}
-                          </Typography>
-                        </TableCell>
-                        <TableCell>{formatDate(expense.date)}</TableCell>
-                        <TableCell>
-                          <Chip 
-                            label={expense.status === 'paid' ? 'Paid' : 'Needs Payment'} 
-                            size="small"
-                            color={expense.status === 'paid' ? 'success' : 'warning'}
-                          />
-                        </TableCell>
-                        {groupBy !== 'project' && <TableCell>{expense.projectName}</TableCell>}
-                        {groupBy !== 'category' && (
-                          <TableCell>
-                            {expense.category.charAt(0).toUpperCase() + expense.category.slice(1)}
-                          </TableCell>
-                        )}
-                        {groupBy !== 'vendor' && <TableCell>{expense.vendor || '-'}</TableCell>}
-                        {groupBy !== 'subcontractor' && <TableCell>{expense.subcontractorName || '-'}</TableCell>}
-                        <TableCell align="center">
-                          <Box sx={{ display: 'flex', justifyContent: 'center' }}>
-                            <IconButton 
-                              size="small"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setSelectedExpense(expense);
-                                setExpenseModalOpen(true);
-                              }}
-                            >
-                              <EditIcon fontSize="small" />
-                            </IconButton>
-                            
-                            {expense.status !== 'paid' && (
-                              <IconButton
-                                size="small"
-                                color="success"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  setSelectedExpense(expense);
-                                  setPaymentModalOpen(true);
-                                }}
-                              >
-                                <PaidIcon fontSize="small" />
-                              </IconButton>
-                            )}
-                            
-                            <IconButton
-                              size="small"
-                              color="default"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleMenuOpen(e, expense.id);
-                              }}
-                            >
-                              <MoreVertIcon fontSize="small" />
-                            </IconButton>
-                          </Box>
-                        </TableCell>
-                      </TableRow>
-                    ))}
+                    {groupItems.map((expense) => renderExpenseRow(expense))}
                     
                     {/* Group total row */}
                     {groupBy !== 'none' && (

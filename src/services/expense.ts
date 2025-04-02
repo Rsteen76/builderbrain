@@ -11,6 +11,7 @@ import {
   where,
   orderBy,
   Timestamp,
+  QueryDocumentSnapshot,
 } from 'firebase/firestore';
 import { Expense } from '../types';
 
@@ -24,54 +25,33 @@ interface FirestoreExpense extends Omit<Expense, 'id' | 'date' | 'createdAt' | '
 export class ExpenseService {
   private static collection = collection(db, 'expenses');
 
-  static async createExpense(userId: string, expenseData: Omit<Expense, 'id' | 'userId' | 'createdAt' | 'updatedAt' | 'createdBy'>): Promise<Expense> {
-    const now = new Date();
-    console.log(`ExpenseService: Creating expense for user: ${userId}`);
+  static async createExpense(userId: string, expenseData: Omit<Expense, 'id' | 'userId' | 'createdBy' | 'createdAt' | 'updatedAt'>): Promise<Expense> {
+    if (!userId) throw new Error('User ID is required');
     
-    if (!userId) {
-      console.error("ExpenseService: No userId provided to createExpense");
-      throw new Error("User ID is required to create an expense");
+    try {
+      const expense = {
+        ...expenseData,
+        userId,
+        createdBy: userId,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        // Make sure tags exists
+        tags: expenseData.tags || [],
+      };
+      
+      // Convert dates to Firestore timestamps
+      const firestoreExpense = this.convertToFirestore(expense);
+      
+      const docRef = await addDoc(this.collection, firestoreExpense);
+      
+      return {
+        ...expense,
+        id: docRef.id,
+      };
+    } catch (error) {
+      console.error('Error creating expense:', error);
+      throw error;
     }
-    
-    // Convert date to Timestamp if it's a string
-    const expenseDate = expenseData.date instanceof Date 
-      ? expenseData.date 
-      : new Date(expenseData.date);
-    
-    // Standardize on phaseName field - if buildingPhase exists but phaseName doesn't, use buildingPhase value
-    const dataWithStandardizedPhase = { ...expenseData };
-    if (!dataWithStandardizedPhase.phaseName && dataWithStandardizedPhase.buildingPhase) {
-      console.log(`ExpenseService: Standardizing on phaseName instead of buildingPhase: ${dataWithStandardizedPhase.buildingPhase}`);
-      dataWithStandardizedPhase.phaseName = dataWithStandardizedPhase.buildingPhase;
-    }
-    
-    const firestoreData: any = {
-      ...dataWithStandardizedPhase,
-      userId: userId,
-      createdBy: userId,
-      date: Timestamp.fromDate(expenseDate),
-      createdAt: Timestamp.fromDate(now),
-      updatedAt: Timestamp.fromDate(now),
-    };
-    
-    console.log("Saving expense to Firestore with data:", JSON.stringify({
-      ...firestoreData,
-      date: firestoreData.date.toDate().toISOString(),
-      createdAt: firestoreData.createdAt.toDate().toISOString(),
-      updatedAt: firestoreData.updatedAt.toDate().toISOString(),
-    }));
-    
-    const docRef = await addDoc(this.collection, firestoreData);
-    console.log(`Expense created with ID: ${docRef.id}`);
-
-    return {
-      ...dataWithStandardizedPhase,
-      id: docRef.id,
-      userId: userId,
-      createdBy: userId,
-      createdAt: now,
-      updatedAt: now,
-    };
   }
 
   static async updateExpense(id: string, expenseData: Partial<Omit<Expense, 'id' | 'userId' | 'createdAt' | 'createdBy'>>): Promise<void> {
@@ -175,88 +155,96 @@ export class ExpenseService {
   }
 
   static async getExpenses(userId: string, filters?: {
-    status?: Expense['status'];
     projectId?: string;
-    phaseId?: string;
-    subcontractorId?: string;
-    category?: string;
-    minAmount?: number;
-    maxAmount?: number;
+    category?: Expense['category'];
     startDate?: Date;
     endDate?: Date;
+    status?: Expense['status'];
+    phaseId?: string;
+    subcontractorId?: string;
   }): Promise<Expense[]> {
-    console.log(`ExpenseService.getExpenses - Fetching expenses for user: ${userId}`);
+    console.log(`ExpenseService: Fetching expenses for user: ${userId}, with filters:`, filters);
     
     if (!userId) {
       console.error("ExpenseService: No userId provided to getExpenses");
       return [];
     }
     
-    // Start with basic userId query
-    let q = query(
-      this.collection,
-      where('userId', '==', userId)
-    );
-
-    // Add filters
-    if (filters?.status) {
-      q = query(q, where('status', '==', filters.status));
-    }
-
-    if (filters?.projectId) {
-      q = query(q, where('projectId', '==', filters.projectId));
-    }
-
-    if (filters?.phaseId) {
-      q = query(q, where('phaseId', '==', filters.phaseId));
-    }
-
-    if (filters?.subcontractorId) {
-      q = query(q, where('subcontractorId', '==', filters.subcontractorId));
-    }
-
-    if (filters?.category) {
-      q = query(q, where('category', '==', filters.category));
-    }
-
-    if (filters?.startDate) {
-      q = query(q, where('date', '>=', Timestamp.fromDate(filters.startDate)));
-    }
-
-    if (filters?.endDate) {
-      q = query(q, where('date', '<=', Timestamp.fromDate(filters.endDate)));
-    }
-
-    // Order by date descending (most recent first)
-    q = query(q, orderBy('date', 'desc'));
-
     try {
-      const snapshot = await getDocs(q);
+      let q = query(this.collection, where('userId', '==', userId));
       
-      if (snapshot.empty) {
-        return [];
+      if (filters) {
+        if (filters.projectId) {
+          q = query(q, where('projectId', '==', filters.projectId));
+        }
+        
+        if (filters.category) {
+          q = query(q, where('category', '==', filters.category));
+        }
+        
+        if (filters.status) {
+          q = query(q, where('status', '==', filters.status));
+        }
+        
+        if (filters.startDate) {
+          const startTimestamp = Timestamp.fromDate(filters.startDate);
+          q = query(q, where('date', '>=', startTimestamp));
+        }
+        
+        if (filters.endDate) {
+          const endTimestamp = Timestamp.fromDate(filters.endDate);
+          q = query(q, where('date', '<=', endTimestamp));
+        }
+        
+        if (filters.phaseId) {
+          q = query(q, where('phaseId', '==', filters.phaseId));
+        }
+        
+        if (filters.subcontractorId) {
+          q = query(q, where('subcontractorId', '==', filters.subcontractorId));
+        }
       }
-
-      const expenses = snapshot.docs.map(doc => {
-        const data = doc.data();
-        return this.convertFirestoreData(data, doc.id);
-      });
       
-      return expenses;
+      // Always sort by date, most recent first
+      q = query(q, orderBy('date', 'desc'));
+      
+      const querySnapshot = await getDocs(q);
+      console.log(`ExpenseService: Found ${querySnapshot.docs.length} expenses`);
+      
+      return querySnapshot.docs.map(doc => {
+        return this.convertFromFirestore(doc);
+      });
     } catch (error) {
-      console.error("ExpenseService - Error executing Firestore query:", error);
-      return [];
+      console.error("ExpenseService: Error fetching expenses:", error);
+      throw error;
     }
   }
   
-  // Get project-specific expenses
   static async getProjectExpenses(userId: string, projectId: string): Promise<Expense[]> {
-    try {
-      const expenses = await this.getExpenses(userId, { projectId });
-      return expenses;
-    } catch (error) {
-      console.error(`ExpenseService.getProjectExpenses - Error retrieving expenses:`, error);
+    console.log(`ExpenseService: Fetching expenses for project: ${projectId}`);
+    
+    if (!userId || !projectId) {
+      console.error("ExpenseService: Missing userId or projectId in getProjectExpenses");
       return [];
+    }
+    
+    try {
+      const q = query(
+        this.collection,
+        where('userId', '==', userId),
+        where('projectId', '==', projectId),
+        orderBy('date', 'desc')
+      );
+      
+      const querySnapshot = await getDocs(q);
+      console.log(`ExpenseService: Found ${querySnapshot.docs.length} expenses for project ${projectId}`);
+      
+      return querySnapshot.docs.map(doc => {
+        return this.convertFromFirestore(doc);
+      });
+    } catch (error) {
+      console.error(`ExpenseService: Error fetching expenses for project ${projectId}:`, error);
+      throw error;
     }
   }
   
@@ -385,5 +373,56 @@ export class ExpenseService {
       createdAt: data.createdAt.toDate(),
       updatedAt: data.updatedAt.toDate(),
     };
+  }
+
+  /**
+   * Convert a JavaScript Expense object to a Firestore-friendly format
+   */
+  private static convertToFirestore(expense: Partial<Expense>): any {
+    const firestoreExpense: any = { ...expense };
+    
+    // Convert Date objects to Firestore Timestamps
+    if (expense.createdAt instanceof Date) {
+      firestoreExpense.createdAt = Timestamp.fromDate(expense.createdAt);
+    }
+    
+    if (expense.updatedAt instanceof Date) {
+      firestoreExpense.updatedAt = Timestamp.fromDate(expense.updatedAt);
+    }
+    
+    if (expense.date instanceof Date) {
+      firestoreExpense.date = Timestamp.fromDate(expense.date);
+    }
+    
+    // Ensure tags is an array
+    if (!firestoreExpense.tags) {
+      firestoreExpense.tags = [];
+    }
+    
+    return firestoreExpense;
+  }
+  
+  /**
+   * Convert a Firestore document to a JavaScript Expense object
+   */
+  private static convertFromFirestore(doc: QueryDocumentSnapshot): Expense {
+    const data = doc.data();
+    
+    // Convert Firestore Timestamps to JavaScript Date objects
+    const createdAt = data.createdAt instanceof Timestamp ? data.createdAt.toDate() : data.createdAt;
+    const updatedAt = data.updatedAt instanceof Timestamp ? data.updatedAt.toDate() : data.updatedAt;
+    const date = data.date instanceof Timestamp ? data.date.toDate() : data.date;
+    
+    // Ensure tags is an array
+    const tags = data.tags || [];
+    
+    return {
+      id: doc.id,
+      ...data,
+      createdAt,
+      updatedAt,
+      date,
+      tags,
+    } as Expense;
   }
 }

@@ -103,7 +103,8 @@ const SubcontractorCard: React.FC<SubcontractorCardProps> = ({
         '&:hover': {
           transform: 'translateY(-4px)',
           boxShadow: `0 4px 12px ${alpha(theme.palette.common.black, 0.08)}`,
-        }
+        },
+        position: 'relative'
       }}
     >
       <CardActionArea onClick={handleCardClick}>
@@ -136,46 +137,6 @@ const SubcontractorCard: React.FC<SubcontractorCardProps> = ({
                   }} 
                 />
               </Box>
-            </Box>
-            <Box>
-              <IconButton 
-                onClick={(e) => {
-                  e.stopPropagation();
-                  handleClick(e as React.MouseEvent<HTMLButtonElement>);
-                }}
-                sx={{ 
-                  color: theme.palette.text.secondary,
-                  '&:hover': {
-                    color: theme.palette.primary.main,
-                    bgcolor: alpha(theme.palette.primary.main, 0.1),
-                  }
-                }}
-              >
-                <MoreVertIcon />
-              </IconButton>
-              <Menu
-                anchorEl={anchorEl}
-                open={open}
-                onClose={handleClose}
-                onClick={(e) => e.stopPropagation()}
-                PaperProps={{
-                  elevation: 2,
-                  sx: {
-                    width: 180,
-                    borderRadius: 2,
-                    overflow: 'visible',
-                    boxShadow: `0 5px 15px ${alpha(theme.palette.common.black, 0.1)}`,
-                  },
-                }}
-              >
-                <MenuItem onClick={() => { onEdit(id); handleClose(); }}>Edit</MenuItem>
-                <MenuItem 
-                  onClick={() => { onDelete(id); handleClose(); }}
-                  sx={{ color: theme.palette.error.main }}
-                >
-                  Delete
-                </MenuItem>
-              </Menu>
             </Box>
           </Box>
 
@@ -296,6 +257,47 @@ const SubcontractorCard: React.FC<SubcontractorCardProps> = ({
           </Stack>
         </CardContent>
       </CardActionArea>
+      
+      <Box sx={{ position: 'absolute', top: 8, right: 8 }}>
+        <IconButton 
+          onClick={(e) => {
+            e.stopPropagation();
+            handleClick(e as React.MouseEvent<HTMLButtonElement>);
+          }}
+          sx={{ 
+            color: theme.palette.text.secondary,
+            '&:hover': {
+              color: theme.palette.primary.main,
+              bgcolor: alpha(theme.palette.primary.main, 0.1),
+            }
+          }}
+        >
+          <MoreVertIcon />
+        </IconButton>
+        <Menu
+          anchorEl={anchorEl}
+          open={open}
+          onClose={handleClose}
+          onClick={(e) => e.stopPropagation()}
+          PaperProps={{
+            elevation: 2,
+            sx: {
+              width: 180,
+              borderRadius: 2,
+              overflow: 'visible',
+              boxShadow: `0 5px 15px ${alpha(theme.palette.common.black, 0.1)}`,
+            },
+          }}
+        >
+          <MenuItem onClick={() => { onEdit(id); handleClose(); }}>Edit</MenuItem>
+          <MenuItem 
+            onClick={() => { onDelete(id); handleClose(); }}
+            sx={{ color: theme.palette.error.main }}
+          >
+            Delete
+          </MenuItem>
+        </Menu>
+      </Box>
     </Card>
   );
 };

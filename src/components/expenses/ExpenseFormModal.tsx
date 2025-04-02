@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   Dialog,
   DialogTitle,
@@ -78,6 +78,12 @@ import { formatCurrency } from '../../utils/formatters';
 interface Project {
   id: string;
   name: string;
+  phases?: ProjectPhase[];
+}
+
+interface ProjectPhase {
+  id: string;
+  name: string;
 }
 
 interface ExpenseFormModalProps {
@@ -86,6 +92,7 @@ interface ExpenseFormModalProps {
   expense?: Partial<Expense>;
   onSave: (expense: Partial<Expense>) => void;
   projects: Project[];
+  projectPhases?: Project['phases'];
 }
 
 // Interface for errors
@@ -117,25 +124,13 @@ const PAYMENT_METHODS = [
   { value: 'other', label: 'Other' },
 ];
 
-const PHASE_OPTIONS = [
-  { value: 'planning', label: 'Planning' },
-  { value: 'foundation', label: 'Foundation' },
-  { value: 'framing', label: 'Framing' },
-  { value: 'electrical', label: 'Electrical' },
-  { value: 'plumbing', label: 'Plumbing' },
-  { value: 'drywall', label: 'Drywall' },
-  { value: 'finishing', label: 'Finishing' },
-  { value: 'exterior', label: 'Exterior' },
-  { value: 'landscaping', label: 'Landscaping' },
-  { value: 'inspection', label: 'Inspection' },
-];
-
 const ExpenseFormModal: React.FC<ExpenseFormModalProps> = ({
   open,
   onClose,
   expense,
   onSave,
   projects,
+  projectPhases = [],
 }) => {
   const theme = useTheme();
   const { user } = useAuth();
@@ -165,8 +160,39 @@ const ExpenseFormModal: React.FC<ExpenseFormModalProps> = ({
   const [paymentNotes, setPaymentNotes] = useState('');
   const [duplicateExpenses, setDuplicateExpenses] = useState<Expense[]>([]);
   const [showDuplicateWarning, setShowDuplicateWarning] = useState(false);
+  const [tags, setTags] = useState<string[]>([]);
+  const [suggestedTags, setSuggestedTags] = useState<string[]>([
+    'plumbing', 'electrical', 'hvac', 'framing', 'drywall', 
+    'painting', 'flooring', 'roofing', 'concrete', 'foundation',
+    'rough-in', 'top-out', 'fixtures', 'inspection', 'permit'
+  ]);
 
   const isEditMode = !!expense?.id;
+
+  // Get phase options from project phases
+  const PHASE_OPTIONS = useMemo(() => {
+    // If we have project phases, use them
+    if (projectPhases && projectPhases.length > 0) {
+      return projectPhases.map(phase => ({
+        value: phase.id || '',
+        label: phase.name || ''
+      }));
+    }
+    
+    // Fallback to hardcoded options if no phases are provided
+    return [
+      { value: 'planning', label: 'Planning' },
+      { value: 'foundation', label: 'Foundation' },
+      { value: 'framing', label: 'Framing' },
+      { value: 'electrical', label: 'Electrical' },
+      { value: 'plumbing', label: 'Plumbing' },
+      { value: 'drywall', label: 'Drywall' },
+      { value: 'finishing', label: 'Finishing' },
+      { value: 'exterior', label: 'Exterior' },
+      { value: 'landscaping', label: 'Landscaping' },
+      { value: 'inspection', label: 'Inspection' },
+    ];
+  }, [projectPhases]);
 
   // Update form data when expense prop changes
   useEffect(() => {
@@ -175,6 +201,8 @@ const ExpenseFormModal: React.FC<ExpenseFormModalProps> = ({
         ...expense,
         date: expense.date ? new Date(expense.date) : new Date(),
       });
+      // Set tags if they exist in the expense
+      setTags(expense.tags || []);
     }
   }, [expense]);
 
@@ -448,6 +476,9 @@ const ExpenseFormModal: React.FC<ExpenseFormModalProps> = ({
     try {
       let updatedFormData = { ...formData };
       
+      // Add tags to the form data
+      updatedFormData.tags = tags;
+      
       // Calculate final amount from line items if using line items
       if (showLineItems) {
         const totalAmount = calculateTotalFromLineItems();
@@ -578,6 +609,10 @@ const ExpenseFormModal: React.FC<ExpenseFormModalProps> = ({
       ...prev,
       status: newStatus,
     }));
+  };
+
+  const handleTagsChange = (_event: React.SyntheticEvent, newTags: string[]) => {
+    setTags(newTags);
   };
 
   return (
@@ -1139,6 +1174,46 @@ const ExpenseFormModal: React.FC<ExpenseFormModalProps> = ({
               </AccordionDetails>
             </Accordion>
         </Grid>
+          
+          {/* Tags section */}
+          <Grid item xs={12}>
+            <Typography variant="subtitle2" gutterBottom>
+              Tags
+            </Typography>
+            <Autocomplete
+              multiple
+              id="tags"
+              options={suggestedTags}
+              value={tags}
+              onChange={handleTagsChange}
+              freeSolo
+              renderTags={(value, getTagProps) =>
+                value.map((option, index) => (
+                  <Chip
+                    label={option}
+                    size="small"
+                    {...getTagProps({ index })}
+                    sx={{
+                      bgcolor: theme.palette.primary.light,
+                      color: theme.palette.primary.contrastText,
+                    }}
+                  />
+                ))
+              }
+              renderInput={(params) => (
+                <TextField
+                  {...params}
+                  variant="outlined"
+                  size="small"
+                  placeholder="Add tags (e.g., plumbing, rough-in, second-floor)"
+                  fullWidth
+                />
+              )}
+            />
+            <Typography variant="caption" color="text.secondary">
+              Add tags to categorize this expense (press Enter after each tag)
+            </Typography>
+          </Grid>
           
           {/* Error message area */}
           {backendError && (

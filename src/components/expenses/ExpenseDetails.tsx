@@ -34,6 +34,7 @@ import {
   Pending as PendingIcon,
   Engineering as SubcontractorIcon,
 } from '@mui/icons-material';
+import { alpha, useTheme } from '@mui/material/styles';
 
 // Types
 interface Expense {
@@ -51,6 +52,7 @@ interface Expense {
   vendor?: string;
   subcontractorId?: string;
   subcontractorName?: string;
+  tags?: string[];
 }
 
 const ExpenseDetails: React.FC = () => {
@@ -60,6 +62,7 @@ const ExpenseDetails: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [expense, setExpense] = useState<Expense | null>(null);
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
+  const theme = useTheme();
 
   useEffect(() => {
     // Simulate API call to fetch expense details
@@ -84,6 +87,7 @@ const ExpenseDetails: React.FC = () => {
           vendor: 'Home Depot',
           subcontractorId: 'sub-123',
           subcontractorName: 'ABC Construction',
+          tags: ['Building', 'Materials'],
         };
         
         setExpense(mockExpense);
@@ -313,6 +317,25 @@ const ExpenseDetails: React.FC = () => {
                       {expense.description}
                     </Typography>
                   </Box>
+
+                  {/* Display tags if they exist */}
+                  {expense.tags && expense.tags.length > 0 && (
+                    <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5, mb: 2 }}>
+                      {expense.tags.map((tag, index) => (
+                        <Chip
+                          key={index}
+                          label={tag}
+                          size="small"
+                          sx={{
+                            height: 24,
+                            fontSize: '0.75rem',
+                            bgcolor: alpha(theme.palette.primary.main, 0.1),
+                            color: theme.palette.primary.main,
+                          }}
+                        />
+                      ))}
+                    </Box>
+                  )}
 
                   <Box sx={{ display: 'flex', alignItems: 'center' }}>
                     <PersonIcon sx={{ mr: 1, color: 'primary.main' }} />

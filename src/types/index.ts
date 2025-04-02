@@ -90,6 +90,8 @@ export interface Expense {
     referenceNumber?: string;
     notes?: string;
   };
+  tags?: string[]; // Array of tags for flexible categorization
+  projectName?: string; // Name of the project this expense belongs to
 }
 
 export interface Bid {
