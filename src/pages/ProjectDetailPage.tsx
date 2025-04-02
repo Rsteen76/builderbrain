@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
   Box,
@@ -38,6 +38,7 @@ import {
   TextField,
   InputAdornment,
   Snackbar,
+  Slider,
 } from '@mui/material';
 import {
   Edit as EditIcon,
@@ -64,6 +65,11 @@ import {
   Update as UpdateIcon,
   Close as CloseIcon,
   Save as SaveIcon,
+  Cancel as CancelIcon,
+  Refresh as RefreshIcon,
+  CalendarToday as CalendarTodayIcon,
+  Storefront as StorefrontIcon,
+  Circle as CircleIcon,
 } from '@mui/icons-material';
 import { useAuth } from '../contexts/AuthContext';
 import { ProjectService } from '../services/project';
@@ -236,6 +242,57 @@ const ProjectDetailPage: React.FC = () => {
     }
   };
   
+  // Function to fetch subcontractors
+  const fetchSubcontractors = async (userId: string) => {
+    try {
+      const data = await SubcontractorService.getSubcontractors(userId);
+      setSubcontractors(data);
+    } catch (err) {
+      console.error('Error fetching subcontractors:', err);
+    }
+  };
+  
+  // Function to fetch phases
+  const fetchPhases = async (projectId: string) => {
+    if (!user?.uid) return;
+    
+    try {
+      // Fetch the project to get phases from it
+      const projectData = await ProjectService.getProject(projectId, user.uid);
+      if (projectData && projectData.phases && projectData.phases.length > 0) {
+        setPhases(projectData.phases as ProjectPhase[]);
+        
+        // Also initialize the phases being updated if in quick update mode
+        if (quickUpdateMode) {
+          const phasesMap: { [id: string]: ProjectPhase } = {};
+          projectData.phases.forEach((phase) => {
+            if (phase.id) {
+              phasesMap[phase.id] = phase as ProjectPhase;
+            }
+          });
+          setPhasesBeingUpdated(phasesMap);
+        }
+      } else {
+        setPhases([]);
+      }
+    } catch (err) {
+      console.error('Error fetching phases:', err);
+    }
+  };
+  
+  // Function to fetch bids
+  const fetchBids = async (projectId: string) => {
+    if (!user?.uid) return;
+    
+    try {
+      const bidFilters = { projectId };
+      const bidData = await BidService.getBids(user.uid, bidFilters);
+      setBids(bidData);
+    } catch (err) {
+      console.error('Error fetching bids:', err);
+    }
+  };
+  
   // Fetch project data
   useEffect(() => {
     // Fetch project and related data when projectId changes
@@ -276,201 +333,53 @@ const ProjectDetailPage: React.FC = () => {
         setLoading(false);
       }
     };
-
-    // Function to fetch subcontractors
-    const fetchSubcontractors = async (userId: string) => {
-      try {
-        console.log('Fetching subcontractors...');
-        const data = await SubcontractorService.getSubcontractors(userId);
-        console.log(`Fetched ${data.length} subcontractors`);
-        setSubcontractors(data);
-      } catch (err) {
-        console.error('Error fetching subcontractors:', err);
-      }
-    };
-    
-    // Additional fetch functions that would make API calls in a real implementation
-    const fetchPhases = async (projectId: string) => {
-      if (!user?.uid) return;
-      
-      try {
-        // Fetch the project to get phases from it
-        const projectData = await ProjectService.getProject(projectId, user.uid);
-        if (projectData && projectData.phases && projectData.phases.length > 0) {
-          console.log('Setting phases from project data:', projectData.phases);
-          setPhases(projectData.phases as ProjectPhase[]);
-          
-          // Also initialize the phases being updated
-          const phasesMap: { [id: string]: ProjectPhase } = {};
-          projectData.phases.forEach((phase) => {
-            if (phase.id) {
-              phasesMap[phase.id] = phase as ProjectPhase;
-            }
-          });
-          setPhasesBeingUpdated(phasesMap);
-        } else {
-          console.log('No phases found in project data');
-          setPhases([]);
-        }
-      } catch (err) {
-        console.error('Error fetching phases:', err);
-      }
-    };
-    
-    const fetchBids = async (projectId: string) => {
-      if (!user?.uid) return;
-      
-      try {
-        const bidFilters = { projectId };
-        const bidData = await BidService.getBids(user.uid, bidFilters);
-        setBids(bidData);
-      } catch (err) {
-        console.error('Error fetching bids:', err);
-      }
-    };
     
     fetchProject();
   }, [projectId, user?.uid]);
-
-  // Handle project update
-  const handleProjectUpdate = (updatedProject: Project) => {
-    setProject(updatedProject);
-  };
   
-  // Calculate overall project progress based on phases
-  const projectProgress = useMemo(() => {
-    if (!phases.length) return 0;
-    
-    const totalWeight = phases.reduce((sum, phase) => sum + phase.budget, 0);
-    if (totalWeight === 0) return 0;
-    
-    const weightedProgress = phases.reduce((sum, phase) => {
-      const weight = phase.budget / totalWeight;
-      return sum + (phase.progress * weight);
-    }, 0);
-    
-    return Math.round(weightedProgress);
-  }, [phases]);
+  // Add a useEffect to ensure data is refreshed when tabs change or when entering/exiting quick update mode
+  useEffect(() => {
+    if (project?.id && user?.uid) {
+      fetchExpenses(project.id);
+      fetchPhases(project.id);
+      fetchBids(project.id);
+    }
+  }, [tabValue, quickUpdateMode, project?.id, user?.uid]);
   
-  // Calculate budget vs actual costs
-  const budgetData = useMemo(() => {
-    // Use the project's original budget if available, otherwise sum the phase budgets
-    let totalBudget = 0;
+  // Add a function to refresh all project data
+  const refreshAllProjectData = useCallback(async () => {
+    if (!project?.id || !user?.uid) return;
     
-    if (project?.budget) {
-      if (typeof project.budget === 'number') {
-        totalBudget = project.budget;
-      } else if (typeof project.budget === 'object' && 'total' in project.budget) {
-        totalBudget = project.budget.total;
-      }
+    setLoading(true);
+    
+    try {
+      await Promise.all([
+        fetchPhases(project.id),
+        fetchExpenses(project.id),
+        fetchBids(project.id),
+        fetchSubcontractors(user.uid)
+      ]);
+    } catch (error) {
+      console.error('Error refreshing project data:', error);
+    } finally {
+      setLoading(false);
     }
-    
-    // If budget wasn't found or is 0, calculate from phases
-    if (totalBudget === 0) {
-      totalBudget = phases.reduce((sum, phase) => sum + phase.budget, 0);
-    }
-    
-    const totalActual = phases.reduce((sum, phase) => sum + phase.actualCost, 0);
-    
-    return {
-      totalBudget,
-      totalActual,
-      difference: totalBudget - totalActual,
-      percentUsed: totalBudget > 0 ? (totalActual / totalBudget) * 100 : 0
-    };
-  }, [phases, project?.budget]);
-
-  // Generate combined expenses for charts
-  const combinedExpenses = useMemo(() => {
-    return phases.map(phase => ({
-      name: phase.name,
-      budget: phase.budget,
-      actual: phase.actualCost,
-    }));
-  }, [phases]);
-
-  // Calculate timeline and progress
-  const timeline = useMemo(() => {
-    // If we have a project with dates, use those directly
-    if (project?.startDate && project?.endDate) {
-      console.log('Using project dates for timeline calculation:', project.startDate, project.endDate);
-      
-      // Ensure dates are actual Date objects
-      const projectStartDate = project.startDate instanceof Date 
-        ? project.startDate 
-        : new Date(project.startDate);
-      
-      const projectEndDate = project.endDate instanceof Date 
-        ? project.endDate 
-        : new Date(project.endDate);
-      
-      const today = new Date();
-      
-      const totalDuration = projectEndDate.getTime() - projectStartDate.getTime();
-      const elapsedDuration = today.getTime() - projectStartDate.getTime();
-      
-      let percentComplete = 0;
-      if (totalDuration > 0) {
-        percentComplete = Math.max(0, Math.min(100, (elapsedDuration / totalDuration) * 100));
-      }
-      
-      return {
-        startDate: projectStartDate,
-        endDate: projectEndDate,
-        elapsedDays: Math.floor(elapsedDuration / (1000 * 60 * 60 * 24)),
-        totalDays: Math.ceil(totalDuration / (1000 * 60 * 60 * 24)),
-        percentComplete: Math.round(percentComplete),
-      };
-    }
-    
-    // Fallback to phase-based calculation if project dates aren't available or valid
-    if (!phases.length) return { 
-      startDate: new Date(), 
-      endDate: new Date(), 
-      elapsedDays: 0, 
-      totalDays: 0, 
-      percentComplete: 0 
-    };
-    
-    // Safely parse dates and filter out invalid ones
-    const parseDates = (dateString: string | Date): number => {
-      if (!dateString) return Date.now();
-      try {
-        const date = typeof dateString === 'string' ? new Date(dateString) : dateString;
-        const timestamp = date.getTime();
-        return isNaN(timestamp) ? Date.now() : timestamp;
-      } catch (e) {
-        console.warn('Invalid date found:', dateString);
-        return Date.now();
-      }
-    };
-    
-    const startDates = phases.map(p => parseDates(p.startDate));
-    const endDates = phases.map(p => parseDates(p.endDate));
-    
-    const phaseBasedStartDate = new Date(Math.min(...startDates));
-    const phaseBasedEndDate = new Date(Math.max(...endDates));
-    const today = new Date();
-    
-    const totalDuration = phaseBasedEndDate.getTime() - phaseBasedStartDate.getTime();
-    const elapsedDuration = today.getTime() - phaseBasedStartDate.getTime();
-    
-    let percentComplete = 0;
-    if (totalDuration > 0) {
-      percentComplete = Math.max(0, Math.min(100, (elapsedDuration / totalDuration) * 100));
-    }
-    
-    return {
-      startDate: phaseBasedStartDate,
-      endDate: phaseBasedEndDate,
-      elapsedDays: Math.floor(elapsedDuration / (1000 * 60 * 60 * 24)),
-      totalDays: Math.ceil(totalDuration / (1000 * 60 * 60 * 24)),
-      percentComplete: Math.round(percentComplete),
-    };
-  }, [project?.startDate, project?.endDate, phases]);
+  }, [project?.id, user?.uid]);
   
+  // Refresh data when component is mounted/re-mounted
+  useEffect(() => {
+    if (project?.id && user?.uid) {
+      refreshAllProjectData();
+    }
+  }, [refreshAllProjectData]);
+  
+  // Update handleTabChange to refresh data when switching to expenses tab
   const handleTabChange = (event: React.SyntheticEvent, newValue: number) => {
     setTabValue(newValue);
+    // Tab index 3 is Expenses, so we'll ensure data is up-to-date
+    if (newValue === 3 && project?.id) {
+      fetchExpenses(project.id);
+    }
   };
   
   const handleMenuOpen = (event: React.MouseEvent<HTMLElement>) => {
@@ -537,16 +446,68 @@ const ProjectDetailPage: React.FC = () => {
     }
   };
 
+  // Cancel quick updates
+  const handleCancelQuickUpdates = () => {
+    setQuickUpdateMode(false);
+    setPhasesBeingUpdated({});
+    
+    // Force refresh data when exiting quick update mode
+    if (project?.id && user?.uid) {
+      fetchPhases(project.id);
+      fetchExpenses(project.id);
+    }
+  };
+  
   // Initialize phases for quick update
   const handleEnterQuickUpdateMode = () => {
-    const phaseUpdates = phases.reduce((acc, phase) => {
-      acc[phase.id] = { ...phase };
-      return acc;
-    }, {} as { [id: string]: ProjectPhase });
-    
-    setPhasesBeingUpdated(phaseUpdates);
-    setQuickUpdateMode(true);
+    // Reset and re-fetch expenses before entering quick update mode
+    if (project?.id && user?.uid) {
+      console.log('Refreshing expenses before entering quick update mode');
+      fetchExpenses(project.id).then(() => {
+        console.log('Expenses refreshed, now entering quick update mode');
+        
+        // Initialize phase updates after expenses are refreshed
+        const phaseUpdates = phases.reduce((acc, phase) => {
+          acc[phase.id] = { ...phase };
+          return acc;
+        }, {} as { [id: string]: ProjectPhase });
+        
+        setPhasesBeingUpdated(phaseUpdates);
+        setQuickUpdateMode(true);
+      });
+    } else {
+      // Fallback if project or user isn't available
+      const phaseUpdates = phases.reduce((acc, phase) => {
+        acc[phase.id] = { ...phase };
+        return acc;
+      }, {} as { [id: string]: ProjectPhase });
+      
+      setPhasesBeingUpdated(phaseUpdates);
+      setQuickUpdateMode(true);
+    }
   };
+  
+  // Add a useEffect to refresh expenses when quick update mode is activated
+  useEffect(() => {
+    if (quickUpdateMode && project) {
+      // Force a re-render of expenses in the phase cards
+      console.log('Quick update mode active, refreshing phase expenses');
+      const expensesByPhase = expenses.reduce((acc, expense) => {
+        if (expense.phaseId) {
+          if (!acc[expense.phaseId]) {
+            acc[expense.phaseId] = [];
+          }
+          acc[expense.phaseId].push(expense);
+        }
+        return acc;
+      }, {} as Record<string, Expense[]>);
+      
+      // Log how many expenses are associated with each phase
+      Object.entries(expensesByPhase).forEach(([phaseId, phaseExpenses]) => {
+        console.log(`Phase ${phaseId} has ${phaseExpenses.length} expenses`);
+      });
+    }
+  }, [quickUpdateMode, expenses, project]);
 
   // Save all phase updates at once
   const handleSaveQuickUpdates = () => {
@@ -557,12 +518,6 @@ const ProjectDetailPage: React.FC = () => {
     
     // Here you would normally save to backend
     // ProjectService.updateProjectPhases(projectId, updatedPhases);
-  };
-
-  // Cancel quick updates
-  const handleCancelQuickUpdates = () => {
-    setQuickUpdateMode(false);
-    setPhasesBeingUpdated({});
   };
 
   // Update a specific phase in the quick update mode
@@ -681,14 +636,14 @@ const ProjectDetailPage: React.FC = () => {
   };
 
   // Fix the handleAddQuickExpense function to update phases and project
-  const handleAddQuickExpense = async () => {
+  const handleAddQuickExpense = async (phaseId?: string) => {
     if (!project || !user?.uid) return;
     
     try {
       const newExpense: Omit<Expense, 'id' | 'userId' | 'createdAt' | 'updatedAt' | 'createdBy'> = {
         projectId: project.id,
-        phaseId: quickExpense.phaseId,
-        phaseName: phases.find(p => p.id === quickExpense.phaseId)?.name || '',
+        phaseId: phaseId || quickExpense.phaseId,
+        phaseName: phases.find(p => p.id === (phaseId || quickExpense.phaseId))?.name || '',
         category: quickExpense.category || 'other', // Default to 'other' if empty
         amount: quickExpense.amount,
         description: quickExpense.description,
@@ -780,6 +735,170 @@ const ProjectDetailPage: React.FC = () => {
       showNotification('Failed to add expense', 'error');
     }
   };
+
+  // Add a useEffect to reset and refresh expenses when toggling quick update mode
+  useEffect(() => {
+    // Whenever quick update mode changes, ensure expenses are fresh
+    if (quickUpdateMode && project?.id && user?.uid) {
+      console.log('Quick update mode toggled, refreshing expense data');
+      
+      // Debug: Log all expenses and their phaseIds
+      console.log('All expenses:', expenses);
+      console.log('Expense phaseIds:', expenses.map(e => ({ id: e.id, phaseId: e.phaseId })));
+      console.log('All phase IDs:', phases.map(p => p.id));
+      
+      // Check for phase ID mismatches
+      const phaseIdsSet = new Set(phases.map(p => p.id));
+      const orphanedExpenses = expenses.filter(e => e.phaseId && !phaseIdsSet.has(e.phaseId));
+      if (orphanedExpenses.length > 0) {
+        console.warn('Found expenses with phaseIds that don\'t match any phases:', orphanedExpenses);
+      }
+      
+      // Force a re-render by making a new array
+      setExpenses(prevExpenses => [...prevExpenses]);
+    }
+  }, [quickUpdateMode, project?.id, user?.uid, expenses, phases]);
+  
+  // Add rendering key to phase cards to force re-render when quick update mode changes
+  const renderingKey = useMemo(() => {
+    // Generate a new key when quick update mode changes to force component re-rendering
+    return `quick-update-${quickUpdateMode}-${Date.now()}`;
+  }, [quickUpdateMode]);
+
+  // Handle project update
+  const handleProjectUpdate = (updatedProject: Project) => {
+    setProject(updatedProject);
+  };
+  
+  // Calculate overall project progress based on phases
+  const projectProgress = useMemo(() => {
+    if (!phases.length) return 0;
+    
+    const totalWeight = phases.reduce((sum, phase) => sum + phase.budget, 0);
+    if (totalWeight === 0) return 0;
+    
+    const weightedProgress = phases.reduce((sum, phase) => {
+      const weight = phase.budget / totalWeight;
+      return sum + (phase.progress * weight);
+    }, 0);
+    
+    return Math.round(weightedProgress);
+  }, [phases]);
+  
+  // Calculate budget vs actual costs
+  const budgetData = useMemo(() => {
+    // Use the project's original budget if available, otherwise sum the phase budgets
+    let totalBudget = 0;
+    
+    if (project?.budget) {
+      if (typeof project.budget === 'number') {
+        totalBudget = project.budget;
+      } else if (typeof project.budget === 'object' && 'total' in project.budget) {
+        totalBudget = project.budget.total;
+      }
+    }
+    
+    // If budget wasn't found or is 0, calculate from phases
+    if (totalBudget === 0) {
+      totalBudget = phases.reduce((sum, phase) => sum + phase.budget, 0);
+    }
+    
+    const totalActual = phases.reduce((sum, phase) => sum + phase.actualCost, 0);
+    
+    return {
+      totalBudget,
+      totalActual,
+      difference: totalBudget - totalActual,
+      percentUsed: totalBudget > 0 ? (totalActual / totalBudget) * 100 : 0
+    };
+  }, [phases, project?.budget]);
+
+  // Generate combined expenses for charts
+  const combinedExpenses = useMemo(() => {
+    return phases.map(phase => ({
+      name: phase.name,
+      budget: phase.budget,
+      actual: phase.actualCost,
+    }));
+  }, [phases]);
+
+  // Calculate timeline and progress
+  const timeline = useMemo(() => {
+    // If we have a project with dates, use those directly
+    if (project?.startDate && project?.endDate) {
+      // Ensure dates are actual Date objects
+      const projectStartDate = project.startDate instanceof Date 
+        ? project.startDate 
+        : new Date(project.startDate);
+      
+      const projectEndDate = project.endDate instanceof Date 
+        ? project.endDate 
+        : new Date(project.endDate);
+      
+      const today = new Date();
+      
+      const totalDuration = projectEndDate.getTime() - projectStartDate.getTime();
+      const elapsedDuration = today.getTime() - projectStartDate.getTime();
+      
+      let percentComplete = 0;
+      if (totalDuration > 0) {
+        percentComplete = Math.max(0, Math.min(100, (elapsedDuration / totalDuration) * 100));
+      }
+      
+      return {
+        startDate: projectStartDate,
+        endDate: projectEndDate,
+        elapsedDays: Math.floor(elapsedDuration / (1000 * 60 * 60 * 24)),
+        totalDays: Math.ceil(totalDuration / (1000 * 60 * 60 * 24)),
+        percentComplete: Math.round(percentComplete),
+      };
+    }
+    
+    // Fallback to phase-based calculation if project dates aren't available or valid
+    if (!phases.length) return { 
+      startDate: new Date(), 
+      endDate: new Date(), 
+      elapsedDays: 0, 
+      totalDays: 0, 
+      percentComplete: 0 
+    };
+    
+    // Safely parse dates and filter out invalid ones
+    const parseDates = (dateString: string | Date): number => {
+      if (!dateString) return Date.now();
+      try {
+        const date = typeof dateString === 'string' ? new Date(dateString) : dateString;
+        const timestamp = date.getTime();
+        return isNaN(timestamp) ? Date.now() : timestamp;
+      } catch (e) {
+        console.warn('Invalid date found:', dateString);
+        return Date.now();
+      }
+    };
+    
+    const startDates = phases.map(p => parseDates(p.startDate));
+    const endDates = phases.map(p => parseDates(p.endDate));
+    
+    const phaseBasedStartDate = new Date(Math.min(...startDates));
+    const phaseBasedEndDate = new Date(Math.max(...endDates));
+    const today = new Date();
+    
+    const totalDuration = phaseBasedEndDate.getTime() - phaseBasedStartDate.getTime();
+    const elapsedDuration = today.getTime() - phaseBasedStartDate.getTime();
+    
+    let percentComplete = 0;
+    if (totalDuration > 0) {
+      percentComplete = Math.max(0, Math.min(100, (elapsedDuration / totalDuration) * 100));
+    }
+    
+    return {
+      startDate: phaseBasedStartDate,
+      endDate: phaseBasedEndDate,
+      elapsedDays: Math.floor(elapsedDuration / (1000 * 60 * 60 * 24)),
+      totalDays: Math.ceil(totalDuration / (1000 * 60 * 60 * 24)),
+      percentComplete: Math.round(percentComplete),
+    };
+  }, [project?.startDate, project?.endDate, phases]);
 
   if (loading) {
     return (
@@ -964,148 +1083,417 @@ const ProjectDetailPage: React.FC = () => {
             
             <Grid container spacing={3}>
               {Object.values(phasesBeingUpdated).map((phase) => (
-                <Grid item xs={12} md={6} key={phase.id}>
+                <Grid item xs={12} sm={6} md={6} lg={4} key={`${renderingKey}-phase-${phase.id}`}>
                   <Card 
-                    elevation={0} 
+                    elevation={2} 
                     sx={{ 
-                      p: 2, 
-                      borderRadius: 2,
-                      border: `1px solid ${alpha(theme.palette.divider, 0.1)}`,
+                      p: 0, 
+                      borderRadius: 3,
+                      height: '100%',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      transition: 'transform 0.2s, box-shadow 0.2s',
+                      '&:hover': {
+                        transform: 'translateY(-4px)',
+                        boxShadow: 6,
+                      },
+                      overflow: 'hidden',
                     }}
                   >
-                    <Typography variant="h6" sx={{ mb: 2 }}>{phase.name}</Typography>
+                    <Box 
+                      sx={{ 
+                        p: 2.5,
+                        borderBottom: `1px solid ${alpha(theme.palette.divider, 0.1)}`,
+                        bgcolor: alpha(getStatusColor(phase.status), 0.05),
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center'
+                      }}
+                    >
+                      <Typography 
+                        variant="h6" 
+                        sx={{ 
+                          fontWeight: 600,
+                          display: '-webkit-box',
+                          WebkitLineClamp: 1,
+                          WebkitBoxOrient: 'vertical',
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                        }}
+                      >
+                        {phase.name}
+                      </Typography>
+                      <Chip
+                        icon={getStatusIcon(phase.status)}
+                        label={phase.status.replace('_', ' ')}
+                        size="small"
+                        sx={{
+                          fontWeight: 600,
+                          fontSize: '0.75rem',
+                          bgcolor: alpha(getStatusColor(phase.status), 0.15),
+                          color: getStatusColor(phase.status),
+                          borderRadius: '12px',
+                          '& .MuiChip-icon': {
+                            color: getStatusColor(phase.status)
+                          }
+                        }}
+                      />
+                    </Box>
                     
-                    <Box sx={{ mb: 2 }}>
-                      <Typography variant="body2" color="text.secondary" gutterBottom>Status</Typography>
-                      <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
-                        {['not_started', 'in_progress', 'completed', 'delayed'].map((status) => (
-                          <Chip
-                            key={status}
-                            label={status.replace('_', ' ').toUpperCase()}
-                            clickable
-                            size="small"
-                            onClick={() => handleQuickUpdatePhase(phase.id, 'status', status)}
+                    <Box sx={{ p: 2.5, flex: 1, display: 'flex', flexDirection: 'column' }}>
+                      <Box sx={{ mb: 3 }}>
+                        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
+                          <Typography variant="body2" fontWeight={600} color="text.secondary">
+                            Status
+                          </Typography>
+                          <Typography variant="body2" color="text.primary">
+                            {phasesBeingUpdated[phase.id].progress}% Complete
+                          </Typography>
+                        </Box>
+                        
+                        <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, mb: 2 }}>
+                          {['not_started', 'in_progress', 'completed', 'delayed'].map((status) => (
+                            <Chip
+                              key={status}
+                              label={status.replace('_', ' ')}
+                              clickable
+                              size="small"
+                              onClick={() => handleQuickUpdatePhase(phase.id, 'status', status)}
+                              sx={{
+                                height: 24,
+                                fontSize: '0.7rem',
+                                fontWeight: 600,
+                                bgcolor: phase.status === status 
+                                  ? alpha(getStatusColor(status), 0.15)
+                                  : alpha(theme.palette.background.default, 0.6),
+                                color: phase.status === status 
+                                  ? getStatusColor(status)
+                                  : theme.palette.text.secondary,
+                                borderRadius: '12px',
+                                border: `1px solid ${alpha(getStatusColor(status), phase.status === status ? 0.5 : 0.1)}`,
+                                '&:hover': {
+                                  bgcolor: alpha(getStatusColor(status), 0.1),
+                                }
+                              }}
+                            />
+                          ))}
+                        </Box>
+                        
+                        <Box sx={{ width: '100%', height: 6, bgcolor: alpha(theme.palette.divider, 0.1), borderRadius: 3, mb: 1, overflow: 'hidden' }}>
+                          <Box
                             sx={{
-                              fontWeight: 600,
-                              bgcolor: phase.status === status 
-                                ? alpha(getStatusColor(status), 0.2)
-                                : 'transparent',
-                              color: phase.status === status 
-                                ? getStatusColor(status)
-                                : 'text.secondary',
-                              borderRadius: 1,
-                              border: `1px solid ${alpha(getStatusColor(status), phase.status === status ? 0.5 : 0.1)}`,
+                              height: '100%',
+                              width: `${phase.status === 'completed' ? 100 : phase.status === 'in_progress' ? 50 : phase.status === 'delayed' ? 25 : 0}%`,
+                              bgcolor: getStatusColor(phase.status),
+                              borderRadius: 3,
+                              transition: 'width 0.5s ease-in-out',
                             }}
                           />
-                        ))}
+                        </Box>
+                        
+                        {/* Remove the Slider component and its container */}
                       </Box>
-                    </Box>
-                    
-                    <Box sx={{ mb: 2 }}>
-                      <Typography variant="body2" color="text.secondary" gutterBottom>
-                        Progress: {phasesBeingUpdated[phase.id].progress}%
-                      </Typography>
-                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-                        <input 
-                          type="range" 
-                          min="0" 
-                          max="100" 
-                          value={phasesBeingUpdated[phase.id].progress} 
-                          onChange={(e) => handleQuickUpdatePhase(phase.id, 'progress', parseInt(e.target.value))}
-                          style={{ width: '100%' }}
-                        />
+                      
+                      <Box sx={{ mb: 3 }}>
+                        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
+                          <Typography variant="body2" fontWeight={600} color="text.secondary">
+                            Budget Status
+                          </Typography>
+                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                            {phasesBeingUpdated[phase.id].actualCost > phase.budget && (
+                              <Chip 
+                                label="Over Budget" 
+                                size="small" 
+                                color="error" 
+                                sx={{ height: 20, fontSize: '0.65rem', fontWeight: 600 }}
+                              />
+                            )}
+                          </Box>
+                        </Box>
+                        
+                        <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
+                          <Typography variant="body2" color="text.secondary">Budget:</Typography>
+                          <Typography variant="body2" fontWeight={600}>{formatCurrency(phase.budget)}</Typography>
+                        </Box>
+                        
                         <Box sx={{ 
                           display: 'flex', 
-                          gap: 1 
+                          justifyContent: 'space-between', 
+                          mb: 1,
+                          p: 1.5,
+                          bgcolor: alpha(
+                            phasesBeingUpdated[phase.id].actualCost > phase.budget ? 
+                              theme.palette.error.main : 
+                              theme.palette.success.main, 
+                            0.05
+                          ),
+                          borderRadius: 1.5,
+                          border: `1px solid ${alpha(
+                            phasesBeingUpdated[phase.id].actualCost > phase.budget ? 
+                              theme.palette.error.main : 
+                              theme.palette.success.main, 
+                            0.1
+                          )}`,
                         }}>
-                          <IconButton 
-                            size="small" 
-                            onClick={() => {
-                              const currentProgress = phasesBeingUpdated[phase.id].progress;
-                              if (currentProgress >= 5) {
-                                handleQuickUpdatePhase(phase.id, 'progress', currentProgress - 5);
-                              }
-                            }}
-                            sx={{ border: `1px solid ${theme.palette.divider}` }}
+                          <Typography variant="body2" fontWeight={600} color="text.secondary">Actual Cost:</Typography>
+                          <Typography 
+                            variant="body2" 
+                            fontWeight={700}
+                            color={phasesBeingUpdated[phase.id].actualCost > phase.budget ? 'error.main' : 'success.main'}
                           >
-                            -
-                          </IconButton>
-                          <IconButton 
-                            size="small" 
-                            onClick={() => {
-                              const currentProgress = phasesBeingUpdated[phase.id].progress;
-                              if (currentProgress <= 95) {
-                                handleQuickUpdatePhase(phase.id, 'progress', currentProgress + 5);
-                              }
-                            }}
-                            sx={{ border: `1px solid ${theme.palette.divider}` }}
-                          >
-                            +
-                          </IconButton>
+                            {formatCurrency(phasesBeingUpdated[phase.id].actualCost)}
+                          </Typography>
                         </Box>
                       </Box>
-                    </Box>
-                    
-                    <Box sx={{ mb: 1 }}>
-                      <Typography variant="body2" color="text.secondary" gutterBottom>
-                        Actual Cost: {formatCurrency(phasesBeingUpdated[phase.id].actualCost)}
-                      </Typography>
-                      <Box sx={{ display: 'flex', gap: 1 }}>
-                        <input 
-                          type="number"
-                          value={phasesBeingUpdated[phase.id].actualCost}
-                          onChange={(e) => handleQuickUpdatePhase(phase.id, 'actualCost', parseFloat(e.target.value) || 0)}
-                          style={{ 
-                            width: '100%',
-                            padding: '8px 12px',
-                            borderRadius: '4px',
-                            border: `1px solid ${theme.palette.divider}`
-                          }}
-                        />
-                      </Box>
-                      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mt: 1 }}>
-                        <Typography variant="body2" color="text.secondary">
-                          Budget: {formatCurrency(phase.budget)}
-                          {phasesBeingUpdated[phase.id].actualCost > phase.budget && (
-                            <Chip 
-                              label="Over Budget" 
-                              size="small" 
-                              color="error" 
-                              sx={{ ml: 1, height: 20, fontSize: '0.7rem' }}
+                      
+                      <Box sx={{ mb: 1, flex: 1 }}>
+                        <Box sx={{ 
+                          display: 'flex', 
+                          justifyContent: 'space-between', 
+                          alignItems: 'center', 
+                          mb: 1.5,
+                          px: 0.5
+                        }}>
+                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                            <Typography variant="body2" fontWeight={600} color="text.secondary">
+                              Expenses
+                            </Typography>
+                            <Chip
+                              label={expenses.filter(e => e.phaseId === phase.id).length}
+                              size="small"
+                              sx={{
+                                height: 20,
+                                fontSize: '0.65rem',
+                                fontWeight: 600,
+                                bgcolor: alpha(theme.palette.primary.main, 0.15),
+                                color: theme.palette.primary.main
+                              }}
                             />
-                          )}
-                        </Typography>
-                        <Box sx={{ display: 'flex', gap: 1 }}>
+                          </Box>
                           <Button
                             size="small"
-                            variant="outlined"
-                            startIcon={<ExpensesIcon fontSize="small" />}
-                            onClick={() => handleOpenQuickExpenseDialog(phase.id)}
-                            sx={{ 
-                              mt: 1, 
-                              height: 30, 
+                            startIcon={<AddIcon />}
+                            onClick={() => handleAddQuickExpense(phase.id)}
+                            sx={{
+                              height: 28,
+                              px: 1.5,
                               fontSize: '0.75rem',
-                              borderRadius: 1
+                              textTransform: 'none',
+                              fontWeight: 600
                             }}
                           >
                             Add Expense
                           </Button>
-                          <Button
-                            size="small"
-                            variant="outlined"
-                            startIcon={<AddIcon fontSize="small" />}
-                            onClick={() => handleOpenQuickBidDialog(phase.id)}
-                            sx={{ 
-                              mt: 1, 
-                              height: 30, 
-                              fontSize: '0.75rem',
-                              borderRadius: 1
-                            }}
-                          >
-                            Add Bid
-                          </Button>
                         </Box>
+                        
+                        {expenses.filter(e => e.phaseId === phase.id).length > 0 ? (
+                          <Box sx={{ 
+                            display: 'flex', 
+                            flexDirection: 'column',
+                            gap: 1,
+                            maxHeight: 160,
+                            overflow: 'auto',
+                            px: 0.5,
+                            '&::-webkit-scrollbar': {
+                              width: '6px',
+                            },
+                            '&::-webkit-scrollbar-thumb': {
+                              backgroundColor: alpha(theme.palette.divider, 0.2),
+                              borderRadius: '3px',
+                            },
+                            '&::-webkit-scrollbar-track': {
+                              backgroundColor: 'transparent',
+                            },
+                          }}>
+                            {expenses
+                              .filter(e => e.phaseId === phase.id)
+                              .map(expense => (
+                                <Paper
+                                  key={expense.id}
+                                  elevation={0}
+                                  sx={{
+                                    p: 1.5,
+                                    borderRadius: 2,
+                                    border: `1px solid ${alpha(theme.palette.divider, 0.1)}`,
+                                    bgcolor: alpha(theme.palette.background.default, 0.5),
+                                    transition: 'all 0.2s',
+                                    '&:hover': {
+                                      bgcolor: alpha(theme.palette.background.default, 0.8),
+                                      borderColor: alpha(theme.palette.primary.main, 0.2),
+                                      transform: 'translateY(-1px)',
+                                      boxShadow: `0 2px 8px ${alpha(theme.palette.common.black, 0.05)}`
+                                    }
+                                  }}
+                                >
+                                  <Box sx={{ 
+                                    display: 'flex', 
+                                    justifyContent: 'space-between',
+                                    alignItems: 'flex-start',
+                                    gap: 1
+                                  }}>
+                                    <Box sx={{ flex: 1, minWidth: 0 }}>
+                                      <Box sx={{ 
+                                        display: 'flex', 
+                                        alignItems: 'center', 
+                                        gap: 1, 
+                                        mb: 0.5,
+                                        flexWrap: 'wrap'
+                                      }}>
+                                        <Chip
+                                          label={expense.category}
+                                          size="small"
+                                          sx={{
+                                            height: 20,
+                                            fontSize: '0.65rem',
+                                            fontWeight: 600,
+                                            bgcolor: expense.category === 'materials' ? alpha(theme.palette.primary.main, 0.15) :
+                                                    expense.category === 'labor' ? alpha(theme.palette.warning.main, 0.15) :
+                                                    expense.category === 'permits' ? alpha(theme.palette.info.main, 0.15) :
+                                                    expense.category === 'equipment' ? alpha(theme.palette.secondary.main, 0.15) :
+                                                    alpha(theme.palette.grey[500], 0.15),
+                                            color: expense.category === 'materials' ? theme.palette.primary.main :
+                                                  expense.category === 'labor' ? theme.palette.warning.main :
+                                                  expense.category === 'permits' ? theme.palette.info.main :
+                                                  expense.category === 'equipment' ? theme.palette.secondary.main :
+                                                  theme.palette.grey[700]
+                                          }}
+                                        />
+                                        <Typography 
+                                          variant="body2" 
+                                          sx={{ 
+                                            fontWeight: 600,
+                                            overflow: 'hidden',
+                                            textOverflow: 'ellipsis',
+                                            whiteSpace: 'nowrap',
+                                            flex: 1
+                                          }}
+                                        >
+                                          {expense.description}
+                                        </Typography>
+                                      </Box>
+                                      <Box sx={{ 
+                                        display: 'flex', 
+                                        alignItems: 'center', 
+                                        gap: 1.5,
+                                        flexWrap: 'wrap',
+                                        fontSize: '0.75rem',
+                                        color: 'text.secondary'
+                                      }}>
+                                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                                          <CalendarTodayIcon sx={{ fontSize: '0.75rem' }} />
+                                          {expense.date instanceof Date 
+                                            ? expense.date.toLocaleDateString() 
+                                            : new Date(expense.date).toLocaleDateString()}
+                                        </Box>
+                                        {expense.vendor && (
+                                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                                            <StorefrontIcon sx={{ fontSize: '0.75rem' }} />
+                                            {expense.vendor}
+                                          </Box>
+                                        )}
+                                        {expense.status && (
+                                          <Box sx={{ 
+                                            display: 'flex', 
+                                            alignItems: 'center', 
+                                            gap: 0.5,
+                                            color: expense.status === 'paid' ? 'success.main' :
+                                                   expense.status === 'pending' ? 'warning.main' :
+                                                   'error.main'
+                                          }}>
+                                            <CircleIcon sx={{ fontSize: '0.5rem' }} />
+                                            {expense.status.charAt(0).toUpperCase() + expense.status.slice(1)}
+                                          </Box>
+                                        )}
+                                      </Box>
+                                    </Box>
+                                    <Typography 
+                                      variant="body2" 
+                                      fontWeight={700}
+                                      sx={{ 
+                                        color: expense.amount > 1000 ? 'error.main' : 'text.primary',
+                                        whiteSpace: 'nowrap'
+                                      }}
+                                    >
+                                      {formatCurrency(expense.amount)}
+                                    </Typography>
+                                  </Box>
+                                </Paper>
+                              ))
+                            }
+                          </Box>
+                        ) : (
+                          <Box sx={{ 
+                            py: 2, 
+                            display: 'flex', 
+                            alignItems: 'center', 
+                            justifyContent: 'center',
+                            height: 80,
+                            bgcolor: alpha(theme.palette.background.default, 0.5),
+                            borderRadius: 2,
+                            border: `1px dashed ${alpha(theme.palette.divider, 0.2)}`,
+                            cursor: 'pointer',
+                            transition: 'all 0.2s',
+                            '&:hover': {
+                              bgcolor: alpha(theme.palette.background.default, 0.8),
+                              borderColor: alpha(theme.palette.primary.main, 0.3)
+                            }
+                          }}
+                          onClick={() => handleAddQuickExpense(phase.id)}
+                          >
+                            <Typography 
+                              variant="body2" 
+                              color="text.secondary" 
+                              sx={{ 
+                                fontStyle: 'italic',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: 1
+                              }}
+                            >
+                              <AddIcon sx={{ fontSize: '1rem' }} />
+                              Add your first expense
+                            </Typography>
+                          </Box>
+                        )}
                       </Box>
+                    </Box>
+                    
+                    <Box sx={{ 
+                      p: 1.5, 
+                      borderTop: `1px solid ${alpha(theme.palette.divider, 0.1)}`,
+                      bgcolor: alpha(theme.palette.background.default, 0.5),
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      gap: 1
+                    }}>
+                      <Button
+                        fullWidth
+                        size="small"
+                        variant="outlined"
+                        startIcon={<ExpensesIcon fontSize="small" />}
+                        onClick={() => handleOpenQuickExpenseDialog(phase.id)}
+                        sx={{ 
+                          fontSize: '0.75rem',
+                          borderRadius: 2,
+                          height: 36
+                        }}
+                      >
+                        Add Expense
+                      </Button>
+                      <Button
+                        fullWidth
+                        size="small"
+                        variant="outlined"
+                        startIcon={<AddIcon fontSize="small" />}
+                        onClick={() => handleOpenQuickBidDialog(phase.id)}
+                        sx={{ 
+                          fontSize: '0.75rem',
+                          borderRadius: 2,
+                          height: 36
+                        }}
+                      >
+                        Add Bid
+                      </Button>
                     </Box>
                   </Card>
                 </Grid>
@@ -1117,68 +1505,136 @@ const ProjectDetailPage: React.FC = () => {
         {/* Recent Expenses in Quick Update Mode */}
         {quickUpdateMode && expenses.length > 0 && (
           <Paper 
-            elevation={0}
+            elevation={3}
             sx={{ 
               p: 3, 
               mb: 3, 
-              borderRadius: 2,
-              border: `1px solid ${alpha(theme.palette.primary.main, 0.3)}`,
-              bgcolor: alpha(theme.palette.success.main, 0.05)
+              borderRadius: 3,
+              overflow: 'hidden',
+              position: 'relative',
+              '&::before': {
+                content: '""',
+                position: 'absolute',
+                top: 0,
+                left: 0,
+                width: '100%',
+                height: '4px',
+                backgroundColor: 'success.main',
+              }
             }}
           >
-            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
               <Typography variant="h5" fontWeight={600} color="success.main">Recent Expenses</Typography>
+              <Chip 
+                label={`${expenses.length} Total`} 
+                color="success" 
+                size="small" 
+                sx={{ fontWeight: 600 }} 
+              />
             </Box>
             
             <Box sx={{ mb: 2 }}>
               <Grid container spacing={2}>
-                {expenses.slice(-5).reverse().map((expense) => {
+                {expenses.slice(-6).reverse().map((expense) => {
                   const phaseName = phases.find(p => p.id === expense.phaseId)?.name || 'Unknown Phase';
                   
                   return (
-                    <Grid item xs={12} sm={6} md={4} key={expense.id}>
-                      <Card elevation={0} sx={{ 
-                        p: 2, 
+                    <Grid item xs={12} sm={6} md={6} lg={4} key={expense.id}>
+                      <Card elevation={2} sx={{ 
+                        p: 0, 
                         borderRadius: 2,
-                        border: `1px solid ${alpha(theme.palette.divider, 0.1)}`,
+                        height: '100%',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        transition: 'transform 0.2s',
+                        '&:hover': {
+                          transform: 'translateY(-4px)',
+                          boxShadow: 4,
+                        },
+                        overflow: 'hidden',
                       }}>
-                        <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
-                          <Chip 
-                            label={expense.category} 
-                            size="small" 
-                            sx={{
-                              fontWeight: 500,
-                              borderRadius: 1,
-                              bgcolor: expense.category === 'materials' ? alpha(theme.palette.primary.main, 0.1) :
-                                       expense.category === 'labor' ? alpha(theme.palette.warning.main, 0.1) :
-                                       expense.category === 'permits' ? alpha(theme.palette.info.main, 0.1) :
-                                       expense.category === 'equipment' ? alpha(theme.palette.secondary.main, 0.1) :
-                                       alpha(theme.palette.grey[500], 0.1),
-                              color: expense.category === 'materials' ? theme.palette.primary.main :
-                                     expense.category === 'labor' ? theme.palette.warning.main :
-                                     expense.category === 'permits' ? theme.palette.info.main :
-                                     expense.category === 'equipment' ? theme.palette.secondary.main :
-                                     theme.palette.grey[700]
-                            }}
-                          />
-                          <Typography variant="body1" fontWeight={600}>
-                            {formatCurrency(expense.amount)}
-                          </Typography>
+                        <Box sx={{ 
+                          p: 2, 
+                          borderBottom: `1px solid ${alpha(theme.palette.divider, 0.1)}`,
+                          bgcolor: alpha(
+                            expense.category === 'materials' ? theme.palette.primary.main :
+                            expense.category === 'labor' ? theme.palette.warning.main :
+                            expense.category === 'permits' ? theme.palette.info.main :
+                            expense.category === 'equipment' ? theme.palette.secondary.main :
+                            theme.palette.grey[500],
+                            0.05
+                          ),
+                        }}>
+                          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <Chip 
+                              label={expense.category} 
+                              size="small" 
+                              sx={{
+                                fontWeight: 600,
+                                fontSize: '0.7rem',
+                                borderRadius: '12px',
+                                height: 24,
+                                bgcolor: expense.category === 'materials' ? alpha(theme.palette.primary.main, 0.15) :
+                                        expense.category === 'labor' ? alpha(theme.palette.warning.main, 0.15) :
+                                        expense.category === 'permits' ? alpha(theme.palette.info.main, 0.15) :
+                                        expense.category === 'equipment' ? alpha(theme.palette.secondary.main, 0.15) :
+                                        alpha(theme.palette.grey[500], 0.15),
+                                color: expense.category === 'materials' ? theme.palette.primary.main :
+                                      expense.category === 'labor' ? theme.palette.warning.main :
+                                      expense.category === 'permits' ? theme.palette.info.main :
+                                      expense.category === 'equipment' ? theme.palette.secondary.main :
+                                      theme.palette.grey[700]
+                              }}
+                            />
+                            <Typography variant="h6" fontWeight={700}>
+                              {formatCurrency(expense.amount)}
+                            </Typography>
+                          </Box>
                         </Box>
                         
-                        <Typography variant="body2" sx={{ mb: 1 }}>
-                          {expense.description || '-'}
-                        </Typography>
-                        
-                        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                          <Typography variant="caption" color="text.secondary">
-                            Phase: {phaseName}
+                        <Box sx={{ p: 2, flex: 1 }}>
+                          <Typography 
+                            variant="body2" 
+                            sx={{ 
+                              mb: 1,
+                              fontWeight: 500,
+                              overflow: 'hidden',
+                              display: '-webkit-box',
+                              WebkitLineClamp: 2,
+                              WebkitBoxOrient: 'vertical',
+                              minHeight: '40px',
+                            }}
+                          >
+                            {expense.description || 'No description'}
                           </Typography>
-                          <Typography variant="caption" color="text.secondary">
-                            {expense.date instanceof Date 
-                              ? expense.date.toLocaleDateString() 
-                              : new Date(expense.date).toLocaleDateString()}
-                          </Typography>
+                          
+                          <Box sx={{ 
+                            display: 'flex', 
+                            alignItems: 'center', 
+                            mt: 1, 
+                            p: 1,
+                            bgcolor: alpha(theme.palette.background.default, 0.5),
+                            borderRadius: 1.5
+                          }}>
+                            <Box sx={{ flex: 1 }}>
+                              <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
+                                Phase
+                              </Typography>
+                              <Typography variant="body2" fontWeight={500} noWrap>
+                                {phaseName}
+                              </Typography>
+                            </Box>
+                            <Box>
+                              <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
+                                Date
+                              </Typography>
+                              <Typography variant="body2" fontWeight={500}>
+                                {expense.date instanceof Date 
+                                  ? expense.date.toLocaleDateString() 
+                                  : new Date(expense.date).toLocaleDateString()}
+                              </Typography>
+                            </Box>
+                          </Box>
                         </Box>
                       </Card>
                     </Grid>
@@ -1186,18 +1642,6 @@ const ProjectDetailPage: React.FC = () => {
                 })}
               </Grid>
             </Box>
-            
-            {expenses.length > 5 && (
-              <Box sx={{ display: 'flex', justifyContent: 'center' }}>
-                <Button 
-                  size="small" 
-                  onClick={() => setTabValue(3)} // Switch to Expenses tab
-                  endIcon={<ArrowBackIcon sx={{ transform: 'rotate(180deg)' }} />}
-                >
-                  View All Expenses
-                </Button>
-              </Box>
-            )}
           </Paper>
         )}
 
@@ -2645,7 +3089,7 @@ const ProjectDetailPage: React.FC = () => {
         <DialogActions>
           <Button onClick={() => setNewExpenseDialogOpen(false)}>Cancel</Button>
           <Button 
-            onClick={handleAddQuickExpense} 
+            onClick={() => handleAddQuickExpense()} 
             variant="contained" 
             disabled={!quickExpense.category || quickExpense.amount <= 0 || !quickExpense.phaseId}
           >

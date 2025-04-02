@@ -44,10 +44,11 @@ import {
   CheckCircle as CheckCircleIcon,
   DeleteOutline as DeleteOutlineIcon,
   Business as BusinessIcon,
+  Engineering as EngineeringIcon,
 } from '@mui/icons-material';
 import { ExpenseService } from '../../services/expense';
 import { ProjectService } from '../../services/project';
-import { Expense } from '../../types';
+import { Expense, LineItem } from '../../types';
 import { useAuth } from '../../contexts/AuthContext';
 import { formatCurrency, formatDate } from '../../utils/formatters';
 import ExpenseFormModal from './ExpenseFormModal';
@@ -317,6 +318,20 @@ const Expenses: React.FC = () => {
       if (expenseData.id) {
         // Update existing expense
         await ExpenseService.updateExpense(expenseData.id, expenseData);
+        
+        // Update in local state
+        setExpenses(prevExpenses => prevExpenses.map(exp => 
+          exp.id === expenseData.id 
+            ? {
+                ...exp,
+                ...expenseData,
+                // Make sure we don't lose the project name
+                projectName: exp.projectName
+              }
+            : exp
+        ));
+        
+        console.log('Updated expense in local state', expenseData.id);
         savedExpense = { ...expenseData } as Expense;
       } else {
         // Create new expense with required fields
@@ -334,25 +349,52 @@ const Expenses: React.FC = () => {
         };
         
         savedExpense = await ExpenseService.createExpense(user.uid, newExpenseData);
+        
+        // Find project name from projects array
+        const projectName = projects.find(p => p.id === savedExpense.projectId)?.name || 'Unknown Project';
+        
+        // Add to local state right away with project name
+        const enhancedExpense = {
+          ...savedExpense,
+          projectName
+        };
+        
+        console.log('Adding new expense to local state:', enhancedExpense);
+        
+        // Check if the expense should be visible in the current tab view
+        const shouldShowInCurrentTab = 
+          tabValue === 0 || // All expenses tab
+          (tabValue === 1 && savedExpense.status !== 'paid') || // Needs payment tab
+          (tabValue === 2 && savedExpense.status === 'paid'); // Paid tab
+        
+        if (shouldShowInCurrentTab) {
+          setExpenses(prevExpenses => [enhancedExpense, ...prevExpenses]);
+        } else {
+          // If the expense doesn't match the current tab filter, show a note to the user
+          console.log('New expense added but not visible in current tab view');
+          setSnackbar({
+            open: true,
+            message: 'Expense created successfully. Switch tabs to view it.',
+            severity: 'info'
+          });
+          // Still update the expenses array for when the user switches tabs
+          setExpenses(prevExpenses => [enhancedExpense, ...prevExpenses]);
+        }
       }
       
-      // Add to local state with project name
-      const projectName = projects.find(p => p.id === savedExpense.projectId)?.name || 'Unknown Project';
-      const updatedExpense = {
-        ...savedExpense,
-        projectName
-      };
-      
-      // Close modal and refresh data
+      // Close modal
       handleCloseModal();
-      fetchExpenses();
       
-      // Show success message
-      setSnackbar({
-        open: true,
-        message: `Expense ${expenseData.id ? 'updated' : 'created'} successfully`,
-        severity: 'success'
-      });
+      // Show success message (only if we didn't already show the tab-specific message)
+      if (!(expenseData.id === undefined && tabValue !== 0 && 
+           ((tabValue === 1 && expenseData.status === 'paid') || 
+            (tabValue === 2 && expenseData.status !== 'paid')))) {
+        setSnackbar({
+          open: true,
+          message: `Expense ${expenseData.id ? 'updated' : 'created'} successfully`,
+          severity: 'success'
+        });
+      }
     } catch (err) {
       console.error('Error saving expense:', err);
       setSnackbar({
@@ -372,7 +414,8 @@ const Expenses: React.FC = () => {
     return (
       expense.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
       expense.vendor?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      expense.projectName?.toLowerCase().includes(searchTerm.toLowerCase())
+      expense.projectName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      expense.subcontractorName?.toLowerCase().includes(searchTerm.toLowerCase())
     );
   });
 
@@ -599,6 +642,37 @@ const Expenses: React.FC = () => {
                     {expense.description}
                   </Typography>
                   
+                  {/* Line items section */}
+                  {expense.lineItems && expense.lineItems.length > 0 && (
+                    <Box sx={{ my: 2 }}>
+                      <Typography variant="subtitle2" color="text.secondary" sx={{ mb: 1 }}>
+                        Line Items
+                      </Typography>
+                      <Paper variant="outlined" sx={{ p: 1 }}>
+                        {expense.lineItems.map((item: LineItem, index: number) => (
+                          <Box key={item.id || index} sx={{ 
+                            display: 'flex', 
+                            justifyContent: 'space-between',
+                            py: 0.5,
+                            ...(index !== 0 && { borderTop: `1px solid ${theme.palette.divider}`, mt: 0.5 })
+                          }}>
+                            <Box sx={{ display: 'flex', flexDirection: 'column' }}>
+                              <Typography variant="body2" noWrap sx={{ maxWidth: '150px' }}>
+                                {item.description}
+                              </Typography>
+                              <Typography variant="caption" color="text.secondary">
+                                {item.quantity} x {formatCurrency(item.unitCost || 0)}
+                              </Typography>
+                            </Box>
+                            <Typography variant="body2" fontWeight="medium">
+                              {formatCurrency(item.totalCost || 0)}
+                            </Typography>
+                          </Box>
+                        ))}
+                      </Paper>
+                    </Box>
+                  )}
+                  
                   <Divider sx={{ my: 2 }} />
                   
                   <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
@@ -611,6 +685,13 @@ const Expenses: React.FC = () => {
                       <Box sx={{ display: 'flex', alignItems: 'center' }}>
                         <VendorIcon fontSize="small" sx={{ mr: 1, color: 'text.secondary' }} />
                         <Typography variant="body2">{expense.vendor}</Typography>
+                      </Box>
+                    )}
+                    
+                    {expense.subcontractorName && (
+                      <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                        <EngineeringIcon fontSize="small" sx={{ mr: 1, color: 'text.secondary' }} />
+                        <Typography variant="body2">{expense.subcontractorName}</Typography>
                       </Box>
                     )}
                     

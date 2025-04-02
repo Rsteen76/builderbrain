@@ -127,7 +127,7 @@ export class ExpenseService {
     startDate?: Date;
     endDate?: Date;
   }): Promise<Expense[]> {
-    console.log(`ExpenseService: Fetching expenses for user: ${userId}, with filters:`, filters);
+    console.log(`ExpenseService.getExpenses - Fetching expenses for user: ${userId}`);
     
     if (!userId) {
       console.error("ExpenseService: No userId provided to getExpenses");
@@ -172,27 +172,45 @@ export class ExpenseService {
     // Order by date descending (most recent first)
     q = query(q, orderBy('date', 'desc'));
 
-    const snapshot = await getDocs(q);
-    console.log(`ExpenseService: Found ${snapshot.docs.length} expenses`);
-    
-    if (snapshot.empty) {
-      console.log("ExpenseService: No expenses found for user:", userId);
+    try {
+      const snapshot = await getDocs(q);
+      
+      if (snapshot.empty) {
+        return [];
+      }
+
+      const expenses = snapshot.docs.map(doc => {
+        const data = doc.data();
+        return this.convertFirestoreData(data, doc.id);
+      });
+      
+      return expenses;
+    } catch (error) {
+      console.error("ExpenseService - Error executing Firestore query:", error);
       return [];
     }
-
-    return snapshot.docs.map(doc => {
-      return this.convertFirestoreData(doc.data(), doc.id);
-    });
   }
-
+  
   // Get project-specific expenses
   static async getProjectExpenses(userId: string, projectId: string): Promise<Expense[]> {
-    return this.getExpenses(userId, { projectId });
+    try {
+      const expenses = await this.getExpenses(userId, { projectId });
+      return expenses;
+    } catch (error) {
+      console.error(`ExpenseService.getProjectExpenses - Error retrieving expenses:`, error);
+      return [];
+    }
   }
-
+  
   // Get phase-specific expenses
   static async getPhaseExpenses(userId: string, projectId: string, phaseId: string): Promise<Expense[]> {
-    return this.getExpenses(userId, { projectId, phaseId });
+    try {
+      const expenses = await this.getExpenses(userId, { projectId, phaseId });
+      return expenses;
+    } catch (error) {
+      console.error(`ExpenseService.getPhaseExpenses - Error retrieving expenses:`, error);
+      return [];
+    }
   }
 
   // Get expenses by status

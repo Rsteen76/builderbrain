@@ -17,6 +17,7 @@ const Projects = lazy(() => import('./components/projects/Projects'));
 const ProjectDetails = lazy(() => import('./components/projects/ProjectDetails'));
 const ProjectSetupWizard = lazy(() => import('./components/projects/ProjectSetupWizard'));
 const ProjectForm = lazy(() => import('./components/projects/ProjectForm'));
+const ProjectTemplates = lazy(() => import('./components/projects/Templates'));
 const Tasks = lazy(() => import('./components/tasks/Tasks'));
 const Expenses = lazy(() => import('./components/expenses/Expenses'));
 const Documents = lazy(() => import('./components/documents/Documents'));
@@ -153,6 +154,7 @@ const App: React.FC = () => {
                   <Route path="subcontractors/:id" element={<ProtectedRoute><SubcontractorDetails /></ProtectedRoute>} />
                   <Route path="subcontractors/:id/edit" element={<ProtectedRoute><SubcontractorForm /></ProtectedRoute>} />
                   <Route path="settings" element={<ProtectedRoute><Settings /></ProtectedRoute>} />
+                  <Route path="templates" element={<ProtectedRoute><ProjectTemplates /></ProtectedRoute>} />
                 </Route>
               </Routes>
             </Suspense>

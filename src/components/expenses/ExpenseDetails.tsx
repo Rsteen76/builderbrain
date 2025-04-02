@@ -16,6 +16,7 @@ import {
   Stack,
   CircularProgress,
   Alert,
+  Link,
 } from '@mui/material';
 import {
   Edit as EditIcon,
@@ -31,6 +32,7 @@ import {
   CheckCircle as CheckCircleIcon,
   Cancel as CancelIcon,
   Pending as PendingIcon,
+  Engineering as SubcontractorIcon,
 } from '@mui/icons-material';
 
 // Types
@@ -46,6 +48,9 @@ interface Expense {
   projectName: string;
   submittedBy: string;
   receiptUrl?: string;
+  vendor?: string;
+  subcontractorId?: string;
+  subcontractorName?: string;
 }
 
 const ExpenseDetails: React.FC = () => {
@@ -76,6 +81,9 @@ const ExpenseDetails: React.FC = () => {
           projectName: 'Office Renovation',
           submittedBy: 'John Doe',
           receiptUrl: 'https://example.com/receipt1.pdf',
+          vendor: 'Home Depot',
+          subcontractorId: 'sub-123',
+          subcontractorName: 'ABC Construction',
         };
         
         setExpense(mockExpense);
@@ -209,165 +217,187 @@ const ExpenseDetails: React.FC = () => {
           Expense Details
         </Typography>
         <Box>
-          {expense.status === 'pending' && (
-            <>
-              <Button
-                variant="contained"
-                color="success"
-                startIcon={<CheckCircleIcon />}
-                onClick={handleApprove}
-                sx={{ mr: 1 }}
-              >
-                Approve
-              </Button>
-              <Button
-                variant="contained"
-                color="error"
-                startIcon={<CancelIcon />}
-                onClick={handleReject}
-                sx={{ mr: 1 }}
-              >
-                Reject
-              </Button>
-            </>
-          )}
           <IconButton onClick={handleMenuOpen}>
             <MoreVertIcon />
           </IconButton>
+          <Menu
+            anchorEl={anchorEl}
+            open={Boolean(anchorEl)}
+            onClose={handleMenuClose}
+          >
+            <MenuItem onClick={handleEdit}>
+              <EditIcon fontSize="small" sx={{ mr: 1 }} />
+              Edit
+            </MenuItem>
+            <MenuItem onClick={handleDelete} sx={{ color: 'error.main' }}>
+              <DeleteIcon fontSize="small" sx={{ mr: 1 }} />
+              Delete
+            </MenuItem>
+          </Menu>
         </Box>
       </Box>
 
-      <Grid container spacing={3}>
-        <Grid item xs={12} md={8}>
-          <Card>
-            <CardContent>
-              <Stack spacing={3}>
-                <Box>
-                  <Typography variant="h5" gutterBottom>
+      {expense && (
+        <Card>
+          <CardContent>
+            <Grid container spacing={3}>
+              <Grid item xs={12}>
+                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <Typography variant="h5" component="h2">
                     {expense.title}
                   </Typography>
-                  <Typography variant="body1" color="text.secondary" paragraph>
-                    {expense.description}
-                  </Typography>
-                  <Stack direction="row" spacing={1}>
-                    <Chip
-                      icon={<CategoryIcon />}
-                      label={expense.category}
-                      variant="outlined"
-                    />
-                    <Chip
-                      icon={getStatusIcon(expense.status)}
-                      label={expense.status.toUpperCase()}
-                      color={getStatusColor(expense.status) as any}
-                    />
-                  </Stack>
-                </Box>
-
-                <Divider />
-
-                <Grid container spacing={2}>
-                  <Grid item xs={12} sm={6}>
-                    <Box>
-                      <Typography variant="subtitle2" color="text.secondary" gutterBottom>
-                        Amount
-                      </Typography>
-                      <Typography variant="h4" color="primary">
-                        {formatCurrency(expense.amount)}
-                      </Typography>
-                    </Box>
-                  </Grid>
-                  <Grid item xs={12} sm={6}>
-                    <Box>
-                      <Typography variant="subtitle2" color="text.secondary" gutterBottom>
-                        Date
-                      </Typography>
-                      <Typography variant="h6">
-                        {formatDate(expense.date)}
-                      </Typography>
-                    </Box>
-                  </Grid>
-                </Grid>
-
-                <Divider />
-
-                <Box>
-                  <Typography variant="subtitle2" color="text.secondary" gutterBottom>
-                    Project Information
-                  </Typography>
-                  <Typography variant="body1">
-                    <BusinessIcon sx={{ mr: 1, verticalAlign: 'middle' }} />
-                    {expense.projectName}
-                  </Typography>
-                </Box>
-
-                <Box>
-                  <Typography variant="subtitle2" color="text.secondary" gutterBottom>
-                    Submitted By
-                  </Typography>
-                  <Typography variant="body1">
-                    <PersonIcon sx={{ mr: 1, verticalAlign: 'middle' }} />
-                    {expense.submittedBy}
-                  </Typography>
-                </Box>
-              </Stack>
-            </CardContent>
-          </Card>
-        </Grid>
-
-        <Grid item xs={12} md={4}>
-          <Card>
-            <CardContent>
-              <Typography variant="h6" gutterBottom>
-                Receipt
-              </Typography>
-              {expense.receiptUrl ? (
-                <Box>
-                  <img
-                    src={expense.receiptUrl}
-                    alt="Receipt"
-                    style={{ width: '100%', maxHeight: '300px', objectFit: 'contain' }}
+                  <Chip
+                    label={expense.status.charAt(0).toUpperCase() + expense.status.slice(1)}
+                    color={getStatusColor(expense.status) as any}
+                    icon={getStatusIcon(expense.status)}
                   />
-                  <Button
-                    variant="outlined"
-                    startIcon={<ReceiptIcon />}
-                    href={expense.receiptUrl}
-                    target="_blank"
-                    sx={{ mt: 2 }}
-                  >
-                    View Full Receipt
-                  </Button>
                 </Box>
-              ) : (
-                <Paper
-                  sx={{
-                    p: 3,
-                    textAlign: 'center',
-                    backgroundColor: '#f5f5f5',
-                  }}
-                >
-                  <ReceiptIcon sx={{ fontSize: 48, color: 'text.secondary', mb: 1 }} />
-                  <Typography variant="body2" color="text.secondary">
-                    No receipt attached
-                  </Typography>
-                </Paper>
-              )}
-            </CardContent>
-          </Card>
-        </Grid>
-      </Grid>
+              </Grid>
 
-      <Menu
-        anchorEl={anchorEl}
-        open={Boolean(anchorEl)}
-        onClose={handleMenuClose}
-      >
-        <MenuItem onClick={handleEdit}>
-          <EditIcon sx={{ mr: 1 }} /> Edit
-        </MenuItem>
-        <MenuItem onClick={handleDelete}>
-          <DeleteIcon sx={{ mr: 1 }} /> Delete
-        </MenuItem>
-      </Menu>
+              <Grid item xs={12}>
+                <Divider />
+              </Grid>
+
+              <Grid item xs={12} md={6}>
+                <Stack spacing={2}>
+                  <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                    <MoneyIcon sx={{ mr: 1, color: 'primary.main' }} />
+                    <Typography variant="body1" component="span" fontWeight="bold">
+                      Amount:
+                    </Typography>
+                    <Typography variant="body1" component="span" sx={{ ml: 1 }}>
+                      {formatCurrency(expense.amount)}
+                    </Typography>
+                  </Box>
+
+                  <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                    <CategoryIcon sx={{ mr: 1, color: 'primary.main' }} />
+                    <Typography variant="body1" component="span" fontWeight="bold">
+                      Category:
+                    </Typography>
+                    <Typography variant="body1" component="span" sx={{ ml: 1 }}>
+                      {expense.category}
+                    </Typography>
+                  </Box>
+
+                  <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                    <CalendarIcon sx={{ mr: 1, color: 'primary.main' }} />
+                    <Typography variant="body1" component="span" fontWeight="bold">
+                      Date:
+                    </Typography>
+                    <Typography variant="body1" component="span" sx={{ ml: 1 }}>
+                      {formatDate(expense.date)}
+                    </Typography>
+                  </Box>
+
+                  <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                    <BusinessIcon sx={{ mr: 1, color: 'primary.main' }} />
+                    <Typography variant="body1" component="span" fontWeight="bold">
+                      Project:
+                    </Typography>
+                    <Typography variant="body1" component="span" sx={{ ml: 1 }}>
+                      {expense.projectName}
+                    </Typography>
+                  </Box>
+                </Stack>
+              </Grid>
+
+              <Grid item xs={12} md={6}>
+                <Stack spacing={2}>
+                  <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                    <DescriptionIcon sx={{ mr: 1, color: 'primary.main' }} />
+                    <Typography variant="body1" component="span" fontWeight="bold">
+                      Description:
+                    </Typography>
+                    <Typography variant="body1" component="span" sx={{ ml: 1 }}>
+                      {expense.description}
+                    </Typography>
+                  </Box>
+
+                  <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                    <PersonIcon sx={{ mr: 1, color: 'primary.main' }} />
+                    <Typography variant="body1" component="span" fontWeight="bold">
+                      Submitted By:
+                    </Typography>
+                    <Typography variant="body1" component="span" sx={{ ml: 1 }}>
+                      {expense.submittedBy}
+                    </Typography>
+                  </Box>
+
+                  {expense.vendor && (
+                    <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                      <BusinessIcon sx={{ mr: 1, color: 'primary.main' }} />
+                      <Typography variant="body1" component="span" fontWeight="bold">
+                        Vendor:
+                      </Typography>
+                      <Typography variant="body1" component="span" sx={{ ml: 1 }}>
+                        {expense.vendor}
+                      </Typography>
+                    </Box>
+                  )}
+
+                  {expense.subcontractorName && (
+                    <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                      <SubcontractorIcon sx={{ mr: 1, color: 'primary.main' }} />
+                      <Typography variant="body1" component="span" fontWeight="bold">
+                        Subcontractor:
+                      </Typography>
+                      <Link 
+                        component="button"
+                        variant="body1"
+                        onClick={() => navigate(`/subcontractors/${expense.subcontractorId}`)}
+                        sx={{ ml: 1, textDecoration: 'none' }}
+                      >
+                        {expense.subcontractorName}
+                      </Link>
+                    </Box>
+                  )}
+
+                  {expense.receiptUrl && (
+                    <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                      <ReceiptIcon sx={{ mr: 1, color: 'primary.main' }} />
+                      <Typography variant="body1" component="span" fontWeight="bold">
+                        Receipt:
+                      </Typography>
+                      <Link
+                        href={expense.receiptUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        sx={{ ml: 1 }}
+                      >
+                        View Receipt
+                      </Link>
+                    </Box>
+                  )}
+                </Stack>
+              </Grid>
+
+              {expense.status === 'pending' && (
+                <Grid item xs={12}>
+                  <Box sx={{ mt: 2, display: 'flex', gap: 2, justifyContent: 'flex-end' }}>
+                    <Button
+                      variant="outlined"
+                      color="error"
+                      startIcon={<CancelIcon />}
+                      onClick={handleReject}
+                    >
+                      Reject
+                    </Button>
+                    <Button
+                      variant="contained"
+                      color="success"
+                      startIcon={<CheckCircleIcon />}
+                      onClick={handleApprove}
+                    >
+                      Approve
+                    </Button>
+                  </Box>
+                </Grid>
+              )}
+            </Grid>
+          </CardContent>
+        </Card>
+      )}
     </Box>
   );
 };

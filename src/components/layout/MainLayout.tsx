@@ -100,6 +100,7 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
     { text: 'Tasks', icon: <AssignmentIcon />, path: '/tasks' },
     { text: 'Documents', icon: <DescriptionIcon />, path: '/documents' },
     { text: 'Payments', icon: <PaymentIcon />, path: '/payments' },
+    { text: 'Templates', icon: <ConstructionIcon />, path: '/templates' },
     { text: 'Settings', icon: <SettingsIcon />, path: '/settings' },
   ];
 
@@ -264,9 +265,17 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
         sx={{
           flexGrow: 1,
           p: 3,
-          width: { sm: `calc(100% - ${drawerWidth}px)` },
+          width: { 
+            xs: '100%', 
+            sm: `calc(100% - ${drawerWidth}px)` 
+          },
           mt: '64px',
           bgcolor: 'background.default',
+          transition: theme.transitions.create(['width', 'margin'], {
+            easing: theme.transitions.easing.sharp,
+            duration: theme.transitions.duration.leavingScreen,
+          }),
+          overflow: 'hidden',
         }}
       >
         {children || <Outlet />}

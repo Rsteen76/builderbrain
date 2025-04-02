@@ -18,6 +18,7 @@ import {
   Folder as DocumentsIcon,
   Payment as PaymentsIcon,
   Settings as SettingsIcon,
+  Construction as TemplatesIcon,
 } from '@mui/icons-material';
 import { useNavigate, useLocation } from 'react-router-dom';
 
@@ -30,6 +31,7 @@ const drawerWidth = 240;
 const menuItems = [
   { text: 'Dashboard', icon: <DashboardIcon />, path: '/dashboard' },
   { text: 'Projects', icon: <ProjectsIcon />, path: '/projects' },
+  { text: 'Templates', icon: <TemplatesIcon />, path: '/templates' },
   { text: 'Expenses', icon: <ExpensesIcon />, path: '/expenses' },
   { text: 'Bids', icon: <BidsIcon />, path: '/bids' },
   { text: 'Tasks', icon: <TasksIcon />, path: '/tasks' },

@@ -81,6 +81,7 @@ export interface Expense {
   createdAt: Date | string;
   updatedAt: Date | string;
   notes?: string;
+  lineItems?: LineItem[]; // Add support for itemized expenses
 }
 
 export interface Bid {
@@ -166,6 +167,17 @@ export interface Task {
   parentTaskId?: string;
   dependencies?: string[];
   attachments?: string[];
+}
+
+export interface Template {
+  id: string;
+  name: string;
+  description: string;
+  icon: string;
+  phases: { name: string; percentage: number }[];
+  createdBy: string;
+  createdAt: Date;
+  isSystem: boolean;
 }
 
 export interface Document {
