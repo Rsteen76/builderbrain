@@ -109,6 +109,28 @@ interface VersionCardProps {
 const VersionCard: React.FC<VersionCardProps> = ({ version, isSelected, onSelect }) => {
   const theme = useTheme();
   
+  // Safely get version creation date
+  const getVersionDate = (dateVal: any) => {
+    if (!dateVal) return 'Unknown date';
+    try {
+      const date = dateVal instanceof Date ? dateVal : new Date(dateVal);
+      return date.toLocaleDateString();
+    } catch (e) {
+      return 'Invalid date';
+    }
+  };
+  
+  // Safely get version creation time
+  const getVersionTime = (dateVal: any) => {
+    if (!dateVal) return 'Unknown time';
+    try {
+      const date = dateVal instanceof Date ? dateVal : new Date(dateVal);
+      return date.toLocaleTimeString();
+    } catch (e) {
+      return 'Invalid time';
+    }
+  };
+  
   return (
     <Card 
       sx={{ 
@@ -125,25 +147,25 @@ const VersionCard: React.FC<VersionCardProps> = ({ version, isSelected, onSelect
     >
       <CardContent>
         <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
-          <Typography variant="h6">Version {version.versionNumber}</Typography>
+          <Typography variant="h6">Version {version.versionNumber || '?'}</Typography>
           {isSelected && (
             <Chip label="Current" color="primary" size="small" />
           )}
         </Box>
         <Typography variant="body2" color="text.secondary" gutterBottom>
-          Created on {new Date(version.createdAt).toLocaleDateString()} at {new Date(version.createdAt).toLocaleTimeString()}
+          Created on {getVersionDate(version.createdAt)} at {getVersionTime(version.createdAt)}
         </Typography>
         <Typography variant="body2" gutterBottom>
-          Total: {formatCurrency(version.totalAmount)}
+          Total: {typeof version.totalAmount === 'number' ? formatCurrency(version.totalAmount) : 'N/A'}
         </Typography>
         <Typography variant="body2">
-          Line items: {(version.lineItems || []).length}
+          Line items: {Array.isArray(version.lineItems) ? version.lineItems.length : 0}
         </Typography>
         {version.notes && (
           <Box sx={{ mt: 1 }}>
             <Typography variant="body2" fontWeight="bold">Notes:</Typography>
             <Typography variant="body2" sx={{ fontStyle: 'italic' }}>
-              {version.notes}
+              {String(version.notes)}
             </Typography>
           </Box>
         )}
@@ -297,7 +319,7 @@ const BidDetails: React.FC = () => {
           >
             Back
           </Button>
-          <Typography variant="h4">{bid.title}</Typography>
+          <Typography variant="h4">{bid.title || 'Untitled Bid'}</Typography>
         </Box>
         <Box>
           <Button 
@@ -337,9 +359,9 @@ const BidDetails: React.FC = () => {
                 <Typography variant="body2" color="text.secondary">Status</Typography>
                 <Box sx={{ mt: 0.5 }}>
                   <Chip 
-                    label={bid.status ? STATUS_DISPLAY[bid.status] : 'Unknown'} 
+                    label={bid.status && typeof bid.status === 'string' && STATUS_DISPLAY[bid.status] ? STATUS_DISPLAY[bid.status] : 'Unknown'} 
                     size="small" 
-                    color={bid.status ? STATUS_COLORS[bid.status] as any : 'default'} 
+                    color={bid.status && typeof bid.status === 'string' && STATUS_COLORS[bid.status] ? STATUS_COLORS[bid.status] as any : 'default'} 
                   />
                 </Box>
               </Grid>
@@ -347,38 +369,55 @@ const BidDetails: React.FC = () => {
                 <Typography variant="body2" color="text.secondary">Priority</Typography>
                 <Box sx={{ mt: 0.5 }}>
                   <Chip 
-                    label={bid.priority ? PRIORITY_DISPLAY[bid.priority] : 'N/A'} 
+                    label={bid.priority && typeof bid.priority === 'string' && PRIORITY_DISPLAY[bid.priority] ? PRIORITY_DISPLAY[bid.priority] : 'N/A'} 
                     size="small" 
-                    color={bid.priority ? PRIORITY_COLORS[bid.priority] as any : 'default'}
+                    color={bid.priority && typeof bid.priority === 'string' && PRIORITY_COLORS[bid.priority] ? PRIORITY_COLORS[bid.priority] as any : 'default'}
                   />
                 </Box>
               </Grid>
               <Grid item xs={12} sm={6}>
                 <Typography variant="body2" color="text.secondary">Project</Typography>
-                <Typography variant="body1">{bid.projectName}</Typography>
+                <Typography variant="body1">{bid.projectName ? String(bid.projectName) : 'N/A'}</Typography>
               </Grid>
               <Grid item xs={12} sm={6}>
                 <Typography variant="body2" color="text.secondary">Subcontractor</Typography>
-                <Typography variant="body1">{bid.subcontractorName}</Typography>
+                <Typography variant="body1">{bid.subcontractorName ? String(bid.subcontractorName) : 'N/A'}</Typography>
               </Grid>
               <Grid item xs={12} sm={6}>
                 <Typography variant="body2" color="text.secondary">Submission Deadline</Typography>
-                <Typography variant="body1">{bid.submissionDeadline ? new Date(bid.submissionDeadline).toLocaleDateString() : 'N/A'}</Typography>
+                <Typography variant="body1">
+                  {bid.submissionDeadline && 
+                   (bid.submissionDeadline instanceof Date || 
+                    (typeof bid.submissionDeadline === 'string' && !isNaN(Date.parse(bid.submissionDeadline)))) ? 
+                    new Date(bid.submissionDeadline).toLocaleDateString() : 'N/A'}
+                </Typography>
               </Grid>
               <Grid item xs={12} sm={6}>
                 <Typography variant="body2" color="text.secondary">Total Amount</Typography>
-                <Typography variant="h6" color="primary.main">{formatCurrency(bid.totalAmount)}</Typography>
+                <Typography variant="h6" color="primary.main">
+                  {typeof bid.totalAmount === 'number' ? formatCurrency(bid.totalAmount) : 'N/A'}
+                </Typography>
               </Grid>
               {bid.startDate && (
                 <Grid item xs={12} sm={6}>
                   <Typography variant="body2" color="text.secondary">Start Date</Typography>
-                  <Typography variant="body1">{new Date(bid.startDate).toLocaleDateString()}</Typography>
+                  <Typography variant="body1">
+                    {bid.startDate && 
+                     (bid.startDate instanceof Date || 
+                      (typeof bid.startDate === 'string' && !isNaN(Date.parse(bid.startDate)))) ? 
+                      new Date(bid.startDate).toLocaleDateString() : 'N/A'}
+                  </Typography>
                 </Grid>
               )}
               {bid.completionDate && (
                 <Grid item xs={12} sm={6}>
                   <Typography variant="body2" color="text.secondary">Completion Date</Typography>
-                  <Typography variant="body1">{new Date(bid.completionDate).toLocaleDateString()}</Typography>
+                  <Typography variant="body1">
+                    {bid.completionDate && 
+                     (bid.completionDate instanceof Date || 
+                      (typeof bid.completionDate === 'string' && !isNaN(Date.parse(bid.completionDate)))) ? 
+                      new Date(bid.completionDate).toLocaleDateString() : 'N/A'}
+                  </Typography>
                 </Grid>
               )}
             </Grid>
@@ -389,36 +428,112 @@ const BidDetails: React.FC = () => {
             <Grid container spacing={2}>
               <Grid item xs={12} sm={6}>
                 <Typography variant="body2" color="text.secondary">Insurance Required</Typography>
-                <Typography variant="body1">{bid.requiresInsurance ? 'Yes' : 'No'}</Typography>
+                <Typography variant="body1">{bid.requiresInsurance === true ? 'Yes' : 'No'}</Typography>
               </Grid>
               <Grid item xs={12} sm={6}>
                 <Typography variant="body2" color="text.secondary">Bond Required</Typography>
-                <Typography variant="body1">{bid.requiresBond ? 'Yes' : 'No'}</Typography>
+                <Typography variant="body1">{bid.requiresBond === true ? 'Yes' : 'No'}</Typography>
               </Grid>
               <Grid item xs={12} sm={6}>
                 <Typography variant="body2" color="text.secondary">Public to Subcontractor</Typography>
-                <Typography variant="body1">{bid.isPublic ? 'Yes' : 'No'}</Typography>
+                <Typography variant="body1">{bid.isPublic === true ? 'Yes' : 'No'}</Typography>
               </Grid>
               <Grid item xs={12} sm={6}>
                 <Typography variant="body2" color="text.secondary">Approved</Typography>
-                <Typography variant="body1">{bid.isApproved ? 'Yes' : 'No'}</Typography>
+                <Typography variant="body1">{bid.isApproved === true ? 'Yes' : 'No'}</Typography>
               </Grid>
               <Grid item xs={12}>
                 <Typography variant="body2" color="text.secondary" gutterBottom>Tags</Typography>
                 <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
-                  {(bid.tags || []).map((tag: string, index: number) => (
-                    <Chip key={index} label={tag} size="small" />
-                  ))}
+                  {Array.isArray(bid.tags) ? (
+                    bid.tags.map((tag: string, index: number) => (
+                      <Chip key={index} label={String(tag)} size="small" />
+                    ))
+                  ) : bid.tags ? (
+                    <Chip label={String(bid.tags)} size="small" />
+                  ) : null}
                 </Box>
               </Grid>
             </Grid>
           </Grid>
           
+          {/* Add payment schedule if it exists */}
+          {Array.isArray(bid.paymentSchedule) && bid.paymentSchedule.length > 0 && (
+            <Grid item xs={12}>
+              <Box>
+                <Typography variant="h6" gutterBottom>Payment Schedule</Typography>
+                <Grid container spacing={2}>
+                  {bid.paymentSchedule.map((stage, index) => (
+                    <Grid item xs={12} sm={6} md={4} key={index}>
+                      <Paper elevation={1} sx={{ p: 2 }}>
+                        <Typography variant="subtitle2">
+                          {typeof stage.name === 'string' ? stage.name : `Stage ${index + 1}`}
+                        </Typography>
+                        <Typography variant="body2" color="text.secondary">
+                          Percentage: {typeof stage.percentage === 'number' ? `${stage.percentage}%` : 'N/A'}
+                        </Typography>
+                        <Typography variant="body2" color="text.secondary">
+                          Amount: {typeof stage.amount === 'number' ? formatCurrency(stage.amount) : 'N/A'}
+                        </Typography>
+                        {stage.description && (
+                          <Typography variant="body2" sx={{ mt: 1 }}>
+                            {String(stage.description)}
+                          </Typography>
+                        )}
+                      </Paper>
+                    </Grid>
+                  ))}
+                </Grid>
+              </Box>
+            </Grid>
+          )}
+          
+          {/* Add payment progress if it exists */}
+          {bid.paymentProgress && typeof bid.paymentProgress === 'object' && (
+            <Grid item xs={12}>
+              <Box>
+                <Typography variant="h6" gutterBottom>Payment Progress</Typography>
+                <Grid container spacing={2}>
+                  <Grid item xs={12} sm={4}>
+                    <Paper elevation={1} sx={{ p: 2, bgcolor: 'success.light' }}>
+                      <Typography variant="subtitle2">Paid</Typography>
+                      <Typography variant="h6">
+                        {typeof bid.paymentProgress.paid === 'number' 
+                          ? formatCurrency(bid.paymentProgress.paid) 
+                          : 'N/A'}
+                      </Typography>
+                    </Paper>
+                  </Grid>
+                  <Grid item xs={12} sm={4}>
+                    <Paper elevation={1} sx={{ p: 2, bgcolor: 'warning.light' }}>
+                      <Typography variant="subtitle2">Pending</Typography>
+                      <Typography variant="h6">
+                        {typeof bid.paymentProgress.pending === 'number' 
+                          ? formatCurrency(bid.paymentProgress.pending) 
+                          : 'N/A'}
+                      </Typography>
+                    </Paper>
+                  </Grid>
+                  <Grid item xs={12} sm={4}>
+                    <Paper elevation={1} sx={{ p: 2, bgcolor: 'info.light' }}>
+                      <Typography variant="subtitle2">Remaining</Typography>
+                      <Typography variant="h6">
+                        {typeof bid.paymentProgress.remaining === 'number' 
+                          ? formatCurrency(bid.paymentProgress.remaining) 
+                          : 'N/A'}
+                      </Typography>
+                    </Paper>
+                  </Grid>
+                </Grid>
+              </Box>
+            </Grid>
+          )}
+          
           <Grid item xs={12}>
             <Box>
               <Typography variant="h6" gutterBottom>Scope</Typography>
               <Typography variant="body1" sx={{ whiteSpace: 'pre-line' }}>
-                {bid.scope || 'No scope description provided.'}
+                {bid.scope ? String(bid.scope) : 'No scope description provided.'}
               </Typography>
             </Box>
           </Grid>
@@ -427,25 +542,28 @@ const BidDetails: React.FC = () => {
             <Box>
               <Typography variant="h6" gutterBottom>Attachments</Typography>
               <Stack direction="row" spacing={1} flexWrap="wrap">
-                {bid.attachments ? (
-                  bid.attachments.length > 0 ? (
-                    bid.attachments.map((attachment, index) => (
+                {Array.isArray(bid.attachments) && bid.attachments.length > 0 ? (
+                  bid.attachments.map((attachment, index) => {
+                    // Handle both string and object attachment formats
+                    const attachmentName = typeof attachment === 'string' 
+                      ? attachment 
+                      : (attachment && typeof attachment === 'object' && 'name' in attachment 
+                        ? attachment.name 
+                        : 'Unnamed Attachment');
+                    const attachmentUrl = typeof attachment === 'string' 
+                      ? attachment 
+                      : (attachment && typeof attachment === 'object' && 'url' in attachment 
+                        ? attachment.url 
+                        : '#');
+                    return (
                       <Chip
                         key={index}
-                        label={typeof attachment === 'string' ? attachment : attachment.name}
+                        label={String(attachmentName)}
                         icon={<DownloadIcon />}
-                        onClick={() => {
-                          if (typeof attachment === 'string') {
-                            window.open(attachment, '_blank');
-                          } else {
-                            window.open(attachment.url, '_blank');
-                          }
-                        }}
+                        onClick={() => window.open(attachmentUrl, '_blank')}
                       />
-                    ))
-                  ) : (
-                    <Typography variant="body1">No attachments</Typography>
-                  )
+                    );
+                  })
                 ) : (
                   <Typography variant="body1">No attachments</Typography>
                 )}
@@ -457,7 +575,7 @@ const BidDetails: React.FC = () => {
             <Box>
               <Typography variant="h6" gutterBottom>Notes</Typography>
               <Typography variant="body1" sx={{ whiteSpace: 'pre-line' }}>
-                {bid.notes}
+                {bid.notes ? String(bid.notes) : 'No notes available.'}
               </Typography>
             </Box>
           </Grid>
@@ -509,33 +627,69 @@ const BidDetails: React.FC = () => {
               <Typography variant="body2" color="text.secondary" paragraph>
                 Select a version to view its details
               </Typography>
-              {(bid.versions || []).sort((a: BidVersion, b: BidVersion) => b.versionNumber - a.versionNumber).map((version: BidVersion) => (
-                <VersionCard 
-                  key={version.id} 
-                  version={version} 
-                  isSelected={version.id === selectedVersionId}
-                  onSelect={() => handleVersionSelect(version.id)}
-                />
-              ))}
+              {Array.isArray(bid.versions) && bid.versions.length > 0 ? 
+                bid.versions
+                  .sort((a: BidVersion, b: BidVersion) => 
+                    (typeof a.versionNumber === 'number' && typeof b.versionNumber === 'number') 
+                      ? b.versionNumber - a.versionNumber 
+                      : 0
+                  )
+                  .map((version: BidVersion) => (
+                    <VersionCard 
+                      key={version.id} 
+                      version={version} 
+                      isSelected={version.id === selectedVersionId}
+                      onSelect={() => handleVersionSelect(version.id)}
+                    />
+                  ))
+                : 
+                <Typography variant="body1">No version history available</Typography>
+              }
             </Grid>
             <Grid item xs={12} md={8}>
               {currentVersion && (
                 <Box>
                   <Typography variant="h6" gutterBottom>
-                    Version {currentVersion.versionNumber} Details
+                    Version {currentVersion.versionNumber || '?'} Details
                     {currentVersion.id === bid.currentVersionId && (
                       <Chip label="Current" color="primary" size="small" sx={{ ml: 2 }} />
                     )}
                   </Typography>
                   <Typography variant="body2" color="text.secondary" gutterBottom>
-                    Created on {new Date(currentVersion.createdAt).toLocaleDateString()} at {new Date(currentVersion.createdAt).toLocaleTimeString()}
+                    {currentVersion.createdAt ? (
+                      <>
+                        Created on {
+                          (() => {
+                            try {
+                              const date = currentVersion.createdAt instanceof Date 
+                                ? currentVersion.createdAt 
+                                : new Date(currentVersion.createdAt);
+                              return date.toLocaleDateString();
+                            } catch (e) {
+                              return 'Invalid date';
+                            }
+                          })()
+                        } at {
+                          (() => {
+                            try {
+                              const date = currentVersion.createdAt instanceof Date 
+                                ? currentVersion.createdAt 
+                                : new Date(currentVersion.createdAt);
+                              return date.toLocaleTimeString();
+                            } catch (e) {
+                              return 'Invalid time';
+                            }
+                          })()
+                        }
+                      </>
+                    ) : 'Creation date unknown'}
                   </Typography>
                   
                   {currentVersion.notes && (
                     <Paper sx={{ p: 2, mb: 3, bgcolor: 'grey.50' }}>
                       <Typography variant="subtitle2" gutterBottom>Version Notes:</Typography>
                       <Typography variant="body2" sx={{ whiteSpace: 'pre-line' }}>
-                        {currentVersion.notes}
+                        {String(currentVersion.notes)}
                       </Typography>
                     </Paper>
                   )}
@@ -544,7 +698,7 @@ const BidDetails: React.FC = () => {
                     Line Items
                   </Typography>
                   <LineItemsTable 
-                    lineItems={currentVersion.lineItems || []} 
+                    lineItems={Array.isArray(currentVersion.lineItems) ? currentVersion.lineItems : []} 
                     onChange={() => {}} // Read-only mode 
                     editable={false}
                   />

@@ -22,19 +22,50 @@ import {
     Bid, 
     BidVersion, 
     LineItem,
+    BidPaymentStage
 } from '../types';
 
 // Define Firestore-specific Bid type extending the main Bid type
 // Handles Timestamps and ensures userId is present
-interface FirestoreBid extends Omit<Bid, 'id' | 'submissionDeadline' | 'startDate' | 'completionDate' | 'createdAt' | 'updatedAt' | 'versions'> {
+interface FirestoreBid {
   userId: string;
-  submissionDeadline?: Timestamp; // Match Bid type (optional)
+  projectId: string;
+  phaseId?: string;
+  phaseName?: string;
+  projectName?: string;
+  subcontractorId?: string;
+  subcontractorName?: string;
+  contractorName?: string;
+  bidAmount?: number;
+  title?: string;
+  scope?: string;
+  status: 'draft' | 'submitted' | 'accepted' | 'rejected' | 'expired' | 'withdrawn' | 'revision_requested';
+  priority?: 'low' | 'medium' | 'high' | 'urgent';
+  submissionDeadline?: Timestamp | null;
   startDate?: Timestamp | null;
   completionDate?: Timestamp | null;
+  totalAmount: number;
+  timeline?: number;
+  paymentTerms?: string;
+  currentVersionId?: string;
+  versions?: FirestoreBidVersion[];
+  tags?: string[];
   createdAt: Timestamp;
   updatedAt: Timestamp;
-  // Firestore representation of versions might use Timestamps
-  versions?: FirestoreBidVersion[]; // Use FirestoreBidVersion here
+  createdBy?: string;
+  updatedBy?: string;
+  notes?: string;
+  requiresInsurance?: boolean;
+  requiresBond?: boolean;
+  isPublic?: boolean;
+  isApproved?: boolean;
+  attachments?: string[] | { name: string; url: string }[]; // Allow both string[] and object[] formats
+  paymentSchedule?: BidPaymentStage[];
+  paymentProgress?: {
+    paid: number;
+    pending: number;
+    remaining: number;
+  };
 }
 
 // Define Firestore-specific BidVersion type
@@ -122,9 +153,10 @@ export class BidService {
       notes: 'Initial version',
       lineItems: [], // Matches LineItem[]
       attachments: bidData.attachments ? 
-        bidData.attachments.map(att => typeof att === 'string' ? 
-          att : 
-          att.url) : [], // Convert complex attachments to string URLs
+        (Array.isArray(bidData.attachments) ? 
+          bidData.attachments.map(att => typeof att === 'string' ? att : 
+            (att && typeof att === 'object' && 'url' in att ? att.url : '')) 
+          : []) : [], // More robust handling of attachments
     };
 
     // Create the bid object (matches imported Bid type, before Firestore conversion)
@@ -200,7 +232,7 @@ export class BidService {
     };
 
     // Convert specific fields
-    if (updatePayload.submissionDeadline !== undefined) firestoreUpdateData.submissionDeadline = updatePayload.submissionDeadline ? Timestamp.fromDate(updatePayload.submissionDeadline) : undefined;
+    if (updatePayload.submissionDeadline !== undefined) firestoreUpdateData.submissionDeadline = updatePayload.submissionDeadline ? Timestamp.fromDate(updatePayload.submissionDeadline) : null;
     if (updatePayload.startDate !== undefined) firestoreUpdateData.startDate = updatePayload.startDate ? Timestamp.fromDate(updatePayload.startDate) : null;
     if (updatePayload.completionDate !== undefined) firestoreUpdateData.completionDate = updatePayload.completionDate ? Timestamp.fromDate(updatePayload.completionDate) : null;
     
@@ -213,7 +245,7 @@ export class BidService {
     if (updatePayload.subcontractorName !== undefined) firestoreUpdateData.subcontractorName = updatePayload.subcontractorName;
     if (updatePayload.title !== undefined) firestoreUpdateData.title = updatePayload.title;
     if (updatePayload.scope !== undefined) firestoreUpdateData.scope = updatePayload.scope;
-    if (updatePayload.tags !== undefined) firestoreUpdateData.tags = updatePayload.tags;
+    if (updatePayload.tags !== undefined) firestoreUpdateData.tags = Array.isArray(updatePayload.tags) ? updatePayload.tags : (updatePayload.tags ? [updatePayload.tags] : []);
     if (updatePayload.updatedBy !== undefined) firestoreUpdateData.updatedBy = updatePayload.updatedBy;
     if (updatePayload.notes !== undefined) firestoreUpdateData.notes = updatePayload.notes;
     if (updatePayload.requiresInsurance !== undefined) firestoreUpdateData.requiresInsurance = updatePayload.requiresInsurance;
@@ -318,24 +350,31 @@ export class BidService {
       await deleteDoc(bidRef);
   }
 
-  // Get bid (Returns imported Bid type)
+  // Get a single bid by ID
   static async getBid(userId: string, id: string): Promise<Bid | null> {
-    const bidRef = doc(this.collection, id);
-    const bidDoc = await getDoc(bidRef);
-
-    if (!bidDoc.exists()) {
-      console.log(`BidService: Bid ${id} not found.`);
-      return null;
+    try {
+      const docRef = doc(this.collection, id);
+      const docSnap = await getDoc(docRef);
+      
+      if (!docSnap.exists()) {
+        console.warn(`Bid with ID ${id} not found`);
+        return null;
+      }
+      
+      const data = docSnap.data() as FirestoreBid;
+      
+      // Validate ownership or public access
+      if (data.userId !== userId) {
+        console.warn(`User ${userId} cannot access bid ${id} owned by ${data.userId}`);
+        return null;
+      }
+      
+      // Convert to the expected Bid type
+      return this.convertFromFirestoreFormat(data, id);
+    } catch (err) {
+      console.error(`Error getting bid ${id}:`, err);
+      throw new Error(`Failed to retrieve bid: ${err instanceof Error ? err.message : String(err)}`);
     }
-
-    const data = bidDoc.data() as FirestoreBid;
-
-    if (data.userId !== userId) {
-      console.warn(`BidService: User ${userId} attempted to access unauthorized bid ${id} owned by ${data.userId}.`);
-      return null;
-    }
-
-    return this.convertFromFirestoreFormat(data, id);
   }
 
   // Get bids (Returns BidSummary[], accepts BidFilter and BidSort)
@@ -459,7 +498,7 @@ export class BidService {
       const { versions, createdAt, updatedAt, submissionDeadline, startDate, completionDate, ...rest } = bid;
       return {
           ...rest, // Includes userId, etc.
-          submissionDeadline: submissionDeadline ? Timestamp.fromDate(submissionDeadline) : undefined,
+          submissionDeadline: submissionDeadline ? Timestamp.fromDate(submissionDeadline) : null,
           startDate: startDate ? Timestamp.fromDate(startDate) : null,
           completionDate: completionDate ? Timestamp.fromDate(completionDate) : null,
           createdAt: Timestamp.fromDate(createdAt || new Date()),
@@ -468,22 +507,37 @@ export class BidService {
       };
   }
 
-  // Convert FirestoreBid to Bid (imported type)
+  // Convert from Firestore format to app format (Used by getBid, getBids)
   private static convertFromFirestoreFormat(data: FirestoreBid, id: string): Bid {
-    const { versions, createdAt, updatedAt, submissionDeadline, startDate, completionDate, attachments, ...rest } = data;
-    return {
-      ...rest, // Includes userId etc.
-      id,
-      submissionDeadline: submissionDeadline ? submissionDeadline.toDate() : undefined,
-      startDate: startDate ? startDate.toDate() : null,
-      completionDate: completionDate ? completionDate.toDate() : null,
-      createdAt: createdAt.toDate(),
-      updatedAt: updatedAt.toDate(),
-      versions: versions ? versions.map(v => this.convertVersionFromFirestoreFormat(v)) : [],
-      // Ensure optional fields are handled if not present in FirestoreBid
-      attachments: attachments || [],
-      tags: data.tags || [],
-    } as Bid; // Use assertion carefully
+    try {
+      // Extract versions first to handle special conversion
+      const { versions: firestoreVersions, ...otherData } = data;
+      
+      // Convert each version, handling lineItems and Timestamp
+      const versions = firestoreVersions?.map(v => ({
+        ...v,
+        createdAt: v.createdAt.toDate(),
+        // Ensure lineItems is an array
+        lineItems: Array.isArray(v.lineItems) ? v.lineItems : [],
+      })) || [];
+      
+      // Handle conversion of Firestore Timestamps to JS Dates
+      return {
+        id,
+        ...otherData,
+        submissionDeadline: data.submissionDeadline ? data.submissionDeadline.toDate() : undefined,
+        startDate: data.startDate ? data.startDate.toDate() : null,
+        completionDate: data.completionDate ? data.completionDate.toDate() : null,
+        createdAt: data.createdAt.toDate(),
+        updatedAt: data.updatedAt.toDate(),
+        versions,
+        tags: Array.isArray(data.tags) ? data.tags : (data.tags ? [data.tags] : []),
+        attachments: Array.isArray(data.attachments) ? data.attachments : (data.attachments ? [data.attachments] : []),
+      };
+    } catch (err) {
+      console.error('Error converting bid from Firestore format:', err);
+      throw new Error('Failed to process bid data');
+    }
   }
 
   // Convert BidVersion (imported type) to FirestoreBidVersion
@@ -493,17 +547,6 @@ export class BidService {
           ...rest,
           createdAt: Timestamp.fromDate(createdAt || new Date()),
           lineItems: lineItems || [], // Ensure lineItems array exists
-      };
-  }
-
-  // Convert FirestoreBidVersion to BidVersion (imported type)
-  private static convertVersionFromFirestoreFormat(firestoreVersion: FirestoreBidVersion): BidVersion {
-      const { createdAt, lineItems, attachments, ...rest } = firestoreVersion;
-      return {
-          ...rest,
-          createdAt: createdAt.toDate(),
-          lineItems: lineItems || [], // Ensure lineItems array exists
-          attachments: attachments || [], // Ensure attachments exist
       };
   }
 

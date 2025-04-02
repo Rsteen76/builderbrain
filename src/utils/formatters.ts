@@ -45,7 +45,7 @@ export const formatCurrency = (
  * @returns Formatted date string
  */
 export const formatDate = (
-  date: Date | string | undefined,
+  date: Date | string | undefined | null | any,
   options: {
     locale?: string;
     format?: 'short' | 'medium' | 'long' | 'full';
@@ -53,17 +53,29 @@ export const formatDate = (
 ): string => {
   if (!date) return '';
   
-  const dateObj = typeof date === 'string' ? new Date(date) : date;
-  
-  if (isNaN(dateObj.getTime())) {
+  try {
+    // Try to convert to a Date object if it's not already one
+    const dateObj = typeof date === 'string' ? new Date(date) : 
+                   date instanceof Date ? date : 
+                   // Handle Firestore Timestamp objects
+                   (date && typeof date.toDate === 'function') ? date.toDate() :
+                   new Date(date);
+    
+    // Check if the date is valid
+    if (isNaN(dateObj.getTime())) {
+      console.warn(`Invalid date value encountered: ${JSON.stringify(date)}`);
+      return '';
+    }
+    
+    const { locale = 'en-US', format = 'medium' } = options;
+    
+    return dateObj.toLocaleDateString(locale, {
+      dateStyle: format
+    } as Intl.DateTimeFormatOptions);
+  } catch (error) {
+    console.error('Error formatting date:', error, date);
     return '';
   }
-  
-  const { locale = 'en-US', format = 'medium' } = options;
-  
-  return dateObj.toLocaleDateString(locale, {
-    dateStyle: format
-  } as Intl.DateTimeFormatOptions);
 };
 
 /**

@@ -1,33 +1,30 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate, useParams, useLocation } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 import {
   Box,
+  Paper,
   Typography,
   TextField,
   Button,
-  Grid,
-  Paper,
-  Divider,
-  MenuItem,
   FormControl,
   InputLabel,
   Select,
-  SelectChangeEvent,
+  MenuItem,
+  Grid,
+  Divider,
   Chip,
-  FormHelperText,
-  Alert,
-  Stepper,
-  Step,
-  StepLabel,
   CircularProgress,
+  Alert,
+  Stack,
+  Autocomplete,
+  FormHelperText,
   IconButton,
   Tooltip,
-  InputAdornment,
-  Tabs,
-  Tab,
-  Autocomplete,
-  FormControlLabel,
-  Checkbox,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogContentText,
+  DialogActions,
 } from '@mui/material';
 import { DatePicker } from '@mui/x-date-pickers/DatePicker';
 import {
@@ -35,32 +32,39 @@ import {
   ArrowBack as ArrowBackIcon,
   Add as AddIcon,
   Delete as DeleteIcon,
-  Check as CheckIcon,
-  Cancel as CancelIcon,
-  NavigateNext as NextIcon,
-  NavigateBefore as PrevIcon,
-  RestartAlt as ResetIcon,
+  CloudUpload as UploadIcon,
 } from '@mui/icons-material';
-import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns';
-import { 
-  Bid, 
-  BidVersion, 
-  LineItem, 
-  Project, 
-  Subcontractor,
-} from '../../types';
-import { 
-  BidService, 
-  BidSummary
-} from '../../services/bid';
-import { SubcontractorService } from '../../services/subcontractor';
-import { ProjectService } from '../../services/project';
+import { v4 as uuidv4 } from 'uuid';
 import { useAuth } from '../../contexts/AuthContext';
-import LineItemsTable from './LineItemsTable';
+import { BidService } from '../../services/bid';
+import { ProjectService } from '../../services/project';
+import { SubcontractorService } from '../../services/subcontractor';
 import { formatCurrency } from '../../utils/formatters';
+import { Bid, BidPaymentStage, Project, Subcontractor } from '../../types';
+import LineItemsTable from './LineItemsTable';
 
-// Mapping of statuses to display names
-const STATUS_OPTIONS: { value: Bid['status']; label: string }[] = [
+// Define interfaces for the form state
+interface BidInstallment {
+  id: string;
+  name: string;
+  percent: number;
+  milestoneDescription: string;
+  phaseId?: string;
+  phaseName?: string;
+}
+
+interface PaymentTerms {
+  downPaymentPercent: number;
+  installments: BidInstallment[];
+}
+
+// Use a simpler interface with type assertion when needed
+interface BidFormState {
+  [key: string]: any;
+}
+
+// Status and priority options
+const STATUS_OPTIONS = [
   { value: 'draft', label: 'Draft' },
   { value: 'submitted', label: 'Submitted' },
   { value: 'accepted', label: 'Accepted' },
@@ -70,571 +74,483 @@ const STATUS_OPTIONS: { value: Bid['status']; label: string }[] = [
   { value: 'revision_requested', label: 'Revision Requested' },
 ];
 
-// Mapping of priorities to display names
-const PRIORITY_OPTIONS: { value: NonNullable<Bid['priority']>; label: string }[] = [
+const PRIORITY_OPTIONS = [
   { value: 'low', label: 'Low' },
   { value: 'medium', label: 'Medium' },
   { value: 'high', label: 'High' },
   { value: 'urgent', label: 'Urgent' },
 ];
 
-// Default form values
-const DEFAULT_BID: Omit<Bid, 'id' | 'userId' | 'createdAt' | 'updatedAt' | 'currentVersionId' | 'versions'> = {
-  projectId: '',
-  projectName: '',
-  subcontractorId: '',
-  subcontractorName: '',
-  title: '',
-  scope: '',
-  status: 'draft',
-  priority: 'medium',
-  submissionDeadline: new Date(new Date().setDate(new Date().getDate() + 14)), // 2 weeks from now
-  startDate: null,
-  completionDate: null,
-  totalAmount: 0,
-  tags: [],
-  createdBy: '',
-  updatedBy: '',
-  notes: '',
-  requiresInsurance: false,
-  requiresBond: false,
-  isPublic: false,
-  isApproved: false,
-  attachments: [],
-};
-
-// Steps for the stepper
-const STEPS = ['Basic Information', 'Scope & Timeline', 'Line Items', 'Review'];
-
-// Project and Subcontractor option type
-interface SelectOption {
-  id: string;
-  name: string | undefined;
-}
-
-// Update LineItemsTable prop types
-interface LineItemsTableProps {
-  lineItems: LineItem[];
-  onChange: (updatedLineItems: LineItem[]) => void;
-  editable?: boolean;
-}
-
 const BidForm: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const location = useLocation();
   const { user } = useAuth();
-  const duplicateData = location.state?.duplicate as BidSummary | undefined;
   
-  // Form state
-  const [formData, setFormData] = useState<Omit<Bid, 'id' | 'userId' | 'createdAt' | 'updatedAt' | 'currentVersionId' | 'versions'>>(DEFAULT_BID);
-  const [lineItems, setLineItems] = useState<LineItem[]>([]);
-  const [currentVersion, setCurrentVersion] = useState<Omit<BidVersion, 'id' | 'createdAt'>>({
-    versionNumber: 1,
+  // State for form data
+  const [bidForm, setBidForm] = useState<BidFormState>({
+    title: '',
+    subcontractorName: '',
+    subcontractorId: '',
+    projectId: '',
+    projectName: '',
+    phaseId: '',
+    phaseName: '',
     totalAmount: 0,
+    scope: '',
+    timeline: 30,
     notes: '',
-    lineItems: [],
+    status: 'draft',
+    priority: 'medium',
+    submissionDeadline: new Date(new Date().setDate(new Date().getDate() + 14)),
+    startDate: null,
+    completionDate: null,
     attachments: [],
+    tags: [],
+    requiresInsurance: false,
+    requiresBond: false,
+    isPublic: false,
+    isApproved: false,
+    paymentTerms: {
+      downPaymentPercent: 20,
+      installments: [
+        {id: uuidv4(), name: 'Final Payment', percent: 80, milestoneDescription: 'Upon completion'}
+      ]
+    },
   });
   
-  // UI state
-  const [loading, setLoading] = useState<boolean>(false);
-  const [saveLoading, setSaveLoading] = useState<boolean>(false);
+  // State for managing UI
+  const [loading, setLoading] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
-  const [activeStep, setActiveStep] = useState<number>(0);
-  const [tagInput, setTagInput] = useState<string>('');
-  const [projects, setProjects] = useState<SelectOption[]>([]);
-  const [subcontractors, setSubcontractors] = useState<SelectOption[]>([]);
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [lineItems, setLineItems] = useState<any[]>([]);
+  const [tagInput, setTagInput] = useState('');
   
-  // Validation state
-  const [errors, setErrors] = useState<Record<string, string>>({});
-  const [touched, setTouched] = useState<Record<string, boolean>>({});
-
-  // Load data when component mounts
+  // State for subcontractor management
+  const [subcontractors, setSubcontractors] = useState<Subcontractor[]>([]);
+  const [showQuickAddSubcontractor, setShowQuickAddSubcontractor] = useState(false);
+  const [newSubcontractor, setNewSubcontractor] = useState({
+    name: '',
+    specialty: '',
+    contact: {
+      phone: '',
+      email: ''
+    }
+  });
+  
+  // Fetch data on component mount
   useEffect(() => {
-    const fetchData = async () => {
-      if (!user?.uid) {
-        setError('User not authenticated. Cannot load data.');
-        setLoading(false);
-        return;
-      }
-      try {
-        setLoading(true);
-        setError(null);
-        await Promise.all([fetchProjects(user.uid), fetchSubcontractors(user.uid)]);
-        
-        if (id) {
-          await fetchBid(user.uid, id);
-        } 
-        else if (duplicateData?.id) {
-          await fetchBidForDuplication(user.uid, duplicateData.id);
-        }
-      } catch (err) {
-        console.error('Error loading form data:', err);
-        setError('Failed to load form data. Please try again.');
-      } finally {
-        setLoading(false);
-      }
-    };
-    
     if (user?.uid) {
       fetchData();
-    } else {
-      setError('Waiting for user authentication...');
+    }
+  }, [user]);
+  
+  // Fetch bid data for editing
+  useEffect(() => {
+    if (id && user?.uid) {
+      fetchBid();
+    }
+  }, [id, user]);
+  
+  const fetchData = async () => {
+    if (!user?.uid) return;
+    
+    setLoading(true);
+    try {
+      // Fetch projects
+      const projectsList = await ProjectService.getProjects(user.uid);
+      setProjects(projectsList);
+      
+      // Fetch subcontractors
+      const subcontractorsList = await SubcontractorService.getSubcontractors(user.uid);
+      setSubcontractors(subcontractorsList);
+    } catch (err) {
+      setError('Error loading data. Please try again.');
+      console.error('Error fetching data:', err);
+    } finally {
       setLoading(false);
     }
-  }, [id, duplicateData, user]);
-
-  // Calculate total amount when line items change
-  useEffect(() => {
-    const total = lineItems.reduce((sum, item) => sum + (item.totalCost || 0), 0);
-    setFormData(prev => ({ ...prev, totalAmount: total }));
-    setCurrentVersion(prev => ({ ...prev, totalAmount: total, lineItems }));
-  }, [lineItems]);
-
-  // Fetch projects
-  const fetchProjects = async (currentUserId: string) => {
-    try {
-      const projectsList: Project[] = await ProjectService.getProjects(currentUserId);
-      setProjects(projectsList.map(p => ({ id: p.id, name: p.name })));
-    } catch (err) {
-      console.error('Error fetching projects:', err);
-    }
   };
-
-  // Fetch subcontractors
-  const fetchSubcontractors = async (currentUserId: string) => {
+  
+  const fetchBid = async () => {
+    if (!id || !user?.uid) return;
+    
+    setLoading(true);
     try {
-      const subcontractorsList: Subcontractor[] = await SubcontractorService.getSubcontractors(currentUserId);
-      setSubcontractors(subcontractorsList.map(s => ({ id: s.id, name: s.name })));
-    } catch (err) {
-      console.error('Error fetching subcontractors:', err);
-    }
-  };
-
-  // Fetch bid details for editing
-  const fetchBid = async (currentUserId: string, bidId: string) => {
-    try {
-      const bid = await BidService.getBid(currentUserId, bidId);
+      const bid = await BidService.getBid(user.uid, id);
       
       if (!bid) {
-        setError('Bid not found or access denied');
+        setError('Bid not found or access denied.');
         return;
       }
       
-      // Extract fields for the form, ensuring names are unique
-      const { 
-        id: _id, 
-        userId: _userId, 
-        createdAt: _createdAt, 
-        updatedAt: _updatedAt,
-        currentVersionId, 
-        versions, 
-        ...formFields 
-      } = bid;
+      console.log('Loaded bid for editing:', bid);
       
-      // Find the current version using imported BidVersion type
-      const currentVersionData = versions?.find((v: BidVersion) => v.id === currentVersionId);
+      // Extract payment terms from payment schedule
+      const paymentTerms = {
+        downPaymentPercent: bid.paymentSchedule && bid.paymentSchedule.length > 0 ? bid.paymentSchedule[0].percentage || 0 : 20,
+        installments: bid.paymentSchedule && bid.paymentSchedule.length > 1 
+          ? bid.paymentSchedule.slice(1).map(payment => ({
+              id: payment.id || uuidv4(),
+              name: payment.name || '',
+              percent: payment.percentage || 0,
+              milestoneDescription: payment.description || '',
+              phaseId: payment.phaseId || '',
+              phaseName: payment.phaseName || ''
+            }))
+          : [{id: uuidv4(), name: 'Final Payment', percent: 80, milestoneDescription: 'Upon completion'}]
+      };
       
-      if (!currentVersionData) {
-        setError('Error loading bid version');
-        const fallbackVersion = versions?.[0];
-        if (fallbackVersion) {
-            // Ensure fallbackVersion.lineItems matches LineItem[]
-            setLineItems(fallbackVersion.lineItems || []);
-            const { id: _vId, createdAt: _vCreatedAt, ...fallbackVersionData } = fallbackVersion;
-            setCurrentVersion(fallbackVersionData);
-            console.warn('Current version ID not found, loaded first version as fallback.');
-        } else {
-            setLineItems([]);
-            setCurrentVersion({ versionNumber: 1, totalAmount: 0, notes: '', lineItems: [], attachments: [] });
-            return; 
+      // Set form data from bid
+      setBidForm({
+        ...bid,
+        paymentTerms
+      });
+      
+      // If bid has versions with line items, load those
+      if (bid.versions && bid.versions.length > 0 && bid.currentVersionId) {
+        const currentVersion = bid.versions.find(v => v.id === bid.currentVersionId);
+        if (currentVersion && Array.isArray(currentVersion.lineItems)) {
+          setLineItems(currentVersion.lineItems);
         }
-      } else {
-         // Ensure currentVersionData.lineItems matches LineItem[]
-         setLineItems(currentVersionData.lineItems || []);
-         const { id: _vId, createdAt: _vCreatedAt, ...versionData } = currentVersionData;
-         setCurrentVersion(versionData);
       }
-
-      // Set form data (formFields should match Omit<Bid, ...>)
-      setFormData(formFields); 
-
     } catch (err) {
+      setError('Error loading bid. Please try again.');
       console.error('Error fetching bid:', err);
-      setError('Failed to load bid data');
+    } finally {
+      setLoading(false);
     }
   };
-
-  // Fetch bid for duplication
-  const fetchBidForDuplication = async (currentUserId: string, bidId: string) => {
-    try {
-      const bid = await BidService.getBid(currentUserId, bidId);
-      
-      if (!bid) {
-        setError('Bid to duplicate not found or access denied');
-        return;
+  
+  // Handle form field changes
+  const handleChangeBidForm = (field: string, value: any) => {
+    setBidForm((prev: BidFormState) => ({
+      ...prev,
+      [field]: value
+    }));
+  };
+  
+  // Handle payment terms changes
+  const handleChangePaymentTerms = (field: string, value: any) => {
+    setBidForm((prev: BidFormState) => ({
+      ...prev,
+      paymentTerms: {
+        ...prev.paymentTerms,
+        [field]: value
       }
-      
-      // Destructure with unique names
-      const { 
-          id: _id, userId: _userId, createdAt: _createdAt, updatedAt: _updatedAt, 
-          currentVersionId: _cvId, versions: _versions, 
-          ...duplicatableFields 
-      } = bid;
-      
-      // Set form data (with some fields reset)
-      setFormData({
-        ...DEFAULT_BID, // Start with defaults
-        ...duplicatableFields, // Spread fields from the fetched bid
-        status: 'draft', // Reset status
-        title: `Copy of ${bid.title || 'Bid'}`, // Adjust title
-        createdBy: '', // Reset creator/updater
-        updatedBy: '',
-      });
-      
-      // Find the original current version to duplicate line items
-      const originalCurrentVersion = _versions?.find((v: BidVersion) => v.id === _cvId); // Add type
-      // Ensure originalCurrentVersion.lineItems matches LineItem[]
-      const itemsToDuplicate = originalCurrentVersion?.lineItems || [];
-      const duplicatedAmount = itemsToDuplicate.reduce((sum, item) => sum + (item.totalCost || 0), 0);
-      
-      // Set lineItems state (expects LineItem[])
-      setLineItems(itemsToDuplicate); 
-      
-      // Set *new* current version data (expects Omit<BidVersion,...>)
-      setCurrentVersion({
-        versionNumber: 1,
-        totalAmount: duplicatedAmount, 
-        notes: 'Duplicated from previous bid',
-        lineItems: itemsToDuplicate, // Ensure this matches LineItem[]
-        attachments: [], 
-      });
-
-    } catch (err) {
-      console.error('Error duplicating bid:', err);
-      setError('Failed to load bid for duplication');
+    }));
+  };
+  
+  // Handle installment changes
+  const handleChangeInstallment = (id: string, field: string, value: any) => {
+    setBidForm((prev: BidFormState) => ({
+      ...prev,
+      paymentTerms: {
+        ...prev.paymentTerms,
+        installments: prev.paymentTerms.installments.map((item: BidInstallment) => 
+          item.id === id ? { ...item, [field]: value } : item
+        )
+      }
+    }));
+  };
+  
+  // Add installment
+  const handleAddInstallment = () => {
+    if (!bidForm.paymentTerms.installments) {
+      handleChangePaymentTerms('installments', []);
     }
+    
+    const newInstallment = {
+      id: uuidv4(),
+      name: `Installment ${(bidForm.paymentTerms.installments?.length || 0) + 1}`,
+      percent: 20,
+      milestoneDescription: '',
+      phaseId: bidForm.phaseId || '',
+      phaseName: bidForm.phaseName || ''
+    };
+    
+    handleChangePaymentTerms('installments', [...(bidForm.paymentTerms.installments || []), newInstallment]);
   };
-
-  // Handle text input changes
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
-    const { name, value } = e.target;
-    setFormData(prev => ({ ...prev, [name]: value }));
-    validateField(name, value);
-    setTouched(prev => ({ ...prev, [name]: true }));
-  };
-
-  // Handle date input changes
-  const handleDateChange = (name: string, date: Date | null) => {
-    if (date) {
-      setFormData(prev => ({ ...prev, [name]: date }));
-      validateField(name, date);
-      setTouched(prev => ({ ...prev, [name]: true }));
-    }
-  };
-
-  // Handle select input changes
-  const handleSelectChange = (e: SelectChangeEvent) => {
-    const { name, value } = e.target;
-    if (name) {
-      setFormData(prev => ({ ...prev, [name]: value }));
-      validateField(name, value);
-      setTouched(prev => ({ ...prev, [name]: true }));
-    }
-  };
-
-  // Handle project selection
-  const handleProjectChange = (event: React.SyntheticEvent, value: SelectOption | null) => {
-    if (value) {
-      setFormData(prev => ({
-        ...prev,
-        projectId: value.id,
-        projectName: value.name || '',
-      }));
-      validateField('projectId', value.id);
-      setTouched(prev => ({ ...prev, projectId: true }));
-    } else {
-      setFormData(prev => ({
-        ...prev,
-        projectId: '',
-        projectName: '',
-      }));
-      validateField('projectId', '');
-      setTouched(prev => ({ ...prev, projectId: true }));
-    }
-  };
-
-  // Handle subcontractor selection
-  const handleSubcontractorChange = (event: React.SyntheticEvent, value: SelectOption | null) => {
-    if (value) {
-      setFormData(prev => ({
-        ...prev,
-        subcontractorId: value.id,
-        subcontractorName: value.name || '',
-      }));
-      validateField('subcontractorId', value.id);
-      setTouched(prev => ({ ...prev, subcontractorId: true }));
-    } else {
-      setFormData(prev => ({
-        ...prev,
-        subcontractorId: '',
-        subcontractorName: '',
-      }));
-      validateField('subcontractorId', '');
-      setTouched(prev => ({ ...prev, subcontractorId: true }));
-    }
-  };
-
-  // Handle checkbox changes
-  const handleCheckboxChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const { name, checked } = e.target;
-    setFormData(prev => ({ ...prev, [name]: checked }));
-  };
-
-  // Handle adding a tag
-  const handleTagAdd = () => {
-    if (tagInput.trim() && !(formData.tags || []).includes(tagInput.trim())) {
-      const newTags = [...(formData.tags || []), tagInput.trim()];
-      setFormData(prev => ({ ...prev, tags: newTags }));
-      setTagInput('');
-    }
-  };
-
-  // Handle deleting a tag
-  const handleTagDelete = (tagToDelete: string) => {
-    const newTags = (formData.tags || []).filter((tag: string) => tag !== tagToDelete);
-    setFormData(prev => ({ ...prev, tags: newTags }));
-  };
-
-  // Handle tag input change
-  const handleTagInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setTagInput(e.target.value);
-  };
-
-  // Handle tag input keydown event
-  const handleTagInputKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter' && tagInput.trim()) {
-      e.preventDefault();
-      handleTagAdd();
-    }
+  
+  // Remove installment
+  const handleRemoveInstallment = (id: string) => {
+    handleChangePaymentTerms('installments', bidForm.paymentTerms.installments.filter((item: BidInstallment) => item.id !== id));
   };
   
   // Handle line item changes
-  const handleLineItemChange = (updatedLineItems: LineItem[]) => {
-    setLineItems(updatedLineItems);
+  const handleLineItemChange = (updatedItems: any[]) => {
+    setLineItems(updatedItems);
+    
+    // Update total amount based on line items
+    const total = updatedItems.reduce((sum, item) => sum + (item.totalCost || 0), 0);
+    handleChangeBidForm('totalAmount', total);
   };
-
-  // Handle adding a new line item
-  const handleAddLineItem = (category: LineItem['category'] = 'labor') => {
-    const newItem = BidService.createLineItem(category);
-    setLineItems([...lineItems, newItem]);
-  };
-
-  // Handle version notes change
-  const handleVersionNotesChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    const { value } = e.target;
-    setCurrentVersion(prev => ({
-      ...prev,
-      notes: value,
-    }));
-  };
-
-  // Move to next step
-  const handleNext = () => {
-    if (validateStep(activeStep)) {
-      if (activeStep === STEPS.length - 1) {
-        // Submit form if on final step
-        handleSubmit();
-      } else {
-        setActiveStep(prevActiveStep => prevActiveStep + 1);
-      }
-    }
-  };
-
-  // Move to previous step
-  const handleBack = () => {
-    setActiveStep(prevActiveStep => prevActiveStep - 1);
-  };
-
-  // Reset form to default values
-  const handleReset = () => {
-    setFormData(DEFAULT_BID);
-    setLineItems([]);
-    setCurrentVersion({
-      versionNumber: 1,
-      totalAmount: 0,
-      notes: '',
-      lineItems: [],
-      attachments: [],
-    });
-    setErrors({});
-    setTouched({});
-    setActiveStep(0);
-    setError(null);
-    setSuccess(null);
-  };
-
-  // Validate a single field
-  const validateField = (name: string, value: any): boolean => {
-    let fieldError = '';
-
-    switch (name) {
-      case 'title':
-        if (!value || value.trim() === '') {
-          fieldError = 'Bid title is required';
-        } else if (value.length > 100) {
-          fieldError = 'Bid title must be 100 characters or less';
-        }
-        break;
-      case 'projectId':
-        if (!value) {
-          fieldError = 'Project is required';
-        }
-        break;
-      case 'subcontractorId':
-        if (!value) {
-          fieldError = 'Subcontractor is required';
-        }
-        break;
-      case 'scope':
-        if (!value || value.trim() === '') {
-          fieldError = 'Scope is required';
-        }
-        break;
-      case 'submissionDeadline':
-        if (!value) {
-          fieldError = 'Submission deadline is required';
-        }
-        break;
-      default:
-        break;
-    }
-
-    setErrors(prev => ({
-      ...prev,
-      [name]: fieldError,
-    }));
-
-    return !fieldError;
-  };
-
-  // Validate all fields for a specific step
-  const validateStep = (step: number): boolean => {
-    let stepIsValid = true;
-    const newErrors: Record<string, string> = {};
-    const newTouched: Record<string, boolean> = { ...touched };
-
-    // Step 1: Basic Information
-    if (step === 0) {
-      if (!formData.title || formData.title.trim() === '') {
-        newErrors.title = 'Bid title is required';
-        stepIsValid = false;
-      }
-      if (!formData.projectId) {
-        newErrors.projectId = 'Project is required';
-        stepIsValid = false;
-      }
-      if (!formData.subcontractorId) {
-        newErrors.subcontractorId = 'Subcontractor is required';
-        stepIsValid = false;
-      }
+  
+  // Add tag
+  const handleAddTag = () => {
+    if (tagInput.trim()) {
+      const newTags = Array.isArray(bidForm.tags) 
+        ? [...bidForm.tags, tagInput.trim()] 
+        : [tagInput.trim()];
       
-      // Mark fields as touched
-      newTouched.title = true;
-      newTouched.projectId = true;
-      newTouched.subcontractorId = true;
+      handleChangeBidForm('tags', newTags);
+      setTagInput('');
     }
-    
-    // Step 2: Scope & Timeline
-    else if (step === 1) {
-      if (!formData.scope || formData.scope.trim() === '') {
-        newErrors.scope = 'Scope is required';
-        stepIsValid = false;
-      }
-      if (!formData.submissionDeadline) {
-        newErrors.submissionDeadline = 'Submission deadline is required';
-        stepIsValid = false;
-      }
-      
-      // Mark fields as touched
-      newTouched.scope = true;
-      newTouched.submissionDeadline = true;
-    }
-    
-    // Step 3: Line Items - no required fields, just make sure total amount is calculated
-    else if (step === 2) {
-      // Ensure total amount is calculated from line items
-      const total = lineItems.reduce((sum, item) => sum + (item.totalCost || 0), 0);
-      if (formData.totalAmount !== total) {
-        setFormData(prev => ({ ...prev, totalAmount: total }));
-      }
-    }
-
-    setErrors(newErrors);
-    setTouched(newTouched);
-    return stepIsValid;
   };
-
-  // Submit the form
-  const handleSubmit = async (e?: React.FormEvent) => {
-    e?.preventDefault();
-    if (!user?.uid) {
-      setError("User authentication error. Cannot save bid.");
-      return;
-    }
-    if (!validateStep(STEPS.length - 1)) {
-      setError('Please review errors before submitting.');
-      return;
-    }
-    setSaveLoading(true);
-    setError(null);
-    setSuccess(null);
-
-    // Prepare the main bid data payload (matches Omit<Bid, ...>)
-    const finalBidData: Omit<Bid, 'id' | 'userId' | 'createdAt' | 'updatedAt' | 'currentVersionId' | 'versions'> = {
-      ...formData,
-      totalAmount: currentVersion.totalAmount, // Ensure total amount is from the current version being saved
-      createdBy: formData.createdBy || user?.uid || '', // Ensure createdBy is set
-      updatedBy: user?.uid || '', // Set updatedBy
-    };
+  
+  // Remove tag
+  const handleRemoveTag = (tagToRemove: string) => {
+    const newTags = Array.isArray(bidForm.tags) 
+      ? bidForm.tags.filter((tag: string) => tag !== tagToRemove)
+      : [];
     
-    // Prepare the version data payload (matches Omit<BidVersion, ...>)
-    // Note: When creating, we let createBid handle the initial version.
-    // When updating, we might need to create a *new* version if line items changed.
-    // For simplicity here, we assume updateBid might just update the main fields, 
-    // and a separate action/button would create a new version.
+    handleChangeBidForm('tags', newTags);
+  };
+  
+  // Quick add subcontractor
+  const handleQuickAddSubcontractor = async () => {
+    if (!user?.uid || !newSubcontractor.name.trim()) return;
     
     try {
+      setIsSaving(true);
+      
+      // Create subcontractor object
+      const subcontractorData = {
+        name: newSubcontractor.name,
+        specialty: newSubcontractor.specialty,
+        contact: {
+          phone: newSubcontractor.contact.phone,
+          email: newSubcontractor.contact.email
+        },
+        rating: 0,
+        totalProjects: 0
+      };
+      
+      const createdSubcontractor = await SubcontractorService.createSubcontractor(user.uid, subcontractorData);
+      
+      // Update subcontractors list
+      setSubcontractors(prev => [...prev, createdSubcontractor]);
+      
+      // Set as selected subcontractor
+      handleChangeBidForm('subcontractorId', createdSubcontractor.id);
+      handleChangeBidForm('subcontractorName', createdSubcontractor.name);
+      
+      // Reset form and close dialog
+      setNewSubcontractor({
+        name: '',
+        specialty: '',
+        contact: {
+          phone: '',
+          email: ''
+        }
+      });
+      setShowQuickAddSubcontractor(false);
+      
+      // Show success message
+      setSuccess('Subcontractor added successfully');
+      setTimeout(() => setSuccess(null), 3000);
+    } catch (err) {
+      setError('Failed to add subcontractor');
+      console.error('Error adding subcontractor:', err);
+    } finally {
+      setIsSaving(false);
+    }
+  };
+  
+  // Helper function to remove undefined fields
+  const removeUndefinedFields = (obj: any): any => {
+    const cleanObj = { ...obj };
+    
+    Object.keys(cleanObj).forEach(key => {
+      if (cleanObj[key] === undefined) {
+        if (key === 'submissionDeadline' || key === 'startDate' || key === 'completionDate' || key === 'dueDate') {
+          cleanObj[key] = null;
+        } else {
+          delete cleanObj[key];
+        }
+      } else if (typeof cleanObj[key] === 'object' && cleanObj[key] !== null && !(cleanObj[key] instanceof Date)) {
+        cleanObj[key] = removeUndefinedFields(cleanObj[key]);
+      }
+    });
+    
+    return cleanObj;
+  };
+  
+  // Handle form submission
+  const handleSubmit = async () => {
+    if (!user?.uid) {
+      setError('User not authenticated');
+      return;
+    }
+    
+    // Validate required fields
+    if (!bidForm.title) {
+      setError('Please enter a title for the bid');
+      return;
+    }
+    
+    if (!bidForm.projectId) {
+      setError('Please select a project');
+      return;
+    }
+    
+    if (!bidForm.subcontractorName) {
+      setError('Please select or enter a subcontractor name');
+      return;
+    }
+    
+    try {
+      setIsSaving(true);
+      
+      // Calculate total percentage to ensure it adds up to 100%
+      const downPaymentPercent = bidForm.paymentTerms.downPaymentPercent;
+      const installmentsTotal = bidForm.paymentTerms.installments.reduce((sum: number, item: any) => sum + (parseFloat(item.percent) || 0), 0);
+      const totalPercent = downPaymentPercent + installmentsTotal;
+      
+      if (Math.abs(totalPercent - 100) > 0.01) {
+        setError(`Payment percentages must add up to 100%. Currently: ${totalPercent.toFixed(2)}%`);
+        setIsSaving(false);
+        return;
+      }
+      
+      const now = new Date();
+      
+      // Create payment schedule for bid with explicit date objects
+      const paymentSchedule = [
+        {
+          id: uuidv4(),
+          name: 'Down Payment',
+          percentage: downPaymentPercent,
+          amount: (bidForm.totalAmount * downPaymentPercent) / 100,
+          status: 'pending',
+          phaseId: bidForm.phaseId,
+          phaseName: bidForm.phaseName,
+          dueDate: now,
+          description: 'Initial payment to start work',
+          createdAt: now,
+          updatedAt: now
+        } as BidPaymentStage,
+        ...bidForm.paymentTerms.installments.map((installment: any) => ({
+          id: installment.id || uuidv4(),
+          name: installment.name,
+          percentage: parseFloat(installment.percent) || 0,
+          amount: (bidForm.totalAmount * parseFloat(installment.percent)) / 100,
+          status: 'pending',
+          phaseId: installment.phaseId || bidForm.phaseId,
+          phaseName: installment.phaseName || bidForm.phaseName,
+          dueDate: now,
+          description: installment.milestoneDescription,
+          createdAt: now,
+          updatedAt: now
+        } as BidPaymentStage))
+      ] as BidPaymentStage[];
+      
+      // Create base bid data object with explicit null values for Date fields that can't be undefined
+      const bidData = {
+        userId: user.uid,
+        projectId: bidForm.projectId,
+        projectName: bidForm.projectName || '',
+        title: bidForm.title || '',
+        subcontractorName: bidForm.subcontractorName || '',
+        subcontractorId: bidForm.subcontractorId || '',
+        phaseId: bidForm.phaseId || '',
+        phaseName: bidForm.phaseName || '',
+        totalAmount: bidForm.totalAmount || 0,
+        scope: bidForm.scope || '',
+        timeline: bidForm.timeline || 0,
+        notes: bidForm.notes || '',
+        status: bidForm.status || 'draft',
+        priority: bidForm.priority || 'medium',
+        requiresInsurance: bidForm.requiresInsurance || false,
+        requiresBond: bidForm.requiresBond || false,
+        isPublic: bidForm.isPublic || false,
+        isApproved: bidForm.isApproved || false,
+        tags: Array.isArray(bidForm.tags) ? bidForm.tags : [],
+        attachments: Array.isArray(bidForm.attachments) ? bidForm.attachments : [],
+        // Set date fields explicitly to null if invalid
+        submissionDeadline: null, // Default to null, will override if valid below
+        startDate: null,
+        completionDate: null,
+        paymentSchedule,
+        createdAt: now,
+        updatedAt: now,
+        paymentProgress: {
+          paid: 0,
+          pending: bidForm.totalAmount,
+          remaining: bidForm.totalAmount
+        }
+      } as any;
+      
+      // Only set date fields if they are valid Date objects
+      if (bidForm.submissionDeadline instanceof Date && !isNaN(bidForm.submissionDeadline.getTime())) {
+        bidData.submissionDeadline = bidForm.submissionDeadline;
+      }
+      
+      if (bidForm.startDate instanceof Date && !isNaN(bidForm.startDate.getTime())) {
+        bidData.startDate = bidForm.startDate;
+      }
+      
+      if (bidForm.completionDate instanceof Date && !isNaN(bidForm.completionDate.getTime())) {
+        bidData.completionDate = bidForm.completionDate;
+      }
+      
+      // Clean any remaining undefined fields
+      const cleanBidData = removeUndefinedFields(bidData);
+      
       if (id) {
-        // For update, we send the main bid fields that can change.
-        // We omit fields managed by the service (id, userId, timestamps) 
-        // and versioning fields (versions, currentVersionId)
-        await BidService.updateBid(id, finalBidData);
+        // Update existing bid
+        await BidService.updateBid(id, cleanBidData);
+        
+        // Create new version if there are line items
+        if (lineItems.length > 0) {
+          const versionData = {
+            versionNumber: (bidForm.versions?.length || 0) + 1,
+            totalAmount: bidForm.totalAmount,
+            notes: 'Updated version',
+            lineItems: lineItems,
+            attachments: Array.isArray(bidForm.attachments) ? bidForm.attachments : []
+          };
+          
+          await BidService.createBidVersion(user.uid, id, versionData);
+        }
+        
         setSuccess('Bid updated successfully');
-        // Optionally refetch or update local state more granularly if needed
-        if (user?.uid) fetchBid(user.uid, id); 
+        
+        setTimeout(() => {
+          navigate(`/bids/${id}`);
+        }, 1500);
       } else {
-        // For create, the service handles the initial version automatically
-        const newBid = await BidService.createBid(user.uid, finalBidData);
-        setSuccess(`Bid created successfully (ID: ${newBid.id})`);
-        navigate(`/bids/${newBid.id}`); // Navigate to the new bid's details page
+        // Create new bid
+        const newBid = await BidService.createBid(user.uid, cleanBidData);
+        
+        // Create version if there are line items
+        if (lineItems.length > 0) {
+          const versionData = {
+            versionNumber: 1,
+            totalAmount: bidForm.totalAmount,
+            notes: 'Initial version',
+            lineItems: lineItems,
+            attachments: Array.isArray(bidForm.attachments) ? bidForm.attachments : []
+          };
+          
+          await BidService.createBidVersion(user.uid, newBid.id, versionData);
+        }
+        
+        setSuccess('Bid created successfully');
+        
+        setTimeout(() => {
+          navigate(`/bids/${newBid.id}`);
+        }, 1500);
       }
     } catch (err) {
       console.error('Error saving bid:', err);
-      setError(err instanceof Error ? err.message : 'Failed to save bid');
+      setError(`Failed to save bid: ${err instanceof Error ? err.message : 'Unknown error'}`);
     } finally {
-      setSaveLoading(false);
+      setIsSaving(false);
     }
   };
-
-  // Cancel form submission
-  const handleCancel = () => {
-    navigate('/bids');
-  };
-
-  // Render loading state
+  
   if (loading) {
     return (
       <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '70vh' }}>
@@ -642,14 +558,13 @@ const BidForm: React.FC = () => {
       </Box>
     );
   }
-
-  // Rest of the component rendering code
+  
   return (
     <Box sx={{ p: 3 }}>
       <Paper sx={{ p: 3, mb: 3 }}>
         <Grid container spacing={2} alignItems="center" sx={{ mb: 3 }}>
           <Grid item>
-            <IconButton onClick={handleCancel} color="primary">
+            <IconButton onClick={() => navigate(-1)} color="primary">
               <ArrowBackIcon />
             </IconButton>
           </Grid>
@@ -658,22 +573,13 @@ const BidForm: React.FC = () => {
           </Grid>
           <Grid item>
             <Button 
-              variant="outlined" 
-              color="primary" 
-              startIcon={<ResetIcon />} 
-              onClick={handleReset}
-              sx={{ mr: 1 }}
-            >
-              Reset
-            </Button>
-            <Button 
               variant="contained" 
               color="primary" 
               startIcon={<SaveIcon />} 
               onClick={handleSubmit}
-              disabled={saveLoading}
+              disabled={isSaving}
             >
-              {saveLoading ? 'Saving...' : 'Save Bid'}
+              {isSaving ? 'Saving...' : 'Save Bid'}
             </Button>
           </Grid>
         </Grid>
@@ -690,369 +596,408 @@ const BidForm: React.FC = () => {
           </Alert>
         )}
 
-        <Stepper activeStep={activeStep} sx={{ mb: 4 }}>
-          {STEPS.map((label) => (
-            <Step key={label}>
-              <StepLabel>{label}</StepLabel>
-            </Step>
-          ))}
-        </Stepper>
+        <Grid container spacing={3}>
+          <Grid item xs={12} md={6}>
+            <Typography variant="h6" gutterBottom>Basic Information</Typography>
 
-        <Box sx={{ mt: 2 }}>
-          {/* Step 1: Basic Information */}
-          {activeStep === 0 && (
-            <Grid container spacing={3}>
-              <Grid item xs={12} md={6}>
+            <TextField
+              label="Bid Title"
+              value={bidForm.title}
+              onChange={(e) => handleChangeBidForm('title', e.target.value)}
+              fullWidth
+              required
+              margin="normal"
+            />
+
+            <FormControl fullWidth margin="normal">
+              <Autocomplete
+                options={projects}
+                getOptionLabel={(option) => option.name || ''}
+                value={bidForm.projectId ? projects.find(p => p.id === bidForm.projectId) || null : null}
+                onChange={(_, value) => {
+                  if (value) {
+                    handleChangeBidForm('projectId', value.id);
+                    handleChangeBidForm('projectName', value.name);
+                    
+                    // If project has phases, set the first phase as default
+                    if (value.phases && value.phases.length > 0) {
+                      handleChangeBidForm('phaseId', value.phases[0].id);
+                      handleChangeBidForm('phaseName', value.phases[0].name);
+                    }
+                  } else {
+                    handleChangeBidForm('projectId', '');
+                    handleChangeBidForm('projectName', '');
+                    handleChangeBidForm('phaseId', '');
+                    handleChangeBidForm('phaseName', '');
+                  }
+                }}
+                renderInput={(params) => <TextField {...params} label="Project" required />}
+              />
+            </FormControl>
+            
+            <FormControl fullWidth margin="normal">
+              <Autocomplete
+                options={subcontractors}
+                getOptionLabel={(option) => option.name || ''}
+                value={bidForm.subcontractorId ? subcontractors.find(s => s.id === bidForm.subcontractorId) || null : null}
+                onChange={(_, value) => {
+                  if (value) {
+                    handleChangeBidForm('subcontractorId', value.id);
+                    handleChangeBidForm('subcontractorName', value.name);
+                  } else {
+                    handleChangeBidForm('subcontractorId', '');
+                    handleChangeBidForm('subcontractorName', '');
+                  }
+                }}
+                renderInput={(params) => <TextField {...params} label="Subcontractor" required />}
+              />
+            </FormControl>
+            
+            <Box sx={{ display: 'flex', justifyContent: 'flex-end', mt: 1 }}>
+              <Button 
+                size="small" 
+                onClick={() => setShowQuickAddSubcontractor(true)}
+                startIcon={<AddIcon />}
+              >
+                Add New Subcontractor
+              </Button>
+            </Box>
+            
+            <TextField
+              label="Total Amount"
+              value={bidForm.totalAmount}
+              onChange={(e) => handleChangeBidForm('totalAmount', parseFloat(e.target.value) || 0)}
+              fullWidth
+              type="number"
+              InputProps={{
+                startAdornment: <Box component="span" sx={{ mr: 1 }}>$</Box>
+              }}
+              margin="normal"
+            />
+
+            <TextField
+              label="Timeline (Days)"
+              value={bidForm.timeline}
+              onChange={(e) => handleChangeBidForm('timeline', parseInt(e.target.value) || 0)}
+              fullWidth
+              type="number"
+              margin="normal"
+            />
+          </Grid>
+
+          <Grid item xs={12} md={6}>
+            <Typography variant="h6" gutterBottom>Details & Settings</Typography>
+            
+            <DatePicker
+              label="Submission Deadline"
+              value={bidForm.submissionDeadline}
+              onChange={(date) => handleChangeBidForm('submissionDeadline', date)}
+              slotProps={{
+                textField: {
+                  fullWidth: true,
+                  margin: 'normal'
+                }
+              }}
+            />
+            
+            <FormControl fullWidth margin="normal">
+              <InputLabel id="status-label">Status</InputLabel>
+              <Select
+                labelId="status-label"
+                value={bidForm.status}
+                onChange={(e) => handleChangeBidForm('status', e.target.value)}
+                label="Status"
+              >
+                {STATUS_OPTIONS.map(option => (
+                  <MenuItem key={option.value} value={option.value}>
+                    {option.label}
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+
+            <FormControl fullWidth margin="normal">
+              <InputLabel id="priority-label">Priority</InputLabel>
+              <Select
+                labelId="priority-label"
+                value={bidForm.priority}
+                onChange={(e) => handleChangeBidForm('priority', e.target.value)}
+                label="Priority"
+              >
+                {PRIORITY_OPTIONS.map(option => (
+                  <MenuItem key={option.value} value={option.value}>
+                    {option.label}
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+            
+            <FormControl fullWidth margin="normal">
+              <Typography variant="body2" gutterBottom>Tags</Typography>
+              <Box sx={{ display: 'flex', flexWrap: 'wrap', mb: 1 }}>
+                {Array.isArray(bidForm.tags) && bidForm.tags.map((tag: string, index: number) => (
+                  <Chip
+                    key={index}
+                    label={String(tag)}
+                    onDelete={() => handleRemoveTag(tag)}
+                    sx={{ m: 0.5 }}
+                  />
+                ))}
+              </Box>
+              <Box sx={{ display: 'flex' }}>
                 <TextField
-                  label="Bid Title"
-                  name="title"
-                  value={formData.title}
-                  onChange={handleInputChange}
-                  fullWidth
-                  required
-                  error={touched.title && !!errors.title}
-                  helperText={touched.title && errors.title}
-                  sx={{ mb: 2 }}
-                />
-
-                <Autocomplete
-                  options={projects}
-                  getOptionLabel={(option) => option.name || ''}
-                  value={formData.projectId ? { id: formData.projectId, name: formData.projectName } : null}
-                  onChange={handleProjectChange}
-                  isOptionEqualToValue={(option, value) => option.id === value.id}
-                  renderInput={(params) => (
-                    <TextField
-                      {...params}
-                      label="Project"
-                      required
-                      error={touched.projectId && !!errors.projectId}
-                      helperText={touched.projectId && errors.projectId}
-                    />
-                  )}
-                  sx={{ mb: 2 }}
-                />
-
-                <Autocomplete
-                  options={subcontractors}
-                  getOptionLabel={(option) => option.name || ''}
-                  value={formData.subcontractorId ? { id: formData.subcontractorId, name: formData.subcontractorName } : null}
-                  onChange={handleSubcontractorChange}
-                  isOptionEqualToValue={(option, value) => option.id === value.id}
-                  renderInput={(params) => (
-                    <TextField
-                      {...params}
-                      label="Subcontractor"
-                      required
-                      error={touched.subcontractorId && !!errors.subcontractorId}
-                      helperText={touched.subcontractorId && errors.subcontractorId}
-                    />
-                  )}
-                  sx={{ mb: 2 }}
-                />
-              </Grid>
-
-              <Grid item xs={12} md={6}>
-                <FormControl fullWidth sx={{ mb: 2 }}>
-                  <InputLabel id="status-label">Status</InputLabel>
-                  <Select
-                    labelId="status-label"
-                    name="status"
-                    value={formData.status}
-                    onChange={handleSelectChange}
-                    label="Status"
-                  >
-                    {STATUS_OPTIONS.map(option => (
-                      <MenuItem key={option.value} value={option.value}>
-                        {option.label}
-                      </MenuItem>
-                    ))}
-                  </Select>
-                </FormControl>
-
-                <FormControl fullWidth sx={{ mb: 2 }}>
-                  <InputLabel id="priority-label">Priority</InputLabel>
-                  <Select
-                    labelId="priority-label"
-                    name="priority"
-                    value={formData.priority}
-                    onChange={handleSelectChange}
-                    label="Priority"
-                  >
-                    {PRIORITY_OPTIONS.map(option => (
-                      <MenuItem key={option.value} value={option.value}>
-                        {option.label}
-                      </MenuItem>
-                    ))}
-                  </Select>
-                </FormControl>
-
-                <Box sx={{ mb: 2 }}>
-                  <Typography variant="subtitle2" gutterBottom>Tags</Typography>
-                  <Box sx={{ display: 'flex', flexWrap: 'wrap', mb: 1 }}>
-                    {(formData.tags || []).map(tag => (
-                      <Chip
-                        key={tag}
-                        label={tag}
-                        onDelete={() => handleTagDelete(tag)}
-                        sx={{ m: 0.5 }}
-                      />
-                    ))}
-                  </Box>
-                  <Box sx={{ display: 'flex' }}>
-                    <TextField
-                      label="Add tag"
-                      value={tagInput}
-                      onChange={handleTagInputChange}
-                      onKeyDown={handleTagInputKeyDown}
-                      size="small"
-                      sx={{ flex: 1 }}
-                    />
-                    <Button 
-                      variant="outlined" 
-                      onClick={handleTagAdd}
-                      disabled={!tagInput.trim()}
-                      sx={{ ml: 1 }}
-                    >
-                      Add
-                    </Button>
-                  </Box>
-                </Box>
-              </Grid>
-            </Grid>
-          )}
-
-          {/* Step 2: Scope & Timeline */}
-          {activeStep === 1 && (
-            <Grid container spacing={3}>
-              <Grid item xs={12}>
-                <TextField
-                  label="Scope Description"
-                  name="scope"
-                  value={formData.scope}
-                  onChange={handleInputChange}
-                  fullWidth
-                  required
-                  multiline
-                  rows={4}
-                  error={touched.scope && !!errors.scope}
-                  helperText={touched.scope && errors.scope}
-                  sx={{ mb: 2 }}
-                />
-              </Grid>
-
-              <Grid item xs={12} md={6}>
-                <DatePicker
-                  label="Submission Deadline"
-                  value={formData.submissionDeadline}
-                  onChange={(date) => handleDateChange('submissionDeadline', date)}
-                  slotProps={{
-                    textField: {
-                      fullWidth: true,
-                      required: true,
-                      error: touched.submissionDeadline && !!errors.submissionDeadline,
-                      helperText: touched.submissionDeadline && errors.submissionDeadline
+                  label="Add tag"
+                  value={tagInput}
+                  onChange={(e) => setTagInput(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && tagInput.trim()) {
+                      e.preventDefault();
+                      handleAddTag();
                     }
                   }}
-                  sx={{ mb: 2 }}
+                  size="small"
+                  sx={{ flex: 1 }}
                 />
-              </Grid>
-
+                <Button 
+                  variant="outlined" 
+                  onClick={handleAddTag}
+                  disabled={!tagInput.trim()}
+                  sx={{ ml: 1 }}
+                >
+                  Add
+                </Button>
+              </Box>
+            </FormControl>
+          </Grid>
+          
+          <Grid item xs={12}>
+            <Divider sx={{ my: 3 }} />
+            <Typography variant="h6" gutterBottom>Scope</Typography>
+            <TextField
+              label="Scope Description"
+              value={bidForm.scope}
+              onChange={(e) => handleChangeBidForm('scope', e.target.value)}
+              fullWidth
+              multiline
+              rows={4}
+              margin="normal"
+            />
+          </Grid>
+          
+          <Grid item xs={12}>
+            <Divider sx={{ my: 3 }} />
+            <Typography variant="h6" gutterBottom>Line Items</Typography>
+            
+            <Box sx={{ mb: 2, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <Typography variant="body1">Add items to break down the total cost</Typography>
+              <Box>
+                <Button
+                  variant="outlined"
+                  startIcon={<AddIcon />}
+                  onClick={() => handleLineItemChange([...lineItems, {
+                    id: uuidv4(),
+                    category: 'labor',
+                    description: '',
+                    quantity: 1,
+                    unit: 'hours',
+                    unitCost: 0,
+                    totalCost: 0
+                  }])}
+                  sx={{ mr: 1 }}
+                >
+                  Add Labor
+                </Button>
+                <Button
+                  variant="outlined"
+                  startIcon={<AddIcon />}
+                  onClick={() => handleLineItemChange([...lineItems, {
+                    id: uuidv4(),
+                    category: 'material',
+                    description: '',
+                    quantity: 1,
+                    unit: 'each',
+                    unitCost: 0,
+                    totalCost: 0
+                  }])}
+                >
+                  Add Material
+                </Button>
+              </Box>
+            </Box>
+            
+            <LineItemsTable
+              lineItems={lineItems}
+              onChange={handleLineItemChange}
+              editable={true}
+            />
+          </Grid>
+          
+          <Grid item xs={12}>
+            <Divider sx={{ my: 3 }} />
+            <Typography variant="h6" gutterBottom>Payment Schedule</Typography>
+            
+            <Grid container spacing={2}>
               <Grid item xs={12} md={6}>
-                <Grid container spacing={2}>
-                  <Grid item xs={6}>
-                    <FormControl fullWidth>
-                      <FormControlLabel
-                        control={
-                          <Checkbox
-                            checked={formData.requiresInsurance}
-                            onChange={handleCheckboxChange}
-                            name="requiresInsurance"
-                          />
-                        }
-                        label="Requires Insurance"
-                      />
-                    </FormControl>
-                  </Grid>
-                  <Grid item xs={6}>
-                    <FormControl fullWidth>
-                      <FormControlLabel
-                        control={
-                          <Checkbox
-                            checked={formData.requiresBond}
-                            onChange={handleCheckboxChange}
-                            name="requiresBond"
-                          />
-                        }
-                        label="Requires Bond"
-                      />
-                    </FormControl>
-                  </Grid>
-                </Grid>
+                <TextField
+                  label="Down Payment (%)"
+                  value={bidForm.paymentTerms.downPaymentPercent}
+                  onChange={(e) => handleChangePaymentTerms('downPaymentPercent', parseFloat(e.target.value) || 0)}
+                  type="number"
+                  fullWidth
+                  margin="normal"
+                  InputProps={{
+                    endAdornment: <Box component="span">%</Box>
+                  }}
+                  helperText={`Amount: ${formatCurrency((bidForm.totalAmount * bidForm.paymentTerms.downPaymentPercent) / 100)}`}
+                />
               </Grid>
             </Grid>
-          )}
-
-          {/* Step 3: Line Items */}
-          {activeStep === 2 && (
-            <Box>
-              <Box sx={{ mb: 2, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <Typography variant="h6">Line Items</Typography>
-                <Box>
-                  <Button
-                    variant="outlined"
-                    startIcon={<AddIcon />}
-                    onClick={() => handleAddLineItem('labor')}
-                    sx={{ mr: 1 }}
-                  >
-                    Add Labor
-                  </Button>
-                  <Button
-                    variant="outlined"
-                    startIcon={<AddIcon />}
-                    onClick={() => handleAddLineItem('material')}
-                    sx={{ mr: 1 }}
-                  >
-                    Add Materials
-                  </Button>
-                  <Button
-                    variant="outlined"
-                    startIcon={<AddIcon />}
-                    onClick={() => handleAddLineItem('equipment')}
-                    sx={{ mr: 1 }}
-                  >
-                    Add Equipment
-                  </Button>
-                  <Button
-                    variant="outlined"
-                    startIcon={<AddIcon />}
-                    onClick={() => handleAddLineItem('other')}
-                  >
-                    Add Other
-                  </Button>
-                </Box>
-              </Box>
-
-              <LineItemsTable
-                lineItems={lineItems}
-                onChange={handleLineItemChange}
-                editable={true}
-              />
-
-              <Box sx={{ mt: 2, display: 'flex', justifyContent: 'flex-end' }}>
-                <Typography variant="h6">
-                  Total: {formatCurrency(formData.totalAmount)}
-                </Typography>
-              </Box>
-            </Box>
-          )}
-
-          {/* Step 4: Review */}
-          {activeStep === 3 && (
-            <Box>
-              <Typography variant="h6" gutterBottom>Review Bid</Typography>
-              
-              <Grid container spacing={3}>
-                <Grid item xs={12} md={6}>
-                  <Typography variant="subtitle1" gutterBottom>Basic Information</Typography>
-                  <Box sx={{ mb: 2 }}>
-                    <Typography variant="body2"><strong>Title:</strong> {formData.title}</Typography>
-                    <Typography variant="body2"><strong>Project:</strong> {formData.projectName}</Typography>
-                    <Typography variant="body2"><strong>Subcontractor:</strong> {formData.subcontractorName}</Typography>
-                    <Typography variant="body2">
-                      <strong>Status:</strong> {STATUS_OPTIONS.find(o => o.value === formData.status)?.label}
-                    </Typography>
-                    <Typography variant="body2">
-                      <strong>Priority:</strong> {PRIORITY_OPTIONS.find(o => o.value === formData.priority)?.label}
-                    </Typography>
-                    {(formData.tags || []).length > 0 && (
-                      <Box sx={{ mt: 1 }}>
-                        <Typography variant="body2"><strong>Tags:</strong></Typography>
-                        <Box sx={{ display: 'flex', flexWrap: 'wrap' }}>
-                          {(formData.tags || []).map(tag => (
-                            <Chip key={tag} label={tag} size="small" sx={{ m: 0.5 }} />
-                          ))}
-                        </Box>
-                      </Box>
-                    )}
-                  </Box>
+            
+            <Typography variant="subtitle1" sx={{ mt: 3, mb: 1 }}>Installments</Typography>
+            
+            {bidForm.paymentTerms.installments?.map((installment: any, index: number) => (
+              <Grid container spacing={2} key={installment.id} sx={{ mb: 2 }}>
+                <Grid item xs={12} md={3}>
+                  <TextField
+                    label="Name"
+                    value={installment.name}
+                    onChange={(e) => handleChangeInstallment(installment.id, 'name', e.target.value)}
+                    fullWidth
+                  />
                 </Grid>
-
-                <Grid item xs={12} md={6}>
-                  <Typography variant="subtitle1" gutterBottom>Scope & Timeline</Typography>
-                  <Box sx={{ mb: 2 }}>
-                    <Typography variant="body2" gutterBottom><strong>Scope:</strong></Typography>
-                    <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap' }}>{formData.scope}</Typography>
-                    <Typography variant="body2">
-                      <strong>Submission Deadline:</strong> {formData.submissionDeadline ? formData.submissionDeadline.toLocaleDateString() : 'N/A'}
-                    </Typography>
-                    <Typography variant="body2">
-                      <strong>Requires Insurance:</strong> {formData.requiresInsurance ? 'Yes' : 'No'}
-                    </Typography>
-                    <Typography variant="body2">
-                      <strong>Requires Bond:</strong> {formData.requiresBond ? 'Yes' : 'No'}
-                    </Typography>
-                  </Box>
+                <Grid item xs={6} md={2}>
+                  <TextField
+                    label="Percentage (%)"
+                    value={installment.percent}
+                    onChange={(e) => handleChangeInstallment(installment.id, 'percent', parseFloat(e.target.value) || 0)}
+                    fullWidth
+                    type="number"
+                    InputProps={{
+                      endAdornment: <Box component="span">%</Box>
+                    }}
+                  />
+                </Grid>
+                <Grid item xs={6} md={2}>
+                  <Typography variant="body2" sx={{ pt: 2 }}>
+                    Amount: {formatCurrency((bidForm.totalAmount * installment.percent) / 100)}
+                  </Typography>
+                </Grid>
+                <Grid item xs={10} md={4}>
+                  <TextField
+                    label="Milestone Description"
+                    value={installment.milestoneDescription}
+                    onChange={(e) => handleChangeInstallment(installment.id, 'milestoneDescription', e.target.value)}
+                    fullWidth
+                  />
+                </Grid>
+                <Grid item xs={2} md={1} sx={{ display: 'flex', alignItems: 'center' }}>
+                  <IconButton 
+                    color="error" 
+                    onClick={() => handleRemoveInstallment(installment.id)}
+                    disabled={bidForm.paymentTerms.installments.length <= 1}
+                  >
+                    <DeleteIcon />
+                  </IconButton>
                 </Grid>
               </Grid>
-
-              <Divider sx={{ my: 2 }} />
+            ))}
+            
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mt: 2 }}>
+              <Button
+                variant="outlined"
+                startIcon={<AddIcon />}
+                onClick={handleAddInstallment}
+              >
+                Add Installment
+              </Button>
               
-              <Typography variant="subtitle1" gutterBottom>Line Items</Typography>
-              {lineItems.length > 0 ? (
-                <LineItemsTable
-                  lineItems={lineItems}
-                  onChange={handleLineItemChange}
-                  editable={false}
-                />
-              ) : (
-                <Typography variant="body2" color="text.secondary">No line items added.</Typography>
-              )}
-
-              <Box sx={{ mt: 2, display: 'flex', justifyContent: 'flex-end' }}>
-                <Typography variant="h6">
-                  Total: {formatCurrency(formData.totalAmount)}
-                </Typography>
-              </Box>
-
-              <Divider sx={{ my: 2 }} />
-              
-              <Box>
-                <Typography variant="subtitle1" gutterBottom>Version Notes</Typography>
-                <TextField
-                  label="Notes for this version"
-                  value={currentVersion.notes}
-                  onChange={handleVersionNotesChange}
-                  fullWidth
-                  multiline
-                  rows={3}
-                  placeholder="Add any notes about this bid version"
-                  sx={{ mb: 2 }}
-                />
-              </Box>
+              <Typography>
+                Total: {bidForm.paymentTerms.downPaymentPercent + bidForm.paymentTerms.installments.reduce((sum: number, item: any) => sum + parseFloat(item.percent || 0), 0)}%
+              </Typography>
             </Box>
-          )}
-        </Box>
-
-        <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 3 }}>
-          <Button
-            variant="outlined"
-            onClick={handleBack}
-            startIcon={<PrevIcon />}
-            disabled={activeStep === 0}
-          >
-            Back
-          </Button>
-          <Button
-            variant="contained"
-            onClick={handleNext}
-            endIcon={activeStep === STEPS.length - 1 ? <SaveIcon /> : <NextIcon />}
-            disabled={saveLoading}
-          >
-            {activeStep === STEPS.length - 1 ? (saveLoading ? 'Saving...' : 'Submit') : 'Next'}
-          </Button>
-        </Box>
+            
+            {Math.abs((bidForm.paymentTerms.downPaymentPercent + bidForm.paymentTerms.installments.reduce((sum: number, item: any) => sum + parseFloat(item.percent || 0), 0)) - 100) > 0.01 && (
+              <Alert severity="warning" sx={{ mt: 2 }}>
+                Payment percentages should add up to 100%.
+              </Alert>
+            )}
+          </Grid>
+          
+          <Grid item xs={12}>
+            <Divider sx={{ my: 3 }} />
+            <Typography variant="h6" gutterBottom>Notes</Typography>
+            <TextField
+              label="Additional Notes"
+              value={bidForm.notes}
+              onChange={(e) => handleChangeBidForm('notes', e.target.value)}
+              fullWidth
+              multiline
+              rows={3}
+              margin="normal"
+            />
+          </Grid>
+        </Grid>
       </Paper>
+
+      {/* Quick Add Subcontractor Dialog */}
+      <Dialog open={showQuickAddSubcontractor} onClose={() => setShowQuickAddSubcontractor(false)}>
+        <DialogTitle>Add New Subcontractor</DialogTitle>
+        <DialogContent>
+          <DialogContentText sx={{ mb: 2 }}>
+            Enter the details of the new subcontractor.
+          </DialogContentText>
+          
+          <TextField
+            label="Subcontractor Name"
+            value={newSubcontractor.name}
+            onChange={(e) => setNewSubcontractor(prev => ({ ...prev, name: e.target.value }))}
+            fullWidth
+            required
+            margin="normal"
+          />
+          
+          <TextField
+            label="Specialty"
+            value={newSubcontractor.specialty}
+            onChange={(e) => setNewSubcontractor(prev => ({ ...prev, specialty: e.target.value }))}
+            fullWidth
+            margin="normal"
+          />
+          
+          <TextField
+            label="Phone"
+            value={newSubcontractor.contact.phone}
+            onChange={(e) => setNewSubcontractor(prev => ({ 
+              ...prev, 
+              contact: { ...prev.contact, phone: e.target.value } 
+            }))}
+            fullWidth
+            margin="normal"
+          />
+          
+          <TextField
+            label="Email"
+            value={newSubcontractor.contact.email}
+            onChange={(e) => setNewSubcontractor(prev => ({ 
+              ...prev, 
+              contact: { ...prev.contact, email: e.target.value } 
+            }))}
+            fullWidth
+            margin="normal"
+            type="email"
+          />
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setShowQuickAddSubcontractor(false)}>Cancel</Button>
+          <Button 
+            onClick={handleQuickAddSubcontractor} 
+            variant="contained" 
+            disabled={isSaving || !newSubcontractor.name.trim()}
+          >
+            {isSaving ? 'Adding...' : 'Add Subcontractor'}
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 };

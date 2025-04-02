@@ -48,6 +48,7 @@ import {
   ListItem,
   ListItemText,
   Alert,
+  FormHelperText,
 } from '@mui/material';
 import {
   Edit as EditIcon,
@@ -132,6 +133,7 @@ import { DatePicker } from '@mui/x-date-pickers/DatePicker';
 import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
 import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns';
 import Autocomplete from '@mui/material/Autocomplete';
+import toast from 'react-hot-toast'; // Add toast import
 
 // Type definitions for phases and progress tracking
 interface ProjectPhase extends Phase {
@@ -500,71 +502,10 @@ const ProjectDetailPage: React.FC = () => {
       },
       notes: '',
       status: 'submitted',
-      attachments: []
+      attachments: [],
+      tags: [] // Initialize empty tags array
     });
     setBidFormOpen(true);
-  };
-  
-  const handleEditBid = (bidId: string) => {
-    // Navigate to bid edit or open modal
-    console.log(`Edit bid: ${bidId}`);
-  };
-  
-  const handleDeleteBid = (bidId: string) => {
-    // Delete bid
-    if (window.confirm('Are you sure you want to delete this bid?')) {
-      setBids(bids.filter(b => b.id !== bidId));
-    }
-  };
-
-  // Cancel quick updates
-  const handleCancelQuickUpdates = () => {
-    setQuickUpdateMode(false);
-    setPhasesBeingUpdated({});
-  };
-  
-  // Initialize phases for quick update
-  const handleEnterQuickUpdateMode = () => {
-    setQuickUpdateMode(true);
-  };
-  
-  // Add a useEffect to refresh expenses when quick update mode is activated
-  useEffect(() => {
-    // Whenever quick update mode changes, ensure expenses are fresh
-    if (quickUpdateMode && project?.id && user?.uid) {
-      console.log('Quick update mode active, refreshing phase expenses');
-      refreshPhaseExpenses();
-    }
-  }, [quickUpdateMode, project?.id, user?.uid]); // Remove expenses and phases from dependencies
-
-  // Save all phase updates at once
-  const handleSaveQuickUpdates = async () => {
-    if (!project?.id || !user?.uid) return;
-    
-    try {
-      // Show loading state
-      setIsSaving(true);
-      
-      // Convert back to array format
-      const updatedPhases = Object.values(phasesBeingUpdated);
-      
-      // Save to database
-      await ProjectService.updateProject(project.id, {
-        phases: updatedPhases
-      });
-      
-      // Update local state
-      setPhases(updatedPhases);
-      setQuickUpdateMode(false);
-      
-      // Show success notification
-      showNotification('All phase updates saved successfully', 'success');
-    } catch (error) {
-      console.error('Error saving phase updates:', error);
-      showNotification('Failed to save updates: ' + (error instanceof Error ? error.message : 'Unknown error'), 'error');
-    } finally {
-      setIsSaving(false);
-    }
   };
 
   // Update a specific phase in the quick update mode
@@ -1195,11 +1136,12 @@ const ProjectDetailPage: React.FC = () => {
     submissionDeadline?: Date;
     paymentTerms: {
       downPaymentPercent: number;
-      installments: {id: string; name: string; percent: number; milestoneDescription: string}[];
+      installments: {id: string; name: string; percent: number; milestoneDescription: string; phaseId?: string; phaseName?: string}[];
     };
     notes: string;
     status: 'draft' | 'submitted' | 'accepted' | 'rejected' | 'expired';
-    attachments: {name: string; url: string}[];
+    attachments: string[]; // Must be string[] to match BidService expectations
+    tags: string[];
   }>({
     title: '',
     subcontractorName: '',
@@ -1214,8 +1156,72 @@ const ProjectDetailPage: React.FC = () => {
     },
     notes: '',
     status: 'submitted',
-    attachments: []
+    attachments: [], // Initialize as an empty array
+    tags: []
   });
+  
+  // Add payment template state
+  const [paymentTemplate, setPaymentTemplate] = useState('standard');
+
+  // Add a function to handle payment template changes after the handleCloseBidForm function
+  const handlePaymentTemplateChange = (e: SelectChangeEvent<string>) => {
+    const template = e.target.value;
+    setPaymentTemplate(template);
+    
+    // Get default phase for new payments
+    const defaultPhase = phases.length > 0 ? phases[0] : null;
+    
+    // Update payment terms based on template
+    switch(template) {
+      case 'standard':
+        setBidForm(prev => ({
+          ...prev,
+          paymentTerms: {
+            downPaymentPercent: 50,
+            installments: [
+              {
+                id: uuidv4(), 
+                name: 'Final Payment', 
+                percent: 50, 
+                milestoneDescription: 'Upon completion',
+                phaseId: defaultPhase?.id,
+                phaseName: defaultPhase?.name
+              }
+            ]
+          }
+        }));
+        break;
+      case 'trades':
+        setBidForm(prev => ({
+          ...prev,
+          paymentTerms: {
+            downPaymentPercent: 30,
+            installments: [
+              {
+                id: uuidv4(), 
+                name: 'Rough-In', 
+                percent: 40, 
+                milestoneDescription: 'After rough-in inspection',
+                phaseId: defaultPhase?.id,
+                phaseName: defaultPhase?.name
+              },
+              {
+                id: uuidv4(), 
+                name: 'Final/Top-Out', 
+                percent: 30, 
+                milestoneDescription: 'After final inspection',
+                phaseId: defaultPhase?.id,
+                phaseName: defaultPhase?.name
+              }
+            ]
+          }
+        }));
+        break;
+      case 'custom':
+        // Keep current values, user will modify manually
+        break;
+    }
+  };
 
   // Add a list of recently added bids for comparison
   const [recentBids, setRecentBids] = useState<Bid[]>([]);
@@ -1252,6 +1258,7 @@ const ProjectDetailPage: React.FC = () => {
         ]
       }
     }));
+    setPaymentTemplate('custom'); // Set to custom when installments are modified
   };
 
   const handleChangeInstallment = (id: string, field: string, value: any) => {
@@ -1264,6 +1271,7 @@ const ProjectDetailPage: React.FC = () => {
         )
       }
     }));
+    setPaymentTemplate('custom'); // Set to custom when installments are modified
   };
 
   const handleRemoveInstallment = (id: string) => {
@@ -1274,9 +1282,35 @@ const ProjectDetailPage: React.FC = () => {
         installments: prev.paymentTerms.installments.filter(item => item.id !== id)
       }
     }));
+    setPaymentTemplate('custom'); // Set to custom when installments are modified
   };
 
-  // Modify the handleSubmitBid function to validate phaseId before submission
+  // Add a utility function to clean objects before sending to Firestore
+  const removeUndefinedFields = (obj: any): any => {
+    const cleanObj = { ...obj };
+    
+    // Special handling for certain fields that need to be null in Firestore
+    const fieldsToMakeNull = ['submissionDeadline', 'startDate', 'completionDate', 'dueDate'];
+    
+    Object.keys(cleanObj).forEach(key => {
+      if (cleanObj[key] === undefined) {
+        // For fields that Firestore expects, convert undefined to null
+        if (fieldsToMakeNull.includes(key)) {
+          cleanObj[key] = null;
+        } else {
+          delete cleanObj[key];
+        }
+      } else if (cleanObj[key] === null) {
+        // Keep null values as is
+      } else if (typeof cleanObj[key] === 'object' && cleanObj[key] !== null) {
+        // Recursively clean nested objects
+        cleanObj[key] = removeUndefinedFields(cleanObj[key]);
+      }
+    });
+    return cleanObj;
+  };
+
+  // Update the handleSubmitBid function to properly handle date fields and undefined values
   const handleSubmitBid = async () => {
     if (!user || !project?.id) return;
     
@@ -1315,7 +1349,9 @@ const ProjectDetailPage: React.FC = () => {
         return;
       }
       
-      // Create payment schedule for bid
+      const now = new Date();
+      
+      // Create payment schedule for bid with explicit date objects
       const paymentSchedule = [
         {
           id: uuidv4(),
@@ -1323,10 +1359,12 @@ const ProjectDetailPage: React.FC = () => {
           percentage: downPaymentPercent,
           amount: (bidForm.totalAmount * downPaymentPercent) / 100,
           status: 'pending',
-          dueDate: new Date(),
+          phaseId: bidForm.phaseId,
+          phaseName: bidForm.phaseName,
+          dueDate: now,
           description: 'Initial payment to start work',
-          createdAt: new Date(),
-          updatedAt: new Date()
+          createdAt: now,
+          updatedAt: now
         } as BidPaymentStage,
         ...bidForm.paymentTerms.installments.map(installment => ({
           id: uuidv4(),
@@ -1334,39 +1372,64 @@ const ProjectDetailPage: React.FC = () => {
           percentage: installment.percent,
           amount: (bidForm.totalAmount * installment.percent) / 100,
           status: 'pending',
-          dueDate: new Date(),
+          phaseId: installment.phaseId || bidForm.phaseId,
+          phaseName: installment.phaseName || bidForm.phaseName,
+          dueDate: now,
           description: installment.milestoneDescription,
-          createdAt: new Date(),
-          updatedAt: new Date()
+          createdAt: now,
+          updatedAt: now
         } as BidPaymentStage))
       ] as BidPaymentStage[];
       
-      // Create new bid
-      const newBid: Bid = {
-        id: uuidv4(),
+      // Create base bid data object with explicit null values for Date fields that can't be undefined
+      const bidData = {
         userId: user.uid,
         projectId: project.id,
-        title: bidForm.title,
-        subcontractorName: bidForm.subcontractorName,
-        subcontractorId: bidForm.subcontractorId,
-        phaseId: bidForm.phaseId,
-        phaseName: bidForm.phaseName,
-        totalAmount: bidForm.totalAmount,
-        scope: bidForm.scope,
-        timeline: bidForm.timeline,
-        submissionDeadline: bidForm.submissionDeadline,
-        notes: bidForm.notes,
-        status: bidForm.status,
-        attachments: bidForm.attachments,
-        paymentSchedule: paymentSchedule,
-        createdAt: new Date(),
-        updatedAt: new Date(),
+        title: bidForm.title || '',
+        subcontractorName: bidForm.subcontractorName || '',
+        subcontractorId: bidForm.subcontractorId || '',
+        phaseId: bidForm.phaseId || '',
+        phaseName: bidForm.phaseName || '',
+        totalAmount: bidForm.totalAmount || 0,
+        scope: bidForm.scope || '',
+        timeline: bidForm.timeline || 0,
+        notes: bidForm.notes || '',
+        status: bidForm.status || 'draft',
+        tags: Array.isArray(bidForm.tags) ? bidForm.tags : [],
+        attachments: [],
+        // Set date fields explicitly to null if invalid
+        submissionDeadline: null, // Default to null, will override if valid below
+        startDate: null,
+        completionDate: null,
+        paymentSchedule,
+        createdAt: now,
+        updatedAt: now,
         paymentProgress: {
           paid: 0,
           pending: bidForm.totalAmount,
           remaining: bidForm.totalAmount
         }
-      };
+      } as any;
+      
+      // Only set date fields if they are valid Date objects
+      if (bidForm.submissionDeadline instanceof Date && !isNaN(bidForm.submissionDeadline.getTime())) {
+        bidData.submissionDeadline = bidForm.submissionDeadline;
+      }
+      
+      // Clean any remaining undefined fields
+      const cleanBidData = removeUndefinedFields(bidData);
+      
+      // Generate ID and create final bid object
+      const newBidId = uuidv4();
+      const newBid: Bid = {
+        id: newBidId,
+        ...cleanBidData
+      } as Bid;
+      
+      // Double-check submissionDeadline before sending to Firestore
+      if (newBid.submissionDeadline === undefined) {
+        (newBid as any).submissionDeadline = null;
+      }
       
       // Save bid to database
       await BidService.createBid(user.uid, newBid);
@@ -1470,6 +1533,90 @@ const ProjectDetailPage: React.FC = () => {
     } catch (error) {
       console.error('Error adding subcontractor:', error);
       showNotification('Failed to add subcontractor: ' + (error instanceof Error ? error.message : 'Unknown error'), 'error');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  // Add tag handling functions
+  const handleAddTag = (tag: string) => {
+    if (tag && !bidForm.tags.includes(tag)) {
+      setBidForm(prev => ({
+        ...prev,
+        tags: [...prev.tags, tag]
+      }));
+    }
+  };
+
+  const handleRemoveTag = (tag: string) => {
+    setBidForm(prev => ({
+      ...prev,
+      tags: prev.tags.filter(t => t !== tag)
+    }));
+  };
+
+  // Add state for tag input
+  const [tagInput, setTagInput] = useState('');
+
+  // Add these functions back which were removed
+  
+  const handleEditBid = (bidId: string) => {
+    // Navigate to bid edit or open modal
+    console.log(`Edit bid: ${bidId}`);
+  };
+  
+  const handleDeleteBid = (bidId: string) => {
+    // Delete bid
+    if (window.confirm('Are you sure you want to delete this bid?')) {
+      setBids(bids.filter(b => b.id !== bidId));
+    }
+  };
+
+  // Cancel quick updates
+  const handleCancelQuickUpdates = () => {
+    setQuickUpdateMode(false);
+    setPhasesBeingUpdated({});
+  };
+  
+  // Initialize phases for quick update
+  const handleEnterQuickUpdateMode = () => {
+    setQuickUpdateMode(true);
+  };
+  
+  // Add a useEffect to refresh expenses when quick update mode is activated
+  useEffect(() => {
+    // Whenever quick update mode changes, ensure expenses are fresh
+    if (quickUpdateMode && project?.id && user?.uid) {
+      console.log('Quick update mode active, refreshing phase expenses');
+      refreshPhaseExpenses();
+    }
+  }, [quickUpdateMode, project?.id, user?.uid]); // Remove expenses and phases from dependencies
+
+  // Save all phase updates at once
+  const handleSaveQuickUpdates = async () => {
+    if (!project?.id || !user?.uid) return;
+    
+    try {
+      // Show loading state
+      setIsSaving(true);
+      
+      // Convert back to array format
+      const updatedPhases = Object.values(phasesBeingUpdated);
+      
+      // Save to database
+      await ProjectService.updateProject(project.id, {
+        phases: updatedPhases
+      });
+      
+      // Update local state
+      setPhases(updatedPhases);
+      setQuickUpdateMode(false);
+      
+      // Show success notification
+      showNotification('All phase updates saved successfully', 'success');
+    } catch (error) {
+      console.error('Error saving phase updates:', error);
+      showNotification('Failed to save updates: ' + (error instanceof Error ? error.message : 'Unknown error'), 'error');
     } finally {
       setIsSaving(false);
     }
@@ -3100,6 +3247,63 @@ const ProjectDetailPage: React.FC = () => {
                                   </Typography>
                                 </Box>
                               </Box>
+                              
+                              {/* Add section to display bids for this phase */}
+                              <Box sx={{ mt: 2, pt: 2, borderTop: `1px solid ${alpha(theme.palette.divider, 0.1)}` }}>
+                                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                  <Typography variant="body2" color="text.secondary">
+                                    Bids ({bids.filter(bid => bid.phaseId === phase.id).length})
+                                  </Typography>
+                                  <Button
+                                    size="small"
+                                    startIcon={<AddIcon fontSize="small" />}
+                                    onClick={() => handleOpenQuickBidDialog(phase.id)}
+                                    sx={{ fontSize: '0.75rem' }}
+                                  >
+                                    Add Bid
+                                  </Button>
+                                </Box>
+                                
+                                {bids.filter(bid => bid.phaseId === phase.id).length > 0 ? (
+                                  <Box sx={{ mt: 1 }}>
+                                    {bids.filter(bid => bid.phaseId === phase.id)
+                                      .slice(0, 2) // Show only the first 2 bids to save space
+                                      .map(bid => (
+                                        <Box 
+                                          key={bid.id}
+                                          sx={{ 
+                                            display: 'flex', 
+                                            justifyContent: 'space-between',
+                                            alignItems: 'center',
+                                            mb: 1,
+                                            p: 1,
+                                            borderRadius: 1,
+                                            bgcolor: alpha(theme.palette.background.paper, 0.5)
+                                          }}
+                                        >
+                                          <Box sx={{ maxWidth: '60%' }}>
+                                            <Typography variant="body2" noWrap>
+                                              {bid.subcontractorName || 'Unnamed'}
+                                            </Typography>
+                                          </Box>
+                                          <Typography variant="body2" fontWeight="medium">
+                                            {formatCurrency(bid.totalAmount)}
+                                          </Typography>
+                                        </Box>
+                                      ))
+                                    }
+                                    {bids.filter(bid => bid.phaseId === phase.id).length > 2 && (
+                                      <Typography variant="caption" color="primary" sx={{ cursor: 'pointer', display: 'block', textAlign: 'center' }}>
+                                        +{bids.filter(bid => bid.phaseId === phase.id).length - 2} more bids
+                                      </Typography>
+                                    )}
+                                  </Box>
+                                ) : (
+                                  <Typography variant="body2" color="text.secondary" sx={{ mt: 1, fontStyle: 'italic' }}>
+                                    No bids yet for this phase
+                                  </Typography>
+                                )}
+                              </Box>
                             </Box>
                           </Grid>
                           
@@ -3331,7 +3535,9 @@ const ProjectDetailPage: React.FC = () => {
                         
                         <Box sx={{ mb: 2 }}>
                           <Typography variant="body2" color="text.secondary">Submission Date</Typography>
-                          <Typography variant="body1">{formatDate(bid.createdAt)}</Typography>
+                          <Typography variant="body1">
+                            {bid.createdAt ? formatDate(bid.createdAt) : 'N/A'}
+                          </Typography>
                         </Box>
                         
                         {/* Payment Terms Section */}
@@ -3976,23 +4182,84 @@ const ProjectDetailPage: React.FC = () => {
               </FormControl>
             </Grid>
             
+            {/* Add tags field */}
             <Grid item xs={12}>
-              <Typography variant="subtitle1" gutterBottom sx={{ mt: 2 }}>
-                Payment Terms
-              </Typography>
+              <Typography variant="subtitle2" gutterBottom>Tags</Typography>
+              <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, mb: 2 }}>
+                {bidForm.tags.map((tag) => (
+                  <Chip
+                    key={tag}
+                    label={tag}
+                    onDelete={() => handleRemoveTag(tag)}
+                    size="small"
+                    sx={{ borderRadius: 1 }}
+                  />
+                ))}
+                
+                <TextField
+                  size="small"
+                  placeholder="Add tag and press Enter"
+                  sx={{ ml: 1, minWidth: 200 }}
+                  value={tagInput}
+                  onChange={(e) => setTagInput(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && tagInput.trim()) {
+                      e.preventDefault();
+                      handleAddTag(tagInput.trim());
+                      setTagInput('');
+                    }
+                  }}
+                />
+              </Box>
+            </Grid>
+            
+            <Grid item xs={12}>
+              <Typography variant="subtitle1" sx={{ mt: 2, mb: 1 }}>Payment Terms</Typography>
               <Divider sx={{ mb: 2 }} />
+              
+              {/* Add Payment Schedule Template selector */}
+              <FormControl fullWidth sx={{ mb: 2 }}>
+                <InputLabel id="payment-template-label">Payment Schedule Template</InputLabel>
+                <Select
+                  labelId="payment-template-label"
+                  id="payment-template"
+                  value={paymentTemplate}
+                  label="Payment Schedule Template"
+                  onChange={handlePaymentTemplateChange}
+                >
+                  <MenuItem value="standard">Standard (50% down, 50% at completion)</MenuItem>
+                  <MenuItem value="trades">Trades (30% down, 40% rough-in, 30% final)</MenuItem>
+                  <MenuItem value="custom">Custom Schedule</MenuItem>
+                </Select>
+              </FormControl>
               
               <Grid container spacing={2}>
                 <Grid item xs={12} sm={6}>
                   <TextField
                     fullWidth
-                    required
                     label="Down Payment (%)"
                     type="number"
+                    InputProps={{
+                      endAdornment: <InputAdornment position="end">%</InputAdornment>,
+                    }}
                     value={bidForm.paymentTerms.downPaymentPercent}
-                    onChange={(e) => handleChangePaymentTerms('downPaymentPercent', parseInt(e.target.value) || 0)}
-                    helperText={`$${((bidForm.totalAmount * bidForm.paymentTerms.downPaymentPercent) / 100).toFixed(2)}`}
+                    onChange={(e) => {
+                      const value = Number(e.target.value);
+                      if (value >= 0 && value <= 100) {
+                        setBidForm(prev => ({
+                          ...prev,
+                          paymentTerms: {
+                            ...prev.paymentTerms,
+                            downPaymentPercent: value
+                          }
+                        }));
+                        setPaymentTemplate('custom'); // Switch to custom when manually edited
+                      }
+                    }}
                   />
+                  <FormHelperText>
+                    Down payment amount: {formatCurrency(bidForm.totalAmount * bidForm.paymentTerms.downPaymentPercent / 100)}
+                  </FormHelperText>
                 </Grid>
                 
                 <Grid item xs={12}>
@@ -4045,8 +4312,31 @@ const ProjectDetailPage: React.FC = () => {
                             type="number"
                             value={installment.percent}
                             onChange={(e) => handleChangeInstallment(installment.id, 'percent', parseInt(e.target.value) || 0)}
-                            helperText={`$${((bidForm.totalAmount * installment.percent) / 100).toFixed(2)}`}
+                            helperText={`${formatCurrency(bidForm.totalAmount * installment.percent / 100)}`}
                           />
+                        </Grid>
+                        
+                        <Grid item xs={12} sm={6}>
+                          <FormControl fullWidth>
+                            <InputLabel id={`phase-select-${installment.id}`}>Associated Phase</InputLabel>
+                            <Select
+                              labelId={`phase-select-${installment.id}`}
+                              value={installment.phaseId || ''}
+                              label="Associated Phase"
+                              onChange={(e) => {
+                                const phaseId = e.target.value;
+                                const phase = phases.find(p => p.id === phaseId);
+                                handleChangeInstallment(installment.id, 'phaseId', phaseId);
+                                handleChangeInstallment(installment.id, 'phaseName', phase?.name || '');
+                              }}
+                            >
+                              {phases.map((phase) => (
+                                <MenuItem key={phase.id} value={phase.id}>
+                                  {phase.name}
+                                </MenuItem>
+                              ))}
+                            </Select>
+                          </FormControl>
                         </Grid>
                         
                         <Grid item xs={12}>

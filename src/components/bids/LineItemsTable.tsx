@@ -206,261 +206,74 @@ const LineItemsTable: React.FC<LineItemsTableProps> = ({
   };
 
   return (
-    <>
-      <TableContainer component={Paper} sx={{ mb: 3 }}>
-        <Table>
-          <TableHead>
-            <TableRow>
-              <TableCell>Category</TableCell>
-              <TableCell width="30%">Description</TableCell>
-              <TableCell align="right">Quantity</TableCell>
-              <TableCell align="right">Unit</TableCell>
-              <TableCell align="right">Price per Unit</TableCell>
-              <TableCell align="right">Total</TableCell>
-              {editable && <TableCell align="right">Actions</TableCell>}
-            </TableRow>
-          </TableHead>
-          <TableBody>
-            {Object.entries(categories).map(([category, { label }]) => {
-              const categoryItems = lineItems.filter(item => item.category === category);
-              if (categoryItems.length === 0) return null;
-
-              return (
-                <React.Fragment key={category}>
-                  {/* Category header */}
-                  <TableRow 
-                    sx={{ 
-                      bgcolor: alpha(theme.palette.primary.main, 0.05),
-                    }}
-                  >
-                    <TableCell colSpan={editable ? 6 : 5}>
-                      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <Typography variant="subtitle1" fontWeight="bold">
-                          {label} ({categoryItems.length} {categoryItems.length === 1 ? 'item' : 'items'})
-                        </Typography>
-                        {showTotals && (
-                          <Typography variant="subtitle1" fontWeight="bold">
-                            Subtotal: {formatCurrency(categoryTotals[category as LineItem['category']])}
-                          </Typography>
-                        )}
-                      </Box>
-                    </TableCell>
-                  </TableRow>
-
-                  {/* Category items */}
-                  {categoryItems.map((item: LineItem) => {
-                    const isEditing = editable && editingRowId === item.id;
-                    return (
-                      <TableRow 
-                        key={item.id}
-                        sx={{ 
-                          bgcolor: isEditing ? alpha(theme.palette.primary.main, 0.1) : 'inherit',
-                          '&:hover': {
-                            bgcolor: alpha(theme.palette.primary.main, 0.05),
-                          },
-                        }}
+    <Box sx={{ width: '100%', overflowX: 'auto' }}>
+      <Table size="small">
+        <TableHead sx={{ bgcolor: 'background.neutral' }}>
+          <TableRow>
+            <TableCell>Category</TableCell>
+            <TableCell>Description</TableCell>
+            <TableCell align="right">Quantity</TableCell>
+            <TableCell>Unit</TableCell>
+            <TableCell align="right">Unit Cost</TableCell>
+            <TableCell align="right">Total Cost</TableCell>
+            {editable && <TableCell align="center">Actions</TableCell>}
+          </TableRow>
+        </TableHead>
+        <TableBody>
+          {Array.isArray(lineItems) && lineItems.length > 0 ? (
+            lineItems.map((item) => (
+              <TableRow key={item.id}>
+                <TableCell>{item.category ? String(item.category) : 'N/A'}</TableCell>
+                <TableCell>{item.description || 'N/A'}</TableCell>
+                <TableCell align="right">{typeof item.quantity === 'number' ? item.quantity.toString() : '0'}</TableCell>
+                <TableCell>{item.unit || 'N/A'}</TableCell>
+                <TableCell align="right">{typeof item.unitCost === 'number' ? formatCurrency(item.unitCost) : '$0.00'}</TableCell>
+                <TableCell align="right">{typeof item.totalCost === 'number' ? formatCurrency(item.totalCost) : '$0.00'}</TableCell>
+                {editable && (
+                  <TableCell align="center">
+                    <Tooltip title="Edit">
+                      <IconButton
+                        size="small"
+                        color="primary"
+                        onClick={() => handleEditClick(item)}
                       >
-                        <TableCell>
-                          {isEditing ? (
-                            <TextField
-                              name="description"
-                              value={editForm?.description || ''}
-                              onChange={(e) => handleInputChange(e, 'description')}
-                              fullWidth
-                              size="small"
-                              multiline
-                              maxRows={3}
-                            />
-                          ) : (
-                            <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                              <Typography>{item.description || '(No description)'}</Typography>
-                            </Box>
-                          )}
-                        </TableCell>
-                        <TableCell align="right">
-                          {isEditing ? (
-                            <TextField
-                              name="quantity"
-                              value={editForm?.quantity || 0}
-                              onChange={(e) => handleInputChange(e, 'quantity')}
-                              type="number"
-                              inputProps={{ min: 0, step: 0.01 }}
-                              size="small"
-                              sx={{ width: 100 }}
-                            />
-                          ) : (
-                            item.quantity
-                          )}
-                        </TableCell>
-                        <TableCell align="right">
-                          {isEditing ? (
-                            <Select
-                              name="unit"
-                              value={editForm?.unit || ''}
-                              onChange={(e) => handleSelectChange(e)}
-                              size="small"
-                              sx={{ width: 100 }}
-                              displayEmpty
-                            >
-                              {UNIT_OPTIONS.map(unit => (
-                                <MenuItem key={unit} value={unit}>
-                                  {unit}
-                                </MenuItem>
-                              ))}
-                            </Select>
-                          ) : (
-                            item.unit
-                          )}
-                        </TableCell>
-                        <TableCell align="right">
-                          {isEditing ? (
-                            <TextField
-                              name="unitCost"
-                              value={editForm?.unitCost || 0}
-                              onChange={(e) => handleInputChange(e, 'unitCost')}
-                              type="number"
-                              inputProps={{ min: 0, step: 0.01 }}
-                              size="small"
-                              sx={{ width: 120 }}
-                              InputProps={{
-                                startAdornment: <InputAdornment position="start">$</InputAdornment>,
-                              }}
-                            />
-                          ) : (
-                            formatCurrency(item.unitCost || 0)
-                          )}
-                        </TableCell>
-                        <TableCell align="right">
-                          {isEditing ? (
-                            formatCurrency(editForm?.totalCost || 0)
-                          ) : (
-                            formatCurrency(item.totalCost || 0)
-                          )}
-                        </TableCell>
-                        {editable && (
-                          <TableCell align="right">
-                            <Box sx={{ display: 'flex', justifyContent: 'flex-end' }}>
-                              {isEditing ? (
-                                <>
-                                  <Tooltip title="Save">
-                                    <IconButton 
-                                      size="small" 
-                                      onClick={handleSaveClick}
-                                      color="primary"
-                                    >
-                                      <SaveIcon />
-                                    </IconButton>
-                                  </Tooltip>
-                                  <Tooltip title="Cancel">
-                                    <IconButton 
-                                      size="small" 
-                                      onClick={handleCancelClick}
-                                      color="default"
-                                    >
-                                      <CancelIcon />
-                                    </IconButton>
-                                  </Tooltip>
-                                </>
-                              ) : (
-                                <>
-                                  <Tooltip title="Edit">
-                                    <IconButton 
-                                      size="small" 
-                                      onClick={() => handleEditClick(item)}
-                                      color="primary"
-                                    >
-                                      <EditIcon />
-                                    </IconButton>
-                                  </Tooltip>
-                                  <Tooltip title="Duplicate">
-                                    <IconButton 
-                                      size="small" 
-                                      onClick={() => handleDuplicateItem(item)}
-                                      color="default"
-                                    >
-                                      <DuplicateIcon />
-                                    </IconButton>
-                                  </Tooltip>
-                                  <Tooltip title="Delete">
-                                    <IconButton 
-                                      size="small" 
-                                      onClick={() => handleDeleteClick(item.id)}
-                                      color="error"
-                                    >
-                                      <DeleteIcon />
-                                    </IconButton>
-                                  </Tooltip>
-                                </>
-                              )}
-                            </Box>
-                          </TableCell>
-                        )}
-                      </TableRow>
-                    );
-                  })}
-                </React.Fragment>
-              );
-            })}
-
-            {/* Grand total row */}
-            {showTotals && (
-              <TableRow sx={{ backgroundColor: 'primary.light' }}>
-                <TableCell colSpan={3} />
-                <TableCell align="right">
-                  <Typography variant="subtitle1" fontWeight="bold" color="common.white">
-                    GRAND TOTAL
-                  </Typography>
-                </TableCell>
-                <TableCell align="right">
-                  <Typography variant="h6" fontWeight="bold" color="common.white">
-                    {formatCurrency(grandTotal)}
-                  </Typography>
-                </TableCell>
-                {editable && <TableCell />}
+                        <EditIcon fontSize="small" />
+                      </IconButton>
+                    </Tooltip>
+                    <Tooltip title="Delete">
+                      <IconButton
+                        size="small"
+                        color="error"
+                        onClick={() => handleDeleteClick(item.id)}
+                      >
+                        <DeleteIcon fontSize="small" />
+                      </IconButton>
+                    </Tooltip>
+                  </TableCell>
+                )}
               </TableRow>
-            )}
-          </TableBody>
-        </Table>
-      </TableContainer>
-
-      {/* "Add item" buttons */}
-      {editable && (
-        <Box sx={{ mb: 3 }}>
-          <Typography variant="subtitle1" gutterBottom>Add New Line Items:</Typography>
-          <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
-            {categories.map(category => (
-              <Button
-                key={category.value}
-                variant="outlined"
-                size="small"
-                startIcon={<AddIcon />}
-                onClick={() => handleAddCategory(category.value as LineItem['category'])}
-                sx={{ mb: 1 }}
-              >
-                {category.label}
-              </Button>
-            ))}
-          </Box>
-        </Box>
-      )}
-
-      {/* Delete confirmation dialog */}
-      <Dialog
-        open={!!itemToDelete}
-        onClose={handleDeleteCancel}
-      >
-        <DialogTitle>Confirm Delete</DialogTitle>
-        <DialogContent>
-          <DialogContentText>
-            Are you sure you want to delete this line item? This action cannot be undone.
-          </DialogContentText>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={handleDeleteCancel}>Cancel</Button>
-          <Button onClick={handleDeleteConfirm} color="error">Delete</Button>
-        </DialogActions>
-      </Dialog>
-    </>
+            ))
+          ) : (
+            <TableRow>
+              <TableCell colSpan={editable ? 7 : 6} align="center">
+                No line items added
+              </TableCell>
+            </TableRow>
+          )}
+          {Array.isArray(lineItems) && lineItems.length > 0 && (
+            <TableRow sx={{ '& td': { fontWeight: 'bold', py: 1.5 } }}>
+              <TableCell colSpan={5} align="right">
+                Total:
+              </TableCell>
+              <TableCell align="right">
+                {formatCurrency(lineItems.reduce((sum, item) => sum + (typeof item.totalCost === 'number' ? item.totalCost : 0), 0))}
+              </TableCell>
+              {editable && <TableCell />}
+            </TableRow>
+          )}
+        </TableBody>
+      </Table>
+    </Box>
   );
 };
 
