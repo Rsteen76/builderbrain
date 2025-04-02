@@ -70,6 +70,20 @@ import {
   CalendarToday as CalendarTodayIcon,
   Storefront as StorefrontIcon,
   Circle as CircleIcon,
+  Money as MoneyIcon,
+  Category as CategoryIcon,
+  CalendarMonth as CalendarIcon,
+  Description as DescriptionIcon,
+  Receipt as ReceiptIcon,
+  CloudUpload as CloudUploadIcon,
+  Check as CheckIcon,
+  BusinessCenter as BusinessCenterIcon,
+  Assignment as AssignmentIcon,
+  AccountBalance as AccountBalanceIcon,
+  Payment as PaymentIcon,
+  Assessment as AssessmentIcon,
+  Task as TaskIcon,
+  ReceiptLong as ReceiptLongIcon,
 } from '@mui/icons-material';
 import { useAuth } from '../contexts/AuthContext';
 import { ProjectService } from '../services/project';
@@ -100,6 +114,12 @@ import {
   AreaChart,
   Area,
 } from 'recharts';
+
+import SubcontractorSelector from '../components/common/SubcontractorSelector';
+import ExpenseFormModal from '../components/expenses/ExpenseFormModal';
+import { DatePicker } from '@mui/x-date-pickers/DatePicker';
+import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
+import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns';
 
 // Type definitions for phases and progress tracking
 interface ProjectPhase extends Phase {
@@ -147,6 +167,7 @@ interface QuickBid {
   description: string;
 }
 
+// Project detail page with phases, progress tracking, and expense breakdowns
 // Add interface for quick expense creation
 interface QuickExpense {
   phaseId: string;
@@ -182,25 +203,16 @@ const ProjectDetailPage: React.FC = () => {
   const [tabValue, setTabValue] = useState(0);
   const [menuAnchorEl, setMenuAnchorEl] = useState<null | HTMLElement>(null);
   const [quickUpdateMode, setQuickUpdateMode] = useState(false);
-  const [subcontractors, setSubcontractors] = useState<Subcontractor[]>([]);
   const [templateAdjusterOpen, setTemplateAdjusterOpen] = useState(false);
   
   // State for quick bid and expense dialogs
   const [newBidDialogOpen, setNewBidDialogOpen] = useState(false);
-  const [newExpenseDialogOpen, setNewExpenseDialogOpen] = useState(false);
   const [currentPhaseForBid, setCurrentPhaseForBid] = useState<string | null>(null);
   const [quickBid, setQuickBid] = useState<QuickBid>({
     phaseId: '',
     contractorName: '',
     amount: 0,
     description: '',
-  });
-  const [quickExpense, setQuickExpense] = useState<QuickExpense>({
-    phaseId: '',
-    category: 'other',
-    amount: 0,
-    description: '',
-    date: new Date().toISOString().split('T')[0],
   });
   const [snackbar, setSnackbar] = useState<{
     open: boolean;
@@ -211,6 +223,10 @@ const ProjectDetailPage: React.FC = () => {
     message: '',
     severity: 'info'
   });
+  
+  // State for expense dialog
+  const [newExpenseDialogOpen, setNewExpenseDialogOpen] = useState(false);
+  const [currentPhaseForExpense, setCurrentPhaseForExpense] = useState<string | null>(null);
   
   // Function to fetch expenses
   const fetchExpenses = async (projectId: string) => {
@@ -241,16 +257,6 @@ const ProjectDetailPage: React.FC = () => {
       setExpensesData(chartData);
     } catch (err) {
       console.error('Error fetching expenses:', err);
-    }
-  };
-  
-  // Function to fetch subcontractors
-  const fetchSubcontractors = async (userId: string) => {
-    try {
-      const data = await SubcontractorService.getSubcontractors(userId);
-      setSubcontractors(data);
-    } catch (err) {
-      console.error('Error fetching subcontractors:', err);
     }
   };
   
@@ -323,11 +329,6 @@ const ProjectDetailPage: React.FC = () => {
         // Fetch project expenses
         await fetchExpenses(projectId);
         
-        // Fetch subcontractors
-        if (user?.uid) {
-          await fetchSubcontractors(user.uid);
-        }
-        
         setLoading(false);
       } catch (err) {
         console.error('Error fetching project:', err);
@@ -358,8 +359,7 @@ const ProjectDetailPage: React.FC = () => {
       await Promise.all([
         fetchPhases(project.id),
         fetchExpenses(project.id),
-        fetchBids(project.id),
-        fetchSubcontractors(user.uid)
+        fetchBids(project.id)
       ]);
     } catch (error) {
       console.error('Error refreshing project data:', error);
@@ -601,26 +601,8 @@ const ProjectDetailPage: React.FC = () => {
 
   // Add this function to handle opening the expense dialog for a specific phase
   const handleOpenQuickExpenseDialog = (phaseId: string) => {
-    setQuickExpense({
-      phaseId,
-      category: 'materials',
-      amount: 0,
-      description: '',
-      date: new Date().toISOString().split('T')[0],
-      subcontractorId: '',
-      subcontractorName: '',
-      vendor: ''
-    });
+    setCurrentPhaseForExpense(phaseId);
     setNewExpenseDialogOpen(true);
-  };
-
-  // Add this function to handle expense input changes
-  const handleQuickExpenseChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement> | SelectChangeEvent) => {
-    const { name, value } = e.target;
-    setQuickExpense(prev => ({
-      ...prev,
-      [name]: name === 'amount' ? parseFloat(value as string) || 0 : value
-    }));
   };
 
   // Add this helper function for notifications
@@ -638,22 +620,27 @@ const ProjectDetailPage: React.FC = () => {
   };
 
   // Fix the handleAddQuickExpense function to update phases and project
-  const handleAddQuickExpense = async (phaseId?: string) => {
+  const handleAddQuickExpense = async (expense: Partial<Expense>) => {
     if (!project || !user?.uid) return;
     
     try {
       const newExpense: Omit<Expense, 'id' | 'userId' | 'createdAt' | 'updatedAt' | 'createdBy'> = {
+        ...expense,
         projectId: project.id,
-        phaseId: phaseId || quickExpense.phaseId,
-        phaseName: phases.find(p => p.id === (phaseId || quickExpense.phaseId))?.name || '',
-        category: quickExpense.category || 'other', // Default to 'other' if empty
-        amount: quickExpense.amount,
-        description: quickExpense.description,
-        date: quickExpense.date,
-        subcontractorId: quickExpense.subcontractorId || null,
-        subcontractorName: quickExpense.subcontractorName || null,
-        vendor: quickExpense.vendor || null,
-        status: 'pending'
+        phaseId: currentPhaseForExpense || expense.phaseId || '',
+        phaseName: phases.find(p => p.id === (currentPhaseForExpense || expense.phaseId))?.name || '',
+        status: expense.status || 'pending',
+        amount: expense.amount || 0,
+        description: expense.description || '',
+        category: expense.category || 'other',
+        date: expense.date || new Date().toISOString().split('T')[0],
+        vendor: expense.vendor || undefined,
+        notes: expense.notes || undefined,
+        subcontractorId: expense.subcontractorId || undefined,
+        subcontractorName: expense.subcontractorName || undefined,
+        receiptUrl: expense.receiptUrl || undefined,
+        lineItems: expense.lineItems || [],
+        paymentDetails: expense.status === 'paid' ? expense.paymentDetails : undefined
       };
       
       console.log('Adding new expense:', newExpense);
@@ -664,14 +651,14 @@ const ProjectDetailPage: React.FC = () => {
       setExpenses(prevExpenses => [...prevExpenses, savedExpense]);
       
       // Find and update the phase with the new expense
-      if (quickExpense.phaseId) {
-        const phaseToUpdate = phases.find(p => p.id === quickExpense.phaseId);
+      if (newExpense.phaseId) {
+        const phaseToUpdate = phases.find(p => p.id === newExpense.phaseId);
         if (phaseToUpdate) {
-          const newTotalActualCost = (phaseToUpdate.actualCost || 0) + quickExpense.amount;
+          const newTotalActualCost = (phaseToUpdate.actualCost || 0) + newExpense.amount;
           
           // Update phases in the project object
           const updatedPhases = phases.map(phase => {
-            if (phase.id === quickExpense.phaseId) {
+            if (phase.id === newExpense.phaseId) {
               return { ...phase, actualCost: newTotalActualCost };
             }
             return phase;
@@ -698,7 +685,7 @@ const ProjectDetailPage: React.FC = () => {
       
       // Also update the project actual cost in the database
       if (project) {
-        const newProjectActualCost = (project.actualCost || 0) + quickExpense.amount;
+        const newProjectActualCost = (project.actualCost || 0) + newExpense.amount;
         
         // Update project in database
         await ProjectService.updateProject(project.id, {
@@ -718,18 +705,9 @@ const ProjectDetailPage: React.FC = () => {
       // Fetch updated expense data
       await fetchExpenses(project.id);
       
-      // Reset the form and close dialog
-      setQuickExpense({
-        category: 'other', // Set a valid default category
-        amount: 0,
-        description: '',
-        date: new Date().toISOString().split('T')[0],
-        phaseId: '',
-        subcontractorId: '',
-        subcontractorName: '',
-        vendor: ''
-      });
+      // Close the dialog
       setNewExpenseDialogOpen(false);
+      setCurrentPhaseForExpense(null);
       
       showNotification('Expense added successfully', 'success');
     } catch (error) {
@@ -1285,7 +1263,16 @@ const ProjectDetailPage: React.FC = () => {
                           <Button
                             size="small"
                             startIcon={<AddIcon />}
-                            onClick={() => handleAddQuickExpense(phase.id)}
+                            onClick={() => handleAddQuickExpense({
+                              phaseId: phase.id,
+                              category: 'other',
+                              amount: 0,
+                              description: '',
+                              date: new Date().toISOString().split('T')[0],
+                              subcontractorId: '',
+                              subcontractorName: '',
+                              vendor: ''
+                            })}
                             sx={{
                               height: 28,
                               px: 1.5,
@@ -1450,7 +1437,16 @@ const ProjectDetailPage: React.FC = () => {
                               borderColor: alpha(theme.palette.primary.main, 0.3)
                             }
                           }}
-                          onClick={() => handleAddQuickExpense(phase.id)}
+                          onClick={() => handleAddQuickExpense({
+                            phaseId: phase.id,
+                            category: 'other',
+                            amount: 0,
+                            description: '',
+                            date: new Date().toISOString().split('T')[0],
+                            subcontractorId: '',
+                            subcontractorName: '',
+                            vendor: ''
+                          })}
                           >
                             <Typography 
                               variant="body2" 
@@ -2977,146 +2973,28 @@ const ProjectDetailPage: React.FC = () => {
       </Dialog>
 
       {/* Expense Dialog */}
-      <Dialog open={newExpenseDialogOpen} onClose={() => setNewExpenseDialogOpen(false)} maxWidth="sm" fullWidth>
-        <DialogTitle>Add Expense</DialogTitle>
-        <DialogContent>
-          <DialogContentText sx={{ mb: 2 }}>
-            Enter the expense details to add to the project.
-          </DialogContentText>
-          
-          <Grid container spacing={2}>
-            <Grid item xs={12}>
-              <TextField
-                fullWidth
-                required
-                margin="dense"
-                label="Category"
-                name="category"
-                select
-                value={quickExpense.category}
-                onChange={handleQuickExpenseChange}
-              >
-                <MenuItem value="materials">Materials</MenuItem>
-                <MenuItem value="labor">Labor</MenuItem>
-                <MenuItem value="equipment">Equipment</MenuItem>
-                <MenuItem value="permits">Permits</MenuItem>
-                <MenuItem value="other">Other</MenuItem>
-              </TextField>
-            </Grid>
-            
-            <Grid item xs={12}>
-              <TextField
-                fullWidth
-                required
-                margin="dense"
-                label="Phase"
-                name="phaseId"
-                select
-                value={quickExpense.phaseId}
-                onChange={handleQuickExpenseChange}
-              >
-                {phases.map(phase => (
-                  <MenuItem key={phase.id} value={phase.id}>{phase.name}</MenuItem>
-                ))}
-              </TextField>
-            </Grid>
-            
-            <Grid item xs={12}>
-              <TextField
-                fullWidth
-                required
-                margin="dense"
-                label="Amount"
-                name="amount"
-                type="number"
-                value={quickExpense.amount}
-                onChange={handleQuickExpenseChange}
-                InputProps={{
-                  startAdornment: <InputAdornment position="start">$</InputAdornment>,
-                }}
-              />
-            </Grid>
-            
-            <Grid item xs={12}>
-              <TextField
-                fullWidth
-                multiline
-                rows={2}
-                margin="dense"
-                label="Description"
-                name="description"
-                value={quickExpense.description}
-                onChange={handleQuickExpenseChange}
-                placeholder="Description of the expense"
-              />
-            </Grid>
-            
-            <Grid item xs={12}>
-              <TextField
-                fullWidth
-                margin="dense"
-                label="Vendor"
-                name="vendor"
-                value={quickExpense.vendor || ''}
-                onChange={handleQuickExpenseChange}
-                placeholder="Vendor or supplier name"
-              />
-            </Grid>
-            
-            <Grid item xs={12}>
-              <TextField
-                fullWidth
-                margin="dense"
-                label="Subcontractor"
-                name="subcontractorId"
-                select
-                value={quickExpense.subcontractorId || ''}
-                onChange={(e) => {
-                  const subId = e.target.value;
-                  const subName = subcontractors.find(s => s.id === subId)?.name || '';
-                  handleQuickExpenseChange(e);
-                  setQuickExpense(prev => ({
-                    ...prev,
-                    subcontractorId: subId,
-                    subcontractorName: subName
-                  }));
-                }}
-              >
-                <MenuItem value="">None</MenuItem>
-                {subcontractors.map(sub => (
-                  <MenuItem key={sub.id} value={sub.id}>{sub.name}</MenuItem>
-                ))}
-              </TextField>
-            </Grid>
-            
-            <Grid item xs={12}>
-              <TextField
-                fullWidth
-                required
-                margin="dense"
-                label="Date"
-                name="date"
-                type="date"
-                value={quickExpense.date}
-                onChange={handleQuickExpenseChange}
-                InputLabelProps={{
-                  shrink: true,
-                }}
-              />
-            </Grid>
-          </Grid>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setNewExpenseDialogOpen(false)}>Cancel</Button>
-          <Button 
-            onClick={() => handleAddQuickExpense()} 
-            variant="contained" 
-            disabled={!quickExpense.category || quickExpense.amount <= 0 || !quickExpense.phaseId}
-          >
-            Add Expense
-          </Button>
-        </DialogActions>
-      </Dialog>
+      <ExpenseFormModal
+        open={newExpenseDialogOpen}
+        onClose={() => {
+          setNewExpenseDialogOpen(false);
+          setCurrentPhaseForExpense(null);
+        }}
+        onSave={handleAddQuickExpense}
+        projects={[{ id: project?.id || '', name: project?.name || '' }]}
+        expense={{
+          phaseId: currentPhaseForExpense || '',
+          category: 'other',
+          amount: 0,
+          description: '',
+          date: new Date(),
+          status: 'pending',
+          projectId: project?.id || '',
+          vendor: '',
+          notes: '',
+          subcontractorId: '',
+          subcontractorName: '',
+        }}
+      />
       
       {/* Add Snackbar for notifications */}
       <Snackbar

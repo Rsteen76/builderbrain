@@ -43,10 +43,13 @@ import {
   Delete as DeleteIcon,
   Add as AddIcon,
   Person as SubcontractorIcon,
+  AccountBalance as BankIcon,
+  Payment as PaymentIcon,
 } from '@mui/icons-material';
 import { DatePicker } from '@mui/x-date-pickers/DatePicker';
 import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
 import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns';
+import SubcontractorSelector from '../common/SubcontractorSelector';
 
 import { Expense, LineItem, Subcontractor } from '../../types';
 import { ExpenseService } from '../../services/expense';
@@ -87,6 +90,14 @@ interface ExpenseLineItemForm {
   totalPrice: number;
 }
 
+const PAYMENT_METHODS = [
+  { value: 'credit_card', label: 'Credit Card' },
+  { value: 'bank_transfer', label: 'Bank Transfer' },
+  { value: 'cash', label: 'Cash' },
+  { value: 'check', label: 'Check' },
+  { value: 'other', label: 'Other' },
+];
+
 const ExpenseFormModal: React.FC<ExpenseFormModalProps> = ({
   open,
   onClose,
@@ -113,14 +124,12 @@ const ExpenseFormModal: React.FC<ExpenseFormModalProps> = ({
   const [backendError, setBackendError] = useState<string | null>(null);
   const [receiptFile, setReceiptFile] = useState<File | null>(null);
   const [receiptPreview, setReceiptPreview] = useState<string | null>(null);
-  const [subcontractors, setSubcontractors] = useState<Subcontractor[]>([]);
-  const [isLoadingSubcontractors, setIsLoadingSubcontractors] = useState(false);
-  const [newSubcontractor, setNewSubcontractor] = useState<string>('');
-  const [showNewSubcontractorField, setShowNewSubcontractorField] = useState(false);
-
-  // Line items state
   const [lineItems, setLineItems] = useState<ExpenseLineItemForm[]>([]);
   const [showLineItems, setShowLineItems] = useState(false);
+  const [paymentMethod, setPaymentMethod] = useState('');
+  const [referenceNumber, setReferenceNumber] = useState('');
+  const [paymentDate, setPaymentDate] = useState(new Date().toISOString().split('T')[0]);
+  const [paymentNotes, setPaymentNotes] = useState('');
 
   const isEditMode = !!expense?.id;
 
@@ -166,29 +175,8 @@ const ExpenseFormModal: React.FC<ExpenseFormModalProps> = ({
       setErrors({});
       setLineItems([]);
       setShowLineItems(false);
-      setNewSubcontractor('');
-      setShowNewSubcontractorField(false);
     }
   }, [expense]);
-
-  // Fetch subcontractors
-  useEffect(() => {
-    const fetchSubcontractors = async () => {
-      if (!user?.uid || !open) return;
-      
-      try {
-        setIsLoadingSubcontractors(true);
-        const fetchedSubcontractors = await SubcontractorService.getSubcontractors(user.uid);
-        setSubcontractors(fetchedSubcontractors);
-      } catch (error) {
-        console.error('Error fetching subcontractors:', error);
-      } finally {
-        setIsLoadingSubcontractors(false);
-      }
-    };
-
-    fetchSubcontractors();
-  }, [user, open]);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
@@ -209,39 +197,15 @@ const ExpenseFormModal: React.FC<ExpenseFormModalProps> = ({
   const handleSelectChange = (e: SelectChangeEvent) => {
     const { name, value } = e.target;
     
-    // Handle subcontractor selection
     if (name === 'subcontractorId') {
-      if (value === 'new') {
-        setShowNewSubcontractorField(true);
-        setFormData({
-          ...formData,
-          subcontractorId: '',
-          subcontractorName: '',
-        });
-      } else if (value === '') {
-        // Clear subcontractor
-        setFormData({
-          ...formData,
-          subcontractorId: '',
-          subcontractorName: '',
-        });
-        setShowNewSubcontractorField(false);
-      } else {
-        // Set existing subcontractor
-        const selectedSubcontractor = subcontractors.find(s => s.id === value);
-        setFormData({
-          ...formData,
-          subcontractorId: value,
-          subcontractorName: selectedSubcontractor?.name || '',
-        });
-        setShowNewSubcontractorField(false);
-      }
-    } else {
-      setFormData({
-        ...formData,
-        [name]: value,
-      });
+      // This will be handled by SubcontractorSelector's onChange
+      return;
     }
+    
+    setFormData({
+      ...formData,
+      [name]: value,
+    });
 
     // Clear the error for this field if it exists
     if (errors[name as keyof FormErrors]) {
@@ -252,58 +216,6 @@ const ExpenseFormModal: React.FC<ExpenseFormModalProps> = ({
     }
   };
 
-  // Handle new subcontractor input
-  const handleNewSubcontractorChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setNewSubcontractor(e.target.value);
-    setFormData({
-      ...formData,
-      subcontractorName: e.target.value,
-      subcontractorId: 'new', // Temporary ID to indicate this is a new subcontractor
-    });
-  };
-
-  // Handle creating new subcontractor
-  const handleCreateSubcontractor = async () => {
-    if (!user?.uid || !newSubcontractor.trim()) return;
-    
-    try {
-      setIsLoading(true);
-      const newSubcontractorData = {
-        name: newSubcontractor.trim(),
-        specialty: '',
-        contact: {},
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      };
-      
-      const createdSubcontractor = await SubcontractorService.createSubcontractor(
-        user.uid, 
-        newSubcontractorData as any
-      );
-      
-      // Add to subcontractors list
-      setSubcontractors([...subcontractors, createdSubcontractor]);
-      
-      // Update form data
-      setFormData({
-        ...formData,
-        subcontractorId: createdSubcontractor.id,
-        subcontractorName: createdSubcontractor.name,
-      });
-      
-      // Reset new subcontractor UI
-      setNewSubcontractor('');
-      setShowNewSubcontractorField(false);
-      
-    } catch (error) {
-      console.error('Error creating subcontractor:', error);
-      setBackendError('Failed to create subcontractor');
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  // Convert string dates to Date objects correctly
   const handleDateChange = (newDate: Date | null) => {
     if (newDate) {
       setFormData(prev => ({ ...prev, date: newDate }));
@@ -424,11 +336,6 @@ const ExpenseFormModal: React.FC<ExpenseFormModalProps> = ({
       validationErrors.date = 'Date is required';
     }
 
-    // Validate subcontractor fields if trying to create a new one
-    if (showNewSubcontractorField && !newSubcontractor.trim()) {
-      validationErrors.newSubcontractor = 'Subcontractor name is required';
-    }
-
     // Validate line items if they are shown
     if (showLineItems && lineItems.length > 0) {
       validationErrors.lineItems = {} as FormErrors['lineItems'];
@@ -494,15 +401,16 @@ const ExpenseFormModal: React.FC<ExpenseFormModalProps> = ({
         totalCost: item.totalPrice,
       })) : [];
 
-      // Cleanup subcontractor data - if "new" was selected but no subcontractor was created
-      if (updatedFormData.subcontractorId === 'new') {
-        // We either need a real subcontractor ID or we clear it
-        if (!newSubcontractor.trim()) {
-          updatedFormData.subcontractorId = '';
-          updatedFormData.subcontractorName = '';
-        }
+      // Add payment details if status is paid
+      if (formData.status === 'paid') {
+        updatedFormData.paymentDetails = {
+          method: paymentMethod,
+          date: paymentDate,
+          referenceNumber: referenceNumber || undefined,
+          notes: paymentNotes || undefined,
+        };
       }
-      
+
       // Format expense data for saving
       const expenseToSave: Partial<Expense> = {
         ...updatedFormData,
@@ -518,16 +426,6 @@ const ExpenseFormModal: React.FC<ExpenseFormModalProps> = ({
       
       // Add updatedAt timestamp
       expenseToSave.updatedAt = new Date();
-      
-      // Make sure subcontractorName is included when subcontractorId is set
-      if (expenseToSave.subcontractorId && !expenseToSave.subcontractorName) {
-        // Look up the name from our loaded subcontractors
-        const selectedSubcontractor = subcontractors.find(s => s.id === expenseToSave.subcontractorId);
-        if (selectedSubcontractor) {
-          expenseToSave.subcontractorName = selectedSubcontractor.name;
-          console.log('Added missing subcontractorName:', selectedSubcontractor.name);
-        }
-      }
       
       // Handle receipt upload if there's a file
       if (receiptFile) {
@@ -548,6 +446,14 @@ const ExpenseFormModal: React.FC<ExpenseFormModalProps> = ({
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const handleStatusChange = (e: SelectChangeEvent<Expense['status']>) => {
+    const newStatus = e.target.value as Expense['status'];
+    setFormData(prev => ({
+      ...prev,
+      status: newStatus,
+    }));
   };
 
   return (
@@ -820,67 +726,19 @@ const ExpenseFormModal: React.FC<ExpenseFormModalProps> = ({
 
           {/* Subcontractor */}
           <Grid item xs={12} sm={6}>
-            <FormControl fullWidth>
-              <InputLabel id="subcontractor-label">Subcontractor</InputLabel>
-              <Select
-                labelId="subcontractor-label"
-                name="subcontractorId"
-                value={formData.subcontractorId || ''}
-                onChange={handleSelectChange}
-                label="Subcontractor"
-                startAdornment={
-                  <InputAdornment position="start">
-                    <SubcontractorIcon />
-                  </InputAdornment>
-                }
-                disabled={isLoadingSubcontractors}
-              >
-                <MenuItem value="">
-                  <em>None</em>
-                </MenuItem>
-                {isLoadingSubcontractors ? (
-                  <MenuItem disabled>
-                    <CircularProgress size={20} /> Loading...
-                  </MenuItem>
-                ) : (
-                  subcontractors.map((sub) => (
-                    <MenuItem key={sub.id} value={sub.id}>
-                      {sub.name}
-                    </MenuItem>
-                  ))
-                )}
-                <MenuItem value="new" sx={{ color: 'primary.main' }}>
-                  <AddIcon fontSize="small" sx={{ mr: 1 }} /> Add New Subcontractor
-                </MenuItem>
-              </Select>
-            </FormControl>
+            <SubcontractorSelector
+              value={formData.subcontractorId || ''}
+              onChange={(subcontractorId, subcontractorName) => {
+                setFormData({
+                  ...formData,
+                  subcontractorId,
+                  subcontractorName,
+                });
+              }}
+              error={!!errors.subcontractorId}
+              helperText={errors.subcontractorId}
+            />
           </Grid>
-
-          {/* New Subcontractor Field */}
-          {showNewSubcontractorField && (
-            <Grid item xs={12}>
-              <Box sx={{ display: 'flex', gap: 1 }}>
-                <TextField
-                  name="newSubcontractor"
-                  label="New Subcontractor Name"
-                  value={newSubcontractor}
-                  onChange={handleNewSubcontractorChange}
-                  fullWidth
-                  error={!!errors.newSubcontractor}
-                  helperText={errors.newSubcontractor}
-                />
-                <Button 
-                  variant="contained" 
-                  color="primary" 
-                  onClick={handleCreateSubcontractor}
-                  disabled={isLoading || !newSubcontractor.trim()}
-                  sx={{ whiteSpace: 'nowrap' }}
-                >
-                  {isLoading ? <CircularProgress size={24} /> : 'Add'}
-                </Button>
-              </Box>
-            </Grid>
-          )}
 
           {/* Receipt */}
           <Grid item xs={12}>
@@ -961,6 +819,103 @@ const ExpenseFormModal: React.FC<ExpenseFormModalProps> = ({
               onChange={handleChange}
             />
           </Grid>
+
+          {/* Status and Payment Details */}
+          <Grid item xs={12}>
+            <FormControl fullWidth>
+              <InputLabel id="status-label">Status</InputLabel>
+              <Select
+                labelId="status-label"
+                id="status"
+                name="status"
+                value={formData.status || 'pending'}
+                onChange={handleStatusChange}
+                label="Status"
+              >
+                <MenuItem value="pending">Pending</MenuItem>
+                <MenuItem value="paid">Paid</MenuItem>
+              </Select>
+            </FormControl>
+          </Grid>
+
+          {formData.status === 'paid' && (
+            <>
+              <Grid item xs={12}>
+                <Typography variant="subtitle1" gutterBottom>
+                  Payment Details
+                </Typography>
+              </Grid>
+
+              <Grid item xs={12} sm={6}>
+                <FormControl fullWidth>
+                  <InputLabel id="payment-method-label">Payment Method</InputLabel>
+                  <Select
+                    labelId="payment-method-label"
+                    value={paymentMethod}
+                    onChange={(e) => setPaymentMethod(e.target.value)}
+                    label="Payment Method"
+                    startAdornment={
+                      <InputAdornment position="start">
+                        <PaymentIcon />
+                      </InputAdornment>
+                    }
+                  >
+                    {PAYMENT_METHODS.map((method) => (
+                      <MenuItem key={method.value} value={method.value}>
+                        {method.label}
+                      </MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
+              </Grid>
+
+              <Grid item xs={12} sm={6}>
+                <TextField
+                  fullWidth
+                  label="Payment Date"
+                  type="date"
+                  value={paymentDate}
+                  onChange={(e) => setPaymentDate(e.target.value)}
+                  InputProps={{
+                    startAdornment: (
+                      <InputAdornment position="start">
+                        <CalendarIcon />
+                      </InputAdornment>
+                    ),
+                  }}
+                />
+              </Grid>
+
+              <Grid item xs={12} sm={6}>
+                <TextField
+                  fullWidth
+                  label="Reference Number (Optional)"
+                  value={referenceNumber}
+                  onChange={(e) => setReferenceNumber(e.target.value)}
+                  placeholder="E.g., Check #, Transaction ID, etc."
+                  InputProps={{
+                    startAdornment: (
+                      <InputAdornment position="start">
+                        <BankIcon />
+                      </InputAdornment>
+                    ),
+                  }}
+                />
+              </Grid>
+
+              <Grid item xs={12}>
+                <TextField
+                  fullWidth
+                  label="Payment Notes (Optional)"
+                  value={paymentNotes}
+                  onChange={(e) => setPaymentNotes(e.target.value)}
+                  multiline
+                  rows={2}
+                  placeholder="Add any additional payment details..."
+                />
+              </Grid>
+            </>
+          )}
         </Grid>
       </DialogContent>
       

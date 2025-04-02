@@ -82,6 +82,12 @@ export interface Expense {
   updatedAt: Date | string;
   notes?: string;
   lineItems?: LineItem[]; // Add support for itemized expenses
+  paymentDetails?: {
+    method: string;
+    date: string;
+    referenceNumber?: string;
+    notes?: string;
+  };
 }
 
 export interface Bid {
