@@ -326,10 +326,89 @@ const BidManager: React.FC<BidManagerProps> = ({ project, userId, onProjectUpdat
       onProjectUpdate({ ...project, bids: updatedBidsList });
       handleCloseModal();
       
-      // If bid was accepted, show the payment terms modal
-      if (wasAccepted) {
-        setBidForPaymentTerms(savedBid);
-        setPaymentTermsModalOpen(true);
+      // If bid was accepted, directly create expense from payment schedule
+      if (wasAccepted && savedBid.paymentSchedule && savedBid.paymentSchedule.length > 0) {
+        try {
+          // Get the first payment stage to create an expense
+          const firstStage = savedBid.paymentSchedule[0];
+          
+          // Calculate payment progress
+          const totalAmount = savedBid.totalAmount;
+          const paymentProgress = {
+            paid: 0,
+            pending: totalAmount,
+            remaining: totalAmount
+          };
+          
+          // Update the bid with payment progress
+          await BidService.updateBid(savedBid.id, { paymentProgress });
+          
+          // Create an expense for the initial payment
+          // Map bid category to expense category
+          let expenseCategory: 'labor' | 'materials' | 'equipment' | 'permits' | 'other' = 'other';
+          
+          // Determine best category based on bid scope
+          const scope = savedBid.scope?.toLowerCase() || '';
+          if (scope.includes('labor') || 
+              scope.includes('framing') || 
+              scope.includes('install') ||
+              scope.includes('carpentry')) {
+            expenseCategory = 'labor';
+          } else if (scope.includes('material') || 
+                    scope.includes('supplies') || 
+                    scope.includes('concrete') || 
+                    scope.includes('lumber')) {
+            expenseCategory = 'materials';
+          } else if (scope.includes('equipment') || 
+                    scope.includes('machinery') || 
+                    scope.includes('tools') ||
+                    scope.includes('rental')) {
+            expenseCategory = 'equipment';
+          } else if (scope.includes('permit') || 
+                    scope.includes('inspection') || 
+                    scope.includes('license') ||
+                    scope.includes('certification')) {
+            expenseCategory = 'permits';
+          }
+          
+          const expenseData: Omit<Expense, 'id' | 'userId' | 'createdAt' | 'updatedAt' | 'createdBy'> = {
+            projectId: savedBid.projectId,
+            category: expenseCategory,
+            description: `${firstStage.name} (${firstStage.percentage}%) - ${savedBid.title || savedBid.scope || 'Unnamed bid'} - ${savedBid.subcontractorName || 'Unknown contractor'}`,
+            amount: firstStage.amount,
+            date: new Date(),
+            status: 'pending',
+            vendor: savedBid.subcontractorName || '',
+            notes: `This expense is for payment stage: ${firstStage.name} (${firstStage.percentage}%) for accepted bid (ID: ${savedBid.id}).\n\nRequirements: ${firstStage.completionRequirements || 'None'}\n\nOriginal bid notes: ${savedBid.notes || 'None'}`,
+          };
+          
+          // Create the expense
+          const expense = await ExpenseService.createExpense(userId, expenseData);
+          
+          // Update the payment stage with the expense ID
+          if (expense) {
+            const updatedSchedule = [...savedBid.paymentSchedule];
+            updatedSchedule[0].expenseId = expense.id;
+            
+            await BidService.updateBid(savedBid.id, {
+              paymentSchedule: updatedSchedule
+            });
+          }
+          
+          // Refresh the bids data
+          if (userId && project.id) {
+            const bidFilters: BidFilter = { projectId: project.id };
+            const refreshedBids = await BidService.getBids(userId, bidFilters);
+            setBids(refreshedBids);
+            onProjectUpdate({ ...project, bids: refreshedBids });
+          }
+          
+          setSuccess(`Bid accepted with payment schedule. Initial payment of ${formatCurrency(firstStage.amount || 0)} has been added to expenses.`);
+          setTimeout(() => setSuccess(null), 5000);
+        } catch (err) {
+          console.error("Error creating expense:", err);
+          setError("Bid was saved but there was an error creating the related expense.");
+        }
       }
     } catch (err) {
       console.error("Error saving bid:", err);
@@ -406,103 +485,6 @@ const BidManager: React.FC<BidManagerProps> = ({ project, userId, onProjectUpdat
   const lowestBidAmount = bids.length > 0 ? Math.min(...bids.filter(bid => bid.totalAmount > 0).map(bid => bid.totalAmount || 0)) : 0;
   const highestBidAmount = bids.length > 0 ? Math.max(...bids.filter(bid => bid.totalAmount > 0).map(bid => bid.totalAmount || 0)) : 0;
   const avgBidAmount = bids.length > 0 ? bids.filter(bid => bid.totalAmount > 0).reduce((sum, bid) => sum + (bid.totalAmount || 0), 0) / bids.filter(bid => bid.totalAmount > 0).length : 0;
-
-  // Add a function to handle payment terms submission
-  const handlePaymentTermsSubmit = async (paymentSchedule: BidPaymentStage[]) => {
-    if (!bidForPaymentTerms) return;
-    
-    try {
-      // Calculate payment progress
-      const totalAmount = bidForPaymentTerms.totalAmount;
-      const paymentProgress = {
-        paid: 0,
-        pending: totalAmount,
-        remaining: totalAmount
-      };
-      
-      // Update the bid with payment schedule
-      await BidService.updateBid(bidForPaymentTerms.id, {
-        paymentSchedule,
-        paymentProgress
-      });
-      
-      // Get the first payment stage to create an expense
-      const firstStage = paymentSchedule[0];
-      if (firstStage) {
-        // Create an expense for the initial payment
-        // Map bid category to expense category
-        let expenseCategory: 'labor' | 'materials' | 'equipment' | 'permits' | 'other' = 'other';
-        
-        // Determine best category based on bid scope
-        const scope = bidForPaymentTerms.scope?.toLowerCase() || '';
-        if (scope.includes('labor') || 
-            scope.includes('framing') || 
-            scope.includes('install') ||
-            scope.includes('carpentry')) {
-          expenseCategory = 'labor';
-        } else if (scope.includes('material') || 
-                  scope.includes('supplies') || 
-                  scope.includes('concrete') || 
-                  scope.includes('lumber')) {
-          expenseCategory = 'materials';
-        } else if (scope.includes('equipment') || 
-                  scope.includes('machinery') || 
-                  scope.includes('tools') ||
-                  scope.includes('rental')) {
-          expenseCategory = 'equipment';
-        } else if (scope.includes('permit') || 
-                  scope.includes('inspection') || 
-                  scope.includes('license') ||
-                  scope.includes('certification')) {
-          expenseCategory = 'permits';
-        }
-        
-        const expenseData: Omit<Expense, 'id' | 'userId' | 'createdAt' | 'updatedAt' | 'createdBy'> = {
-          projectId: bidForPaymentTerms.projectId,
-          category: expenseCategory,
-          description: `${firstStage.name} (${firstStage.percentage}%) - ${bidForPaymentTerms.title || bidForPaymentTerms.scope || 'Unnamed bid'} - ${bidForPaymentTerms.subcontractorName || 'Unknown contractor'}`,
-          amount: firstStage.amount,
-          date: new Date(),
-          status: 'pending',
-          vendor: bidForPaymentTerms.subcontractorName || '',
-          notes: `This expense is for payment stage: ${firstStage.name} (${firstStage.percentage}%) for accepted bid (ID: ${bidForPaymentTerms.id}).\n\nRequirements: ${firstStage.completionRequirements || 'None'}\n\nOriginal bid notes: ${bidForPaymentTerms.notes || 'None'}`,
-        };
-        
-        // Create the expense
-        const expense = await ExpenseService.createExpense(userId, expenseData);
-        
-        // Update the payment stage with the expense ID
-        if (expense) {
-          const updatedSchedule = [...paymentSchedule];
-          updatedSchedule[0].expenseId = expense.id;
-          
-          await BidService.updateBid(bidForPaymentTerms.id, {
-            paymentSchedule: updatedSchedule
-          });
-        }
-      }
-      
-      // Refresh the bids data
-      if (userId && project.id) {
-        const bidFilters: BidFilter = { projectId: project.id };
-        const refreshedBids = await BidService.getBids(userId, bidFilters);
-        setBids(refreshedBids);
-        onProjectUpdate({ ...project, bids: refreshedBids });
-      }
-      
-      setSuccess(`Bid accepted with payment schedule. Initial payment of ${formatCurrency(firstStage?.amount || 0)} has been added to expenses.`);
-      setTimeout(() => setSuccess(null), 5000);
-      
-    } catch (error) {
-      console.error('Error creating payment schedule:', error);
-      setError('Failed to save payment schedule. Please try again.');
-    }
-  };
-  
-  const handleClosePaymentTermsModal = () => {
-    setPaymentTermsModalOpen(false);
-    setBidForPaymentTerms(null);
-  };
 
   if (loading) { // Show skeleton only during initial load
     return (
@@ -1009,16 +991,6 @@ const BidManager: React.FC<BidManagerProps> = ({ project, userId, onProjectUpdat
         userId={userId}
         projectId={project.id}
       />
-
-      {/* Payment Terms Modal */}
-      {bidForPaymentTerms && (
-        <BidPaymentTermsModal
-          open={paymentTermsModalOpen}
-          onClose={handleClosePaymentTermsModal}
-          onSubmit={handlePaymentTermsSubmit}
-          bid={bidForPaymentTerms}
-        />
-      )}
     </>
   );
 };

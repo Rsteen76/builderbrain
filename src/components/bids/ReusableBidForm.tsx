@@ -203,6 +203,38 @@ const ReusableBidForm: React.FC<ReusableBidFormProps> = ({
   const [paymentTemplate, setPaymentTemplate] = useState('standard');
   const [tagInput, setTagInput] = useState('');
 
+  // Track initialization to prevent infinite loops
+  const initialized = React.useRef(false);
+
+  // Effect to update form data when initialBidData or editingBidId changes
+  useEffect(() => {
+    // Skip if no initialBidData
+    if (!initialBidData) return;
+    
+    // If editing mode changes, or form hasn't been initialized yet, update the form
+    if (!initialized.current || (editingBidId !== null && editingBidId !== undefined)) {
+      console.log('Initializing bid form with data:', initialBidData, 'editingBidId:', editingBidId);
+      
+      // Create a copy of initialBidData with defaults for any missing fields
+      const updatedFormData = {
+        ...defaultBidForm,
+        ...initialBidData,
+        // Ensure these nested objects are properly set
+        paymentTerms: {
+          ...defaultBidForm.paymentTerms,
+          ...(initialBidData.paymentTerms || {}),
+        },
+        // Ensure arrays are properly initialized
+        tags: initialBidData.tags || defaultBidForm.tags,
+        attachments: initialBidData.attachments || defaultBidForm.attachments
+      };
+      
+      console.log('Setting bid form to:', updatedFormData);
+      setBidForm(updatedFormData);
+      initialized.current = true;
+    }
+  }, [initialBidData, editingBidId]);
+
   // Form change handlers
   const handleChangeBidForm = (field: string, value: any) => {
     setBidForm(prev => ({
