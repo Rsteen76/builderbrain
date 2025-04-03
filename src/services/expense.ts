@@ -20,12 +20,14 @@ interface FirestoreExpense extends Omit<Expense, 'id' | 'date' | 'createdAt' | '
   date: Timestamp;
   createdAt: Timestamp;
   updatedAt: Timestamp;
+  bidId?: string;
+  paymentStageId?: string;
 }
 
 export class ExpenseService {
   private static collection = collection(db, 'expenses');
 
-  static async createExpense(userId: string, expenseData: Omit<Expense, 'id' | 'userId' | 'createdBy' | 'createdAt' | 'updatedAt'>): Promise<Expense> {
+  static async createExpense(userId: string, expenseData: Omit<Expense, 'id' | 'userId' | 'createdBy' | 'createdAt' | 'updatedAt'> & { bidId?: string; paymentStageId?: string }): Promise<Expense> {
     if (!userId) throw new Error('User ID is required');
     
     try {
@@ -37,6 +39,9 @@ export class ExpenseService {
         updatedAt: new Date(),
         // Make sure tags exists
         tags: expenseData.tags || [],
+        // Ensure bidId and paymentStageId are properly passed through
+        bidId: expenseData.bidId || undefined,
+        paymentStageId: expenseData.paymentStageId || undefined,
       };
       
       // Convert dates to Firestore timestamps
@@ -372,6 +377,8 @@ export class ExpenseService {
       date: data.date.toDate(),
       createdAt: data.createdAt.toDate(),
       updatedAt: data.updatedAt.toDate(),
+      bidId: data.bidId || undefined,
+      paymentStageId: data.paymentStageId || undefined
     };
   }
 
@@ -416,6 +423,11 @@ export class ExpenseService {
     // Ensure tags is an array
     const tags = data.tags || [];
     
+    // Get bid references if they exist
+    const bidId = data.bidId || undefined;
+    const paymentStageId = data.paymentStageId || undefined;
+    
+    // Create the full expense object with type assertion to unknown first
     return {
       id: doc.id,
       ...data,
@@ -423,6 +435,8 @@ export class ExpenseService {
       updatedAt,
       date,
       tags,
-    } as Expense;
+      bidId,
+      paymentStageId
+    } as unknown as Expense;
   }
 }

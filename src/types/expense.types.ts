@@ -36,4 +36,8 @@ export interface Expense {
   paymentDetails?: PaymentDetails;
   tags?: string[];
   projectName?: string;
+  /** Reference to the bid this expense was created from */
+  bidId?: string;
+  /** Reference to the payment stage this expense corresponds to */
+  paymentStageId?: string;
 } 

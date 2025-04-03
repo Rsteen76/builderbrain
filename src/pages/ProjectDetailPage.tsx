@@ -105,7 +105,8 @@ import { formatCurrency, formatDate, formatPercentage } from '../utils/formatter
 import PageLayout from '../components/layout/PageLayout';
 import ProjectTaskManager from '../components/projects/ProjectTaskManager';
 import TemplateAdjuster from '../components/projects/TemplateAdjuster';
-import { Project, Task, Phase, Expense, Bid, Subcontractor, BidPaymentStage, ProjectPhase } from '../types';
+import { Project, Task, Phase, Bid, Subcontractor, BidPaymentStage, ProjectPhase } from '../types';
+import { Expense, ExpenseCategory, ExpenseStatus } from '../types/expense.types';
 import { v4 as uuidv4 } from 'uuid';
 
 // Import extracted tab components
@@ -221,6 +222,12 @@ const CONSTRUCTION_SPECIALTIES = [
   'Other'
 ];
 
+// Ensure Expense type has the necessary fields
+interface EnhancedExpense extends Expense {
+  bidId?: string;
+  paymentStageId?: string;
+}
+
 // Project detail page with phases, progress tracking, and expense breakdowns
 const ProjectDetailPage: React.FC = () => {
   console.log('--- Rendering ProjectDetailPage ---'); // Test edit
@@ -283,7 +290,8 @@ const ProjectDetailPage: React.FC = () => {
     
     try {
       const expenseData = await ExpenseService.getProjectExpenses(user.uid, projectId);
-      setExpenses(expenseData);
+      // Use type assertion to resolve type conflict
+      setExpenses(expenseData as unknown as Expense[]);
       
       // Process expense data for charts - group by category
       const expensesByCategory = expenseData.reduce((acc, expense) => {
@@ -628,6 +636,7 @@ const ProjectDetailPage: React.FC = () => {
       phaseId: quickBid.phaseId,
       phaseName: phaseName,
       contractorName: quickBid.contractorName,
+      subcontractorName: quickBid.contractorName, // Ensure subcontractorName is also set for consistency
       bidAmount: quickBid.amount,
       totalAmount: quickBid.amount,
       title: `${quickBid.contractorName} - ${phaseName}`,
@@ -665,39 +674,62 @@ const ProjectDetailPage: React.FC = () => {
           };
         });
         
-        // Since this is an accepted bid, create an expense for the first payment stage
+        // Since this is an accepted bid, create expenses for all payment stages
         try {
-          const firstStage = paymentSchedule[0];
-          
-          // Create an expense for the initial payment
-          const expenseData: Omit<Expense, 'id' | 'userId' | 'createdAt' | 'updatedAt' | 'createdBy'> = {
-            projectId: project.id || '',
-            category: 'other', // Default category
-            description: `${firstStage.name} (${firstStage.percentage}%) - ${newBid.title}`,
-            amount: firstStage.amount,
-            date: new Date(),
-            status: 'pending',
-            vendor: newBid.contractorName || '',
-            notes: `This expense is for payment stage: ${firstStage.name} (${firstStage.percentage}%) for accepted bid from ${newBid.contractorName}`,
-          };
-          
-          // Create the expense
-          const expense = await ExpenseService.createExpense(user.uid, expenseData);
-          
-          // Update the payment stage with the expense ID
-          if (expense) {
-            const updatedSchedule = [...paymentSchedule] as BidPaymentStage[];
-            updatedSchedule[0].expenseId = expense.id;
-            
-            await BidService.updateBid(newBid.id, {
-              paymentSchedule: updatedSchedule
-            });
-            
-            // Refresh expenses
-            fetchExpenses(project.id || '');
+          // Create expenses for each payment stage in the schedule
+          for (const stage of paymentSchedule) {
+            try {
+              // Check if an expense already exists for this payment stage
+              const existingExpense = await findExistingExpenseForPaymentStage(
+                newBid.id,
+                stage.id
+              );
+              
+              if (existingExpense) {
+                console.log(`Expense already exists for payment stage ${stage.id}, skipping creation`);
+                continue; // Skip to next stage
+              }
+              
+              // Create an expense for this payment stage
+              const expenseData: Omit<EnhancedExpense, 'id' | 'userId' | 'createdBy' | 'createdAt' | 'updatedAt'> = {
+                projectId: project.id || '',
+                category: 'other', // Default category
+                description: `${stage.name} (${stage.percentage}%) - ${newBid.title}`,
+                amount: stage.amount,
+                date: new Date(),
+                status: 'pending',
+                vendor: newBid.subcontractorName || '',
+                notes: `This expense is for payment stage: ${stage.name} (${stage.percentage}%) for accepted bid from ${newBid.subcontractorName}`,
+                phaseId: stage.phaseId || newBid.phaseId || '',
+                phaseName: stage.phaseName || newBid.phaseName || '',
+                bidId: newBid.id,
+                paymentStageId: stage.id
+              };
+              
+              // Create the expense
+              const expense = await ExpenseService.createExpense(user.uid, expenseData);
+              
+              // Update the payment stage with the expense ID
+              if (expense) {
+                const updatedSchedule = [...paymentSchedule] as BidPaymentStage[];
+                const stageIndex = updatedSchedule.findIndex(s => s.id === stage.id);
+                if (stageIndex !== -1) {
+                  updatedSchedule[stageIndex].expenseId = expense.id;
+                  
+                  await BidService.updateBid(newBid.id, {
+                    paymentSchedule: updatedSchedule
+                  });
+                }
+              }
+            } catch (error) {
+              console.error(`Error creating expense for payment stage ${stage.id}:`, error);
+            }
           }
+          
+          // Refresh expenses
+          fetchExpenses(project.id || '');
         } catch (error) {
-          console.error('Error creating expense for bid:', error);
+          console.error('Error creating expenses for bid:', error);
           // Continue with the flow even if expense creation fails
         }
         
@@ -749,7 +781,7 @@ const ProjectDetailPage: React.FC = () => {
         ? expense.date 
         : new Date(expense.date || new Date());
 
-      const newExpense: Omit<Expense, 'id' | 'userId' | 'createdAt' | 'updatedAt' | 'createdBy'> = {
+      const newExpense: Omit<EnhancedExpense, 'id' | 'userId' | 'createdAt' | 'updatedAt' | 'createdBy'> = {
         ...expense,
         projectId: project.id,
         phaseId: currentPhaseForExpense || expense.phaseId || '',
@@ -767,15 +799,18 @@ const ProjectDetailPage: React.FC = () => {
         subcontractorName: expense.subcontractorName || '',
         receiptUrl: expense.receiptUrl || '',
         lineItems: expense.lineItems || [],
-        paymentDetails: expense.status === 'paid' ? expense.paymentDetails : undefined
+        paymentDetails: expense.status === 'paid' ? expense.paymentDetails : undefined,
+        // Add the bidId and paymentStageId if they exist
+        bidId: expense.bidId,
+        paymentStageId: expense.paymentStageId
       };
       
       console.log('Adding new expense:', newExpense);
       
       const savedExpense = await ExpenseService.createExpense(user.uid, newExpense);
       
-      // Update the expenses state
-      setExpenses(prevExpenses => [...prevExpenses, savedExpense]);
+      // Update the expenses state with type assertion to fix the conflict
+      setExpenses(prevExpenses => [...prevExpenses, savedExpense as unknown as Expense]);
       
       // Find and update the phase with the new expense
       if (newExpense.phaseId) {
@@ -1411,6 +1446,25 @@ const ProjectDetailPage: React.FC = () => {
     return cleanObj;
   };
 
+  // Update the findExistingExpenseForPaymentStage function to use the EnhancedExpense type
+  const findExistingExpenseForPaymentStage = async (bidId: string, paymentStageId: string): Promise<EnhancedExpense | null> => {
+    if (!user?.uid || !project?.id) return null;
+    
+    try {
+      // Get all project expenses and cast them to EnhancedExpense
+      const projectExpenses = expenses.filter(e => {
+        const enhancedExp = e as unknown as EnhancedExpense;
+        return enhancedExp.bidId === bidId && enhancedExp.paymentStageId === paymentStageId;
+      });
+      
+      // Find an expense with matching bidId and paymentStageId
+      return projectExpenses.length > 0 ? projectExpenses[0] as unknown as EnhancedExpense : null;
+    } catch (error) {
+      console.error('Error finding existing expense:', error);
+      return null;
+    }
+  };
+
   // Update the handleSubmitBid function to properly handle date fields and undefined values
   const handleSubmitBid = async (bidFormData: {
     title: string;
@@ -1535,6 +1589,9 @@ const ProjectDetailPage: React.FC = () => {
           id: newBidId,
           ...cleanBidData,
           createdAt: now,
+          // Ensure both subcontractorName and contractorName are set for consistency
+          subcontractorName: cleanBidData.subcontractorName || '',
+          contractorName: cleanBidData.subcontractorName || '', // Use subcontractorName for contractorName too
         } as Bid;
         
         // Double-check submissionDeadline before sending to Firestore
@@ -1566,42 +1623,63 @@ const ProjectDetailPage: React.FC = () => {
       // Close dialog
       setBidFormOpen(false);
       
-      // If the bid is being created with 'accepted' status, create an expense for the first payment stage
+      // If the bid is being created with 'accepted' status, create an expense for each payment stage
       if (bidFormData.status === 'accepted' && !editingBidId) {
         try {
-          // The bid ID is stored in the newly created bid object that was just saved to Firestore
-          const firstStage = paymentSchedule[0];
-          
-          // Create an expense for the initial payment
-          const expenseData: Omit<Expense, 'id' | 'userId' | 'createdAt' | 'updatedAt' | 'createdBy'> = {
-            projectId: project.id || '',
-            category: 'other', // Default category
-            description: `${firstStage.name} (${firstStage.percentage}%) - ${bidFormData.title}`,
-            amount: firstStage.amount,
-            date: new Date(),
-            status: 'pending',
-            vendor: bidFormData.subcontractorName || '',
-            notes: `This expense is for payment stage: ${firstStage.name} (${firstStage.percentage}%) for accepted bid: ${bidFormData.title}`,
-          };
-          
-          // Create the expense
-          const expense = await ExpenseService.createExpense(user.uid, expenseData);
-          
-          // Update the payment stage with the expense ID
-          if (expense) {
-            const updatedSchedule = [...paymentSchedule] as BidPaymentStage[];
-            updatedSchedule[0].expenseId = expense.id;
-            
-            // Fix the second error - use only the editingBidId (which will be null) or generate a new UUID
-            await BidService.updateBid(editingBidId || uuidv4(), {
-              paymentSchedule: updatedSchedule
-            });
-            
-            // Refresh expenses list
-            fetchExpenses(project.id || '');
+          // Create expenses for all payment stages in the payment schedule
+          for (const stage of paymentSchedule) {
+            try {
+              // First check if this payment stage already has an expense
+              const existingExpense = await findExistingExpenseForPaymentStage(
+                editingBidId || 'new-bid', // Use temporary ID for new bids
+                stage.id
+              );
+              
+              if (existingExpense) {
+                console.log(`Expense already exists for payment stage ${stage.id}, skipping creation`);
+                continue; // Skip to next stage
+              }
+              
+              // Proceed with expense creation if no existing expense found
+              const expenseData: Omit<EnhancedExpense, 'id' | 'userId' | 'createdBy' | 'createdAt' | 'updatedAt'> = {
+                projectId: project.id || '',
+                category: 'other', // Default category
+                description: `${stage.name} (${stage.percentage}%) - ${bidFormData.title}`,
+                amount: stage.amount,
+                date: new Date(),
+                status: 'pending',
+                vendor: bidFormData.subcontractorName || '', // Ensure vendor gets the subcontractor name
+                notes: `This expense is for payment stage: ${stage.name} (${stage.percentage}%) for accepted bid: ${bidFormData.title}`,
+                phaseId: stage.phaseId || bidFormData.phaseId || '',
+                phaseName: stage.phaseName || bidFormData.phaseName || '',
+                bidId: editingBidId || 'new-bid', // Will be updated after bid creation
+                paymentStageId: stage.id, // Add paymentStageId reference
+              };
+              
+              // Create the expense
+              const expense = await ExpenseService.createExpense(user.uid, expenseData);
+              
+              // Update the payment stage with the expense ID
+              if (expense) {
+                const updatedSchedule = [...paymentSchedule] as BidPaymentStage[];
+                const stageIndex = updatedSchedule.findIndex(s => s.id === stage.id);
+                if (stageIndex !== -1) {
+                  updatedSchedule[stageIndex].expenseId = expense.id;
+                  
+                  await BidService.updateBid(editingBidId || 'new-bid', {
+                    paymentSchedule: updatedSchedule
+                  });
+                }
+              }
+            } catch (error) {
+              console.error(`Error creating expense for payment stage ${stage.id}:`, error);
+            }
           }
+          
+          // Refresh expenses list
+          fetchExpenses(project.id || '');
         } catch (error) {
-          console.error('Error creating expense for accepted bid:', error);
+          console.error('Error creating expenses for accepted bid:', error);
           // We'll continue with the flow even if expense creation fails
         }
       }
@@ -1611,18 +1689,25 @@ const ProjectDetailPage: React.FC = () => {
         const bidToEdit = bids.find(b => b.id === editingBidId);
         if (bidToEdit && bidToEdit.status !== 'accepted') {
           try {
-            const firstStage = paymentSchedule[0];
-            if (firstStage && !firstStage.expenseId) {
-              // Create an expense for the initial payment
-              const expenseData: Omit<Expense, 'id' | 'userId' | 'createdAt' | 'updatedAt' | 'createdBy'> = {
+            // Create expenses for all payment stages that don't already have an expense
+            for (const stage of paymentSchedule) {
+              // Skip if this stage already has an expense
+              if (stage.expenseId) continue;
+              
+              // Create an expense for this payment stage
+              const expenseData: Omit<EnhancedExpense, 'id' | 'userId' | 'createdBy' | 'createdAt' | 'updatedAt'> = {
                 projectId: project.id || '',
                 category: 'other', // Default category
-                description: `${firstStage.name} (${firstStage.percentage}%) - ${bidFormData.title}`,
-                amount: firstStage.amount,
+                description: `${stage.name} (${stage.percentage}%) - ${bidFormData.title}`,
+                amount: stage.amount,
                 date: new Date(),
                 status: 'pending',
-                vendor: bidFormData.subcontractorName || '',
-                notes: `This expense is for payment stage: ${firstStage.name} (${firstStage.percentage}%) for accepted bid: ${bidFormData.title}`,
+                vendor: bidFormData.subcontractorName || '', // Ensure vendor gets the subcontractor name
+                notes: `This expense is for payment stage: ${stage.name} (${stage.percentage}%) for accepted bid: ${bidFormData.title}`,
+                phaseId: stage.phaseId || bidFormData.phaseId || '',
+                phaseName: stage.phaseName || bidFormData.phaseName || '',
+                bidId: editingBidId || 'new-bid', // Will be updated after bid creation
+                paymentStageId: stage.id, // Add paymentStageId reference
               };
               
               // Create the expense
@@ -1631,18 +1716,21 @@ const ProjectDetailPage: React.FC = () => {
               // Update the payment stage with the expense ID
               if (expense) {
                 const updatedSchedule = [...paymentSchedule] as BidPaymentStage[];
-                updatedSchedule[0].expenseId = expense.id;
-                
-                await BidService.updateBid(editingBidId, {
-                  paymentSchedule: updatedSchedule
-                });
-                
-                // Refresh expenses list
-                fetchExpenses(project.id || '');
+                const stageIndex = updatedSchedule.findIndex(s => s.id === stage.id);
+                if (stageIndex !== -1) {
+                  updatedSchedule[stageIndex].expenseId = expense.id;
+                  
+                  await BidService.updateBid(editingBidId || 'new-bid', {
+                    paymentSchedule: updatedSchedule
+                  });
+                }
               }
             }
+            
+            // Refresh expenses list
+            fetchExpenses(project.id || '');
           } catch (error) {
-            console.error('Error creating expense for updated bid:', error);
+            console.error('Error creating expenses for updated bid:', error);
             // We'll continue with the flow even if expense creation fails
           }
         }
@@ -2122,9 +2210,9 @@ const ProjectDetailPage: React.FC = () => {
       <ExpenseFormModal
         open={newExpenseDialogOpen}
         onClose={() => { setNewExpenseDialogOpen(false); setCurrentPhaseForExpense(null); }}
-        onSave={handleAddQuickExpense}
+        onSave={handleAddQuickExpense as unknown as (expense: Partial<import('../types').Expense>) => void}
         projects={[{ id: project?.id || '', name: project?.name || '' }]}
-        expense={currentExpenseData}
+        expense={currentExpenseData as unknown as import('../types').Expense}
         projectPhases={phases}
         // isSaving={isSaving} // Removed prop
       />
