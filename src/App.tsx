@@ -6,6 +6,7 @@ import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns';
 import theme from './theme';
 import MainLayout from './components/layout/MainLayout';
 import { AuthProvider } from './contexts/AuthContext';
+import { QueryProvider } from './contexts/QueryContext';
 import ProtectedRoute from './components/auth/ProtectedRoute';
 import ProjectDetailPage from './pages/ProjectDetailPage';
 import NewResidentialProjectForm from './components/projects/NewResidentialProjectForm';
@@ -126,40 +127,42 @@ const App: React.FC = () => {
         }}
       />
       <LocalizationProvider dateAdapter={AdapterDateFns}>
-        <AuthProvider>
-          <Router>
-            <Suspense fallback={<div>Loading...</div>}>
-              <Routes>
-                <Route path="/login" element={<Login />} />
-                <Route path="/signup" element={<SignUp />} />
-                <Route path="/" element={<MainLayout />}>
-                  <Route index element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
-                  <Route path="dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
-                  <Route path="projects" element={<ProtectedRoute><Projects /></ProtectedRoute>} />
-                  <Route path="projects/new" element={<ProtectedRoute><ProjectForm /></ProtectedRoute>} />
-                  <Route path="projects/new-residential" element={<ProtectedRoute><NewResidentialProjectForm /></ProtectedRoute>} />
-                  <Route path="projects/residential-template" element={<ProtectedRoute><ResidentialTemplateLanding /></ProtectedRoute>} />
-                  <Route path="projects/:id/edit" element={<ProtectedRoute><ProjectForm /></ProtectedRoute>} />
-                  <Route path="projects/:projectId" element={<ProtectedRoute><ProjectDetailPage /></ProtectedRoute>} />
-                  <Route path="tasks" element={<ProtectedRoute><Tasks /></ProtectedRoute>} />
-                  <Route path="expenses" element={<ProtectedRoute><Expenses /></ProtectedRoute>} />
-                  <Route path="documents" element={<ProtectedRoute><Documents /></ProtectedRoute>} />
-                  <Route path="bids" element={<ProtectedRoute><Bids /></ProtectedRoute>} />
-                  <Route path="bids/new" element={<ProtectedRoute><BidForm /></ProtectedRoute>} />
-                  <Route path="bids/:id" element={<ProtectedRoute><BidDetails /></ProtectedRoute>} />
-                  <Route path="bids/:id/edit" element={<ProtectedRoute><BidForm /></ProtectedRoute>} />
-                  <Route path="payments" element={<ProtectedRoute><Payments /></ProtectedRoute>} />
-                  <Route path="subcontractors" element={<ProtectedRoute><Subcontractors /></ProtectedRoute>} />
-                  <Route path="subcontractors/new" element={<ProtectedRoute><SubcontractorForm /></ProtectedRoute>} />
-                  <Route path="subcontractors/:id" element={<ProtectedRoute><SubcontractorDetails /></ProtectedRoute>} />
-                  <Route path="subcontractors/:id/edit" element={<ProtectedRoute><SubcontractorForm /></ProtectedRoute>} />
-                  <Route path="settings" element={<ProtectedRoute><Settings /></ProtectedRoute>} />
-                  <Route path="templates" element={<ProtectedRoute><ProjectTemplates /></ProtectedRoute>} />
-                </Route>
-              </Routes>
-            </Suspense>
-          </Router>
-        </AuthProvider>
+        <QueryProvider>
+          <AuthProvider>
+            <Router>
+              <Suspense fallback={<div>Loading...</div>}>
+                <Routes>
+                  <Route path="/login" element={<Login />} />
+                  <Route path="/signup" element={<SignUp />} />
+                  <Route path="/" element={<MainLayout />}>
+                    <Route index element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
+                    <Route path="dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
+                    <Route path="projects" element={<ProtectedRoute><Projects /></ProtectedRoute>} />
+                    <Route path="projects/new" element={<ProtectedRoute><ProjectForm /></ProtectedRoute>} />
+                    <Route path="projects/new-residential" element={<ProtectedRoute><NewResidentialProjectForm /></ProtectedRoute>} />
+                    <Route path="projects/residential-template" element={<ProtectedRoute><ResidentialTemplateLanding /></ProtectedRoute>} />
+                    <Route path="projects/:id/edit" element={<ProtectedRoute><ProjectForm /></ProtectedRoute>} />
+                    <Route path="projects/:projectId" element={<ProtectedRoute><ProjectDetailPage /></ProtectedRoute>} />
+                    <Route path="tasks" element={<ProtectedRoute><Tasks /></ProtectedRoute>} />
+                    <Route path="expenses" element={<ProtectedRoute><Expenses /></ProtectedRoute>} />
+                    <Route path="documents" element={<ProtectedRoute><Documents /></ProtectedRoute>} />
+                    <Route path="bids" element={<ProtectedRoute><Bids /></ProtectedRoute>} />
+                    <Route path="bids/new" element={<ProtectedRoute><BidForm /></ProtectedRoute>} />
+                    <Route path="bids/:id" element={<ProtectedRoute><BidDetails /></ProtectedRoute>} />
+                    <Route path="bids/:id/edit" element={<ProtectedRoute><BidForm /></ProtectedRoute>} />
+                    <Route path="payments" element={<ProtectedRoute><Payments /></ProtectedRoute>} />
+                    <Route path="subcontractors" element={<ProtectedRoute><Subcontractors /></ProtectedRoute>} />
+                    <Route path="subcontractors/new" element={<ProtectedRoute><SubcontractorForm /></ProtectedRoute>} />
+                    <Route path="subcontractors/:id" element={<ProtectedRoute><SubcontractorDetails /></ProtectedRoute>} />
+                    <Route path="subcontractors/:id/edit" element={<ProtectedRoute><SubcontractorForm /></ProtectedRoute>} />
+                    <Route path="settings" element={<ProtectedRoute><Settings /></ProtectedRoute>} />
+                    <Route path="templates" element={<ProtectedRoute><ProjectTemplates /></ProtectedRoute>} />
+                  </Route>
+                </Routes>
+              </Suspense>
+            </Router>
+          </AuthProvider>
+        </QueryProvider>
       </LocalizationProvider>
     </ThemeProvider>
   );

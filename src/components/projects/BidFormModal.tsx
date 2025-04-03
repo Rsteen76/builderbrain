@@ -18,7 +18,7 @@ import {
 import { DatePicker } from '@mui/x-date-pickers/DatePicker';
 import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
 import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns';
-import { BidStatus } from '../../types/project.types';
+import { BidStatus } from '../../types/bid.types';
 import { Bid, Subcontractor } from '../../types';
 import { v4 as uuidv4 } from 'uuid';
 import { TextFieldProps } from '@mui/material/TextField';

@@ -294,3 +294,37 @@ export interface Phase {
   createdAt?: Date | string;
   updatedAt?: Date | string;
 }
+
+// Re-export types from their domain-specific files
+export * from './user.types';
+export * from './project.types';
+export * from './bid.types';
+export * from './task.types';
+export * from './expense.types';
+export * from './document.types';
+
+// Common types used across multiple domains
+export interface ApiResponse<T> {
+  data?: T;
+  error?: string;
+  status: 'success' | 'error' | 'loading';
+}
+
+export interface PaginatedResponse<T> {
+  items: T[];
+  totalCount: number;
+  page: number;
+  limit: number;
+  hasMore: boolean;
+}
+
+export interface FilterOptions {
+  sortBy?: string;
+  sortDirection?: 'asc' | 'desc';
+  page?: number;
+  limit?: number;
+  search?: string;
+  [key: string]: any;
+}
+
+// Add more common types as needed
