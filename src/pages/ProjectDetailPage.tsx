@@ -484,6 +484,7 @@ const ProjectDetailPage: React.FC = () => {
 
   const handleAddBid = () => {
     // Reset form and open modal
+    setEditingBidId(null);
     setBidForm({
       title: '',
       subcontractorName: '',
@@ -1124,6 +1125,7 @@ const ProjectDetailPage: React.FC = () => {
 
   // Update the state with proper bid form fields
   const [bidFormOpen, setBidFormOpen] = useState(false);
+  const [editingBidId, setEditingBidId] = useState<string | null>(null);
   const [bidForm, setBidForm] = useState<{
     title: string;
     subcontractorName: string;
@@ -1228,6 +1230,7 @@ const ProjectDetailPage: React.FC = () => {
 
   const handleCloseBidForm = () => {
     setBidFormOpen(false);
+    setEditingBidId(null);
   };
 
   const handleChangeBidForm = (field: string, value: any) => {
@@ -1402,7 +1405,6 @@ const ProjectDetailPage: React.FC = () => {
         startDate: null,
         completionDate: null,
         paymentSchedule,
-        createdAt: now,
         updatedAt: now,
         paymentProgress: {
           paid: 0,
@@ -1419,32 +1421,48 @@ const ProjectDetailPage: React.FC = () => {
       // Clean any remaining undefined fields
       const cleanBidData = removeUndefinedFields(bidData);
       
-      // Generate ID and create final bid object
-      const newBidId = uuidv4();
-      const newBid: Bid = {
-        id: newBidId,
-        ...cleanBidData
-      } as Bid;
-      
-      // Double-check submissionDeadline before sending to Firestore
-      if (newBid.submissionDeadline === undefined) {
-        (newBid as any).submissionDeadline = null;
+      // Check if we're updating an existing bid or creating a new one
+      if (editingBidId) {
+        // Update existing bid
+        await BidService.updateBid(editingBidId, cleanBidData);
+        
+        // Update bid in local state
+        setBids(prev => prev.map(b => b.id === editingBidId ? { ...b, ...cleanBidData, id: editingBidId } : b));
+        
+        // Show success notification
+        showNotification('Bid updated successfully', 'success');
+      } else {
+        // Generate ID and create final bid object for new bid
+        const newBidId = uuidv4();
+        const newBid: Bid = {
+          id: newBidId,
+          ...cleanBidData,
+          createdAt: now,
+        } as Bid;
+        
+        // Double-check submissionDeadline before sending to Firestore
+        if (newBid.submissionDeadline === undefined) {
+          (newBid as any).submissionDeadline = null;
+        }
+        
+        // Save new bid to database
+        await BidService.createBid(user.uid, newBid);
+        
+        // Add to local state
+        setBids(prev => [...prev, newBid]);
+        
+        // Add to recent bids for easy comparison
+        setRecentBids(prev => [newBid, ...prev].slice(0, 5));
+        
+        // Show success notification
+        showNotification('Bid added successfully', 'success');
       }
       
-      // Save bid to database
-      await BidService.createBid(user.uid, newBid);
-      
-      // Add to local state
-      setBids(prev => [...prev, newBid]);
-      
-      // Add to recent bids for easy comparison
-      setRecentBids(prev => [newBid, ...prev].slice(0, 5));
+      // Reset editing state
+      setEditingBidId(null);
       
       // Close dialog
       setBidFormOpen(false);
-      
-      // Show success notification
-      showNotification('Bid added successfully', 'success');
     } catch (error) {
       console.error('Error saving bid:', error);
       showNotification('Failed to save bid: ' + (error instanceof Error ? error.message : 'Unknown error'), 'error');
@@ -1561,14 +1579,97 @@ const ProjectDetailPage: React.FC = () => {
   // Add these functions back which were removed
   
   const handleEditBid = (bidId: string) => {
-    // Navigate to bid edit or open modal
-    console.log(`Edit bid: ${bidId}`);
+    // Find the bid to edit
+    const bidToEdit = bids.find(b => b.id === bidId);
+    
+    if (bidToEdit) {
+      // Store the ID of the bid being edited
+      setEditingBidId(bidId);
+      
+      // Get the payment schedule from the bid, if any
+      const paymentSchedule = bidToEdit.paymentSchedule || [];
+      
+      // Calculate down payment and installments from payment schedule
+      let downPaymentPercent = 20; // Default
+      let installments = [{id: uuidv4(), name: 'Final Payment', percent: 80, milestoneDescription: 'Upon completion'}];
+      
+      if (paymentSchedule.length > 0) {
+        // Find down payment
+        const downPayment = paymentSchedule.find(p => p.name === 'Down Payment');
+        if (downPayment) {
+          downPaymentPercent = downPayment.percentage || 20;
+        }
+        
+        // Extract installments (all except down payment)
+        const installmentPayments = paymentSchedule.filter(p => p.name !== 'Down Payment');
+        if (installmentPayments.length > 0) {
+          installments = installmentPayments.map(p => ({
+            id: p.id || uuidv4(),
+            name: p.name || 'Installment',
+            percent: p.percentage || 0,
+            milestoneDescription: p.description || '',
+            phaseId: p.phaseId || bidToEdit.phaseId,
+            phaseName: p.phaseName || bidToEdit.phaseName
+          }));
+        }
+      }
+      
+      // Populate the form with the bid data, matching the structure in handleAddBid
+      setBidForm({
+        title: bidToEdit.title || '',
+        subcontractorName: bidToEdit.subcontractorName || '',
+        subcontractorId: bidToEdit.subcontractorId || '',
+        totalAmount: bidToEdit.totalAmount || 0,
+        phaseId: bidToEdit.phaseId || (phases.length > 0 ? phases[0].id : ''),
+        phaseName: bidToEdit.phaseName || (phases.length > 0 ? phases[0].name : ''),
+        scope: bidToEdit.scope || '',
+        timeline: bidToEdit.timeline || 30,
+        paymentTerms: {
+          downPaymentPercent: downPaymentPercent,
+          installments: installments
+        },
+        notes: bidToEdit.notes || '',
+        status: (bidToEdit.status === 'draft' || 
+                bidToEdit.status === 'submitted' || 
+                bidToEdit.status === 'accepted' || 
+                bidToEdit.status === 'rejected' || 
+                bidToEdit.status === 'expired') 
+                ? bidToEdit.status 
+                : 'submitted',
+        attachments: Array.isArray(bidToEdit.attachments) 
+                    ? bidToEdit.attachments.map(att => typeof att === 'string' ? att : (att && typeof att === 'object' && 'url' in att ? att.url : ''))
+                    : [],
+        tags: bidToEdit.tags || []
+      });
+      
+      // Open the form modal
+      setBidFormOpen(true);
+    } else {
+      console.error(`Bid with ID ${bidId} not found`);
+    }
   };
   
   const handleDeleteBid = (bidId: string) => {
     // Delete bid
-    if (window.confirm('Are you sure you want to delete this bid?')) {
-      setBids(bids.filter(b => b.id !== bidId));
+    if (!window.confirm('Are you sure you want to delete this bid?')) {
+      return;
+    }
+    
+    try {
+      // Delete from database
+      BidService.deleteBid(bidId)
+        .then(() => {
+          // If successful, update local state
+          setBids(prevBids => prevBids.filter(b => b.id !== bidId));
+          showNotification('Bid deleted successfully', 'success');
+        })
+        .catch(error => {
+          console.error('Error deleting bid:', error);
+          showNotification('Failed to delete bid: ' + (error instanceof Error ? error.message : 'Unknown error'), 'error');
+        });
+    } catch (error) {
+      console.error('Error deleting bid:', error);
+      showNotification('Failed to delete bid', 'error');
     }
   };
 
