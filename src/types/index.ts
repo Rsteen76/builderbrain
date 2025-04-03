@@ -297,6 +297,17 @@ export interface Phase {
   updatedAt?: Date | string;
 }
 
+// Add the ProjectPhase interface (or enhance existing Phase if preferred)
+// Note: Ensure Task type is imported or defined if used within ProjectPhase
+export interface ProjectPhase extends Phase {
+  // id is already optional in Phase, but often required in components
+  // Ensure you handle potential undefined id if extending base Phase
+  id: string; 
+  // Other properties are inherited from Phase
+  // Add any ProjectDetailPage specific enhancements here if needed
+  // e.g., tasks: Task[]; // Ensure Task type is imported/defined
+}
+
 // Re-export types from their domain-specific files
 export * from './user.types';
 export * from './project.types';
