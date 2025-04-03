@@ -62,6 +62,69 @@ const ProjectPhasesTab: React.FC<ProjectPhasesTabProps> = ({
   getStatusColor,
   formatCurrency,
 }) => {
+  // Function to get payments for a specific phase from all bids
+  const getPhasePayments = (phaseId: string) => {
+    const phasePayments: Array<{
+      bidId: string;
+      bidTitle: string;
+      subcontractorName: string;
+      payment: any;
+    }> = [];
+    
+    bids.forEach(bid => {
+      if (bid.paymentSchedule?.length) {
+        // Find all payments in this bid that belong to this phase
+        const paymentsForPhase = bid.paymentSchedule.filter(
+          payment => payment.phaseId === phaseId
+        );
+        
+        // If we found payments for this phase, add them to our results
+        if (paymentsForPhase.length > 0) {
+          paymentsForPhase.forEach(payment => {
+            phasePayments.push({
+              bidId: bid.id,
+              bidTitle: bid.title || 'Unnamed Bid',
+              subcontractorName: bid.subcontractorName || bid.contractorName || 'Unnamed',
+              payment
+            });
+          });
+        }
+      }
+      
+      // Also check for top-level phaseId (legacy support)
+      if (bid.phaseId === phaseId) {
+        console.log(`Found bid ${bid.id} with top-level phaseId ${phaseId}`);
+        // Add a synthetic payment for bids that have phaseId but no payment schedule
+        if (!bid.paymentSchedule?.some(payment => payment.phaseId === phaseId)) {
+          phasePayments.push({
+            bidId: bid.id,
+            bidTitle: bid.title || 'Unnamed Bid',
+            subcontractorName: bid.subcontractorName || bid.contractorName || 'Unnamed',
+            payment: {
+              id: `synthetic-${bid.id}`,
+              name: 'Full Payment',
+              amount: bid.totalAmount,
+              percentage: 100,
+              phaseId: bid.phaseId
+            }
+          });
+        }
+      }
+    });
+    
+    return phasePayments;
+  };
+  
+  // Function to get all the bids associated with a phase
+  const getPhaseBids = (phaseId: string) => {
+    // Get unique bids from the payments list
+    const phasePayments = getPhasePayments(phaseId);
+    const bidIds = new Set(phasePayments.map(item => item.bidId));
+    
+    // Return the full bid objects for these IDs
+    return bids.filter(bid => bidIds.has(bid.id));
+  };
+
   return (
     <Box>
       <Box display="flex" justifyContent="space-between" alignItems="center" mb={2}>
@@ -254,7 +317,7 @@ const ProjectPhasesTab: React.FC<ProjectPhasesTabProps> = ({
                       <Box sx={{ mt: 2, pt: 2, borderTop: `1px solid ${alpha(theme.palette.divider, 0.1)}` }}>
                         <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                           <Typography variant="body2" color="text.secondary">
-                            Bids ({bids.filter(bid => bid.phaseId === phase.id).length})
+                            Bids ({getPhaseBids(phase.id).length})
                           </Typography>
                           <Button
                             size="small"
@@ -266,42 +329,64 @@ const ProjectPhasesTab: React.FC<ProjectPhasesTabProps> = ({
                           </Button>
                         </Box>
                         
-                        {bids.filter(bid => bid.phaseId === phase.id).length > 0 ? (
+                        {getPhaseBids(phase.id).length > 0 ? (
                           <>
-                            {(() => { 
-                              console.log('Bids for phase', phase.id, ':', bids.filter(bid => bid.phaseId === phase.id));
-                              return null; 
-                            })()}
                             <Box sx={{ mt: 1 }}>
-                              {bids.filter(bid => bid.phaseId === phase.id)
-                                .slice(0, 2) // Show only the first 2 bids to save space
-                                .map(bid => (
+                              {getPhasePayments(phase.id)
+                                .slice(0, 4) // Show only the first 4 payments to save space
+                                .map((item, index) => (
                                   <Box 
-                                    key={bid.id}
+                                    key={`${item.bidId}-${item.payment.id || index}`}
                                     sx={{ 
                                       display: 'flex', 
-                                      justifyContent: 'space-between',
-                                      alignItems: 'center',
-                                      mb: 1,
+                                      flexDirection: 'column',
+                                      mb: 2,
                                       p: 1,
                                       borderRadius: 1,
                                       bgcolor: alpha(theme.palette.background.paper, 0.5)
                                     }}
                                   >
-                                    <Box sx={{ maxWidth: '60%' }}>
-                                      <Typography variant="body2" noWrap>
-                                        {bid.subcontractorName || bid.contractorName || 'Unnamed'}
+                                    <Box sx={{ 
+                                      display: 'flex', 
+                                      justifyContent: 'space-between',
+                                      alignItems: 'center',
+                                      mb: 1
+                                    }}>
+                                      <Box sx={{ maxWidth: '60%' }}>
+                                        <Typography variant="body2" noWrap>
+                                          {item.subcontractorName}
+                                        </Typography>
+                                        <Typography variant="caption" color="text.secondary">
+                                          {item.bidTitle} - {item.payment.name}
+                                        </Typography>
+                                      </Box>
+                                      <Typography variant="body2" fontWeight="medium">
+                                        {formatCurrency(item.payment.amount)}
                                       </Typography>
                                     </Box>
-                                    <Typography variant="body2" fontWeight="medium">
-                                      {formatCurrency(bid.totalAmount)}
-                                    </Typography>
+                                    
+                                    <Box sx={{ 
+                                      display: 'flex',
+                                      justifyContent: 'space-between',
+                                      alignItems: 'center',
+                                      py: 0.5,
+                                      px: 1,
+                                      borderRadius: 0.5,
+                                      bgcolor: alpha(theme.palette.background.paper, 0.3)
+                                    }}>
+                                      <Typography variant="caption">
+                                        {item.payment.percentage}% of bid
+                                      </Typography>
+                                      <Typography variant="caption">
+                                        Status: {item.payment.status || 'pending'}
+                                      </Typography>
+                                    </Box>
                                   </Box>
                                 ))
                               }
-                              {bids.filter(bid => bid.phaseId === phase.id).length > 2 && (
+                              {getPhasePayments(phase.id).length > 4 && (
                                 <Typography variant="caption" color="primary" sx={{ cursor: 'pointer', display: 'block', textAlign: 'center' }}>
-                                  +{bids.filter(bid => bid.phaseId === phase.id).length - 2} more bids
+                                  +{getPhasePayments(phase.id).length - 4} more payments
                                 </Typography>
                               )}
                             </Box>
