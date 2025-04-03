@@ -105,9 +105,9 @@ const ReusableBidForm: React.FC<ReusableBidFormProps> = ({
     scope: '',
     timeline: 30,
     paymentTerms: {
-      downPaymentPercent: 20,
+      downPaymentPercent: 50,
       installments: [
-        {id: uuidv4(), name: 'Final Payment', percent: 80, milestoneDescription: 'Upon completion'}
+        {id: uuidv4(), name: 'Final Payment', percent: 50, milestoneDescription: 'Upon completion'}
       ]
     },
     notes: '',
