@@ -22,6 +22,7 @@ import { SubcontractorService } from '../../services/subcontractor';
 import { Bid, Project, Subcontractor, BidPaymentStage } from '../../types';
 import ReusableBidForm from './ReusableBidForm';
 import { toast } from 'react-hot-toast';
+import { submitBid } from '../../utils/bidOperations';
 
 const BidForm: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -161,12 +162,9 @@ const BidForm: React.FC = () => {
     console.log("BidForm - handleSubmit called with data:", bidFormData);
     if (!user?.uid) return;
     
-    console.log('Submitting bid form data:', JSON.stringify(bidFormData, null, 2));
     setIsSaving(true);
     
     try {
-      const now = new Date();
-      
       // Find the project and phase to get projectId
       const phase = projects.flatMap(p => p.phases || []).find(p => p.id === bidFormData.phaseId);
       const project = projects.find(p => p.phases?.some(ph => ph.id === bidFormData.phaseId));
@@ -175,95 +173,29 @@ const BidForm: React.FC = () => {
         throw new Error('Project not found for the selected phase');
       }
       
-      // Create payment schedule
-      const paymentSchedule = [
-        {
-          id: uuidv4(),
-          name: 'Down Payment',
-          percentage: bidFormData.paymentTerms.downPaymentPercent,
-          amount: (bidFormData.totalAmount * bidFormData.paymentTerms.downPaymentPercent) / 100,
-          status: 'pending',
-          phaseId: bidFormData.phaseId,
-          phaseName: bidFormData.phaseName,
-          dueDate: now,
-          description: 'Initial payment to start work',
-          createdAt: now,
-          updatedAt: now
-        },
-        ...bidFormData.paymentTerms.installments.map((installment: any) => ({
-          id: installment.id || uuidv4(),
-          name: installment.name,
-          percentage: installment.percent,
-          amount: (bidFormData.totalAmount * installment.percent) / 100,
-          status: 'pending',
-          phaseId: installment.phaseId || bidFormData.phaseId,
-          phaseName: installment.phaseName || bidFormData.phaseName,
-          dueDate: now,
-          description: installment.milestoneDescription,
-          createdAt: now,
-          updatedAt: now
-        }))
-      ];
+      // Use the shared submitBid function
+      const result = await submitBid(
+        user.uid,
+        bidFormData,
+        id || null,
+        project.id,
+        project.name
+      );
       
-      // Create bid data
-      const bidData = {
-        userId: user.uid,
-        projectId: project.id,
-        projectName: project.name,
-        title: bidFormData.title || '',
-        subcontractorName: bidFormData.subcontractorName || '',
-        subcontractorId: bidFormData.subcontractorId || '',
-        phaseId: bidFormData.phaseId || '',
-        phaseName: bidFormData.phaseName || '',
-        totalAmount: bidFormData.totalAmount || 0,
-        scope: bidFormData.scope || '',
-        timeline: bidFormData.timeline || 0,
-        notes: bidFormData.notes || '',
-        status: bidFormData.status || 'draft',
-        priority: bidFormData.priority || 'medium',
-        requiresInsurance: bidFormData.requiresInsurance || false,
-        requiresBond: bidFormData.requiresBond || false,
-        isPublic: bidFormData.isPublic || false,
-        isApproved: bidFormData.isApproved || false,
-        tags: Array.isArray(bidFormData.tags) ? bidFormData.tags : [],
-        attachments: Array.isArray(bidFormData.attachments) ? bidFormData.attachments : [],
-        submissionDeadline: bidFormData.submissionDeadline || null,
-        startDate: bidFormData.startDate || null,
-        completionDate: bidFormData.completionDate || null,
-        paymentSchedule,
-        updatedAt: now,
-        paymentProgress: {
-          paid: 0,
-          pending: bidFormData.totalAmount,
-          remaining: bidFormData.totalAmount
-        }
-      };
-      
-      if (id) {
-        console.log('Updating existing bid:', id);
-        console.log('Update data:', JSON.stringify(bidData, null, 2));
+      if (result) {
+        setSuccess(id ? 'Bid updated successfully' : 'Bid created successfully');
         
-        // Update existing bid
-        await BidService.updateBid(id, bidData);
-        setSuccess('Bid updated successfully');
+        // Navigate back after a short delay
+        setTimeout(() => {
+          navigate(-1);
+        }, 1500);
       } else {
-        // Create new bid
-        const newBid = {
-          id: uuidv4(),
-          ...bidData,
-          createdAt: now,
-        };
-        await BidService.createBid(user.uid, newBid);
-        setSuccess('Bid created successfully');
+        throw new Error('Failed to submit bid');
       }
-      
-      // Navigate back after a short delay
-      setTimeout(() => {
-        navigate(-1);
-      }, 1500);
     } catch (err) {
       console.error('Error saving bid:', err);
       setError('Error saving bid. Please try again.');
+      toast.error('Failed to save bid. Please try again.');
     } finally {
       setIsSaving(false);
     }

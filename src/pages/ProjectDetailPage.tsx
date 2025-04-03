@@ -152,6 +152,9 @@ import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns';
 import Autocomplete from '@mui/material/Autocomplete';
 import toast from 'react-hot-toast'; // Add toast import
 
+// Import bid operations
+import { submitBid, deleteBid as deleteBidOp, findExistingExpenseForPaymentStage as findExpense } from '../utils/bidOperations';
+
 // Enhanced status indicators
 const getStatusColor = (status: string): string => {
   const statusColors: { [key: string]: string } = {
@@ -222,7 +225,8 @@ const CONSTRUCTION_SPECIALTIES = [
   'Other'
 ];
 
-// Ensure Expense type has the necessary fields
+// Define EnhancedExpense locally to match the expected type within this file
+// This interface needs to align with how findExpense is expected to work
 interface EnhancedExpense extends Expense {
   bidId?: string;
   paymentStageId?: string;
@@ -588,7 +592,7 @@ const ProjectDetailPage: React.FC = () => {
     setNewBidDialogOpen(true);
   };
 
-  // Add this function to handle adding the bid and updating the phase
+  // Replace handleAddQuickBid with a version that uses the shared utility
   const handleAddQuickBid = (quickBid: { phaseId: string; contractorName: string; amount: number; description: string }) => {
     // Only proceed if we have a valid phase ID and project
     if (!quickBid.phaseId || !project || !user?.uid) return;
@@ -597,152 +601,49 @@ const ProjectDetailPage: React.FC = () => {
     const phase = phases.find(p => p.id === quickBid.phaseId);
     const phaseName = phase?.name || '';
     
-    // Create payment schedule structure (similar to the full bid form)
-    const now = new Date();
-    const paymentSchedule = [
-      {
-        id: uuidv4(),
-        name: 'Down Payment',
-        percentage: 50,
-        amount: (quickBid.amount * 50) / 100,
-        status: 'pending' as const,
-        phaseId: quickBid.phaseId,
-        phaseName: phaseName,
-        dueDate: now,
-        description: 'Initial payment to start work',
-        createdAt: now,
-        updatedAt: now
-      },
-      {
-        id: uuidv4(),
-        name: 'Final Payment',
-        percentage: 50,
-        amount: (quickBid.amount * 50) / 100,
-        status: 'pending' as const,
-        phaseId: quickBid.phaseId,
-        phaseName: phaseName,
-        dueDate: now,
-        description: 'Upon completion',
-        createdAt: now,
-        updatedAt: now
-      }
-    ];
-    
-    // Create a new bid with all required fields
-    const newBid: Bid = {
-      id: uuidv4(),
-      userId: user.uid,
-      projectId: project.id || '',
+    // Convert quick bid to regular bid format
+    const bidFormData = {
+      title: `${quickBid.contractorName} - ${phaseName}`,
+      subcontractorName: quickBid.contractorName,
+      totalAmount: quickBid.amount,
       phaseId: quickBid.phaseId,
       phaseName: phaseName,
-      contractorName: quickBid.contractorName,
-      subcontractorName: quickBid.contractorName, // Ensure subcontractorName is also set for consistency
-      bidAmount: quickBid.amount,
-      totalAmount: quickBid.amount,
-      title: `${quickBid.contractorName} - ${phaseName}`,
       scope: quickBid.description,
-      notes: quickBid.description,
-      status: 'accepted',
-      createdAt: now,
-      updatedAt: now,
       timeline: 30, // Default timeline
-      paymentSchedule,
-      paymentProgress: {
-        paid: 0,
-        pending: quickBid.amount,
-        remaining: quickBid.amount
+      notes: quickBid.description,
+      status: 'accepted' as 'accepted', // Auto-accept quick bids
+      paymentTerms: {
+        downPaymentPercent: 50,
+        installments: [
+          {
+            id: uuidv4(),
+            name: 'Final Payment',
+            percent: 50,
+            milestoneDescription: 'Upon completion'
+          }
+        ]
       },
+      attachments: [],
       tags: [phaseName]
     };
     
-    // Save the bid to Firestore
-    BidService.createBid(user.uid, newBid)
-      .then(async (createdBid) => {
-        // Add the bid to the project bids
-        setBids(prev => [...prev, createdBid]);
-        
-        // Update the phase actual cost to reflect the new bid
-        setPhasesBeingUpdated(prev => {
-          const updatedPhase = {
-            ...prev[quickBid.phaseId],
-            actualCost: (prev[quickBid.phaseId]?.actualCost || 0) + quickBid.amount
-          };
+    // Use the shared submitBid function
+    submitBid(user.uid, bidFormData, null, project.id, project.name)
+      .then(resultBid => {
+        if (resultBid) {
+          // Add the bid to local state
+          setBids(prev => [...prev, resultBid]);
           
-          return {
-            ...prev,
-            [quickBid.phaseId]: updatedPhase
-          };
-        });
-        
-        // Since this is an accepted bid, create expenses for all payment stages
-        try {
-          // Create expenses for each payment stage in the schedule
-          for (const stage of paymentSchedule) {
-            try {
-              // Check if an expense already exists for this payment stage
-              const existingExpense = await findExistingExpenseForPaymentStage(
-                newBid.id,
-                stage.id
-              );
-              
-              if (existingExpense) {
-                console.log(`Expense already exists for payment stage ${stage.id}, skipping creation`);
-                continue; // Skip to next stage
-              }
-              
-              // Create an expense for this payment stage
-              const expenseData: Omit<EnhancedExpense, 'id' | 'userId' | 'createdBy' | 'createdAt' | 'updatedAt'> = {
-                projectId: project.id || '',
-                category: 'subcontractor', // Changed from 'other' to 'subcontractor'
-                description: `${stage.name} (${stage.percentage}%) - ${newBid.title}`,
-                amount: stage.amount,
-                date: new Date(),
-                status: 'pending',
-                vendor: newBid.subcontractorName || '',
-                notes: `This expense is for payment stage: ${stage.name} (${stage.percentage}%) for accepted bid from ${newBid.subcontractorName}`,
-                phaseId: stage.phaseId || newBid.phaseId || '',
-                phaseName: stage.phaseName || newBid.phaseName || '',
-                bidId: newBid.id,
-                paymentStageId: stage.id
-              };
-              
-              // Create the expense
-              const expense = await ExpenseService.createExpense(user.uid, expenseData);
-              
-              // Update the payment stage with the expense ID
-              if (expense) {
-                const updatedSchedule = [...paymentSchedule] as BidPaymentStage[];
-                const stageIndex = updatedSchedule.findIndex(s => s.id === stage.id);
-                if (stageIndex !== -1) {
-                  updatedSchedule[stageIndex].expenseId = expense.id;
-                  
-                  await BidService.updateBid(newBid.id, {
-                    paymentSchedule: updatedSchedule
-                  });
-                }
-              }
-            } catch (error) {
-              console.error(`Error creating expense for payment stage ${stage.id}:`, error);
-            }
-          }
+          // Show success notification
+          showNotification('Quick bid added successfully', 'success');
           
-          // Refresh expenses
-          fetchExpenses(project.id || '');
-        } catch (error) {
-          console.error('Error creating expenses for bid:', error);
-          // Continue with the flow even if expense creation fails
+          // Also reload expenses since a new expense will have been created
+          fetchExpenses(project.id);
         }
-        
-        // Close the dialog
-        setNewBidDialogOpen(false);
-        setCurrentPhaseForBid(null);
-        
-        // Show a success message
-        showNotification(`Bid from ${quickBid.contractorName} added successfully and phase cost updated.`, 'success');
       })
       .catch(error => {
-        console.error('Error saving bid:', error);
-        showNotification('Failed to add bid: ' + (error instanceof Error ? error.message : 'Unknown error'), 'error');
+        console.error('Error adding quick bid:', error);
+        showNotification('Failed to add quick bid: ' + (error instanceof Error ? error.message : 'Unknown error'), 'error');
       });
   };
 
@@ -1446,26 +1347,7 @@ const ProjectDetailPage: React.FC = () => {
     return cleanObj;
   };
 
-  // Update the findExistingExpenseForPaymentStage function to use the EnhancedExpense type
-  const findExistingExpenseForPaymentStage = async (bidId: string, paymentStageId: string): Promise<EnhancedExpense | null> => {
-    if (!user?.uid || !project?.id) return null;
-    
-    try {
-      // Get all project expenses and cast them to EnhancedExpense
-      const projectExpenses = expenses.filter(e => {
-        const enhancedExp = e as unknown as EnhancedExpense;
-        return enhancedExp.bidId === bidId && enhancedExp.paymentStageId === paymentStageId;
-      });
-      
-      // Find an expense with matching bidId and paymentStageId
-      return projectExpenses.length > 0 ? projectExpenses[0] as unknown as EnhancedExpense : null;
-    } catch (error) {
-      console.error('Error finding existing expense:', error);
-      return null;
-    }
-  };
-
-  // Update the handleSubmitBid function to properly handle date fields and undefined values
+  // Replace handleSubmitBid with a version that calls the shared utility
   const handleSubmitBid = async (bidFormData: {
     title: string;
     subcontractorName: string;
@@ -1497,243 +1379,35 @@ const ProjectDetailPage: React.FC = () => {
     try {
       setIsSaving(true);
       
-      // Create a clean copy of the bid data with Dates properly handled
-      const cleanBidData: Partial<Bid> = {
-        title: bidFormData.title || '',
-        subcontractorName: bidFormData.subcontractorName || '',
-        subcontractorId: bidFormData.subcontractorId || '',
-        totalAmount: bidFormData.totalAmount || 0,
-        phaseId: bidFormData.phaseId || '',
-        phaseName: bidFormData.phaseName || '',
-        scope: bidFormData.scope || '',
-        timeline: bidFormData.timeline || 30,
-        notes: bidFormData.notes || '',
-        status: (bidFormData.status === 'draft' || 
-                 bidFormData.status === 'submitted' || 
-                 bidFormData.status === 'accepted' || 
-                 bidFormData.status === 'rejected' || 
-                 bidFormData.status === 'expired') 
-                 ? bidFormData.status 
-                 : 'submitted',
-        tags: Array.isArray(bidFormData.tags) ? bidFormData.tags : []
-      };
+      // Use the shared submitBid function
+      const resultBid = await submitBid(
+        user.uid, 
+        bidFormData, 
+        editingBidId, 
+        project.id, 
+        project.name
+      );
       
-      // Ensure dates are proper Date objects or null
-      if (bidFormData.submissionDeadline) {
-        cleanBidData.submissionDeadline = bidFormData.submissionDeadline instanceof Date 
-          ? bidFormData.submissionDeadline 
-          : new Date(bidFormData.submissionDeadline);
-      } else {
-        cleanBidData.submissionDeadline = null;
-      }
-      
-      // Calculate payment schedule
-      const paymentSchedule: BidPaymentStage[] = [];
-      const now = new Date();
-      
-      // Add down payment stage
-      if (bidFormData.paymentTerms?.downPaymentPercent) {
-        const downPaymentAmount = (bidFormData.totalAmount * bidFormData.paymentTerms.downPaymentPercent) / 100;
-        paymentSchedule.push({
-          id: uuidv4(),
-          name: 'Down Payment',
-          percentage: bidFormData.paymentTerms.downPaymentPercent,
-          amount: downPaymentAmount,
-          status: 'pending',
-          phaseId: bidFormData.phaseId || '',
-          phaseName: bidFormData.phaseName || '',
-          description: 'Initial payment upon bid acceptance',
-          dueDate: now,
-          createdAt: now,
-          updatedAt: now
-        });
-      }
-      
-      // Add installment stages
-      if (bidFormData.paymentTerms?.installments) {
-        bidFormData.paymentTerms.installments.forEach(installment => {
-          const installmentAmount = (bidFormData.totalAmount * installment.percent) / 100;
-          paymentSchedule.push({
-            id: installment.id || uuidv4(),
-            name: installment.name,
-            percentage: installment.percent,
-            amount: installmentAmount,
-            status: 'pending',
-            phaseId: installment.phaseId || bidFormData.phaseId || '',
-            phaseName: installment.phaseName || bidFormData.phaseName || '',
-            description: installment.milestoneDescription,
-            dueDate: now, // Default due date
-            createdAt: now,
-            updatedAt: now
-          });
-        });
-      }
-      
-      // Add payment schedule to clean bid data
-      cleanBidData.paymentSchedule = paymentSchedule;
-      
-      // Check if we're updating an existing bid or creating a new one
-      if (editingBidId) {
-        // Update existing bid
-        await BidService.updateBid(editingBidId, cleanBidData);
-        
-        // Update bid in local state
-        setBids(prev => prev.map(b => b.id === editingBidId ? { ...b, ...cleanBidData, id: editingBidId } : b));
-        
-        // Show success notification
-        showNotification('Bid updated successfully', 'success');
-      } else {
-        // Generate ID and create final bid object for new bid
-        const newBidId = uuidv4();
-        const newBid: Bid = {
-          id: newBidId,
-          ...cleanBidData,
-          createdAt: now,
-          // Ensure both subcontractorName and contractorName are set for consistency
-          subcontractorName: cleanBidData.subcontractorName || '',
-          contractorName: cleanBidData.subcontractorName || '', // Use subcontractorName for contractorName too
-        } as Bid;
-        
-        // Double-check submissionDeadline before sending to Firestore
-        if (newBid.submissionDeadline === undefined) {
-          (newBid as any).submissionDeadline = null;
-        }
-        
-        // Save new bid to database
-        const createdBid = await BidService.createBid(user.uid, newBid);
-        
-        // Make sure payment schedule is copied correctly to the local state
-        if (!createdBid.paymentSchedule && newBid.paymentSchedule) {
-          createdBid.paymentSchedule = newBid.paymentSchedule;
-        }
-        
-        // Add to local state with the complete bid object
-        setBids(prev => [...prev, createdBid]);
-        
-        // Add to recent bids for easy comparison
-        setRecentBids(prev => [createdBid, ...prev].slice(0, 5));
-        
-        // Show success notification
-        showNotification('Bid added successfully', 'success');
-      }
-      
-      // Reset editing state
-      setEditingBidId(null);
-      
-      // Close dialog
-      setBidFormOpen(false);
-      
-      // If the bid is being created with 'accepted' status, create an expense for each payment stage
-      if (bidFormData.status === 'accepted' && !editingBidId) {
-        try {
-          // Create expenses for all payment stages in the payment schedule
-          for (const stage of paymentSchedule) {
-            try {
-              // First check if this payment stage already has an expense
-              const existingExpense = await findExistingExpenseForPaymentStage(
-                editingBidId || 'new-bid', // Use temporary ID for new bids
-                stage.id
-              );
-              
-              if (existingExpense) {
-                console.log(`Expense already exists for payment stage ${stage.id}, skipping creation`);
-                continue; // Skip to next stage
-              }
-              
-              // Proceed with expense creation if no existing expense found
-              const expenseData: Omit<EnhancedExpense, 'id' | 'userId' | 'createdBy' | 'createdAt' | 'updatedAt'> = {
-                projectId: project.id || '',
-                category: 'subcontractor', // Changed from 'other' to 'subcontractor'
-                description: `${stage.name} (${stage.percentage}%) - ${bidFormData.title}`,
-                amount: stage.amount,
-                date: new Date(),
-                status: 'pending',
-                vendor: bidFormData.subcontractorName || '', // Ensure vendor gets the subcontractor name
-                notes: `This expense is for payment stage: ${stage.name} (${stage.percentage}%) for accepted bid: ${bidFormData.title}`,
-                phaseId: stage.phaseId || bidFormData.phaseId || '',
-                phaseName: stage.phaseName || bidFormData.phaseName || '',
-                bidId: editingBidId || 'new-bid', // Will be updated after bid creation
-                paymentStageId: stage.id, // Add paymentStageId reference
-              };
-              
-              // Create the expense
-              const expense = await ExpenseService.createExpense(user.uid, expenseData);
-              
-              // Update the payment stage with the expense ID
-              if (expense) {
-                const updatedSchedule = [...paymentSchedule] as BidPaymentStage[];
-                const stageIndex = updatedSchedule.findIndex(s => s.id === stage.id);
-                if (stageIndex !== -1) {
-                  updatedSchedule[stageIndex].expenseId = expense.id;
-                  
-                  await BidService.updateBid(editingBidId || 'new-bid', {
-                    paymentSchedule: updatedSchedule
-                  });
-                }
-              }
-            } catch (error) {
-              console.error(`Error creating expense for payment stage ${stage.id}:`, error);
-            }
-          }
+      if (resultBid) {
+        if (editingBidId) {
+          // Update bid in local state
+          setBids(prev => prev.map(b => b.id === editingBidId ? resultBid : b));
+          showNotification('Bid updated successfully', 'success');
+        } else {
+          // Add to local state with the complete bid object
+          setBids(prev => [...prev, resultBid]);
           
-          // Refresh expenses list
-          fetchExpenses(project.id || '');
-        } catch (error) {
-          console.error('Error creating expenses for accepted bid:', error);
-          // We'll continue with the flow even if expense creation fails
+          // Add to recent bids for easy comparison
+          setRecentBids(prev => [resultBid, ...prev].slice(0, 5));
+          showNotification('Bid added successfully', 'success');
         }
-      }
-      
-      // If a bid is being updated to 'accepted' status
-      if (editingBidId && bidFormData.status === 'accepted') {
-        const bidToEdit = bids.find(b => b.id === editingBidId);
-        if (bidToEdit && bidToEdit.status !== 'accepted') {
-          try {
-            // Create expenses for all payment stages that don't already have an expense
-            for (const stage of paymentSchedule) {
-              // Skip if this stage already has an expense
-              if (stage.expenseId) continue;
-              
-              // Create an expense for this payment stage
-              const expenseData: Omit<EnhancedExpense, 'id' | 'userId' | 'createdBy' | 'createdAt' | 'updatedAt'> = {
-                projectId: project.id || '',
-                category: 'subcontractor', // Changed from 'other' to 'subcontractor'
-                description: `${stage.name} (${stage.percentage}%) - ${bidFormData.title}`,
-                amount: stage.amount,
-                date: new Date(),
-                status: 'pending',
-                vendor: bidFormData.subcontractorName || '', // Ensure vendor gets the subcontractor name
-                notes: `This expense is for payment stage: ${stage.name} (${stage.percentage}%) for accepted bid: ${bidFormData.title}`,
-                phaseId: stage.phaseId || bidFormData.phaseId || '',
-                phaseName: stage.phaseName || bidFormData.phaseName || '',
-                bidId: editingBidId || 'new-bid', // Will be updated after bid creation
-                paymentStageId: stage.id, // Add paymentStageId reference
-              };
-              
-              // Create the expense
-              const expense = await ExpenseService.createExpense(user.uid, expenseData);
-              
-              // Update the payment stage with the expense ID
-              if (expense) {
-                const updatedSchedule = [...paymentSchedule] as BidPaymentStage[];
-                const stageIndex = updatedSchedule.findIndex(s => s.id === stage.id);
-                if (stageIndex !== -1) {
-                  updatedSchedule[stageIndex].expenseId = expense.id;
-                  
-                  await BidService.updateBid(editingBidId || 'new-bid', {
-                    paymentSchedule: updatedSchedule
-                  });
-                }
-              }
-            }
-            
-            // Refresh expenses list
-            fetchExpenses(project.id || '');
-          } catch (error) {
-            console.error('Error creating expenses for updated bid:', error);
-            // We'll continue with the flow even if expense creation fails
-          }
-        }
+        
+        // Reset editing state and close dialog
+        setEditingBidId(null);
+        setBidFormOpen(false);
+        
+        // Refresh expenses list
+        fetchExpenses(project.id || '');
       }
     } catch (error) {
       console.error('Error saving bid:', error);
@@ -1743,224 +1417,37 @@ const ProjectDetailPage: React.FC = () => {
     }
   };
 
-  // Add additional state variables for subcontractor management
-  const [subcontractors, setSubcontractors] = useState<Subcontractor[]>([]);
-  const [subcontractorSearchQuery, setSubcontractorSearchQuery] = useState('');
-  const [showQuickAddSubcontractor, setShowQuickAddSubcontractor] = useState(false);
-  
-  // Add a function to fetch subcontractors
-  const fetchSubcontractors = async () => {
-    if (!user?.uid) return;
-    
-    try {
-      const fetchedSubcontractors = await SubcontractorService.getSubcontractors(user.uid);
-      setSubcontractors(fetchedSubcontractors);
-    } catch (err) {
-      console.error('Error fetching subcontractors:', err);
-    }
-  };
-
-  // Fetch subcontractors when bid form opens
-  useEffect(() => {
-    if (bidFormOpen) {
-      fetchSubcontractors();
-    }
-  }, [bidFormOpen, user?.uid]);
-
-  // Function to handle quick add of a new subcontractor
-  const handleQuickAddSubcontractor = async (subcontractorData: {
-    name: string;
-    specialty: string;
-    contact: {
-      phone: string;
-      email: string;
-    };
-  }) => {
-    if (!user?.uid) return;
-    
-    try {
-      setIsSaving(true);
-      
-      // Create basic subcontractor
-      const subcontractorToCreate: Omit<Subcontractor, 'id' | 'userId' | 'createdAt' | 'updatedAt'> = {
-        name: subcontractorData.name,
-        specialty: subcontractorData.specialty,
-        contact: {
-          phone: subcontractorData.contact.phone,
-          email: subcontractorData.contact.email
-        },
-        rating: 0,
-        totalProjects: 0
-        // Remove createdAt and updatedAt as they're added by the service
-      };
-      
-      const createdSubcontractor = await SubcontractorService.createSubcontractor(user.uid, subcontractorToCreate);
-      
-      // Add to local state
-      setSubcontractors(prev => [createdSubcontractor, ...prev]);
-      
-      // Update bid form with the new subcontractor
-      setBidForm(prev => ({
-        ...prev,
-        subcontractorName: createdSubcontractor.name,
-        subcontractorId: createdSubcontractor.id
-      }));
-      
-      // Close quick add form
-      setShowQuickAddSubcontractor(false);
-      
-      // Show success notification
-      showNotification('Subcontractor added successfully', 'success');
-    } catch (error) {
-      console.error('Error adding subcontractor:', error);
-      showNotification('Failed to add subcontractor: ' + (error instanceof Error ? error.message : 'Unknown error'), 'error');
-    } finally {
-      setIsSaving(false);
-    }
-  };
-
-  // Add tag handling functions
-  const handleAddTag = (tag: string) => {
-    if (tag && !bidForm.tags.includes(tag)) {
-      setBidForm(prev => ({
-        ...prev,
-        tags: [...prev.tags, tag]
-      }));
-    }
-  };
-
-  const handleRemoveTag = (tag: string) => {
-    setBidForm(prev => ({
-      ...prev,
-      tags: prev.tags.filter(t => t !== tag)
-    }));
-  };
-
-  // Add state for tag input
-  const [tagInput, setTagInput] = useState('');
-
-  // Add these functions back which were removed
-  
-  const handleEditBid = (bidId: string) => {
-    // Find the bid to edit
-    const bidToEdit = bids.find(b => b.id === bidId);
-    
-    if (bidToEdit) {
-      console.log('Editing bid:', JSON.stringify(bidToEdit, null, 2));
-      
-      // Store the ID of the bid being edited
-      setEditingBidId(bidId);
-      
-      // Get the payment schedule from the bid, if any
-      const paymentSchedule = bidToEdit.paymentSchedule || [];
-      console.log('Original payment schedule:', JSON.stringify(paymentSchedule, null, 2));
-      
-      // Calculate down payment and installments from payment schedule
-      let downPaymentPercent = 20; // Default
-      let installments = [{id: uuidv4(), name: 'Final Payment', percent: 80, milestoneDescription: 'Upon completion'}];
-      
-      if (paymentSchedule.length > 0) {
-        // Find down payment
-        const downPayment = paymentSchedule.find(p => p.name === 'Down Payment');
-        if (downPayment) {
-          downPaymentPercent = downPayment.percentage || 20;
-        }
-        
-        // Extract installments (all except down payment)
-        const installmentPayments = paymentSchedule.filter(p => p.name !== 'Down Payment');
-        if (installmentPayments.length > 0) {
-          installments = installmentPayments.map(p => ({
-            id: p.id || uuidv4(),
-            name: p.name || 'Installment',
-            percent: p.percentage || 0,
-            milestoneDescription: p.description || '',
-            phaseId: p.phaseId || bidToEdit.phaseId,
-            phaseName: p.phaseName || bidToEdit.phaseName
-          }));
-        }
-      }
-      
-      // Ensure submission deadline is properly converted
-      let submissionDeadline: Date | undefined = undefined;
-      if (bidToEdit.submissionDeadline) {
-        try {
-          submissionDeadline = bidToEdit.submissionDeadline instanceof Date 
-            ? bidToEdit.submissionDeadline 
-            : new Date(bidToEdit.submissionDeadline);
-            
-          // Check if the date is valid
-          if (isNaN(submissionDeadline.getTime())) {
-            submissionDeadline = undefined;
-          }
-        } catch (error) {
-          console.error('Error converting submission deadline:', error);
-          submissionDeadline = undefined;
-        }
-      }
-      
-      // Create the form data to edit
-      const formData = {
-        title: bidToEdit.title || '',
-        subcontractorName: bidToEdit.subcontractorName || '',
-        subcontractorId: bidToEdit.subcontractorId || '',
-        totalAmount: bidToEdit.totalAmount || 0,
-        phaseId: bidToEdit.phaseId || (phases.length > 0 ? phases[0].id : ''),
-        phaseName: bidToEdit.phaseName || (phases.length > 0 ? phases[0].name : ''),
-        scope: bidToEdit.scope || '',
-        timeline: bidToEdit.timeline || 30,
-        submissionDeadline: submissionDeadline,
-        paymentTerms: {
-          downPaymentPercent: downPaymentPercent,
-          installments: installments
-        },
-        notes: bidToEdit.notes || '',
-        status: (bidToEdit.status === 'draft' || 
-                bidToEdit.status === 'submitted' || 
-                bidToEdit.status === 'accepted' || 
-                bidToEdit.status === 'rejected' || 
-                bidToEdit.status === 'expired') 
-                ? bidToEdit.status 
-                : 'submitted',
-        attachments: Array.isArray(bidToEdit.attachments) 
-                     ? bidToEdit.attachments.map(att => typeof att === 'string' ? att : (att && typeof att === 'object' && 'url' in att ? att.url : ''))
-                     : [],
-        tags: Array.isArray(bidToEdit.tags) ? [...bidToEdit.tags] : []
-      };
-      
-      // Update the form state
-      console.log('Setting bid form with data:', JSON.stringify(formData, null, 2));
-      setBidForm(formData);
-      
-      // Open the form modal
-      setBidFormOpen(true);
-    } else {
-      console.error(`Bid with ID ${bidId} not found`);
-      showNotification(`Bid with ID ${bidId} not found`, 'error');
-    }
-  };
-  
+  // Replace handleDeleteBid with a version that calls the shared utility
   const handleDeleteBid = (bidId: string) => {
     // Delete bid
     if (!window.confirm('Are you sure you want to delete this bid?')) {
       return;
     }
     
-    try {
-      // Delete from database
-      BidService.deleteBid(bidId)
-        .then(() => {
+    // Delete from database using the shared utility
+    deleteBidOp(bidId)
+      .then((success) => {
+        if (success) {
           // If successful, update local state
           setBids(prevBids => prevBids.filter(b => b.id !== bidId));
           showNotification('Bid deleted successfully', 'success');
-        })
-        .catch(error => {
-          console.error('Error deleting bid:', error);
-          showNotification('Failed to delete bid: ' + (error instanceof Error ? error.message : 'Unknown error'), 'error');
-        });
-    } catch (error) {
-      console.error('Error deleting bid:', error);
-      showNotification('Failed to delete bid', 'error');
-    }
+        } else {
+          throw new Error('Operation failed');
+        }
+      })
+      .catch(error => {
+        console.error('Error deleting bid:', error);
+        showNotification('Failed to delete bid: ' + (error instanceof Error ? error.message : 'Unknown error'), 'error');
+      });
+  };
+
+  // Replace the findExistingExpenseForPaymentStage function implementation
+  // Cast the result to the locally defined EnhancedExpense type
+  const findExistingExpenseForPaymentStage = async (bidId: string, paymentStageId: string): Promise<EnhancedExpense | null> => {
+    if (!user?.uid) return null;
+    // Cast the return type of the imported function
+    const result = await findExpense(user.uid, bidId, paymentStageId);
+    return result as EnhancedExpense | null; 
   };
 
   // Cancel quick updates
@@ -2041,6 +1528,150 @@ const ProjectDetailPage: React.FC = () => {
   const handleClosePhaseDetails = () => {
     setPhaseDetailsDialogOpen(false);
     setSelectedPhaseId(null);
+  };
+
+  // Re-add state for subcontractor management
+  const [subcontractors, setSubcontractors] = useState<Subcontractor[]>([]);
+  const [showQuickAddSubcontractor, setShowQuickAddSubcontractor] = useState(false);
+
+  // Re-add function to fetch subcontractors
+  const fetchSubcontractors = async () => {
+    if (!user?.uid) return;
+    try {
+      const fetchedSubcontractors = await SubcontractorService.getSubcontractors(user.uid);
+      setSubcontractors(fetchedSubcontractors);
+    } catch (err) {
+      console.error('Error fetching subcontractors:', err);
+    }
+  };
+
+  // Re-add useEffect to fetch subcontractors when bid form opens
+  useEffect(() => {
+    if (bidFormOpen) {
+      fetchSubcontractors();
+    }
+  }, [bidFormOpen, user?.uid]);
+
+  // Re-add function to handle quick add of a new subcontractor
+  const handleQuickAddSubcontractor = async (subcontractorData: {
+    name: string;
+    specialty: string;
+    contact: {
+      phone: string;
+      email: string;
+    };
+  }) => {
+    if (!user?.uid) return;
+    
+    try {
+      setIsSaving(true);
+      const subcontractorToCreate: Omit<Subcontractor, 'id' | 'userId' | 'createdAt' | 'updatedAt'> = {
+        name: subcontractorData.name,
+        specialty: subcontractorData.specialty,
+        contact: {
+          phone: subcontractorData.contact.phone,
+          email: subcontractorData.contact.email
+        },
+        rating: 0,
+        totalProjects: 0
+      };
+      
+      const createdSubcontractor = await SubcontractorService.createSubcontractor(user.uid, subcontractorToCreate);
+      setSubcontractors(prev => [createdSubcontractor, ...prev]);
+      setBidForm(prev => ({
+        ...prev,
+        subcontractorName: createdSubcontractor.name,
+        subcontractorId: createdSubcontractor.id
+      }));
+      setShowQuickAddSubcontractor(false);
+      showNotification('Subcontractor added successfully', 'success');
+    } catch (error) {
+      console.error('Error adding subcontractor:', error);
+      showNotification('Failed to add subcontractor: ' + (error instanceof Error ? error.message : 'Unknown error'), 'error');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  // Re-add handleEditBid function
+  const handleEditBid = (bidId: string) => {
+    const bidToEdit = bids.find(b => b.id === bidId);
+    if (bidToEdit) {
+      console.log('Editing bid:', JSON.stringify(bidToEdit, null, 2));
+      setEditingBidId(bidId);
+      
+      const paymentSchedule = bidToEdit.paymentSchedule || [];
+      let downPaymentPercent = 20;
+      let installments = [{id: uuidv4(), name: 'Final Payment', percent: 80, milestoneDescription: 'Upon completion'}];
+      
+      if (paymentSchedule.length > 0) {
+        const downPayment = paymentSchedule.find(p => p.name === 'Down Payment');
+        if (downPayment) {
+          downPaymentPercent = downPayment.percentage || 20;
+        }
+        const installmentPayments = paymentSchedule.filter(p => p.name !== 'Down Payment');
+        if (installmentPayments.length > 0) {
+          installments = installmentPayments.map(p => ({
+            id: p.id || uuidv4(),
+            name: p.name || 'Installment',
+            percent: p.percentage || 0,
+            milestoneDescription: p.description || '',
+            phaseId: p.phaseId || bidToEdit.phaseId,
+            phaseName: p.phaseName || bidToEdit.phaseName
+          }));
+        }
+      }
+      
+      let submissionDeadline: Date | undefined = undefined;
+      if (bidToEdit.submissionDeadline) {
+        try {
+          submissionDeadline = bidToEdit.submissionDeadline instanceof Date 
+            ? bidToEdit.submissionDeadline 
+            : new Date(bidToEdit.submissionDeadline);
+          if (isNaN(submissionDeadline.getTime())) {
+            submissionDeadline = undefined;
+          }
+        } catch (error) {
+          console.error('Error converting submission deadline:', error);
+          submissionDeadline = undefined;
+        }
+      }
+      
+      const formData = {
+        title: bidToEdit.title || '',
+        subcontractorName: bidToEdit.subcontractorName || '',
+        subcontractorId: bidToEdit.subcontractorId || '',
+        totalAmount: bidToEdit.totalAmount || 0,
+        phaseId: bidToEdit.phaseId || (phases.length > 0 ? phases[0].id : ''),
+        phaseName: bidToEdit.phaseName || (phases.length > 0 ? phases[0].name : ''),
+        scope: bidToEdit.scope || '',
+        timeline: bidToEdit.timeline || 30,
+        submissionDeadline: submissionDeadline,
+        paymentTerms: {
+          downPaymentPercent: downPaymentPercent,
+          installments: installments
+        },
+        notes: bidToEdit.notes || '',
+        status: (bidToEdit.status === 'draft' || 
+                 bidToEdit.status === 'submitted' || 
+                 bidToEdit.status === 'accepted' || 
+                 bidToEdit.status === 'rejected' || 
+                 bidToEdit.status === 'expired') 
+                 ? bidToEdit.status 
+                 : 'submitted',
+        attachments: Array.isArray(bidToEdit.attachments) 
+                     ? bidToEdit.attachments.map(att => typeof att === 'string' ? att : (att && typeof att === 'object' && 'url' in att ? att.url : ''))
+                     : [],
+        tags: Array.isArray(bidToEdit.tags) ? [...bidToEdit.tags] : []
+      };
+      
+      console.log('Setting bid form with data:', JSON.stringify(formData, null, 2));
+      setBidForm(formData);
+      setBidFormOpen(true);
+    } else {
+      console.error(`Bid with ID ${bidId} not found`);
+      showNotification(`Bid with ID ${bidId} not found`, 'error');
+    }
   };
 
   // Loading and Error states
