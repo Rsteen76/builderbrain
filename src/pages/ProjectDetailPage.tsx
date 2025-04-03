@@ -1504,13 +1504,18 @@ const ProjectDetailPage: React.FC = () => {
         }
         
         // Save new bid to database
-        await BidService.createBid(user.uid, newBid);
+        const createdBid = await BidService.createBid(user.uid, newBid);
         
-        // Add to local state
-        setBids(prev => [...prev, newBid]);
+        // Make sure payment schedule is copied correctly to the local state
+        if (!createdBid.paymentSchedule && newBid.paymentSchedule) {
+          createdBid.paymentSchedule = newBid.paymentSchedule;
+        }
+        
+        // Add to local state with the complete bid object
+        setBids(prev => [...prev, createdBid]);
         
         // Add to recent bids for easy comparison
-        setRecentBids(prev => [newBid, ...prev].slice(0, 5));
+        setRecentBids(prev => [createdBid, ...prev].slice(0, 5));
         
         // Show success notification
         showNotification('Bid added successfully', 'success');

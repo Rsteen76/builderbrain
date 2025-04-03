@@ -282,12 +282,25 @@ export class BidService {
     // Convert to Firestore format and save
     const firestoreBid = this.convertToFirestoreFormat(cleanBidData);
     const docRef = await addDoc(this.collection, firestoreBid);
+    const newBidId = docRef.id;
     
-    // Return the created bid matching the imported Bid type
-    return {
-      ...cleanBidData,
-      id: docRef.id,
-    } as Bid;
+    // Fetch the complete bid from Firestore to ensure data consistency
+    const createdBid = await this.getBid(userId, newBidId);
+    
+    // If fetching failed, construct the bid with the local data
+    if (!createdBid) {
+      return {
+        ...cleanBidData,
+        id: newBidId,
+      } as Bid;
+    }
+    
+    // Make sure payment schedule is intact
+    if (!createdBid.paymentSchedule && cleanBidData.paymentSchedule) {
+      createdBid.paymentSchedule = cleanBidData.paymentSchedule;
+    }
+    
+    return createdBid;
   }
 
   // Create new version (Input/Output uses imported BidVersion type)
