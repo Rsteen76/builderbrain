@@ -95,7 +95,12 @@ const ProjectPhasesTab: React.FC<ProjectPhasesTabProps> = ({
       if (bid.phaseId === phaseId) {
         console.log(`Found bid ${bid.id} with top-level phaseId ${phaseId}`);
         // Add a synthetic payment for bids that have phaseId but no payment schedule
-        if (!bid.paymentSchedule?.some(payment => payment.phaseId === phaseId)) {
+        
+        // Ensure paymentSchedule exists AND is an array before calling .some()
+        const hasMatchingPaymentInSchedule = Array.isArray(bid.paymentSchedule) && 
+                                            bid.paymentSchedule.some(payment => payment.phaseId === phaseId);
+
+        if (!hasMatchingPaymentInSchedule) {
           phasePayments.push({
             bidId: bid.id,
             bidTitle: bid.title || 'Unnamed Bid',

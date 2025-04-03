@@ -38,6 +38,88 @@ import { v4 as uuidv4 } from 'uuid';
 import { formatCurrency } from '../../utils/formatters';
 import { Bid, BidPaymentStage, Project, Subcontractor, Phase } from '../../types';
 
+// Define common bid categories (Copied from BidFormShared.tsx for now)
+const COMMON_BID_CATEGORIES: string[] = [
+  // Site Work
+  'Site Preparation',
+  'Demolition',
+  'Excavation',
+  'Grading',
+  'Erosion Control',
+  'Utilities',
+  'Paving',
+  'Concrete',
+  'Fencing',
+  'Landscaping',
+  
+  // Structural
+  'Foundation',
+  'Concrete Foundation',
+  'Poured Foundation',
+  'Slab Foundation',
+  'Basement Foundation',
+  'Crawl Space Foundation',
+  'Pier and Beam Foundation',
+  'Pile Foundation',
+  'Masonry',
+  'Structural Steel',
+  'Framing',
+  'Rough Carpentry',
+  'Finish Carpentry',
+  
+  // Exterior
+  'Roofing',
+  'Siding',
+  'Windows',
+  'Doors',
+  'Exterior Painting',
+  'Waterproofing',
+  'Insulation',
+  
+  // Interior
+  'Drywall',
+  'Plaster',
+  'Interior Painting',
+  'Flooring',
+  'Tile',
+  'Cabinetry',
+  'Countertops',
+  'Millwork',
+  'Trim Work',
+  
+  // Mechanical/Electrical/Plumbing
+  'Plumbing',
+  'HVAC',
+  'Electrical',
+  'Fire Protection',
+  'Security Systems',
+  'Low Voltage',
+  'Solar/Renewable Energy',
+  
+  // Specialty
+  'Elevator',
+  'Windows & Doors',
+  'Glass & Glazing',
+  'Acoustical',
+  'Specialty Finishes',
+  'Kitchen Equipment',
+  'Bathroom Fixtures',
+  
+  // Professional Services
+  'Architecture',
+  'Engineering',
+  'Surveying',
+  'Interior Design',
+  'Consulting',
+  
+  // General
+  'General Contractor',
+  'Construction Management',
+  'Labor Only',
+  'Materials Only',
+  'Other',
+];
+
 // Interface for bid form data
 interface BidFormData {
   title: string;
@@ -284,15 +366,35 @@ const ReusableBidForm: React.FC<ReusableBidFormProps> = ({
           
           <Grid container spacing={2}> {/* Reduced spacing */} 
             <Grid item xs={12} md={8}> {/* Wider title field */}
-              <TextField
+              <Autocomplete
+                freeSolo // Allow custom input
                 fullWidth
-                required
-                label="Bid Title"
+                options={COMMON_BID_CATEGORIES} // Use predefined categories
                 value={bidForm.title}
-                onChange={(e) => handleChangeBidForm('title', e.target.value)}
-                variant="outlined"
+                onChange={(event, newValue) => {
+                  // Handles selection or custom input blur
+                  handleChangeBidForm('title', newValue || '');
+                }}
+                onInputChange={(event, newInputValue) => {
+                  // Handles typing custom input directly
+                  // We might not need this if onChange handles freeSolo correctly,
+                  // but kept for potential finer control if needed.
+                  // Be careful not to overwrite selection with input change.
+                  // Let's rely on onChange for simplicity for now.
+                }}
                 size="small"
-                InputProps={{ sx: { borderRadius: 1 } }} 
+                renderInput={(params) => (
+                  <TextField
+                    {...params}
+                    required
+                    label="Bid Title (Select or Type)" // Updated label
+                    variant="outlined"
+                    InputProps={{ 
+                      ...params.InputProps,
+                      sx: { borderRadius: 1 } 
+                    }}
+                  />
+                )}
               />
             </Grid>
 
