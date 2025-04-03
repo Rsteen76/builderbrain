@@ -260,252 +260,464 @@ const ReusableBidForm: React.FC<ReusableBidFormProps> = ({
 
   const formContent = (
     <LocalizationProvider dateAdapter={AdapterDateFns}>
-      <Grid container spacing={3}>
-        <Grid item xs={12} sm={6}>
-          <TextField
-            fullWidth
-            required
-            label="Bid Title"
-            value={bidForm.title}
-            onChange={(e) => handleChangeBidForm('title', e.target.value)}
-          />
-        </Grid>
-        <Grid item xs={12}>
-          <FormControl fullWidth required>
-            <InputLabel id="bid-phase-select-label">Project Phase</InputLabel>
-            <Select
-              labelId="bid-phase-select-label"
-              value={bidForm.phaseId || ''}
-              label="Project Phase"
-              onChange={(e) => {
-                const phaseId = e.target.value;
-                const phase = phases.find(p => p.id === phaseId);
-                handleChangeBidForm('phaseId', phaseId);
-                handleChangeBidForm('phaseName', phase?.name || '');
-              }}
-            >
-              {phases.map((phase) => (
-                <MenuItem key={phase.id} value={phase.id}>{phase.name}</MenuItem>
-              ))}
-            </Select>
-          </FormControl>
-        </Grid>
-        <Grid item xs={12}>
-          <Autocomplete
-            fullWidth
-            options={subcontractors}
-            getOptionLabel={(option) => option.name}
-            isOptionEqualToValue={(option, value) => option.id === value.id}
-            value={subcontractors.find(s => s.id === bidForm.subcontractorId) || null}
-            onChange={(_, newValue) => {
-              handleChangeBidForm('subcontractorName', newValue?.name || '');
-              handleChangeBidForm('subcontractorId', newValue?.id || '');
-            }}
-            renderInput={(params) => (
-              <TextField {...params} label="Subcontractor" required />
-            )}
-          />
-          {onAddSubcontractor && (
-            <Button
-              size="small"
-              color="primary"
-              onClick={onAddSubcontractor}
-              sx={{ mt: 1 }}
-              startIcon={<AddIcon />}
-            >
-              Add New Sub
-            </Button>
-          )}
-        </Grid>
-        <Grid item xs={12} sm={6}>
-          <TextField
-            fullWidth
-            required
-            label="Total Amount"
-            type="number"
-            value={bidForm.totalAmount}
-            onChange={(e) => handleChangeBidForm('totalAmount', parseFloat(e.target.value) || 0)}
-            InputProps={{
-              startAdornment: <InputAdornment position="start">$</InputAdornment>
-            }}
-          />
-        </Grid>
-        <Grid item xs={12} sm={6}>
-          <TextField
-            fullWidth
-            required
-            label="Timeline (days)"
-            type="number"
-            value={bidForm.timeline}
-            onChange={(e) => handleChangeBidForm('timeline', parseInt(e.target.value) || 0)}
-          />
-        </Grid>
-        <Grid item xs={12}>
-          <TextField
-            fullWidth
-            required
-            multiline
-            rows={3}
-            label="Scope of Work"
-            value={bidForm.scope}
-            onChange={(e) => handleChangeBidForm('scope', e.target.value)}
-          />
-        </Grid>
-        <Grid item xs={12} sm={6}>
-          <FormControl fullWidth>
-            <InputLabel>Status</InputLabel>
-            <Select
-              value={bidForm.status}
-              onChange={(e) => handleChangeBidForm('status', e.target.value as Bid['status'])}
-              label="Status"
-            >
-              <MenuItem value="draft">Draft</MenuItem>
-              <MenuItem value="submitted">Submitted</MenuItem>
-              <MenuItem value="accepted">Accepted</MenuItem>
-              <MenuItem value="rejected">Rejected</MenuItem>
-              <MenuItem value="expired">Expired</MenuItem>
-            </Select>
-          </FormControl>
-        </Grid>
-        <Grid item xs={12}>
-          <Typography variant="subtitle1" sx={{ mt: 1, mb: 1 }}>Payment Terms</Typography>
-          <Divider sx={{ mb: 2 }}/>
-          <FormControl fullWidth sx={{ mb: 2 }}>
-            <InputLabel id="payment-template-label">Schedule Template</InputLabel>
-            <Select
-              labelId="payment-template-label"
-              value={paymentTemplate}
-              label="Schedule Template"
-              onChange={handlePaymentTemplateChange}
-            >
-              <MenuItem value="standard">Standard (50/50)</MenuItem>
-              <MenuItem value="trades">Trades (30/40/30)</MenuItem>
-              <MenuItem value="custom">Custom</MenuItem>
-            </Select>
-          </FormControl>
-          <Grid container spacing={2}>
-            <Grid item xs={12} sm={6}>
+      <Box sx={{ 
+        p: { xs: 1.5, md: 2.5 }, // Reduced padding
+        '& .MuiGrid-item': { 
+          display: 'flex',
+          flexDirection: 'column', 
+          justifyContent: 'flex-start' 
+        },
+        '& .form-section': {
+          mb: 3, // Reduced spacing between sections
+        },
+        // Apply size="small" globally where applicable
+        '& .MuiTextField-root': { size: 'small' },
+        '& .MuiFormControl-root': { size: 'small' },
+        '& .MuiAutocomplete-root': { size: 'small' },
+        '& .MuiButton-root': { textTransform: 'none' }, // Consistent button text
+      }}>
+        {/* Bid Details Section */}
+        <Box className="form-section">
+          <Typography variant="subtitle1" sx={{ fontWeight: 600, mb: 1.5, color: 'text.primary' }}> {/* Adjusted Typography & reduced margin */}
+            Bid Details
+          </Typography>
+          
+          <Grid container spacing={2}> {/* Reduced spacing */} 
+            <Grid item xs={12} md={8}> {/* Wider title field */}
               <TextField
                 fullWidth
-                label="Down Payment (%)"
-                type="number"
-                InputProps={{
-                  endAdornment: <InputAdornment position="end">%</InputAdornment>
-                }}
-                value={bidForm.paymentTerms.downPaymentPercent}
-                onChange={(e) => {
-                  const val = Math.max(0, Math.min(100, Number(e.target.value)));
-                  handleChangePaymentTerms('downPaymentPercent', val);
-                  setPaymentTemplate('custom');
+                required
+                label="Bid Title"
+                value={bidForm.title}
+                onChange={(e) => handleChangeBidForm('title', e.target.value)}
+                variant="outlined"
+                size="small"
+                InputProps={{ sx: { borderRadius: 1 } }} 
+              />
+            </Grid>
+
+            <Grid item xs={12} md={4}>
+              <DatePicker
+                label="Submission Deadline"
+                value={bidForm.submissionDeadline || null}
+                onChange={(date) => handleChangeBidForm('submissionDeadline', date)}
+                slotProps={{
+                  textField: {
+                    fullWidth: true,
+                    variant: "outlined",
+                    size: "small",
+                    InputProps: { sx: { borderRadius: 1 } }
+                  }
                 }}
               />
-              <FormHelperText>
-                {formatCurrency(bidForm.totalAmount * bidForm.paymentTerms.downPaymentPercent / 100)}
-              </FormHelperText>
             </Grid>
-            <Grid item xs={12}>
-              {bidForm.paymentTerms.installments.map((installment) => (
-                <Box
-                  key={installment.id}
-                  sx={{
-                    p: 2,
-                    mb: 2,
-                    border: '1px solid',
-                    borderColor: 'divider',
-                    borderRadius: 1
+
+            <Grid item xs={12} md={8}> {/* Wider Phase field */}
+              <FormControl fullWidth variant="outlined" size="small">
+                <InputLabel id="bid-phase-select-label">Project Phase</InputLabel>
+                <Select
+                  labelId="bid-phase-select-label"
+                  value={bidForm.phaseId || ''}
+                  label="Project Phase"
+                  onChange={(e) => {
+                    const phaseId = e.target.value;
+                    const phase = phases.find(p => p.id === phaseId);
+                    handleChangeBidForm('phaseId', phaseId);
+                    handleChangeBidForm('phaseName', phase?.name || '');
                   }}
+                  sx={{ borderRadius: 1 }}
                 >
-                  <Grid container spacing={2}>
-                    <Grid item xs={12} sm={6}>
-                      <TextField
-                        fullWidth
-                        required
-                        label="Name"
-                        value={installment.name}
-                        onChange={(e) => handleChangeInstallment(installment.id, 'name', e.target.value)}
-                      />
-                    </Grid>
-                    <Grid item xs={12} sm={6}>
-                      <TextField
-                        fullWidth
-                        required
-                        label="Percent (%)"
-                        type="number"
-                        value={installment.percent}
-                        onChange={(e) => {
-                          const val = Math.max(0, Number(e.target.value));
-                          handleChangeInstallment(installment.id, 'percent', val);
-                          setPaymentTemplate('custom');
-                        }}
-                        helperText={`${formatCurrency(bidForm.totalAmount * installment.percent / 100)}`}
-                      />
-                    </Grid>
-                    <Grid item xs={12} sm={6}>
-                      <FormControl fullWidth>
-                        <InputLabel>Phase</InputLabel>
-                        <Select
-                          value={installment.phaseId || ''}
-                          label="Phase"
-                          onChange={(e) => {
-                            const pId = e.target.value;
-                            const pName = phases.find(p => p.id === pId)?.name || '';
-                            handleChangeInstallment(installment.id, 'phaseId', pId);
-                            handleChangeInstallment(installment.id, 'phaseName', pName);
-                          }}
-                        >
-                          {phases.map((p) => (
-                            <MenuItem key={p.id} value={p.id}>{p.name}</MenuItem>
-                          ))}
-                        </Select>
-                      </FormControl>
-                    </Grid>
-                    <Grid item xs={12}>
-                      <TextField
-                        fullWidth
-                        label="Milestone Description"
-                        value={installment.milestoneDescription}
-                        onChange={(e) => handleChangeInstallment(installment.id, 'milestoneDescription', e.target.value)}
-                      />
-                    </Grid>
-                  </Grid>
-                </Box>
-              ))}
-              {bidForm.paymentTerms.downPaymentPercent + bidForm.paymentTerms.installments.reduce((s, i) => s + i.percent, 0) !== 100 && (
-                <Alert severity="warning" sx={{ mt: 1 }}>Percentages must total 100%</Alert>
-              )}
+                  {phases.map((phase) => (
+                    <MenuItem key={phase.id} value={phase.id}>{phase.name}</MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+            </Grid>
+
+            <Grid item xs={12} md={4}>
+              <FormControl fullWidth variant="outlined" size="small">
+                <InputLabel>Status</InputLabel>
+                <Select
+                  value={bidForm.status}
+                  onChange={(e) => handleChangeBidForm('status', e.target.value as Bid['status'])}
+                  label="Status"
+                  sx={{ borderRadius: 1 }}
+                >
+                  {/* Status MenuItems with smaller dots */}
+                  <MenuItem value="draft">
+                    <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                      <Box sx={{ width: 7, height: 7, borderRadius: '50%', bgcolor: 'grey.400', mr: 1 }} /> Draft
+                    </Box>
+                  </MenuItem>
+                  <MenuItem value="submitted">
+                    <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                      <Box sx={{ width: 7, height: 7, borderRadius: '50%', bgcolor: 'info.main', mr: 1 }} /> Submitted
+                    </Box>
+                  </MenuItem>
+                  <MenuItem value="accepted">
+                    <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                      <Box sx={{ width: 7, height: 7, borderRadius: '50%', bgcolor: 'success.main', mr: 1 }} /> Accepted
+                    </Box>
+                  </MenuItem>
+                  <MenuItem value="rejected">
+                    <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                      <Box sx={{ width: 7, height: 7, borderRadius: '50%', bgcolor: 'error.main', mr: 1 }} /> Rejected
+                    </Box>
+                  </MenuItem>
+                  <MenuItem value="expired">
+                    <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                      <Box sx={{ width: 7, height: 7, borderRadius: '50%', bgcolor: 'warning.dark', mr: 1 }} /> Expired
+                    </Box>
+                  </MenuItem>
+                </Select>
+              </FormControl>
             </Grid>
           </Grid>
-        </Grid>
-        <Grid item xs={12}>
+        </Box>
+
+        {/* Subcontractor & Financial Section */}
+        <Box className="form-section">
+          <Typography variant="subtitle1" sx={{ fontWeight: 600, mb: 1.5, color: 'text.primary' }}> {/* Adjusted Typography & reduced margin */}
+            Subcontractor & Financials
+          </Typography>
+
+          <Grid container spacing={2}> 
+            <Grid item xs={12} md={6}> 
+              <Autocomplete
+                fullWidth
+                options={subcontractors}
+                getOptionLabel={(option) => option.name}
+                isOptionEqualToValue={(option, value) => option.id === value.id}
+                value={subcontractors.find(s => s.id === bidForm.subcontractorId) || null}
+                onChange={(_, newValue) => {
+                  handleChangeBidForm('subcontractorName', newValue?.name || '');
+                  handleChangeBidForm('subcontractorId', newValue?.id || '');
+                }}
+                size="small"
+                renderInput={(params) => (
+                  <TextField 
+                    {...params} 
+                    label="Subcontractor" 
+                    required 
+                    variant="outlined"
+                    InputProps={{
+                      ...params.InputProps,
+                      sx: { borderRadius: 1 }
+                    }} 
+                  />
+                )}
+              />
+              {onAddSubcontractor && (
+                <Button
+                  size="small"
+                  color="primary"
+                  onClick={onAddSubcontractor}
+                  sx={{ mt: 0.5, alignSelf: 'flex-start', borderRadius: 1, fontSize: '0.8rem' }} // Smaller button
+                  startIcon={<AddIcon fontSize="small"/>}
+                >
+                  Add New Sub
+                </Button>
+              )}
+            </Grid>
+
+            <Grid item xs={6} md={3}> {/* More compact grid */}
+              <TextField
+                fullWidth
+                required
+                label="Total Amount"
+                type="number"
+                value={bidForm.totalAmount}
+                onChange={(e) => handleChangeBidForm('totalAmount', parseFloat(e.target.value) || 0)}
+                InputProps={{
+                  startAdornment: <InputAdornment position="start">$</InputAdornment>,
+                  sx: { borderRadius: 1 }
+                }}
+                variant="outlined"
+                size="small"
+              />
+            </Grid>
+
+            <Grid item xs={6} md={3}> {/* More compact grid */}
+              <TextField
+                fullWidth
+                required
+                label="Timeline (days)"
+                type="number"
+                value={bidForm.timeline}
+                onChange={(e) => handleChangeBidForm('timeline', parseInt(e.target.value) || 0)}
+                variant="outlined"
+                size="small"
+                InputProps={{ sx: { borderRadius: 1 } }}
+              />
+            </Grid>
+            
+            <Grid item xs={12}>
+              <TextField
+                fullWidth
+                required
+                multiline
+                rows={3}
+                label="Scope of Work"
+                placeholder="Describe the scope of work..."
+                value={bidForm.scope}
+                onChange={(e) => handleChangeBidForm('scope', e.target.value)}
+                variant="outlined"
+                size="small"
+                InputProps={{ sx: { borderRadius: 1 } }}
+              />
+            </Grid>
+          </Grid>
+        </Box>
+
+        {/* Payment Terms Section */}
+        <Box className="form-section">
+          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1.5 }}> {/* Reduced margin */}
+            <Typography variant="subtitle1" sx={{ fontWeight: 600, color: 'text.primary' }}> {/* Adjusted Typography */}
+              Payment Terms
+            </Typography>
+            <FormControl size="small" variant="outlined" sx={{ minWidth: 160 }}> {/* Reduced width */}
+              <InputLabel id="payment-template-label">Template</InputLabel>
+              <Select
+                labelId="payment-template-label"
+                value={paymentTemplate}
+                label="Template"
+                onChange={handlePaymentTemplateChange}
+                sx={{ borderRadius: 1 }}
+              >
+                <MenuItem value="standard">Standard (50/50)</MenuItem>
+                <MenuItem value="trades">Trades (30/40/30)</MenuItem>
+                <MenuItem value="custom">Custom</MenuItem>
+              </Select>
+            </FormControl>
+          </Box>
+
+          {/* Down Payment & Add Installment Button */}
+          <Grid container spacing={2} sx={{ mb: 2 }}>
+             <Grid item xs={12} sm={6}>
+                <TextField
+                  fullWidth
+                  label="Down Payment (%)"
+                  type="number"
+                  size="small"
+                  InputProps={{
+                    endAdornment: <InputAdornment position="end">%</InputAdornment>,
+                    sx: { borderRadius: 1 }
+                  }}
+                  value={bidForm.paymentTerms.downPaymentPercent}
+                  onChange={(e) => {
+                    const val = Math.max(0, Math.min(100, Number(e.target.value)));
+                    handleChangePaymentTerms('downPaymentPercent', val);
+                    setPaymentTemplate('custom');
+                  }}
+                  variant="outlined"
+                />
+                <FormHelperText sx={{ textAlign: 'right', mt: 0.5 }}>
+                  Amount: {formatCurrency(bidForm.totalAmount * bidForm.paymentTerms.downPaymentPercent / 100)}
+                </FormHelperText>
+              </Grid>
+              <Grid item xs={12} sm={6} sx={{ display: 'flex', alignItems: 'flex-start', pt: '0 !important' /* Align button better */ }}> 
+                <Button
+                  fullWidth
+                  variant="outlined"
+                  size="medium" // Keep button reasonable size
+                  startIcon={<AddIcon />}
+                  onClick={handleAddInstallment}
+                  sx={{ borderRadius: 1, mt: { xs: 1, sm: 0 } }} // Top margin on small screens
+                >
+                  Add Installment
+                </Button>
+              </Grid>
+          </Grid>
+
+          {/* Installments List */}
+          {bidForm.paymentTerms.installments.map((installment, index) => (
+            <Paper
+              key={installment.id}
+              elevation={0}
+              variant="outlined"
+              sx={{
+                p: 1.5, // Reduced padding
+                mb: 1.5, // Reduced spacing
+                borderRadius: 1,
+                borderColor: 'divider',
+                position: 'relative' 
+              }}
+            >
+              <IconButton 
+                size="small" 
+                onClick={() => handleRemoveInstallment(installment.id)} 
+                color="inherit"
+                sx={{ position: 'absolute', top: 6, right: 6, opacity: 0.5 }} // Adjusted position
+              >
+                <DeleteIcon fontSize="small" />
+              </IconButton>
+              
+               <Typography variant="body2" fontWeight={600} sx={{ mb: 1.5 }}> {/* Smaller title */}
+                 Installment {index + 1}: {installment.name}
+               </Typography>
+
+              <Grid container spacing={1.5}> {/* Reduced spacing */}
+                <Grid item xs={12} sm={6} md={4}>
+                  <TextField
+                    fullWidth
+                    required
+                    label="Name"
+                    size="small"
+                    value={installment.name}
+                    onChange={(e) => handleChangeInstallment(installment.id, 'name', e.target.value)}
+                    variant="outlined"
+                    InputProps={{ sx: { borderRadius: 1 } }}
+                  />
+                </Grid>
+
+                <Grid item xs={6} sm={3} md={2}> {/* Tighter grid */}
+                  <TextField
+                    fullWidth
+                    required
+                    label="Percent"
+                    type="number"
+                    size="small"
+                    value={installment.percent}
+                    InputProps={{ 
+                      endAdornment: <InputAdornment position="end">%</InputAdornment>,
+                      sx: { borderRadius: 1 } 
+                    }}
+                    onChange={(e) => {
+                      const val = Math.max(0, Number(e.target.value));
+                      handleChangeInstallment(installment.id, 'percent', val);
+                      setPaymentTemplate('custom');
+                    }}
+                    variant="outlined"
+                  />
+                </Grid>
+                
+                <Grid item xs={6} sm={3} md={2}> {/* Amount display (read-only) */}
+                   <TextField
+                     fullWidth
+                     disabled
+                     label="Amount"
+                     size="small"
+                     value={formatCurrency(bidForm.totalAmount * installment.percent / 100)}
+                     variant="outlined"
+                     InputProps={{ 
+                        startAdornment: <InputAdornment position="start">$</InputAdornment>,
+                        sx: { borderRadius: 1 } 
+                      }}
+                   />
+                </Grid>
+
+                <Grid item xs={12} sm={6} md={4}> {/* Tighter grid */}
+                  <FormControl fullWidth variant="outlined" size="small">
+                    <InputLabel>Related Phase</InputLabel>
+                    <Select
+                      value={installment.phaseId || ''}
+                      label="Related Phase"
+                      onChange={(e) => {
+                        const pId = e.target.value;
+                        const pName = phases.find(p => p.id === pId)?.name || '';
+                        handleChangeInstallment(installment.id, 'phaseId', pId);
+                        handleChangeInstallment(installment.id, 'phaseName', pName);
+                      }}
+                      sx={{ borderRadius: 1 }}
+                    >
+                      <MenuItem value=""><em>None</em></MenuItem> 
+                      {phases.map((p) => (
+                        <MenuItem key={p.id} value={p.id}>{p.name}</MenuItem>
+                      ))}
+                    </Select>
+                  </FormControl>
+                </Grid>
+
+                <Grid item xs={12} sm={6} md={8}> {/* Wider milestone */}
+                  <TextField
+                    fullWidth
+                    label="Milestone Description"
+                    placeholder="Payment trigger..."
+                    size="small"
+                    value={installment.milestoneDescription}
+                    onChange={(e) => handleChangeInstallment(installment.id, 'milestoneDescription', e.target.value)}
+                    variant="outlined"
+                    InputProps={{ sx: { borderRadius: 1 } }}
+                  />
+                </Grid>
+              </Grid>
+            </Paper>
+          ))}
+
+          {bidForm.paymentTerms.downPaymentPercent + bidForm.paymentTerms.installments.reduce((s, i) => s + i.percent, 0) !== 100 && (
+            <Alert 
+              severity="warning" 
+              variant="outlined" 
+              sx={{ mt: 1, mb: 3, borderRadius: 1, py: 0.5, fontSize: '0.875rem' }} // Compact Alert
+            >
+              Payments must total 100%. Current: {bidForm.paymentTerms.downPaymentPercent + bidForm.paymentTerms.installments.reduce((s, i) => s + i.percent, 0)}%
+            </Alert>
+          )}
+        </Box>
+
+        {/* Notes Section */}
+        <Box className="form-section" sx={{ mb: 0 }}>
+          <Typography variant="subtitle1" sx={{ fontWeight: 600, mb: 1.5, color: 'text.primary' }}> {/* Ensured reduced margin */}
+            Additional Notes
+          </Typography>
+          
           <TextField
             fullWidth
             multiline
-            rows={3}
+            rows={3} // Reduced rows
             label="Notes / Exclusions"
+            placeholder="Include any notes, exclusions, or requirements..."
             value={bidForm.notes}
             onChange={(e) => handleChangeBidForm('notes', e.target.value)}
+            variant="outlined"
+            size="small"
+            InputProps={{ sx: { borderRadius: 1 } }}
           />
-        </Grid>
-      </Grid>
+        </Box>
+      </Box>
     </LocalizationProvider>
   );
 
+  // Dialog Variant
   if (isDialog) {
     return (
-      <Dialog open={open || false} onClose={onClose} maxWidth="md" fullWidth>
-        <DialogTitle>
-          <Typography variant="h6" fontWeight={600}>
-            {editingBidId ? 'Edit Bid' : 'Add New Bid'}
+      <Dialog 
+        open={open || false} 
+        onClose={onClose} 
+        maxWidth="md" 
+        fullWidth
+        PaperProps={{ sx: { borderRadius: 1.5 } }} // Adjusted rounding
+      >
+        <DialogTitle sx={{ borderBottom: '1px solid', borderColor: 'divider', px: 2.5, py: 1.5 }}> {/* Tighter header */}
+          <Typography variant="h6" fontWeight={500}> 
+            {editingBidId ? 'Edit Bid' : 'Create New Bid'}
           </Typography>
         </DialogTitle>
-        <DialogContent dividers>
+        <DialogContent sx={{ pt: 2 }}> {/* Added top padding */} 
           {formContent}
         </DialogContent>
-        <DialogActions sx={{ p: 2, justifyContent: 'space-between' }}>
-          <Button onClick={onClose}>Cancel</Button>
+        <DialogActions 
+          sx={{ 
+            p: 1.5, // Tighter actions
+            borderTop: '1px solid', 
+            borderColor: 'divider',
+            bgcolor: 'background.paper', 
+            justifyContent: 'space-between' 
+          }}
+        >
+          <Button 
+            onClick={onClose} 
+            color="inherit" 
+            variant="outlined" 
+            size="medium"
+            sx={{ borderRadius: 1, px: 2 }}
+          >
+            Cancel
+          </Button>
           <Button
             variant="contained"
             onClick={handleSubmit}
+            size="medium"
             disabled={
               isSaving ||
               !bidForm.title ||
@@ -513,23 +725,45 @@ const ReusableBidForm: React.FC<ReusableBidFormProps> = ({
               !bidForm.phaseId ||
               (bidForm.paymentTerms.downPaymentPercent + bidForm.paymentTerms.installments.reduce((s, i) => s + i.percent, 0)) !== 100
             }
+            sx={{ borderRadius: 1, px: 2 }}
           >
-            {isSaving ? <CircularProgress size={24}/> : (editingBidId ? 'Update Bid' : 'Submit Bid')}
+            {isSaving ? 
+              <CircularProgress size={22} color="inherit"/> : // Smaller spinner
+              (editingBidId ? 'Update Bid' : 'Create Bid')
+            }
           </Button>
         </DialogActions>
       </Dialog>
     );
   }
 
+  // Standalone Paper Variant
   return (
-    <Paper sx={{ p: 3 }}>
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
-        <Typography variant="h5" fontWeight={600}>
-          {editingBidId ? 'Edit Bid' : 'Add New Bid'}
+    <Paper 
+      sx={{ 
+        borderRadius: 1.5, // Adjusted rounding
+        overflow: 'hidden',
+        boxShadow: (theme) => theme.shadows[2] 
+      }}
+    >
+      <Box 
+        sx={{ 
+          display: 'flex', 
+          justifyContent: 'space-between', 
+          alignItems: 'center', 
+          p: { xs: 1.5, md: 2 }, // Tighter header
+          borderBottom: '1px solid', 
+          borderColor: 'divider',
+          bgcolor: 'background.paper'
+        }}
+      >
+        <Typography variant="h6" fontWeight={500}> {/* Adjusted size/weight */}
+          {editingBidId ? 'Edit Bid' : 'Create New Bid'}
         </Typography>
         <Button
           variant="contained"
           onClick={handleSubmit}
+          size="medium"
           disabled={
             isSaving ||
             !bidForm.title ||
@@ -537,8 +771,9 @@ const ReusableBidForm: React.FC<ReusableBidFormProps> = ({
             !bidForm.phaseId ||
             (bidForm.paymentTerms.downPaymentPercent + bidForm.paymentTerms.installments.reduce((s, i) => s + i.percent, 0)) !== 100
           }
+          sx={{ borderRadius: 1, px: 2 }}
         >
-          {isSaving ? <CircularProgress size={24}/> : (editingBidId ? 'Update Bid' : 'Submit Bid')}
+          {isSaving ? <CircularProgress size={22} color="inherit"/> : (editingBidId ? 'Update Bid' : 'Create Bid')}
         </Button>
       </Box>
       {formContent}
