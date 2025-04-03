@@ -693,7 +693,7 @@ const ProjectDetailPage: React.FC = () => {
               // Create an expense for this payment stage
               const expenseData: Omit<EnhancedExpense, 'id' | 'userId' | 'createdBy' | 'createdAt' | 'updatedAt'> = {
                 projectId: project.id || '',
-                category: 'other', // Default category
+                category: 'subcontractor', // Changed from 'other' to 'subcontractor'
                 description: `${stage.name} (${stage.percentage}%) - ${newBid.title}`,
                 amount: stage.amount,
                 date: new Date(),
@@ -1643,7 +1643,7 @@ const ProjectDetailPage: React.FC = () => {
               // Proceed with expense creation if no existing expense found
               const expenseData: Omit<EnhancedExpense, 'id' | 'userId' | 'createdBy' | 'createdAt' | 'updatedAt'> = {
                 projectId: project.id || '',
-                category: 'other', // Default category
+                category: 'subcontractor', // Changed from 'other' to 'subcontractor'
                 description: `${stage.name} (${stage.percentage}%) - ${bidFormData.title}`,
                 amount: stage.amount,
                 date: new Date(),
@@ -1697,7 +1697,7 @@ const ProjectDetailPage: React.FC = () => {
               // Create an expense for this payment stage
               const expenseData: Omit<EnhancedExpense, 'id' | 'userId' | 'createdBy' | 'createdAt' | 'updatedAt'> = {
                 projectId: project.id || '',
-                category: 'other', // Default category
+                category: 'subcontractor', // Changed from 'other' to 'subcontractor'
                 description: `${stage.name} (${stage.percentage}%) - ${bidFormData.title}`,
                 amount: stage.amount,
                 date: new Date(),
