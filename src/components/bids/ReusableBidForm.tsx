@@ -496,7 +496,7 @@ const ReusableBidForm: React.FC<ReusableBidFormProps> = ({
              <Grid item xs={12} sm={6}>
                 <TextField
                   fullWidth
-                  label="Down Payment (%)"
+                  label="Initial Payment (%)"
                   type="number"
                   size="small"
                   InputProps={{
@@ -515,14 +515,14 @@ const ReusableBidForm: React.FC<ReusableBidFormProps> = ({
                   Amount: {formatCurrency(bidForm.totalAmount * bidForm.paymentTerms.downPaymentPercent / 100)}
                 </FormHelperText>
               </Grid>
-              <Grid item xs={12} sm={6} sx={{ display: 'flex', alignItems: 'flex-start', pt: '0 !important' /* Align button better */ }}> 
+              <Grid item xs={12} sm={6}> 
                 <Button
                   fullWidth
                   variant="outlined"
-                  size="medium" // Keep button reasonable size
+                  size="small"
                   startIcon={<AddIcon />}
                   onClick={handleAddInstallment}
-                  sx={{ borderRadius: 1, mt: { xs: 1, sm: 0 } }} // Top margin on small screens
+                  sx={{ borderRadius: 1 }}
                 >
                   Add Installment
                 </Button>
