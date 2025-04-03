@@ -1,16 +1,32 @@
-// Export the base service
-export * from './base.service';
+// Import base service types
+import { BaseService } from './base.service';
+import { ApiResponse } from '../types';
 
-// Export service implementations
-export * from './project.service';
+// Import service implementations
+import { ProjectService } from './project.service';
+import { BidService } from './bid.service';
+import { TaskService } from './task.service';
+import { ExpenseService } from './expense.service';
+import { DocumentService } from './document.service';
 
 // Create service instances
-import { ProjectService } from './project.service';
+const projectService = new ProjectService();
+const bidService = new BidService();
+const taskService = new TaskService();
+const expenseService = new ExpenseService();
+const documentService = new DocumentService();
 
-// Initialize services
-export const projectService = new ProjectService();
+// Export service instances
+export {
+  projectService,
+  bidService,
+  taskService,
+  expenseService,
+  documentService,
+  BaseService,
+};
 
-// In the future, add more services like:
-// export const taskService = new TaskService();
-// export const bidService = new BidService();
-// etc. 
+// Export types
+export type { ApiResponse };
+
+// More services will be added as we implement them 

@@ -1,0 +1,283 @@
+import { useQuery, useMutation, useQueryClient } from 'react-query';
+import { Expense } from '../types';
+import { expenseService } from '../api';
+
+// Query key for expenses
+const EXPENSES_QUERY_KEY = 'expenses';
+
+/**
+ * Hook to fetch expenses by project ID
+ */
+export const useProjectExpenses = (
+  projectId: string,
+  filters?: {
+    category?: string;
+    status?: string;
+    dateFrom?: Date;
+    dateTo?: Date;
+  },
+  enabled = true
+) => {
+  return useQuery(
+    [EXPENSES_QUERY_KEY, 'project', projectId, filters],
+    async () => {
+      const response = await expenseService.getExpensesByProject(projectId, filters);
+      if (response.status === 'error') {
+        throw new Error(response.error);
+      }
+      return response.data;
+    },
+    {
+      enabled: !!projectId && enabled,
+      keepPreviousData: true,
+      staleTime: 5 * 60 * 1000, // 5 minutes
+    }
+  );
+};
+
+/**
+ * Hook to fetch expenses by phase ID
+ */
+export const usePhaseExpenses = (phaseId: string, enabled = true) => {
+  return useQuery(
+    [EXPENSES_QUERY_KEY, 'phase', phaseId],
+    async () => {
+      const response = await expenseService.getExpensesByPhase(phaseId);
+      if (response.status === 'error') {
+        throw new Error(response.error);
+      }
+      return response.data;
+    },
+    {
+      enabled: !!phaseId && enabled,
+      keepPreviousData: true,
+      staleTime: 5 * 60 * 1000, // 5 minutes
+    }
+  );
+};
+
+/**
+ * Hook to fetch expenses by vendor
+ */
+export const useVendorExpenses = (vendor: string, enabled = true) => {
+  return useQuery(
+    [EXPENSES_QUERY_KEY, 'vendor', vendor],
+    async () => {
+      const response = await expenseService.getExpensesByVendor(vendor);
+      if (response.status === 'error') {
+        throw new Error(response.error);
+      }
+      return response.data;
+    },
+    {
+      enabled: !!vendor && enabled,
+      keepPreviousData: true,
+      staleTime: 5 * 60 * 1000, // 5 minutes
+    }
+  );
+};
+
+/**
+ * Hook to fetch expenses by subcontractor ID
+ */
+export const useSubcontractorExpenses = (subcontractorId: string, enabled = true) => {
+  return useQuery(
+    [EXPENSES_QUERY_KEY, 'subcontractor', subcontractorId],
+    async () => {
+      const response = await expenseService.getExpensesBySubcontractor(subcontractorId);
+      if (response.status === 'error') {
+        throw new Error(response.error);
+      }
+      return response.data;
+    },
+    {
+      enabled: !!subcontractorId && enabled,
+      keepPreviousData: true,
+      staleTime: 5 * 60 * 1000, // 5 minutes
+    }
+  );
+};
+
+/**
+ * Hook to fetch a single expense by ID
+ */
+export const useExpense = (expenseId: string, enabled = true) => {
+  return useQuery(
+    [EXPENSES_QUERY_KEY, expenseId],
+    async () => {
+      const response = await expenseService.getById(expenseId);
+      if (response.status === 'error') {
+        throw new Error(response.error);
+      }
+      return response.data;
+    },
+    {
+      enabled: !!expenseId && enabled,
+    }
+  );
+};
+
+/**
+ * Hook to create a new expense
+ */
+export const useCreateExpense = () => {
+  const queryClient = useQueryClient();
+
+  return useMutation(
+    async (expense: Omit<Expense, 'id' | 'createdAt' | 'updatedAt'>) => {
+      const response = await expenseService.create(expense as any);
+      if (response.status === 'error') {
+        throw new Error(response.error);
+      }
+      return response.data;
+    },
+    {
+      onSuccess: (newExpense) => {
+        if (!newExpense) return;
+
+        // Invalidate relevant expense queries
+        queryClient.invalidateQueries([EXPENSES_QUERY_KEY, 'project', newExpense.projectId]);
+        
+        if (newExpense.phaseId) {
+          queryClient.invalidateQueries([EXPENSES_QUERY_KEY, 'phase', newExpense.phaseId]);
+        }
+        
+        if (newExpense.vendor) {
+          queryClient.invalidateQueries([EXPENSES_QUERY_KEY, 'vendor', newExpense.vendor]);
+        }
+        
+        if (newExpense.subcontractorId) {
+          queryClient.invalidateQueries([EXPENSES_QUERY_KEY, 'subcontractor', newExpense.subcontractorId]);
+        }
+        
+        // Add the new expense to the cache
+        queryClient.setQueryData([EXPENSES_QUERY_KEY, newExpense.id], newExpense);
+      },
+    }
+  );
+};
+
+/**
+ * Hook to update an existing expense
+ */
+export const useUpdateExpense = () => {
+  const queryClient = useQueryClient();
+
+  return useMutation(
+    async ({ id, expense }: { id: string; expense: Partial<Expense> }) => {
+      const response = await expenseService.update(id, expense);
+      if (response.status === 'error') {
+        throw new Error(response.error);
+      }
+      return response.data;
+    },
+    {
+      onSuccess: (updatedExpense) => {
+        if (!updatedExpense) return;
+
+        // Update the cache for this specific expense
+        queryClient.setQueryData([EXPENSES_QUERY_KEY, updatedExpense.id], updatedExpense);
+        
+        // Invalidate relevant expense queries
+        queryClient.invalidateQueries([EXPENSES_QUERY_KEY, 'project', updatedExpense.projectId]);
+        
+        if (updatedExpense.phaseId) {
+          queryClient.invalidateQueries([EXPENSES_QUERY_KEY, 'phase', updatedExpense.phaseId]);
+        }
+        
+        if (updatedExpense.vendor) {
+          queryClient.invalidateQueries([EXPENSES_QUERY_KEY, 'vendor', updatedExpense.vendor]);
+        }
+        
+        if (updatedExpense.subcontractorId) {
+          queryClient.invalidateQueries([EXPENSES_QUERY_KEY, 'subcontractor', updatedExpense.subcontractorId]);
+        }
+      },
+    }
+  );
+};
+
+/**
+ * Hook to approve an expense
+ */
+export const useApproveExpense = () => {
+  const queryClient = useQueryClient();
+
+  return useMutation(
+    async ({ expenseId, approvedBy }: { expenseId: string; approvedBy: string }) => {
+      const response = await expenseService.approveExpense(expenseId, approvedBy);
+      if (response.status === 'error') {
+        throw new Error(response.error);
+      }
+      return response.data;
+    },
+    {
+      onSuccess: (approvedExpense) => {
+        if (!approvedExpense) return;
+
+        // Update the cache for this specific expense
+        queryClient.setQueryData([EXPENSES_QUERY_KEY, approvedExpense.id], approvedExpense);
+        
+        // Invalidate relevant expense queries
+        queryClient.invalidateQueries([EXPENSES_QUERY_KEY, 'project', approvedExpense.projectId]);
+        
+        if (approvedExpense.phaseId) {
+          queryClient.invalidateQueries([EXPENSES_QUERY_KEY, 'phase', approvedExpense.phaseId]);
+        }
+        
+        if (approvedExpense.vendor) {
+          queryClient.invalidateQueries([EXPENSES_QUERY_KEY, 'vendor', approvedExpense.vendor]);
+        }
+        
+        if (approvedExpense.subcontractorId) {
+          queryClient.invalidateQueries([EXPENSES_QUERY_KEY, 'subcontractor', approvedExpense.subcontractorId]);
+        }
+      },
+    }
+  );
+};
+
+/**
+ * Hook to delete an expense
+ */
+export const useDeleteExpense = () => {
+  const queryClient = useQueryClient();
+
+  return useMutation(
+    async (expenseId: string) => {
+      // Get the expense first so we can invalidate related queries
+      const expenseResponse = await expenseService.getById(expenseId);
+      const expense = expenseResponse.data;
+      
+      const response = await expenseService.delete(expenseId);
+      if (response.status === 'error') {
+        throw new Error(response.error);
+      }
+      
+      return expense;
+    },
+    {
+      onSuccess: (expense) => {
+        if (!expense) return;
+
+        // Remove from the cache
+        queryClient.removeQueries([EXPENSES_QUERY_KEY, expense.id]);
+        
+        // Invalidate relevant expense queries
+        queryClient.invalidateQueries([EXPENSES_QUERY_KEY, 'project', expense.projectId]);
+        
+        if (expense.phaseId) {
+          queryClient.invalidateQueries([EXPENSES_QUERY_KEY, 'phase', expense.phaseId]);
+        }
+        
+        if (expense.vendor) {
+          queryClient.invalidateQueries([EXPENSES_QUERY_KEY, 'vendor', expense.vendor]);
+        }
+        
+        if (expense.subcontractorId) {
+          queryClient.invalidateQueries([EXPENSES_QUERY_KEY, 'subcontractor', expense.subcontractorId]);
+        }
+      },
+    }
+  );
+}; 

@@ -110,7 +110,7 @@ export interface Bid {
   scope?: string;
   status: 'draft' | 'submitted' | 'accepted' | 'rejected' | 'expired' | 'withdrawn' | 'revision_requested';
   priority?: 'low' | 'medium' | 'high' | 'urgent';
-  submissionDeadline?: Date;
+  submissionDeadline?: Date | null;
   startDate?: Date | null;
   completionDate?: Date | null;
   totalAmount: number;
@@ -179,6 +179,8 @@ export interface Task {
   parentTaskId?: string;
   dependencies?: string[];
   attachments?: string[];
+  phaseId?: string;
+  phaseName?: string;
 }
 
 export interface Template {

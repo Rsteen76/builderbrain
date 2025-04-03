@@ -57,7 +57,7 @@ export interface Bid {
   scope?: string;
   status: BidStatus;
   priority?: BidPriority;
-  submissionDeadline?: Date;
+  submissionDeadline?: Date | null;
   startDate?: Date | null;
   completionDate?: Date | null;
   totalAmount: number;
