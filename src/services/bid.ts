@@ -60,7 +60,7 @@ interface FirestoreBid {
   isPublic?: boolean;
   isApproved?: boolean;
   attachments?: string[] | { name: string; url: string }[]; // Allow both string[] and object[] formats
-  paymentSchedule?: BidPaymentStage[];
+  paymentSchedule?: FirestoreBidPaymentStage[];
   paymentProgress?: {
     paid: number;
     pending: number;
@@ -72,6 +72,14 @@ interface FirestoreBid {
 interface FirestoreBidVersion extends Omit<BidVersion, 'createdAt' | 'lineItems'> {
     createdAt: Timestamp;
     lineItems?: LineItem[]; // Use LineItem here
+}
+
+// Define Firestore-specific BidPaymentStage type
+interface FirestoreBidPaymentStage extends Omit<BidPaymentStage, 'createdAt' | 'updatedAt' | 'dueDate' | 'paymentDate'> {
+    createdAt: Timestamp;
+    updatedAt: Timestamp;
+    dueDate?: Timestamp;
+    paymentDate?: Timestamp;
 }
 
 // --- BidSummary (If needed, define locally or import if added to types/index.ts) ---
@@ -143,6 +151,11 @@ export class BidService {
   static async createBid(userId: string, bidData: Omit<Bid, 'id' | 'userId' | 'createdAt' | 'updatedAt' | 'currentVersionId' | 'versions'>): Promise<Bid> {
     const now = new Date();
     const versionId = uuidv4();
+    
+    // Debug paymentSchedule
+    console.log('paymentSchedule in createBid:', typeof bidData.paymentSchedule, 
+                bidData.paymentSchedule, 
+                Array.isArray(bidData.paymentSchedule));
 
     // Create initial version (matches imported BidVersion type)
     const initialVersion: BidVersion = {
@@ -152,31 +165,129 @@ export class BidService {
       totalAmount: bidData.totalAmount,
       notes: 'Initial version',
       lineItems: [], // Matches LineItem[]
-      attachments: bidData.attachments ? 
-        (Array.isArray(bidData.attachments) ? 
-          bidData.attachments.map(att => typeof att === 'string' ? att : 
-            (att && typeof att === 'object' && 'url' in att ? att.url : '')) 
-          : []) : [], // More robust handling of attachments
+      attachments: [],
     };
+    
+    // Safely handle attachments
+    if (bidData.attachments) {
+      if (Array.isArray(bidData.attachments)) {
+        // Manual iteration to avoid filter/map type issues
+        const cleanAttachments: string[] = [];
+        
+        for (const att of bidData.attachments) {
+          if (!att) continue; // Skip null/undefined
+          
+          // Handle string or object with url
+          let url: string | null = null;
+          if (typeof att === 'string') {
+            url = att;
+          } else if (att && typeof att === 'object' && 'url' in att && typeof att.url === 'string') {
+            url = att.url;
+          }
+          
+          // Only add non-empty strings
+          if (url) {
+            cleanAttachments.push(url);
+          }
+        }
+        
+        initialVersion.attachments = cleanAttachments;
+      }
+    }
 
-    // Create the bid object (matches imported Bid type, before Firestore conversion)
+    // Create the bid object with required fields (matches imported Bid type, before Firestore conversion)
     const newBid: Omit<Bid, 'id'> = {
-      ...bidData,
       userId: userId,
+      projectId: bidData.projectId,
+      totalAmount: bidData.totalAmount || 0,
+      status: bidData.status || 'draft',
       currentVersionId: versionId,
-      versions: [initialVersion], 
+      versions: [initialVersion],
       createdAt: now,
       updatedAt: now,
     };
-
-    const firestoreBid = this.convertToFirestoreFormat(newBid);
+    
+    // Add optional fields only if they exist and are valid
+    if (bidData.title) newBid.title = bidData.title;
+    if (bidData.subcontractorName) newBid.subcontractorName = bidData.subcontractorName;
+    if (bidData.subcontractorId) newBid.subcontractorId = bidData.subcontractorId;
+    if (bidData.phaseId) newBid.phaseId = bidData.phaseId;
+    if (bidData.phaseName) newBid.phaseName = bidData.phaseName;
+    if (bidData.projectName) newBid.projectName = bidData.projectName;
+    if (bidData.scope) newBid.scope = bidData.scope;
+    if (bidData.timeline) newBid.timeline = bidData.timeline;
+    if (bidData.notes) newBid.notes = bidData.notes;
+    if (bidData.priority) newBid.priority = bidData.priority;
+    
+    // Only add date fields if they're valid Date objects
+    if (bidData.submissionDeadline instanceof Date) newBid.submissionDeadline = bidData.submissionDeadline;
+    if (bidData.startDate instanceof Date) newBid.startDate = bidData.startDate;
+    if (bidData.completionDate instanceof Date) newBid.completionDate = bidData.completionDate;
+    
+    // Handle boolean fields with defaults
+    newBid.requiresInsurance = bidData.requiresInsurance || false;
+    newBid.requiresBond = bidData.requiresBond || false;
+    newBid.isPublic = bidData.isPublic || false;
+    newBid.isApproved = bidData.isApproved || false;
+    
+    // If paymentSchedule is an object but not an array, convert to array
+    if (bidData.paymentSchedule) {
+      if (typeof bidData.paymentSchedule === 'object' && !Array.isArray(bidData.paymentSchedule)) {
+        console.log('Converting paymentSchedule object to array:', bidData.paymentSchedule);
+        if ('0' in bidData.paymentSchedule && '1' in bidData.paymentSchedule) {
+          // It looks like an object with numeric keys, likely an array-like object
+          newBid.paymentSchedule = Object.values(bidData.paymentSchedule);
+          console.log('Converted to array:', newBid.paymentSchedule);
+        }
+      } else if (Array.isArray(bidData.paymentSchedule)) {
+        // Make a clean copy of the payment schedule
+        newBid.paymentSchedule = bidData.paymentSchedule.map(payment => {
+          const cleanPayment: BidPaymentStage = {
+            id: payment.id || uuidv4(),
+            name: payment.name || 'Payment',
+            percentage: payment.percentage || 0,
+            amount: payment.amount || 0,
+            status: payment.status || 'pending',
+            createdAt: payment.createdAt instanceof Date ? payment.createdAt : now,
+            updatedAt: payment.updatedAt instanceof Date ? payment.updatedAt : now
+          };
+          
+          // Add optional fields only if they exist
+          if (payment.description) cleanPayment.description = payment.description;
+          if (payment.phaseId) cleanPayment.phaseId = payment.phaseId;
+          if (payment.phaseName) cleanPayment.phaseName = payment.phaseName;
+          if (payment.completionRequirements) cleanPayment.completionRequirements = payment.completionRequirements;
+          if (payment.expenseId) cleanPayment.expenseId = payment.expenseId;
+          if (payment.invoiceId) cleanPayment.invoiceId = payment.invoiceId;
+          if (payment.dueDate instanceof Date) cleanPayment.dueDate = payment.dueDate;
+          if (payment.paymentDate instanceof Date) cleanPayment.paymentDate = payment.paymentDate;
+          
+          return cleanPayment;
+        });
+      }
+    }
+    
+    // Add tags if they exist, ensuring it's a valid array
+    if (bidData.tags) {
+      if (Array.isArray(bidData.tags)) {
+        newBid.tags = bidData.tags.filter(tag => typeof tag === 'string');
+      }
+    } else {
+      newBid.tags = [];
+    }
+    
+    // Clean bid data one more time to ensure no undefined values
+    const cleanBidData = this.removeUndefined(newBid);
+    
+    // Convert to Firestore format and save
+    const firestoreBid = this.convertToFirestoreFormat(cleanBidData);
     const docRef = await addDoc(this.collection, firestoreBid);
     
     // Return the created bid matching the imported Bid type
     return {
-      ...newBid,
+      ...cleanBidData,
       id: docRef.id,
-    };
+    } as Bid;
   }
 
   // Create new version (Input/Output uses imported BidVersion type)
@@ -499,16 +610,123 @@ export class BidService {
 
   // Convert Bid (imported type) to FirestoreBid
   private static convertToFirestoreFormat(bid: Omit<Bid, 'id'>): FirestoreBid {
-      const { versions, createdAt, updatedAt, submissionDeadline, startDate, completionDate, ...rest } = bid;
-      return {
-          ...rest, // Includes userId, etc.
-          submissionDeadline: submissionDeadline ? Timestamp.fromDate(submissionDeadline) : null,
-          startDate: startDate ? Timestamp.fromDate(startDate) : null,
-          completionDate: completionDate ? Timestamp.fromDate(completionDate) : null,
-          createdAt: Timestamp.fromDate(createdAt || new Date()),
-          updatedAt: Timestamp.fromDate(updatedAt || new Date()),
+      const { versions, createdAt, updatedAt, submissionDeadline, startDate, completionDate, paymentSchedule, tags, attachments, ...rest } = bid;
+      
+      // Debug paymentSchedule
+      console.log('paymentSchedule in convertToFirestoreFormat:', typeof paymentSchedule, 
+                  paymentSchedule, 
+                  Array.isArray(paymentSchedule));
+      
+      // Handle array-like objects for paymentSchedule
+      let paymentScheduleArray = paymentSchedule;
+      if (paymentSchedule && typeof paymentSchedule === 'object' && !Array.isArray(paymentSchedule)) {
+        console.log('Converting paymentSchedule object to array in convertToFirestoreFormat');
+        if ('0' in paymentSchedule && '1' in paymentSchedule) {
+          // It looks like an object with numeric keys, likely an array-like object
+          paymentScheduleArray = Object.values(paymentSchedule);
+          console.log('Converted to array:', paymentScheduleArray);
+        } else {
+          // Not an array-like object, create an empty array
+          paymentScheduleArray = [];
+        }
+      }
+      
+      // Convert payment schedule date fields - ensure it's an array first
+      const convertedPaymentSchedule = paymentScheduleArray && Array.isArray(paymentScheduleArray) 
+        ? paymentScheduleArray.map(payment => {
+            const result: any = {
+                id: payment.id,
+                name: payment.name,
+                percentage: payment.percentage || 0,
+                amount: payment.amount || 0,
+                status: payment.status || 'pending',
+                createdAt: payment.createdAt instanceof Date ? Timestamp.fromDate(payment.createdAt) : Timestamp.now(),
+                updatedAt: payment.updatedAt instanceof Date ? Timestamp.fromDate(payment.updatedAt) : Timestamp.now(),
+            };
+
+            // Only add optional fields if they exist and are valid
+            if (payment.description) result.description = payment.description;
+            if (payment.phaseId) result.phaseId = payment.phaseId;
+            if (payment.phaseName) result.phaseName = payment.phaseName;
+            if (payment.completionRequirements) result.completionRequirements = payment.completionRequirements;
+            if (payment.expenseId) result.expenseId = payment.expenseId;
+            if (payment.invoiceId) result.invoiceId = payment.invoiceId;
+            if (payment.dueDate instanceof Date) result.dueDate = Timestamp.fromDate(payment.dueDate);
+            if (payment.paymentDate instanceof Date) result.paymentDate = Timestamp.fromDate(payment.paymentDate);
+            
+            return result as FirestoreBidPaymentStage;
+        }) 
+        : [];
+      
+      // Ensure tags is a string array
+      const convertedTags: string[] = Array.isArray(tags) ? tags.filter(t => typeof t === 'string') : 
+                           (tags && typeof tags === 'object' ? 
+                             Object.values(tags).filter(t => typeof t === 'string') as string[] : 
+                             []);
+      
+      // Handle attachments - avoid using filter on unknown type
+      let convertedAttachments: string[] = [];
+      
+      if (Array.isArray(attachments)) {
+          for (const item of attachments) {
+              if (typeof item === 'string') {
+                  convertedAttachments.push(item);
+              } else if (typeof item === 'object' && item !== null && 'url' in item) {
+                  // Handle URL objects - convert to string URL
+                  if (typeof item.url === 'string') {
+                      convertedAttachments.push(item.url);
+                  }
+              }
+          }
+      } else if (attachments && typeof attachments === 'object') {
+          for (const item of Object.values(attachments)) {
+              if (typeof item === 'string') {
+                  convertedAttachments.push(item);
+              } else if (typeof item === 'object' && item !== null && 'url' in item) {
+                  // Handle URL objects - convert to string URL
+                  if (typeof item.url === 'string') {
+                      convertedAttachments.push(item.url);
+                  }
+              }
+          }
+      }
+      
+      // Create the Firestore document with all required fields
+      const firestoreBid: FirestoreBid = {
+          ...this.removeUndefined(rest), // Remove any undefined values from rest
+          userId: rest.userId,
+          projectId: rest.projectId,
+          totalAmount: rest.totalAmount || 0,
+          status: rest.status || 'draft',
+          createdAt: createdAt instanceof Date ? Timestamp.fromDate(createdAt) : Timestamp.now(),
+          updatedAt: updatedAt instanceof Date ? Timestamp.fromDate(updatedAt) : Timestamp.now(),
+          submissionDeadline: submissionDeadline ? (submissionDeadline instanceof Date ? Timestamp.fromDate(submissionDeadline) : null) : null,
+          startDate: startDate ? (startDate instanceof Date ? Timestamp.fromDate(startDate) : null) : null,
+          completionDate: completionDate ? (completionDate instanceof Date ? Timestamp.fromDate(completionDate) : null) : null,
           versions: versions ? versions.map(v => this.convertVersionToFirestoreFormat(v)) : [],
+          tags: convertedTags,
+          attachments: convertedAttachments,
       };
+      
+      // Only add payment schedule if it contains items
+      if (convertedPaymentSchedule && convertedPaymentSchedule.length > 0) {
+          firestoreBid.paymentSchedule = convertedPaymentSchedule;
+      }
+      
+      return firestoreBid;
+  }
+  
+  // Utility function to remove undefined values from an object
+  private static removeUndefined(obj: any): any {
+    const result: any = {};
+    
+    for (const key in obj) {
+      if (obj[key] !== undefined) {
+        result[key] = obj[key];
+      }
+    }
+    
+    return result;
   }
 
   // Helper function to safely convert Firestore Timestamp to Date
@@ -537,15 +755,34 @@ export class BidService {
       })) || [];
       
       // Handle payment schedule if it exists
-      let paymentSchedule = undefined;
+      let paymentSchedule: BidPaymentStage[] | undefined = undefined;
       if (data.paymentSchedule && Array.isArray(data.paymentSchedule)) {
-        paymentSchedule = data.paymentSchedule.map(payment => ({
-          ...payment,
-          // Convert timestamps to dates if they exist
-          createdAt: this.toDate(payment.createdAt) || new Date(),
-          updatedAt: this.toDate(payment.updatedAt) || new Date(),
-          dueDate: this.toDate(payment.dueDate),
-        }));
+        paymentSchedule = data.paymentSchedule.map(payment => {
+          // Don't spread the entire payment object, create a new object with the correct types
+          const converted: BidPaymentStage = {
+            id: payment.id,
+            name: payment.name,
+            description: payment.description,
+            percentage: payment.percentage,
+            amount: payment.amount,
+            status: payment.status,
+            phaseId: payment.phaseId,
+            phaseName: payment.phaseName,
+            completionRequirements: payment.completionRequirements,
+            expenseId: payment.expenseId,
+            invoiceId: payment.invoiceId,
+            createdAt: this.toDate(payment.createdAt) || new Date(),
+            updatedAt: this.toDate(payment.updatedAt) || new Date(),
+            dueDate: payment.dueDate ? this.toDate(payment.dueDate) : undefined
+          };
+          
+          // Explicitly handle paymentDate conversion if it exists
+          if (payment.paymentDate) {
+            converted.paymentDate = this.toDate(payment.paymentDate);
+          }
+          
+          return converted;
+        });
       }
       
       // Handle payment progress
@@ -579,11 +816,22 @@ export class BidService {
   // Convert BidVersion (imported type) to FirestoreBidVersion
   private static convertVersionToFirestoreFormat(version: BidVersion): FirestoreBidVersion {
       const { createdAt, lineItems, ...rest } = version;
-      return {
-          ...rest,
+      
+      // Create clean version object with no undefined values
+      const cleanVersion: FirestoreBidVersion = {
+          ...this.removeUndefined(rest),
           createdAt: Timestamp.fromDate(createdAt || new Date()),
-          lineItems: lineItems || [], // Ensure lineItems array exists
       };
+      
+      // Only add lineItems if it's a valid array
+      if (Array.isArray(lineItems) && lineItems.length > 0) {
+          // Make sure each line item has no undefined values
+          cleanVersion.lineItems = lineItems.map(item => this.removeUndefined(item));
+      } else {
+          cleanVersion.lineItems = [];
+      }
+      
+      return cleanVersion;
   }
 
   // Convert FirestoreBid to BidSummary

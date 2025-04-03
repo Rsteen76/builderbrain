@@ -1415,10 +1415,10 @@ const ProjectDetailPage: React.FC = () => {
           status: 'pending',
           phaseId: bidFormData.phaseId,
           phaseName: bidFormData.phaseName,
-          dueDate: now,
+          dueDate: new Date(),
           description: 'Initial payment to start work',
-          createdAt: now,
-          updatedAt: now
+          createdAt: new Date(),
+          updatedAt: new Date()
         } as BidPaymentStage,
         ...bidFormData.paymentTerms.installments.map((installment: {
           id: string;
@@ -1435,10 +1435,10 @@ const ProjectDetailPage: React.FC = () => {
           status: 'pending',
           phaseId: installment.phaseId || bidFormData.phaseId,
           phaseName: installment.phaseName || bidFormData.phaseName,
-          dueDate: now,
+          dueDate: new Date(),
           description: installment.milestoneDescription,
-          createdAt: now,
-          updatedAt: now
+          createdAt: new Date(),
+          updatedAt: new Date()
         } as BidPaymentStage))
       ] as BidPaymentStage[];
       
