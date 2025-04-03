@@ -19,6 +19,7 @@ import {
   Delete as DeleteIcon,
   Add as AddIcon,
   Timeline as TimelineIcon,
+  Receipt as ReceiptIcon,
 } from '@mui/icons-material';
 import {
   ResponsiveContainer,
@@ -28,16 +29,18 @@ import {
   Tooltip as RechartsTooltip,
 } from 'recharts';
 
-import { ProjectPhase, Bid } from '../../../types'; // Corrected path
+import { ProjectPhase, Bid, Expense } from '../../../types'; // Corrected path
 
 interface ProjectPhasesTabProps {
   phases: ProjectPhase[];
   bids: Bid[];
+  expenses: Expense[];
   theme: Theme;
   handleAddPhase: () => void;
   handleUpdatePhase: (phaseId: string) => void;
   handleDeletePhase: (phaseId: string) => void;
   handleOpenQuickBidDialog: (phaseId: string) => void;
+  handleOpenQuickExpenseDialog: (phaseId: string) => void;
   handleOpenTemplateAdjuster: () => void;
   getStatusColor: (status: string) => string;
   formatCurrency: (value: number) => string;
@@ -46,11 +49,13 @@ interface ProjectPhasesTabProps {
 const ProjectPhasesTab: React.FC<ProjectPhasesTabProps> = ({
   phases,
   bids,
+  expenses,
   theme,
   handleAddPhase,
   handleUpdatePhase,
   handleDeletePhase,
   handleOpenQuickBidDialog,
+  handleOpenQuickExpenseDialog,
   handleOpenTemplateAdjuster,
   getStatusColor,
   formatCurrency,
@@ -260,12 +265,79 @@ const ProjectPhasesTab: React.FC<ProjectPhasesTabProps> = ({
                         </Box>
                         
                         {bids.filter(bid => bid.phaseId === phase.id).length > 0 ? (
+                          <>
+                            {(() => { 
+                              console.log('Bids for phase', phase.id, ':', bids.filter(bid => bid.phaseId === phase.id));
+                              return null; 
+                            })()}
+                            <Box sx={{ mt: 1 }}>
+                              {bids.filter(bid => bid.phaseId === phase.id)
+                                .slice(0, 2) // Show only the first 2 bids to save space
+                                .map(bid => (
+                                  <Box 
+                                    key={bid.id}
+                                    sx={{ 
+                                      display: 'flex', 
+                                      justifyContent: 'space-between',
+                                      alignItems: 'center',
+                                      mb: 1,
+                                      p: 1,
+                                      borderRadius: 1,
+                                      bgcolor: alpha(theme.palette.background.paper, 0.5)
+                                    }}
+                                  >
+                                    <Box sx={{ maxWidth: '60%' }}>
+                                      <Typography variant="body2" noWrap>
+                                        {bid.subcontractorName || bid.contractorName || 'Unnamed'}
+                                      </Typography>
+                                    </Box>
+                                    <Typography variant="body2" fontWeight="medium">
+                                      {formatCurrency(bid.totalAmount)}
+                                    </Typography>
+                                  </Box>
+                                ))
+                              }
+                              {bids.filter(bid => bid.phaseId === phase.id).length > 2 && (
+                                <Typography variant="caption" color="primary" sx={{ cursor: 'pointer', display: 'block', textAlign: 'center' }}>
+                                  +{bids.filter(bid => bid.phaseId === phase.id).length - 2} more bids
+                                </Typography>
+                              )}
+                            </Box>
+                          </>
+                        ) : (
+                          <Typography variant="body2" color="text.secondary" sx={{ mt: 1, fontStyle: 'italic' }}>
+                            No bids yet for this phase
+                          </Typography>
+                        )}
+                      </Box>
+
+                      {/* Add section to display expenses for this phase */}
+                      <Box sx={{ mt: 2, pt: 2, borderTop: `1px solid ${alpha(theme.palette.divider, 0.1)}` }}>
+                        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <Typography variant="body2" color="text.secondary">
+                            Expenses ({expenses.filter(expense => expense.phaseId === phase.id).length})
+                          </Typography>
+                          <Button
+                            size="small"
+                            startIcon={<AddIcon fontSize="small" />}
+                            onClick={() => handleOpenQuickExpenseDialog(phase.id)}
+                            sx={{ fontSize: '0.75rem' }}
+                          >
+                            Add Expense
+                          </Button>
+                        </Box>
+                        
+                        {(() => { 
+                          console.log('Expenses for phase', phase.id, ':', expenses.filter(expense => expense.phaseId === phase.id));
+                          return null; 
+                        })()}
+                        {expenses.filter(expense => expense.phaseId === phase.id).length > 0 ? (
                           <Box sx={{ mt: 1 }}>
-                            {bids.filter(bid => bid.phaseId === phase.id)
-                              .slice(0, 2) // Show only the first 2 bids to save space
-                              .map(bid => (
+                            {expenses.filter(expense => expense.phaseId === phase.id)
+                              .slice(0, 2) // Show only the first 2 expenses to save space
+                              .map(expense => (
                                 <Box 
-                                  key={bid.id}
+                                  key={expense.id}
                                   sx={{ 
                                     display: 'flex', 
                                     justifyContent: 'space-between',
@@ -278,24 +350,27 @@ const ProjectPhasesTab: React.FC<ProjectPhasesTabProps> = ({
                                 >
                                   <Box sx={{ maxWidth: '60%' }}>
                                     <Typography variant="body2" noWrap>
-                                      {bid.subcontractorName || 'Unnamed'}
+                                      {expense.description || 'Unnamed expense'}
+                                    </Typography>
+                                    <Typography variant="caption" color="text.secondary">
+                                      {expense.category} {expense.vendor ? `- ${expense.vendor}` : ''}
                                     </Typography>
                                   </Box>
                                   <Typography variant="body2" fontWeight="medium">
-                                    {formatCurrency(bid.totalAmount)}
+                                    {formatCurrency(expense.amount)}
                                   </Typography>
                                 </Box>
                               ))
                             }
-                            {bids.filter(bid => bid.phaseId === phase.id).length > 2 && (
+                            {expenses.filter(expense => expense.phaseId === phase.id).length > 2 && (
                               <Typography variant="caption" color="primary" sx={{ cursor: 'pointer', display: 'block', textAlign: 'center' }}>
-                                +{bids.filter(bid => bid.phaseId === phase.id).length - 2} more bids
+                                +{expenses.filter(expense => expense.phaseId === phase.id).length - 2} more expenses
                               </Typography>
                             )}
                           </Box>
                         ) : (
                           <Typography variant="body2" color="text.secondary" sx={{ mt: 1, fontStyle: 'italic' }}>
-                            No bids yet for this phase
+                            No expenses yet for this phase
                           </Typography>
                         )}
                       </Box>

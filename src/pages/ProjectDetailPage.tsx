@@ -1828,11 +1828,13 @@ const ProjectDetailPage: React.FC = () => {
             <ProjectPhasesTab
               phases={phases}
               bids={bids}
+              expenses={expenses}
               theme={theme}
               handleAddPhase={handleAddPhase}
               handleUpdatePhase={handleUpdatePhase}
               handleDeletePhase={handleDeletePhase}
               handleOpenQuickBidDialog={handleOpenQuickBidDialog}
+              handleOpenQuickExpenseDialog={handleOpenQuickExpenseDialog}
               handleOpenTemplateAdjuster={handleOpenTemplateAdjuster}
               getStatusColor={getStatusColor}
               formatCurrency={formatCurrency}
