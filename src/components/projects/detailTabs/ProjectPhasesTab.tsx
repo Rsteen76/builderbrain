@@ -42,6 +42,7 @@ interface ProjectPhasesTabProps {
   handleOpenQuickBidDialog: (phaseId: string) => void;
   handleOpenQuickExpenseDialog: (phaseId: string) => void;
   handleOpenTemplateAdjuster: () => void;
+  handleViewPhaseDetails: (phaseId: string) => void;
   getStatusColor: (status: string) => string;
   formatCurrency: (value: number) => string;
 }
@@ -57,6 +58,7 @@ const ProjectPhasesTab: React.FC<ProjectPhasesTabProps> = ({
   handleOpenQuickBidDialog,
   handleOpenQuickExpenseDialog,
   handleOpenTemplateAdjuster,
+  handleViewPhaseDetails,
   getStatusColor,
   formatCurrency,
 }) => {
@@ -416,6 +418,7 @@ const ProjectPhasesTab: React.FC<ProjectPhasesTabProps> = ({
                     variant="outlined" 
                     size="small"
                     sx={{ borderRadius: 1.5 }}
+                    onClick={() => handleViewPhaseDetails(phase.id)}
                   >
                     View Phase Details
                   </Button>

@@ -139,6 +139,29 @@ const BidForm: React.FC = () => {
     }
   });
   
+  // Store available phases for the selected project
+  const [availablePhases, setAvailablePhases] = useState<Array<{id: string, name: string}>>([]);
+  
+  // Update available phases when project changes
+  useEffect(() => {
+    if (bidForm.projectId) {
+      const currentProject = projects.find(p => p.id === bidForm.projectId);
+      if (currentProject?.phases && currentProject.phases.length > 0) {
+        // Map phases to ensure they have the correct type
+        setAvailablePhases(
+          currentProject.phases.map(phase => ({
+            id: phase.id || '',
+            name: phase.name || ''
+          }))
+        );
+      } else {
+        setAvailablePhases([]);
+      }
+    } else {
+      setAvailablePhases([]);
+    }
+  }, [bidForm.projectId, projects]);
+  
   // Fetch data on component mount
   useEffect(() => {
     if (user?.uid) {
@@ -379,72 +402,61 @@ const BidForm: React.FC = () => {
   
   // Handle form submission
   const handleSubmit = async () => {
-    if (!user?.uid) {
-      setError('User not authenticated');
-      return;
-    }
+    if (!user?.uid) return;
     
     // Validate required fields
-    if (!bidForm.title) {
-      setError('Please enter a title for the bid');
-      return;
-    }
-    
-    if (!bidForm.projectId) {
-      setError('Please select a project');
-      return;
-    }
-    
-    if (!bidForm.subcontractorName) {
-      setError('Please select or enter a subcontractor name');
+    if (!bidForm.title || !bidForm.subcontractorName || !bidForm.projectId || !bidForm.totalAmount) {
+      setError('Please fill in all required fields.');
       return;
     }
     
     try {
       setIsSaving(true);
+      setError(null);
+      setSuccess(null);
       
       // Calculate total percentage to ensure it adds up to 100%
       const downPaymentPercent = bidForm.paymentTerms.downPaymentPercent;
-      const installmentsTotal = bidForm.paymentTerms.installments.reduce((sum: number, item: any) => sum + (parseFloat(item.percent) || 0), 0);
+      const installmentsTotal = bidForm.paymentTerms.installments.reduce((sum: number, item: BidInstallment) => sum + item.percent, 0);
       const totalPercent = downPaymentPercent + installmentsTotal;
       
-      if (Math.abs(totalPercent - 100) > 0.01) {
-        setError(`Payment percentages must add up to 100%. Currently: ${totalPercent.toFixed(2)}%`);
+      if (totalPercent !== 100) {
+        setError('Payment percentages must add up to 100%.');
         setIsSaving(false);
         return;
       }
       
       const now = new Date();
       
-      // Create payment schedule for bid with explicit date objects
+      // Create payment schedule for bid with explicit date objects that matches ProjectDetailPage structure
       const paymentSchedule = [
         {
           id: uuidv4(),
           name: 'Down Payment',
           percentage: downPaymentPercent,
           amount: (bidForm.totalAmount * downPaymentPercent) / 100,
-          status: 'pending',
-          phaseId: bidForm.phaseId,
-          phaseName: bidForm.phaseName,
+          status: 'pending' as const,
+          phaseId: bidForm.phaseId || '',
+          phaseName: bidForm.phaseName || '',
           dueDate: now,
           description: 'Initial payment to start work',
           createdAt: now,
           updatedAt: now
-        } as BidPaymentStage,
-        ...bidForm.paymentTerms.installments.map((installment: any) => ({
+        },
+        ...bidForm.paymentTerms.installments.map((installment: BidInstallment) => ({
           id: installment.id || uuidv4(),
           name: installment.name,
-          percentage: parseFloat(installment.percent) || 0,
-          amount: (bidForm.totalAmount * parseFloat(installment.percent)) / 100,
-          status: 'pending',
-          phaseId: installment.phaseId || bidForm.phaseId,
-          phaseName: installment.phaseName || bidForm.phaseName,
+          percentage: installment.percent,
+          amount: (bidForm.totalAmount * installment.percent) / 100,
+          status: 'pending' as const,
+          phaseId: installment.phaseId || bidForm.phaseId || '',
+          phaseName: installment.phaseName || bidForm.phaseName || '',
           dueDate: now,
           description: installment.milestoneDescription,
           createdAt: now,
           updatedAt: now
-        } as BidPaymentStage))
-      ] as BidPaymentStage[];
+        }))
+      ];
       
       // Create base bid data object with explicit null values for Date fields that can't be undefined
       const bidData = {
@@ -472,8 +484,7 @@ const BidForm: React.FC = () => {
         submissionDeadline: null, // Default to null, will override if valid below
         startDate: null,
         completionDate: null,
-        paymentSchedule,
-        createdAt: now,
+        paymentSchedule, // Use our properly formatted payment schedule
         updatedAt: now,
         paymentProgress: {
           paid: 0,
@@ -543,9 +554,9 @@ const BidForm: React.FC = () => {
           navigate(`/bids/${newBid.id}`);
         }, 1500);
       }
-    } catch (err) {
-      console.error('Error saving bid:', err);
-      setError(`Failed to save bid: ${err instanceof Error ? err.message : 'Unknown error'}`);
+    } catch (error) {
+      console.error('Error saving bid:', error);
+      setError('Failed to save bid: ' + (error instanceof Error ? error.message : 'Unknown error'));
     } finally {
       setIsSaving(false);
     }
@@ -634,6 +645,28 @@ const BidForm: React.FC = () => {
                 renderInput={(params) => <TextField {...params} label="Project" required />}
               />
             </FormControl>
+            
+            {/* Phase Selection field */}
+            {bidForm.projectId && availablePhases.length > 0 && (
+              <FormControl fullWidth required margin="normal">
+                <InputLabel id="bid-phase-select-label">Project Phase</InputLabel>
+                <Select
+                  labelId="bid-phase-select-label"
+                  value={bidForm.phaseId || ''}
+                  label="Project Phase"
+                  onChange={(e) => {
+                    const phaseId = e.target.value;
+                    const phase = availablePhases.find(p => p.id === phaseId);
+                    handleChangeBidForm('phaseId', phaseId);
+                    handleChangeBidForm('phaseName', phase?.name || '');
+                  }}
+                >
+                  {availablePhases.map((phase) => (
+                    <MenuItem key={phase.id} value={phase.id}>{phase.name}</MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+            )}
             
             <FormControl fullWidth margin="normal">
               <Autocomplete

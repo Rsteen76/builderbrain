@@ -574,44 +574,97 @@ const ProjectDetailPage: React.FC = () => {
     // Only proceed if we have a valid phase ID and project
     if (!quickBid.phaseId || !project) return;
     
-    // Create a new bid
+    // Get the phase name
+    const phase = phases.find(p => p.id === quickBid.phaseId);
+    const phaseName = phase?.name || '';
+    
+    // Create payment schedule structure (similar to the full bid form)
+    const now = new Date();
+    const paymentSchedule = [
+      {
+        id: uuidv4(),
+        name: 'Down Payment',
+        percentage: 50,
+        amount: (quickBid.amount * 50) / 100,
+        status: 'pending' as const,
+        phaseId: quickBid.phaseId,
+        phaseName: phaseName,
+        dueDate: now,
+        description: 'Initial payment to start work',
+        createdAt: now,
+        updatedAt: now
+      },
+      {
+        id: uuidv4(),
+        name: 'Final Payment',
+        percentage: 50,
+        amount: (quickBid.amount * 50) / 100,
+        status: 'pending' as const,
+        phaseId: quickBid.phaseId,
+        phaseName: phaseName,
+        dueDate: now,
+        description: 'Upon completion',
+        createdAt: now,
+        updatedAt: now
+      }
+    ];
+    
+    // Create a new bid with all required fields
     const newBid: Bid = {
       id: uuidv4(),
       userId: user?.uid || '',
       projectId: project.id || '',
       phaseId: quickBid.phaseId,
+      phaseName: phaseName,
       contractorName: quickBid.contractorName,
       bidAmount: quickBid.amount,
-      totalAmount: quickBid.amount, // Set totalAmount to match bidAmount
-      notes: quickBid.description, // Use notes instead of description
-      status: 'accepted', // lowercase to match the enum type
-      createdAt: new Date(),
-      updatedAt: new Date(),
+      totalAmount: quickBid.amount,
+      title: `${quickBid.contractorName} - ${phaseName}`,
+      scope: quickBid.description,
+      notes: quickBid.description,
+      status: 'accepted',
+      createdAt: now,
+      updatedAt: now,
+      timeline: 30, // Default timeline
+      paymentSchedule,
+      paymentProgress: {
+        paid: 0,
+        pending: quickBid.amount,
+        remaining: quickBid.amount
+      },
+      tags: [phaseName]
     };
     
-    // Add the bid to the project bids
-    setBids(prev => [...prev, newBid]);
-    
-    // Update the phase actual cost to reflect the new bid
-    setPhasesBeingUpdated(prev => {
-      // Add the bid amount to the current actual cost of the phase
-      const updatedPhase = {
-        ...prev[quickBid.phaseId],
-        actualCost: (prev[quickBid.phaseId].actualCost || 0) + quickBid.amount
-      };
-      
-      return {
-        ...prev,
-        [quickBid.phaseId]: updatedPhase
-      };
-    });
-    
-    // Close the dialog
-    setNewBidDialogOpen(false);
-    setCurrentPhaseForBid(null);
-    
-    // Show a success message or toast (if you have a toast system)
-    showNotification(`Bid from ${quickBid.contractorName} added successfully and phase cost updated.`, 'success');
+    // Save the bid to Firestore
+    BidService.createBid(user?.uid || '', newBid)
+      .then(() => {
+        // Add the bid to the project bids
+        setBids(prev => [...prev, newBid]);
+        
+        // Update the phase actual cost to reflect the new bid
+        setPhasesBeingUpdated(prev => {
+          const updatedPhase = {
+            ...prev[quickBid.phaseId],
+            actualCost: (prev[quickBid.phaseId]?.actualCost || 0) + quickBid.amount
+          };
+          
+          return {
+            ...prev,
+            [quickBid.phaseId]: updatedPhase
+          };
+        });
+        
+        // Close the dialog
+        setNewBidDialogOpen(false);
+        setCurrentPhaseForBid(null);
+        
+        // Show a success message
+        showNotification(`Bid from ${quickBid.contractorName} added successfully and phase cost updated.`, 'success');
+      })
+      .catch(error => {
+        console.error('Error saving bid:', error);
+        showNotification('Failed to add bid: ' + (error instanceof Error ? error.message : 'Unknown error'), 'error');
+      });
   };
 
   // Add this function to handle opening the expense dialog for a specific phase
@@ -1722,6 +1775,22 @@ const ProjectDetailPage: React.FC = () => {
     <RecentExpenses expenses={expenses} phases={phases} />
   );
 
+  // Add state for phase details dialog and selected phase
+  const [phaseDetailsDialogOpen, setPhaseDetailsDialogOpen] = useState(false);
+  const [selectedPhaseId, setSelectedPhaseId] = useState<string | null>(null);
+
+  // Add function to handle viewing phase details
+  const handleViewPhaseDetails = (phaseId: string) => {
+    setSelectedPhaseId(phaseId);
+    setPhaseDetailsDialogOpen(true);
+  };
+
+  // Add function to close the phase details dialog
+  const handleClosePhaseDetails = () => {
+    setPhaseDetailsDialogOpen(false);
+    setSelectedPhaseId(null);
+  };
+
   // Loading and Error states
   if (loading) {
     return (
@@ -1838,6 +1907,7 @@ const ProjectDetailPage: React.FC = () => {
               handleOpenTemplateAdjuster={handleOpenTemplateAdjuster}
               getStatusColor={getStatusColor}
               formatCurrency={formatCurrency}
+              handleViewPhaseDetails={handleViewPhaseDetails}
             />
           )}
           {tabValue === 2 && (
@@ -1923,6 +1993,252 @@ const ProjectDetailPage: React.FC = () => {
         project={project} 
         onUpdateProject={handleProjectUpdate}
       />
+
+      {/* Phase Details Dialog */}
+      <Dialog
+        open={phaseDetailsDialogOpen}
+        onClose={handleClosePhaseDetails}
+        maxWidth="md"
+        fullWidth
+        aria-labelledby="phase-details-dialog-title"
+        aria-describedby="phase-details-dialog-description"
+      >
+        <DialogTitle id="phase-details-dialog-title">
+          {selectedPhaseId && phases.find(p => p.id === selectedPhaseId)?.name}
+        </DialogTitle>
+        <DialogContent dividers>
+          {selectedPhaseId && (() => {
+            const phase = phases.find(p => p.id === selectedPhaseId);
+            const phaseBids = bids.filter(bid => bid.phaseId === selectedPhaseId);
+            const phaseExpenses = expenses.filter(expense => expense.phaseId === selectedPhaseId);
+            
+            if (!phase) return <Typography>Phase not found</Typography>;
+            
+            return (
+              <Grid container spacing={3}>
+                <Grid item xs={12}>
+                  <Box sx={{ mb: 2, p: 2, bgcolor: alpha(theme.palette.primary.main, 0.05), borderRadius: 1 }}>
+                    <Typography variant="subtitle1" gutterBottom fontWeight={600}>Phase Information</Typography>
+                    <Grid container spacing={2}>
+                      <Grid item xs={12} sm={6}>
+                        <Typography variant="body2" color="text.secondary">Status</Typography>
+                        <Chip
+                          label={phase.status.replace('_', ' ').toUpperCase()}
+                          size="small"
+                          sx={{ 
+                            mt: 0.5,
+                            fontWeight: 600,
+                            bgcolor: alpha(getStatusColor(phase.status), 0.1),
+                            color: getStatusColor(phase.status),
+                            borderRadius: 1
+                          }}
+                        />
+                      </Grid>
+                      <Grid item xs={12} sm={6}>
+                        <Typography variant="body2" color="text.secondary">Progress</Typography>
+                        <Box sx={{ display: 'flex', alignItems: 'center', mt: 0.5 }}>
+                          <LinearProgress 
+                            variant="determinate" 
+                            value={phase.progress} 
+                            sx={{ 
+                              height: 8, 
+                              borderRadius: 4,
+                              flexGrow: 1,
+                              mr: 1,
+                              backgroundColor: alpha(theme.palette.primary.main, 0.1)
+                            }} 
+                          />
+                          <Typography variant="body2" fontWeight="medium">{phase.progress}%</Typography>
+                        </Box>
+                      </Grid>
+                      <Grid item xs={12} sm={6}>
+                        <Typography variant="body2" color="text.secondary">Start Date</Typography>
+                        <Typography variant="body1">{new Date(phase.startDate).toLocaleDateString()}</Typography>
+                      </Grid>
+                      <Grid item xs={12} sm={6}>
+                        <Typography variant="body2" color="text.secondary">End Date</Typography>
+                        <Typography variant="body1">{new Date(phase.endDate).toLocaleDateString()}</Typography>
+                      </Grid>
+                      <Grid item xs={12} sm={6}>
+                        <Typography variant="body2" color="text.secondary">Budget</Typography>
+                        <Typography variant="body1" fontWeight="medium">{formatCurrency(phase.budget)}</Typography>
+                      </Grid>
+                      <Grid item xs={12} sm={6}>
+                        <Typography variant="body2" color="text.secondary">Actual Cost</Typography>
+                        <Typography 
+                          variant="body1" 
+                          fontWeight="medium" 
+                          color={phase.actualCost > phase.budget ? 'error' : 'inherit'}
+                        >
+                          {formatCurrency(phase.actualCost)}
+                        </Typography>
+                      </Grid>
+                      {phase.description && (
+                        <Grid item xs={12}>
+                          <Typography variant="body2" color="text.secondary">Description</Typography>
+                          <Typography variant="body1">{phase.description}</Typography>
+                        </Grid>
+                      )}
+                    </Grid>
+                  </Box>
+                </Grid>
+                
+                <Grid item xs={12} md={6}>
+                  <Typography variant="subtitle1" gutterBottom fontWeight={600}>
+                    Bids ({phaseBids.length})
+                  </Typography>
+                  {phaseBids.length > 0 ? (
+                    <TableContainer component={Paper} variant="outlined" sx={{ maxHeight: 300 }}>
+                      <Table stickyHeader size="small">
+                        <TableHead>
+                          <TableRow>
+                            <TableCell>Contractor</TableCell>
+                            <TableCell align="right">Amount</TableCell>
+                            <TableCell>Status</TableCell>
+                            <TableCell align="right">Actions</TableCell>
+                          </TableRow>
+                        </TableHead>
+                        <TableBody>
+                          {phaseBids.map(bid => (
+                            <TableRow key={bid.id}>
+                              <TableCell>{bid.subcontractorName || bid.contractorName || 'Unnamed'}</TableCell>
+                              <TableCell align="right">{formatCurrency(bid.totalAmount)}</TableCell>
+                              <TableCell>
+                                <Chip 
+                                  label={bid.status.toUpperCase()} 
+                                  size="small"
+                                  sx={{ 
+                                    fontSize: '0.7rem',
+                                    bgcolor: bid.status === 'accepted' 
+                                      ? alpha(theme.palette.success.main, 0.1)
+                                      : bid.status === 'rejected'
+                                        ? alpha(theme.palette.error.main, 0.1)
+                                        : alpha(theme.palette.info.main, 0.1),
+                                    color: bid.status === 'accepted' 
+                                      ? theme.palette.success.main
+                                      : bid.status === 'rejected'
+                                        ? theme.palette.error.main
+                                        : theme.palette.info.main,
+                                  }}
+                                />
+                              </TableCell>
+                              <TableCell align="right">
+                                <IconButton size="small" onClick={() => handleEditBid(bid.id)}>
+                                  <EditIcon fontSize="small" />
+                                </IconButton>
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </TableContainer>
+                  ) : (
+                    <Typography variant="body2" color="text.secondary" sx={{ fontStyle: 'italic' }}>
+                      No bids for this phase
+                    </Typography>
+                  )}
+                </Grid>
+                
+                <Grid item xs={12} md={6}>
+                  <Typography variant="subtitle1" gutterBottom fontWeight={600}>
+                    Expenses ({phaseExpenses.length})
+                  </Typography>
+                  {phaseExpenses.length > 0 ? (
+                    <TableContainer component={Paper} variant="outlined" sx={{ maxHeight: 300 }}>
+                      <Table stickyHeader size="small">
+                        <TableHead>
+                          <TableRow>
+                            <TableCell>Description</TableCell>
+                            <TableCell>Category</TableCell>
+                            <TableCell align="right">Amount</TableCell>
+                            <TableCell>Status</TableCell>
+                          </TableRow>
+                        </TableHead>
+                        <TableBody>
+                          {phaseExpenses.map(expense => (
+                            <TableRow key={expense.id}>
+                              <TableCell>{expense.description}</TableCell>
+                              <TableCell>{expense.category}</TableCell>
+                              <TableCell align="right">{formatCurrency(expense.amount)}</TableCell>
+                              <TableCell>
+                                <Chip 
+                                  label={expense.status.toUpperCase()} 
+                                  size="small"
+                                  sx={{ 
+                                    fontSize: '0.7rem',
+                                    bgcolor: expense.status === 'paid' 
+                                      ? alpha(theme.palette.success.main, 0.1)
+                                      : expense.status === 'rejected'
+                                        ? alpha(theme.palette.error.main, 0.1)
+                                        : alpha(theme.palette.info.main, 0.1),
+                                    color: expense.status === 'paid' 
+                                      ? theme.palette.success.main
+                                      : expense.status === 'rejected'
+                                        ? theme.palette.error.main
+                                        : theme.palette.info.main,
+                                  }}
+                                />
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </TableContainer>
+                  ) : (
+                    <Typography variant="body2" color="text.secondary" sx={{ fontStyle: 'italic' }}>
+                      No expenses for this phase
+                    </Typography>
+                  )}
+                </Grid>
+                
+                {phase.tasks && phase.tasks.length > 0 && (
+                  <Grid item xs={12}>
+                    <Typography variant="subtitle1" gutterBottom fontWeight={600}>
+                      Tasks ({phase.tasks.length})
+                    </Typography>
+                    <TableContainer component={Paper} variant="outlined" sx={{ maxHeight: 200 }}>
+                      <Table stickyHeader size="small">
+                        <TableHead>
+                          <TableRow>
+                            <TableCell>Task</TableCell>
+                            <TableCell>Assigned To</TableCell>
+                            <TableCell>Status</TableCell>
+                            <TableCell align="right">Due Date</TableCell>
+                          </TableRow>
+                        </TableHead>
+                        <TableBody>
+                          {phase.tasks.map(task => (
+                            <TableRow key={task.id}>
+                              <TableCell>{task.title}</TableCell>
+                              <TableCell>{task.assigneeId || 'Unassigned'}</TableCell>
+                              <TableCell>{task.status}</TableCell>
+                              <TableCell align="right">
+                                {task.dueDate ? new Date(task.dueDate).toLocaleDateString() : 'No date'}
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </TableContainer>
+                  </Grid>
+                )}
+              </Grid>
+            );
+          })()}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={handleClosePhaseDetails}>Close</Button>
+          <Button 
+            variant="contained" 
+            onClick={() => {
+              handleClosePhaseDetails();
+              if (selectedPhaseId) handleUpdatePhase(selectedPhaseId);
+            }}
+          >
+            Edit Phase
+          </Button>
+        </DialogActions>
+      </Dialog>
     </>
   );
 };

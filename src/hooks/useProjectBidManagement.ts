@@ -359,18 +359,66 @@ export function useProjectBidManagement(projectId: string, userId: string, phase
     try {
       setIsSaving(true);
       
-      // Create a new bid
+      // Get the phase name from phases
+      const phase = phases.find(p => p.id === quickBid.phaseId);
+      const phaseName = phase?.name || '';
+      
+      // Create current date
+      const now = new Date();
+      
+      // Create proper payment schedule (similar to the full bid form)
+      const paymentSchedule = [
+        {
+          id: uuidv4(),
+          name: 'Down Payment',
+          percentage: 50,
+          amount: (quickBid.amount * 50) / 100,
+          status: 'pending' as const,
+          phaseId: quickBid.phaseId,
+          phaseName: phaseName,
+          dueDate: now,
+          description: 'Initial payment to start work',
+          createdAt: now,
+          updatedAt: now
+        },
+        {
+          id: uuidv4(),
+          name: 'Final Payment',
+          percentage: 50,
+          amount: (quickBid.amount * 50) / 100,
+          status: 'pending' as const,
+          phaseId: quickBid.phaseId,
+          phaseName: phaseName,
+          dueDate: now,
+          description: 'Upon completion',
+          createdAt: now,
+          updatedAt: now
+        }
+      ];
+      
+      // Create a complete bid with all required fields
       const newBid: Omit<Bid, 'id'> = {
         userId: userId,
         projectId: projectId,
         phaseId: quickBid.phaseId,
+        phaseName: phaseName,
         contractorName: quickBid.contractorName,
+        title: `${quickBid.contractorName} - ${phaseName}`,
         bidAmount: quickBid.amount,
-        totalAmount: quickBid.amount, // Set totalAmount to match bidAmount
-        notes: quickBid.description, // Use notes instead of description
-        status: 'accepted', // lowercase to match the enum type
-        createdAt: new Date(),
-        updatedAt: new Date(),
+        totalAmount: quickBid.amount,
+        scope: quickBid.description,
+        notes: quickBid.description,
+        status: 'accepted' as const,
+        timeline: 30, // Default timeline
+        tags: ['quick-bid'],
+        paymentSchedule: paymentSchedule,
+        createdAt: now,
+        updatedAt: now,
+        paymentProgress: {
+          paid: 0,
+          pending: quickBid.amount,
+          remaining: quickBid.amount
+        }
       };
       
       // Save the bid
@@ -399,7 +447,7 @@ export function useProjectBidManagement(projectId: string, userId: string, phase
       showNotification('Failed to process bid: ' + (error instanceof Error ? error.message : 'Unknown error'), 'error');
       setIsSaving(false);
     }
-  }, [projectId, userId, createBidMutation, refetch]);
+  }, [projectId, userId, phases, createBidMutation, refetch]);
   
   return {
     bids,
