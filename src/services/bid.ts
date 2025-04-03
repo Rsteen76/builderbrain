@@ -384,7 +384,7 @@ export class BidService {
     sort?: BidSort,
     pageSize: number = 50,
     startAfterId?: string // Changed from startAfterDoc for simplicity
-  ): Promise<BidSummary[]> {
+  ): Promise<Bid[]> {
     let q = query(this.collection, where('userId', '==', userId));
 
     // Apply filters (using the local BidFilter type)
@@ -447,11 +447,12 @@ export class BidService {
     q = query(q, limit(pageSize));
 
     const querySnapshot = await getDocs(q);
-    return querySnapshot.docs.map(doc => this.convertToSummary(doc.data() as FirestoreBid, doc.id));
+    // Use convertFromFirestoreFormat instead of convertToSummary to get full bid data
+    return querySnapshot.docs.map(doc => this.convertFromFirestoreFormat(doc.data() as FirestoreBid, doc.id));
   }
 
   // Get recent bids (Returns BidSummary[])
-  static async getRecentBids(userId: string, limitCount: number = 5): Promise<BidSummary[]> {
+  static async getRecentBids(userId: string, limitCount: number = 5): Promise<Bid[]> {
     const q = query(
       this.collection,
       where('userId', '==', userId),
@@ -460,11 +461,12 @@ export class BidService {
     );
     
     const querySnapshot = await getDocs(q);
-    return querySnapshot.docs.map(doc => this.convertToSummary(doc.data() as FirestoreBid, doc.id));
+    // Use convertFromFirestoreFormat instead of convertToSummary
+    return querySnapshot.docs.map(doc => this.convertFromFirestoreFormat(doc.data() as FirestoreBid, doc.id));
   }
 
   // Get upcoming bids (Returns BidSummary[])
-  static async getUpcomingBids(userId: string, limitCount: number = 5): Promise<BidSummary[]> {
+  static async getUpcomingBids(userId: string, limitCount: number = 5): Promise<Bid[]> {
     const now = Timestamp.now();
     const q = query(
       this.collection,
@@ -475,11 +477,12 @@ export class BidService {
     );
     
     const querySnapshot = await getDocs(q);
-    return querySnapshot.docs.map(doc => this.convertToSummary(doc.data() as FirestoreBid, doc.id));
+    // Use convertFromFirestoreFormat instead of convertToSummary
+    return querySnapshot.docs.map(doc => this.convertFromFirestoreFormat(doc.data() as FirestoreBid, doc.id));
   }
 
   // Get subcontractor bids (Returns BidSummary[])
-  static async getSubcontractorBids(userId: string, subcontractorId: string): Promise<BidSummary[]> {
+  static async getSubcontractorBids(userId: string, subcontractorId: string): Promise<Bid[]> {
     const q = query(
       this.collection,
       where('userId', '==', userId),
@@ -488,7 +491,8 @@ export class BidService {
     );
     
     const querySnapshot = await getDocs(q);
-    return querySnapshot.docs.map(doc => this.convertToSummary(doc.data() as FirestoreBid, doc.id));
+    // Use convertFromFirestoreFormat instead of convertToSummary
+    return querySnapshot.docs.map(doc => this.convertFromFirestoreFormat(doc.data() as FirestoreBid, doc.id));
   }
 
   // --- Helper Functions --- 
@@ -507,6 +511,17 @@ export class BidService {
       };
   }
 
+  // Helper function to safely convert Firestore Timestamp to Date
+  private static toDate(timestamp: any): Date | undefined {
+    if (timestamp && typeof timestamp === 'object' && 'toDate' in timestamp && typeof timestamp.toDate === 'function') {
+      return timestamp.toDate();
+    }
+    if (timestamp instanceof Date) {
+      return timestamp;
+    }
+    return undefined;
+  }
+
   // Convert from Firestore format to app format (Used by getBid, getBids)
   private static convertFromFirestoreFormat(data: FirestoreBid, id: string): Bid {
     try {
@@ -516,26 +531,47 @@ export class BidService {
       // Convert each version, handling lineItems and Timestamp
       const versions = firestoreVersions?.map(v => ({
         ...v,
-        createdAt: v.createdAt.toDate(),
+        createdAt: this.toDate(v.createdAt) || new Date(),
         // Ensure lineItems is an array
         lineItems: Array.isArray(v.lineItems) ? v.lineItems : [],
       })) || [];
+      
+      // Handle payment schedule if it exists
+      let paymentSchedule = undefined;
+      if (data.paymentSchedule && Array.isArray(data.paymentSchedule)) {
+        paymentSchedule = data.paymentSchedule.map(payment => ({
+          ...payment,
+          // Convert timestamps to dates if they exist
+          createdAt: this.toDate(payment.createdAt) || new Date(),
+          updatedAt: this.toDate(payment.updatedAt) || new Date(),
+          dueDate: this.toDate(payment.dueDate),
+        }));
+      }
+      
+      // Handle payment progress
+      const paymentProgress = data.paymentProgress || {
+        paid: 0,
+        pending: data.totalAmount || 0,
+        remaining: data.totalAmount || 0
+      };
       
       // Handle conversion of Firestore Timestamps to JS Dates
       return {
         id,
         ...otherData,
-        submissionDeadline: data.submissionDeadline ? data.submissionDeadline.toDate() : undefined,
-        startDate: data.startDate ? data.startDate.toDate() : null,
-        completionDate: data.completionDate ? data.completionDate.toDate() : null,
-        createdAt: data.createdAt.toDate(),
-        updatedAt: data.updatedAt.toDate(),
+        submissionDeadline: this.toDate(data.submissionDeadline),
+        startDate: this.toDate(data.startDate),
+        completionDate: this.toDate(data.completionDate),
+        createdAt: this.toDate(data.createdAt) || new Date(),
+        updatedAt: this.toDate(data.updatedAt) || new Date(),
         versions,
+        paymentSchedule,
+        paymentProgress,
         tags: Array.isArray(data.tags) ? data.tags : (data.tags ? [data.tags] : []),
         attachments: Array.isArray(data.attachments) ? data.attachments : (data.attachments ? [data.attachments] : []),
       };
     } catch (err) {
-      console.error('Error converting bid from Firestore format:', err);
+      console.error('Error converting bid from Firestore format:', err, data);
       throw new Error('Failed to process bid data');
     }
   }

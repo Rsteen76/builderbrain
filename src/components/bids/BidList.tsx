@@ -502,7 +502,22 @@ const BidList: React.FC = () => {
     setError(null);
     try {
       const fetchedBids = await BidService.getBids(user.uid, filter, sort);
-      setBids(fetchedBids);
+      const bidSummaries = fetchedBids.map(bid => ({
+        id: bid.id,
+        userId: bid.userId,
+        projectId: bid.projectId,
+        projectName: bid.projectName,
+        subcontractorId: bid.subcontractorId,
+        subcontractorName: bid.subcontractorName,
+        title: bid.title,
+        status: bid.status,
+        priority: bid.priority,
+        submissionDeadline: bid.submissionDeadline || undefined,
+        totalAmount: bid.totalAmount,
+        createdAt: bid.createdAt,
+        updatedAt: bid.updatedAt
+      }));
+      setBids(bidSummaries);
     } catch (err) {
       console.error("Error fetching bids:", err);
       setError('Failed to load bids. Please try again.');

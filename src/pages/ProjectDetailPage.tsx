@@ -343,7 +343,18 @@ const ProjectDetailPage: React.FC = () => {
     
     try {
       const bidFilters = { projectId };
+      console.log('Fetching bids with filters:', bidFilters);
       const bidData = await BidService.getBids(user.uid, bidFilters);
+      console.log('Fetched bids (raw):', JSON.stringify(bidData, null, 2));
+      console.log('Payment schedules:', bidData.map((bid) => ({
+        bidId: bid.id, 
+        bidTitle: bid.title,
+        // Only include these properties if they exist
+        ...(bid as any).paymentSchedule && { paymentSchedule: (bid as any).paymentSchedule },
+        ...(bid as any).phaseId && { phaseId: (bid as any).phaseId }
+      })));
+      // We're setting the full Bid objects directly to the state
+      // Make sure the state is typed as Bid[] instead of BidSummary[]
       setBids(bidData);
     } catch (err) {
       console.error('Error fetching bids:', err);
@@ -1971,6 +1982,8 @@ const ProjectDetailPage: React.FC = () => {
         onSubmit={handleAddQuickBid}
         phaseId={currentPhaseForBid}
         isSaving={isSaving}
+        phases={phases}
+        subcontractors={subcontractors}
       />
 
       <ExpenseFormModal

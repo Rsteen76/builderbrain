@@ -11,6 +11,8 @@ import {
   InputAdornment,
   CircularProgress,
 } from '@mui/material';
+import { Phase, Subcontractor } from '../../types';
+import ReusableBidForm from '../bids/ReusableBidForm';
 
 interface QuickBidData {
   phaseId: string;
@@ -25,6 +27,8 @@ interface QuickBidDialogProps {
   onSubmit: (bid: QuickBidData) => void;
   phaseId: string | null;
   isSaving: boolean;
+  phases: Phase[];
+  subcontractors: Subcontractor[];
 }
 
 const QuickBidDialog: React.FC<QuickBidDialogProps> = ({
@@ -32,96 +36,46 @@ const QuickBidDialog: React.FC<QuickBidDialogProps> = ({
   onClose,
   onSubmit,
   phaseId,
-  isSaving
+  isSaving,
+  phases,
+  subcontractors,
 }) => {
-  const [bid, setBid] = useState<QuickBidData>({
-    phaseId: phaseId || '',
-    contractorName: '',
-    amount: 0,
-    description: '',
-  });
-
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
-    const { name, value } = e.target;
-    setBid(prev => ({
-      ...prev,
-      [name]: name === 'amount' ? parseFloat(value) || 0 : value,
-      phaseId: phaseId || prev.phaseId
-    }));
-  };
-
-  const handleSubmit = () => {
-    onSubmit(bid);
-    
-    // Reset form fields after submission
-    setBid({
-      phaseId: phaseId || '',
-      contractorName: '',
-      amount: 0,
-      description: '',
+  const handleSubmit = async (bidForm: any) => {
+    onSubmit({
+      phaseId: bidForm.phaseId || phaseId || '',
+      contractorName: bidForm.subcontractorName,
+      amount: bidForm.totalAmount,
+      description: bidForm.scope,
     });
   };
 
   return (
-    <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
-      <DialogTitle>Add Contractor Bid</DialogTitle>
-      <DialogContent>
-        <DialogContentText sx={{ mb: 2 }}>
-          Enter bid details to update phase cost.
-        </DialogContentText>
-        <Grid container spacing={2}>
-          <Grid item xs={12}>
-            <TextField
-              fullWidth
-              required
-              margin="dense"
-              label="Contractor Name"
-              name="contractorName"
-              value={bid.contractorName}
-              onChange={handleChange}
-            />
-          </Grid>
-          <Grid item xs={12}>
-            <TextField
-              fullWidth
-              required
-              margin="dense"
-              label="Bid Amount"
-              name="amount"
-              type="number"
-              value={bid.amount}
-              onChange={handleChange}
-              InputProps={{
-                startAdornment: <InputAdornment position="start">$</InputAdornment>
-              }}
-            />
-          </Grid>
-          <Grid item xs={12}>
-            <TextField
-              fullWidth
-              multiline
-              rows={2}
-              margin="dense"
-              label="Description"
-              name="description"
-              value={bid.description}
-              onChange={handleChange}
-              placeholder="Work description"
-            />
-          </Grid>
-        </Grid>
-      </DialogContent>
-      <DialogActions>
-        <Button onClick={onClose}>Cancel</Button>
-        <Button
-          onClick={handleSubmit}
-          variant="contained"
-          disabled={!bid.contractorName || bid.amount <= 0 || isSaving}
-        >
-          {isSaving ? <CircularProgress size={24} /> : 'Add Bid'}
-        </Button>
-      </DialogActions>
-    </Dialog>
+    <ReusableBidForm
+      open={open}
+      onClose={onClose}
+      onSubmit={handleSubmit}
+      phases={phases}
+      subcontractors={subcontractors}
+      initialBidData={{
+        phaseId: phaseId || '',
+        subcontractorName: '',
+        totalAmount: 0,
+        scope: '',
+        timeline: 30,
+        paymentTerms: {
+          downPaymentPercent: 50,
+          installments: [
+            {id: 'final', name: 'Final Payment', percent: 50, milestoneDescription: 'Upon completion'}
+          ]
+        },
+        notes: '',
+        status: 'submitted',
+        attachments: [],
+        tags: []
+      }}
+      isSaving={isSaving}
+      isDialog={true}
+    />
   );
 };
 
