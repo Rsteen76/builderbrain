@@ -203,23 +203,35 @@ const ProjectDetails: React.FC = () => {
           total: 0
         };
         
+        // Log all expenses to debug the status values
+        console.log('All project expenses:', JSON.stringify(expenses, null, 2));
+        
         expenses.forEach(expense => {
           // Ensure we have a valid numeric amount
           const amount = typeof expense.amount === 'number' ? expense.amount : 0;
-          console.log(`Expense: ${expense.description}, Amount: ${amount}, Status: ${expense.status}`);
+          // Normalize status to handle case sensitivity or whitespace issues
+          const status = expense.status?.trim().toLowerCase();
+          
+          console.log(`Expense: ${expense.description}, Amount: ${amount}, Status: ${status} (original: ${expense.status})`);
           
           // Add to total
           breakdown.total += amount;
           
           // Add to appropriate status bucket
-          if (expense.status === 'approved') {
+          if (status === 'approved') {
             breakdown.approved += amount;
-          } else if (expense.status === 'pending') {
+            console.log(`Adding ${amount} to approved, now: ${breakdown.approved}`);
+          } else if (status === 'pending') {
             breakdown.pending += amount;
-          } else if (expense.status === 'paid') {
+            console.log(`Adding ${amount} to pending, now: ${breakdown.pending}`);
+          } else if (status === 'paid') {
             breakdown.paid += amount;
-          } else if (expense.status === 'rejected') {
+            console.log(`Adding ${amount} to paid, now: ${breakdown.paid}`);
+          } else if (status === 'rejected') {
             breakdown.rejected += amount;
+            console.log(`Adding ${amount} to rejected, now: ${breakdown.rejected}`);
+          } else {
+            console.log(`Unknown status "${status}" for expense ${expense.id}`);
           }
         });
         

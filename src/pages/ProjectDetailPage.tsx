@@ -1145,7 +1145,7 @@ const ProjectDetailPage: React.FC = () => {
 
   const [isSaving, setIsSaving] = useState(false);
 
-  // Add a new useMemo for expense breakdown
+  // Add a useMemo for expense breakdown
   const expenseBreakdown = useMemo(() => {
     const breakdown = {
       pending: 0,
@@ -1154,19 +1154,34 @@ const ProjectDetailPage: React.FC = () => {
       rejected: 0
     };
     
+    // Add debug logging
+    console.log('Calculating expense breakdown with', expenses.length, 'expenses');
+    
     expenses.forEach(expense => {
       const amount = typeof expense.amount === 'number' ? expense.amount : 0;
-      if (expense.status === 'pending') {
+      // Normalize status to handle case sensitivity or whitespace issues
+      const status = expense.status?.trim().toLowerCase();
+      
+      console.log(`Expense in ProjectDetailPage: ${expense.description}, Amount: ${amount}, Status: ${status} (original: ${expense.status})`);
+      
+      if (status === 'pending') {
         breakdown.pending += amount;
-      } else if (expense.status === 'approved') {
+        console.log(`Adding ${amount} to pending, now: ${breakdown.pending}`);
+      } else if (status === 'approved') {
         breakdown.approved += amount;
-      } else if (expense.status === 'paid') {
+        console.log(`Adding ${amount} to approved, now: ${breakdown.approved}`);
+      } else if (status === 'paid') {
         breakdown.paid += amount;
-      } else if (expense.status === 'rejected') {
+        console.log(`Adding ${amount} to paid, now: ${breakdown.paid}`);
+      } else if (status === 'rejected') {
         breakdown.rejected += amount;
+        console.log(`Adding ${amount} to rejected, now: ${breakdown.rejected}`);
+      } else {
+        console.log(`Unknown status "${status}" for expense ${expense.id}`);
       }
     });
     
+    console.log('Final expense breakdown:', breakdown);
     return breakdown;
   }, [expenses]);
 
