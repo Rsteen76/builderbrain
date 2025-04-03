@@ -118,6 +118,9 @@ import ProjectDocumentsTab from '../components/projects/detailTabs/ProjectDocume
 import ProjectDetailHeaderActions from '../components/projects/ProjectDetailHeaderActions';
 // Import metric cards component
 import ProjectMetricCards from '../components/projects/ProjectMetricCards';
+import BidFormDialog from '../components/dialogs/BidFormDialog';
+import QuickAddSubcontractorDialog from '../components/dialogs/QuickAddSubcontractorDialog';
+import QuickBidDialog from '../components/dialogs/QuickBidDialog';
 
 // Import recharts components
 import {
@@ -245,12 +248,6 @@ const ProjectDetailPage: React.FC = () => {
   // State for quick bid and expense dialogs
   const [newBidDialogOpen, setNewBidDialogOpen] = useState(false);
   const [currentPhaseForBid, setCurrentPhaseForBid] = useState<string | null>(null);
-  const [quickBid, setQuickBid] = useState<QuickBid>({
-    phaseId: '',
-    contractorName: '',
-    amount: 0,
-    description: '',
-  });
   const [snackbar, setSnackbar] = useState<{
     open: boolean;
     message: string;
@@ -567,35 +564,20 @@ const ProjectDetailPage: React.FC = () => {
   // Add this function to handle opening the bid dialog for a specific phase
   const handleOpenQuickBidDialog = (phaseId: string) => {
     setCurrentPhaseForBid(phaseId);
-    setQuickBid({
-      phaseId,
-      contractorName: '',
-      amount: 0,
-      description: '',
-    });
     setNewBidDialogOpen(true);
   };
 
-  // Add this function to handle bid input changes
-  const handleQuickBidChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement> | SelectChangeEvent) => {
-    const { name, value } = e.target;
-    setQuickBid(prev => ({
-      ...prev,
-      [name]: name === 'amount' ? parseFloat(value as string) || 0 : value
-    }));
-  };
-
   // Add this function to handle adding the bid and updating the phase
-  const handleAddQuickBid = () => {
+  const handleAddQuickBid = (quickBid: { phaseId: string; contractorName: string; amount: number; description: string }) => {
     // Only proceed if we have a valid phase ID and project
-    if (!currentPhaseForBid || !project) return;
+    if (!quickBid.phaseId || !project) return;
     
     // Create a new bid
     const newBid: Bid = {
       id: uuidv4(),
       userId: user?.uid || '',
       projectId: project.id || '',
-      phaseId: currentPhaseForBid,
+      phaseId: quickBid.phaseId,
       contractorName: quickBid.contractorName,
       bidAmount: quickBid.amount,
       totalAmount: quickBid.amount, // Set totalAmount to match bidAmount
@@ -612,13 +594,13 @@ const ProjectDetailPage: React.FC = () => {
     setPhasesBeingUpdated(prev => {
       // Add the bid amount to the current actual cost of the phase
       const updatedPhase = {
-        ...prev[currentPhaseForBid],
-        actualCost: (prev[currentPhaseForBid].actualCost || 0) + quickBid.amount
+        ...prev[quickBid.phaseId],
+        actualCost: (prev[quickBid.phaseId].actualCost || 0) + quickBid.amount
       };
       
       return {
         ...prev,
-        [currentPhaseForBid]: updatedPhase
+        [quickBid.phaseId]: updatedPhase
       };
     });
     
@@ -627,7 +609,7 @@ const ProjectDetailPage: React.FC = () => {
     setCurrentPhaseForBid(null);
     
     // Show a success message or toast (if you have a toast system)
-    alert(`Bid from ${quickBid.contractorName} added successfully and phase cost updated.`);
+    showNotification(`Bid from ${quickBid.contractorName} added successfully and phase cost updated.`, 'success');
   };
 
   // Add this function to handle opening the expense dialog for a specific phase
@@ -1313,36 +1295,40 @@ const ProjectDetailPage: React.FC = () => {
   };
 
   // Update the handleSubmitBid function to properly handle date fields and undefined values
-  const handleSubmitBid = async () => {
+  const handleSubmitBid = async (bidFormData: {
+    title: string;
+    subcontractorName: string;
+    subcontractorId?: string;
+    totalAmount: number;
+    phaseId?: string;
+    phaseName?: string;
+    scope: string;
+    timeline: number;
+    submissionDeadline?: Date;
+    paymentTerms: {
+      downPaymentPercent: number;
+      installments: {
+        id: string;
+        name: string;
+        percent: number;
+        milestoneDescription: string;
+        phaseId?: string;
+        phaseName?: string;
+      }[];
+    };
+    notes: string;
+    status: 'draft' | 'submitted' | 'accepted' | 'rejected' | 'expired';
+    attachments: string[];
+    tags: string[];
+  }) => {
     if (!user || !project?.id) return;
-    
-    // Validate required fields
-    if (!bidForm.title) {
-      showNotification('Please enter a title for the bid', 'error');
-      return;
-    }
-    
-    if (!bidForm.subcontractorName) {
-      showNotification('Please select or enter a subcontractor name', 'error');
-      return;
-    }
-    
-    if (!bidForm.phaseId && phases.length > 0) {
-      // If phaseId is not set but phases exist, use the first phase as default
-      handleChangeBidForm('phaseId', phases[0].id);
-      handleChangeBidForm('phaseName', phases[0].name);
-      showNotification('No phase selected - using first project phase by default', 'info');
-    } else if (!bidForm.phaseId) {
-      showNotification('Please select a phase for this bid', 'error');
-      return;
-    }
     
     try {
       setIsSaving(true);
       
       // Calculate total percentage to ensure it adds up to 100%
-      const downPaymentPercent = bidForm.paymentTerms.downPaymentPercent;
-      const installmentsTotal = bidForm.paymentTerms.installments.reduce((sum, item) => sum + item.percent, 0);
+      const downPaymentPercent = bidFormData.paymentTerms.downPaymentPercent;
+      const installmentsTotal = bidFormData.paymentTerms.installments.reduce((sum: number, item: { percent: number }) => sum + item.percent, 0);
       const totalPercent = downPaymentPercent + installmentsTotal;
       
       if (totalPercent !== 100) {
@@ -1359,23 +1345,30 @@ const ProjectDetailPage: React.FC = () => {
           id: uuidv4(),
           name: 'Down Payment',
           percentage: downPaymentPercent,
-          amount: (bidForm.totalAmount * downPaymentPercent) / 100,
+          amount: (bidFormData.totalAmount * downPaymentPercent) / 100,
           status: 'pending',
-          phaseId: bidForm.phaseId,
-          phaseName: bidForm.phaseName,
+          phaseId: bidFormData.phaseId,
+          phaseName: bidFormData.phaseName,
           dueDate: now,
           description: 'Initial payment to start work',
           createdAt: now,
           updatedAt: now
         } as BidPaymentStage,
-        ...bidForm.paymentTerms.installments.map(installment => ({
+        ...bidFormData.paymentTerms.installments.map((installment: {
+          id: string;
+          name: string;
+          percent: number;
+          milestoneDescription: string;
+          phaseId?: string;
+          phaseName?: string;
+        }) => ({
           id: uuidv4(),
           name: installment.name,
           percentage: installment.percent,
-          amount: (bidForm.totalAmount * installment.percent) / 100,
+          amount: (bidFormData.totalAmount * installment.percent) / 100,
           status: 'pending',
-          phaseId: installment.phaseId || bidForm.phaseId,
-          phaseName: installment.phaseName || bidForm.phaseName,
+          phaseId: installment.phaseId || bidFormData.phaseId,
+          phaseName: installment.phaseName || bidFormData.phaseName,
           dueDate: now,
           description: installment.milestoneDescription,
           createdAt: now,
@@ -1387,17 +1380,17 @@ const ProjectDetailPage: React.FC = () => {
       const bidData = {
         userId: user.uid,
         projectId: project.id,
-        title: bidForm.title || '',
-        subcontractorName: bidForm.subcontractorName || '',
-        subcontractorId: bidForm.subcontractorId || '',
-        phaseId: bidForm.phaseId || '',
-        phaseName: bidForm.phaseName || '',
-        totalAmount: bidForm.totalAmount || 0,
-        scope: bidForm.scope || '',
-        timeline: bidForm.timeline || 0,
-        notes: bidForm.notes || '',
-        status: bidForm.status || 'draft',
-        tags: Array.isArray(bidForm.tags) ? bidForm.tags : [],
+        title: bidFormData.title || '',
+        subcontractorName: bidFormData.subcontractorName || '',
+        subcontractorId: bidFormData.subcontractorId || '',
+        phaseId: bidFormData.phaseId || '',
+        phaseName: bidFormData.phaseName || '',
+        totalAmount: bidFormData.totalAmount || 0,
+        scope: bidFormData.scope || '',
+        timeline: bidFormData.timeline || 0,
+        notes: bidFormData.notes || '',
+        status: bidFormData.status || 'draft',
+        tags: Array.isArray(bidFormData.tags) ? bidFormData.tags : [],
         attachments: [],
         // Set date fields explicitly to null if invalid
         submissionDeadline: null, // Default to null, will override if valid below
@@ -1407,14 +1400,14 @@ const ProjectDetailPage: React.FC = () => {
         updatedAt: now,
         paymentProgress: {
           paid: 0,
-          pending: bidForm.totalAmount,
-          remaining: bidForm.totalAmount
+          pending: bidFormData.totalAmount,
+          remaining: bidFormData.totalAmount
         }
       } as any;
       
       // Only set date fields if they are valid Date objects
-      if (bidForm.submissionDeadline instanceof Date && !isNaN(bidForm.submissionDeadline.getTime())) {
-        bidData.submissionDeadline = bidForm.submissionDeadline;
+      if (bidFormData.submissionDeadline instanceof Date && !isNaN(bidFormData.submissionDeadline.getTime())) {
+        bidData.submissionDeadline = bidFormData.submissionDeadline;
       }
       
       // Clean any remaining undefined fields
@@ -1474,15 +1467,7 @@ const ProjectDetailPage: React.FC = () => {
   const [subcontractors, setSubcontractors] = useState<Subcontractor[]>([]);
   const [subcontractorSearchQuery, setSubcontractorSearchQuery] = useState('');
   const [showQuickAddSubcontractor, setShowQuickAddSubcontractor] = useState(false);
-  const [newSubcontractor, setNewSubcontractor] = useState({
-    name: '',
-    specialty: '',
-    contact: {
-      phone: '',
-      email: ''
-    }
-  });
-
+  
   // Add a function to fetch subcontractors
   const fetchSubcontractors = async () => {
     if (!user?.uid) return;
@@ -1503,26 +1488,33 @@ const ProjectDetailPage: React.FC = () => {
   }, [bidFormOpen, user?.uid]);
 
   // Function to handle quick add of a new subcontractor
-  const handleQuickAddSubcontractor = async () => {
+  const handleQuickAddSubcontractor = async (subcontractorData: {
+    name: string;
+    specialty: string;
+    contact: {
+      phone: string;
+      email: string;
+    };
+  }) => {
     if (!user?.uid) return;
     
     try {
       setIsSaving(true);
       
       // Create basic subcontractor
-      const subcontractorData: Omit<Subcontractor, 'id' | 'userId' | 'createdAt' | 'updatedAt'> = {
-        name: newSubcontractor.name,
-        specialty: newSubcontractor.specialty,
+      const subcontractorToCreate: Omit<Subcontractor, 'id' | 'userId' | 'createdAt' | 'updatedAt'> = {
+        name: subcontractorData.name,
+        specialty: subcontractorData.specialty,
         contact: {
-          phone: newSubcontractor.contact.phone,
-          email: newSubcontractor.contact.email
+          phone: subcontractorData.contact.phone,
+          email: subcontractorData.contact.email
         },
         rating: 0,
         totalProjects: 0
         // Remove createdAt and updatedAt as they're added by the service
       };
       
-      const createdSubcontractor = await SubcontractorService.createSubcontractor(user.uid, subcontractorData);
+      const createdSubcontractor = await SubcontractorService.createSubcontractor(user.uid, subcontractorToCreate);
       
       // Add to local state
       setSubcontractors(prev => [createdSubcontractor, ...prev]);
@@ -1534,15 +1526,7 @@ const ProjectDetailPage: React.FC = () => {
         subcontractorId: createdSubcontractor.id
       }));
       
-      // Reset and close quick add form
-      setNewSubcontractor({
-        name: '',
-        specialty: '',
-        contact: {
-          phone: '',
-          email: ''
-        }
-      });
+      // Close quick add form
       setShowQuickAddSubcontractor(false);
       
       // Show success notification
@@ -1724,222 +1708,222 @@ const ProjectDetailPage: React.FC = () => {
 
   // Helper function to render Quick Update Mode section (extracted for clarity)
   const renderQuickUpdateMode = () => (
-    <Paper 
-      elevation={0}
-      sx={{ 
-        p: 3, 
-        mb: 3, 
-        borderRadius: 2,
-        border: `1px solid ${alpha(theme.palette.primary.main, 0.3)}`,
-        bgcolor: alpha(theme.palette.primary.main, 0.05)
-      }}
-    >
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-        <Typography variant="h5" fontWeight={600} color="primary">Quick Update Mode</Typography>
-      </Box>
-      
-      <Typography variant="body1" sx={{ mb: 3 }}>
-        Make multiple updates across phases to catch up on project progress quickly. Update status, progress, and actual costs for each phase.
-      </Typography>
-      
-      <Grid container spacing={3}>
-        {Object.values(phasesBeingUpdated).map((phase) => (
-          <Grid item xs={12} sm={6} md={6} lg={4} key={`${renderingKey}-phase-${phase.id}`}>
-            <Card 
-              elevation={2} 
-              sx={{ 
-                p: 0, 
-                borderRadius: 3,
-                height: '100%',
-                display: 'flex',
-                flexDirection: 'column',
-                transition: 'transform 0.2s, box-shadow 0.2s',
-                '&:hover': {
-                  transform: 'translateY(-4px)',
-                  boxShadow: 6,
-                },
-                overflow: 'hidden',
-              }}
-            >
-              <Box 
-                sx={{ 
-                  p: 2.5,
-                  borderBottom: `1px solid ${alpha(theme.palette.divider, 0.1)}`,
-                  bgcolor: alpha(getStatusColor(phase.status), 0.05),
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'center'
-                }}
-              >
-                <Typography 
-                  variant="h6" 
-                  sx={{ 
-                    fontWeight: 600,
-                    display: '-webkit-box',
-                    WebkitLineClamp: 1,
-                    WebkitBoxOrient: 'vertical',
-                    overflow: 'hidden',
-                    textOverflow: 'ellipsis',
-                  }}
-                >
-                  {phase.name}
-                </Typography>
-                <Chip
-                  icon={getStatusIcon(phase.status)}
-                  label={phase.status.replace('_', ' ')}
-                  size="small"
-                  sx={{
-                    fontWeight: 600,
-                    fontSize: '0.75rem',
-                    bgcolor: alpha(getStatusColor(phase.status), 0.15),
-                    color: getStatusColor(phase.status),
-                    borderRadius: '12px',
-                    '& .MuiChip-icon': {
-                      color: getStatusColor(phase.status)
-                    }
-                  }}
-                />
-              </Box>
-              
-              <Box sx={{ p: 2.5, flex: 1, display: 'flex', flexDirection: 'column' }}>
-                <Box sx={{ mb: 3 }}>
-                  <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
-                    <Typography variant="body2" fontWeight={600} color="text.secondary">
-                      Status
-                    </Typography>
-                    <Typography variant="body2" color="text.primary">
-                      {phasesBeingUpdated[phase.id]?.progress || phase.progress || 0}% Complete
-                    </Typography>
-                  </Box>
-                  
-                  <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, mb: 2 }}>
-                    {['not_started', 'in_progress', 'completed', 'delayed'].map((status) => (
-                      <Chip
-                        key={status}
-                        label={status.replace('_', ' ')}
-                        clickable
-                        size="small"
-                        onClick={() => handleQuickUpdatePhase(phase.id, 'status', status)}
-                        sx={{
-                          height: 24,
-                          fontSize: '0.7rem',
+          <Paper 
+            elevation={0}
+            sx={{ 
+              p: 3, 
+              mb: 3, 
+              borderRadius: 2,
+              border: `1px solid ${alpha(theme.palette.primary.main, 0.3)}`,
+              bgcolor: alpha(theme.palette.primary.main, 0.05)
+            }}
+          >
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+              <Typography variant="h5" fontWeight={600} color="primary">Quick Update Mode</Typography>
+            </Box>
+            
+            <Typography variant="body1" sx={{ mb: 3 }}>
+              Make multiple updates across phases to catch up on project progress quickly. Update status, progress, and actual costs for each phase.
+            </Typography>
+            
+            <Grid container spacing={3}>
+              {Object.values(phasesBeingUpdated).map((phase) => (
+                <Grid item xs={12} sm={6} md={6} lg={4} key={`${renderingKey}-phase-${phase.id}`}>
+                  <Card 
+                    elevation={2} 
+                    sx={{ 
+                      p: 0, 
+                      borderRadius: 3,
+                      height: '100%',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      transition: 'transform 0.2s, box-shadow 0.2s',
+                      '&:hover': {
+                        transform: 'translateY(-4px)',
+                        boxShadow: 6,
+                      },
+                      overflow: 'hidden',
+                    }}
+                  >
+                    <Box 
+                      sx={{ 
+                        p: 2.5,
+                        borderBottom: `1px solid ${alpha(theme.palette.divider, 0.1)}`,
+                        bgcolor: alpha(getStatusColor(phase.status), 0.05),
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center'
+                      }}
+                    >
+                      <Typography 
+                        variant="h6" 
+                        sx={{ 
                           fontWeight: 600,
-                          bgcolor: (phasesBeingUpdated[phase.id]?.status || phase.status) === status 
-                            ? alpha(getStatusColor(status), 0.15)
-                            : alpha(theme.palette.background.default, 0.6),
-                          color: (phasesBeingUpdated[phase.id]?.status || phase.status) === status 
-                            ? getStatusColor(status)
-                            : theme.palette.text.secondary,
+                          display: '-webkit-box',
+                          WebkitLineClamp: 1,
+                          WebkitBoxOrient: 'vertical',
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                        }}
+                      >
+                        {phase.name}
+                      </Typography>
+                      <Chip
+                        icon={getStatusIcon(phase.status)}
+                        label={phase.status.replace('_', ' ')}
+                        size="small"
+                        sx={{
+                          fontWeight: 600,
+                          fontSize: '0.75rem',
+                          bgcolor: alpha(getStatusColor(phase.status), 0.15),
+                          color: getStatusColor(phase.status),
                           borderRadius: '12px',
-                          border: `1px solid ${alpha(getStatusColor(status), (phasesBeingUpdated[phase.id]?.status || phase.status) === status ? 0.5 : 0.1)}`,
-                          '&:hover': {
-                            bgcolor: alpha(getStatusColor(status), 0.1),
+                          '& .MuiChip-icon': {
+                            color: getStatusColor(phase.status)
                           }
                         }}
                       />
-                    ))}
-                  </Box>
-                  
-                  <Box sx={{ width: '100%', height: 6, bgcolor: alpha(theme.palette.divider, 0.1), borderRadius: 3, mb: 1, overflow: 'hidden' }}>
-                    <Box
-                      sx={{
-                        height: '100%',
+                    </Box>
+                    
+                    <Box sx={{ p: 2.5, flex: 1, display: 'flex', flexDirection: 'column' }}>
+                      <Box sx={{ mb: 3 }}>
+                        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
+                          <Typography variant="body2" fontWeight={600} color="text.secondary">
+                            Status
+                          </Typography>
+                          <Typography variant="body2" color="text.primary">
+                      {phasesBeingUpdated[phase.id]?.progress || phase.progress || 0}% Complete
+                          </Typography>
+                        </Box>
+                        
+                        <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, mb: 2 }}>
+                          {['not_started', 'in_progress', 'completed', 'delayed'].map((status) => (
+                            <Chip
+                              key={status}
+                              label={status.replace('_', ' ')}
+                              clickable
+                              size="small"
+                              onClick={() => handleQuickUpdatePhase(phase.id, 'status', status)}
+                              sx={{
+                                height: 24,
+                                fontSize: '0.7rem',
+                                fontWeight: 600,
+                          bgcolor: (phasesBeingUpdated[phase.id]?.status || phase.status) === status 
+                                  ? alpha(getStatusColor(status), 0.15)
+                                  : alpha(theme.palette.background.default, 0.6),
+                          color: (phasesBeingUpdated[phase.id]?.status || phase.status) === status 
+                                  ? getStatusColor(status)
+                                  : theme.palette.text.secondary,
+                                borderRadius: '12px',
+                          border: `1px solid ${alpha(getStatusColor(status), (phasesBeingUpdated[phase.id]?.status || phase.status) === status ? 0.5 : 0.1)}`,
+                                '&:hover': {
+                                  bgcolor: alpha(getStatusColor(status), 0.1),
+                                }
+                              }}
+                            />
+                          ))}
+                        </Box>
+                        
+                        <Box sx={{ width: '100%', height: 6, bgcolor: alpha(theme.palette.divider, 0.1), borderRadius: 3, mb: 1, overflow: 'hidden' }}>
+                          <Box
+                            sx={{
+                              height: '100%',
                         width: `${(phasesBeingUpdated[phase.id]?.status || phase.status) === 'completed' ? 100 : (phasesBeingUpdated[phase.id]?.status || phase.status) === 'in_progress' ? 50 : (phasesBeingUpdated[phase.id]?.status || phase.status) === 'delayed' ? 25 : 0}%`,
                         bgcolor: getStatusColor(phasesBeingUpdated[phase.id]?.status || phase.status),
-                        borderRadius: 3,
-                        transition: 'width 0.5s ease-in-out',
-                      }}
-                    />
-                  </Box>
-                </Box>
-                
-                <Box sx={{ mb: 3 }}>
-                  <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
-                    <Typography variant="body2" fontWeight={600} color="text.secondary">
-                      Budget Status
-                    </Typography>
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                              borderRadius: 3,
+                              transition: 'width 0.5s ease-in-out',
+                            }}
+                          />
+                        </Box>
+                      </Box>
+                      
+                      <Box sx={{ mb: 3 }}>
+                        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
+                          <Typography variant="body2" fontWeight={600} color="text.secondary">
+                            Budget Status
+                          </Typography>
+                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                       {(phasesBeingUpdated[phase.id]?.actualCost || phase.actualCost || 0) > phase.budget && (
-                        <Chip 
-                          label="Over Budget" 
-                          size="small" 
-                          color="error" 
-                          sx={{ height: 20, fontSize: '0.65rem', fontWeight: 600 }}
-                        />
-                      )}
-                    </Box>
-                  </Box>
-                  
-                  <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
-                    <Typography variant="body2" color="text.secondary">Budget:</Typography>
+                              <Chip 
+                                label="Over Budget" 
+                                size="small" 
+                                color="error" 
+                                sx={{ height: 20, fontSize: '0.65rem', fontWeight: 600 }}
+                              />
+                            )}
+                          </Box>
+                        </Box>
+                        
+                        <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
+                          <Typography variant="body2" color="text.secondary">Budget:</Typography>
                     <Typography variant="body2" color="text.primary">{formatCurrency(phase.budget)}</Typography>
-                  </Box>
-                </Box>
-              </Box>
-            </Card>
-          </Grid>
-        ))}
-      </Grid>
-    </Paper>
+                        </Box>
+                        </Box>
+                    </Box>
+                  </Card>
+                </Grid>
+              ))}
+            </Grid>
+          </Paper>
   );
 
   // Helper function to render Recent Expenses section (extracted for clarity)
   const renderRecentExpenses = () => (
-    <Paper 
-      elevation={3}
-      sx={{ 
-        p: 3, 
-        mb: 3, 
-        borderRadius: 3,
-        overflow: 'hidden',
-        position: 'relative',
-        '&::before': {
-          content: '""',
-          position: 'absolute',
-          top: 0,
-          left: 0,
-          width: '100%',
-          height: '4px',
-          backgroundColor: 'success.main',
-        }
-      }}
-    >
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
-        <Typography variant="h5" fontWeight={600} color="success.main">Recent Expenses</Typography>
-        <Chip 
-          label={`${expenses.length} Total`} 
-          color="success" 
-          size="small" 
-          sx={{ fontWeight: 600 }} 
-        />
-      </Box>
-      
-      <Box sx={{ mb: 2 }}>
-        <Grid container spacing={2}>
-          {expenses.slice(-6).reverse().map((expense) => {
+          <Paper 
+            elevation={3}
+            sx={{ 
+              p: 3, 
+              mb: 3, 
+              borderRadius: 3,
+              overflow: 'hidden',
+              position: 'relative',
+              '&::before': {
+                content: '""',
+                position: 'absolute',
+                top: 0,
+                left: 0,
+                width: '100%',
+                height: '4px',
+                backgroundColor: 'success.main',
+              }
+            }}
+          >
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
+              <Typography variant="h5" fontWeight={600} color="success.main">Recent Expenses</Typography>
+              <Chip 
+                label={`${expenses.length} Total`} 
+                color="success" 
+                size="small" 
+                sx={{ fontWeight: 600 }} 
+              />
+            </Box>
+            
+            <Box sx={{ mb: 2 }}>
+              <Grid container spacing={2}>
+                {expenses.slice(-6).reverse().map((expense) => {
             const phaseName = expense.phaseName || phases.find(p => p.id === expense.phaseId)?.name || expense.buildingPhase || 'Unknown Phase';
-            return (
-              <Grid item xs={12} sm={6} md={6} lg={4} key={expense.id}>
+                  return (
+                    <Grid item xs={12} sm={6} md={6} lg={4} key={expense.id}>
                 {/* Simplified Card structure for brevity - reconstruct if needed */}
                  <Card elevation={2} sx={{ p: 0, borderRadius: 2, height: '100%' }}>
                    <CardContent>
                      <Box sx={{ display: 'flex', justifyContent: 'space-between'}}>
                        <Chip label={expense.category} size="small" />
                        <Typography variant="h6" fontWeight={700}>{formatCurrency(expense.amount)}</Typography>
-                     </Box>
+                          </Box>
                      <Typography variant="body2" sx={{ my: 1 }}>{expense.description || 'No description'}</Typography>
                      <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
                        <Typography variant="caption">Phase: {phaseName}</Typography>
                        <Typography variant="caption">Date: {formatDate(expense.date)}</Typography>
-                     </Box>
+                        </Box>
                    </CardContent>
-                 </Card>
+                      </Card>
+                    </Grid>
+                  );
+                })}
               </Grid>
-            );
-          })}
-        </Grid>
-      </Box>
-    </Paper>
+            </Box>
+          </Paper>
   );
 
   // Loading and Error states
@@ -1948,7 +1932,7 @@ const ProjectDetailPage: React.FC = () => {
       <PageLayout title="Loading Project" icon={BusinessIcon}>
         <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '60vh' }}>
           <CircularProgress />
-        </Box>
+                </Box>
       </PageLayout>
     );
   }
@@ -2094,21 +2078,32 @@ const ProjectDetailPage: React.FC = () => {
       </PageLayout>
 
       {/* Dialogs, Snackbar, Modals outside PageLayout */}
-      <Dialog open={newBidDialogOpen} onClose={() => setNewBidDialogOpen(false)} maxWidth="sm" fullWidth>
-        <DialogTitle>Add Contractor Bid</DialogTitle>
-        <DialogContent>
-          <DialogContentText sx={{ mb: 2 }}>Enter bid details to update phase cost.</DialogContentText>
-          <Grid container spacing={2}>
-            <Grid item xs={12}><TextField fullWidth required margin="dense" label="Contractor Name" name="contractorName" value={quickBid.contractorName} onChange={handleQuickBidChange}/></Grid>
-            <Grid item xs={12}><TextField fullWidth required margin="dense" label="Bid Amount" name="amount" type="number" value={quickBid.amount} onChange={handleQuickBidChange} InputProps={{startAdornment: <InputAdornment position="start">$</InputAdornment>}}/></Grid>
-            <Grid item xs={12}><TextField fullWidth multiline rows={2} margin="dense" label="Description" name="description" value={quickBid.description} onChange={handleQuickBidChange} placeholder="Work description"/></Grid>
-          </Grid>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setNewBidDialogOpen(false)}>Cancel</Button>
-          <Button onClick={handleAddQuickBid} variant="contained" disabled={!quickBid.contractorName || quickBid.amount <= 0 || isSaving}> {isSaving ? <CircularProgress size={24} /> : 'Add Bid'} </Button>
-        </DialogActions>
-      </Dialog>
+      <BidFormDialog
+        open={bidFormOpen}
+        onClose={handleCloseBidForm}
+        onSubmit={handleSubmitBid}
+        phases={phases}
+        subcontractors={subcontractors}
+        initialBidData={bidForm}
+        editingBidId={editingBidId}
+        isSaving={isSaving}
+        onAddSubcontractor={() => setShowQuickAddSubcontractor(true)}
+      />
+
+      <QuickAddSubcontractorDialog
+        open={showQuickAddSubcontractor}
+        onClose={() => setShowQuickAddSubcontractor(false)}
+        onSubmit={handleQuickAddSubcontractor}
+        isSaving={isSaving}
+      />
+
+      <QuickBidDialog
+        open={newBidDialogOpen}
+        onClose={() => setNewBidDialogOpen(false)}
+        onSubmit={handleAddQuickBid}
+        phaseId={currentPhaseForBid}
+        isSaving={isSaving}
+      />
 
       <ExpenseFormModal
         open={newExpenseDialogOpen}
@@ -2130,44 +2125,6 @@ const ProjectDetailPage: React.FC = () => {
         project={project} 
         onUpdateProject={handleProjectUpdate}
       />
-
-      <Dialog open={bidFormOpen} onClose={handleCloseBidForm} maxWidth="md" fullWidth>
-        <DialogTitle><Typography variant="h6" fontWeight={600}> {editingBidId ? 'Edit Bid' : 'Add New Bid'} </Typography></DialogTitle>
-        <DialogContent dividers>
-           <Grid container spacing={3}>
-             <Grid item xs={12} sm={6}><TextField fullWidth required label="Bid Title" value={bidForm.title} onChange={(e) => handleChangeBidForm('title', e.target.value)} /></Grid>
-             <Grid item xs={12}><FormControl fullWidth required><InputLabel id="bid-phase-select-label">Project Phase</InputLabel><Select labelId="bid-phase-select-label" value={bidForm.phaseId || ''} label="Project Phase" onChange={(e) => { const phaseId = e.target.value; const phase = phases.find(p => p.id === phaseId); handleChangeBidForm('phaseId', phaseId); handleChangeBidForm('phaseName', phase?.name || ''); }}>{phases.map((phase) => (<MenuItem key={phase.id} value={phase.id}>{phase.name}</MenuItem>))}</Select></FormControl></Grid>
-             <Grid item xs={12} sm={6}><Autocomplete fullWidth options={subcontractors} getOptionLabel={(option) => option.name} isOptionEqualToValue={(option, value) => option.id === value.id} value={subcontractors.find(s => s.id === bidForm.subcontractorId) || null} onChange={(_, newValue) => { handleChangeBidForm('subcontractorName', newValue?.name || ''); handleChangeBidForm('subcontractorId', newValue?.id || ''); }} renderInput={(params) => (<TextField {...params} label="Subcontractor" required />)}/><Button size="small" color="primary" onClick={() => setShowQuickAddSubcontractor(true)} sx={{ mt: 1 }} startIcon={<AddIcon />}>Add New Sub</Button></Grid>
-             <Grid item xs={12} sm={6}><TextField fullWidth required label="Total Amount" type="number" value={bidForm.totalAmount} onChange={(e) => handleChangeBidForm('totalAmount', parseFloat(e.target.value) || 0)} InputProps={{ startAdornment: <InputAdornment position="start">$</InputAdornment> }}/></Grid>
-             <Grid item xs={12} sm={6}><TextField fullWidth required label="Timeline (days)" type="number" value={bidForm.timeline} onChange={(e) => handleChangeBidForm('timeline', parseInt(e.target.value) || 0)} /></Grid>
-             <Grid item xs={12}><TextField fullWidth required multiline rows={3} label="Scope of Work" value={bidForm.scope} onChange={(e) => handleChangeBidForm('scope', e.target.value)} /></Grid>
-             <Grid item xs={12} sm={6}><FormControl fullWidth><InputLabel>Status</InputLabel><Select value={bidForm.status} onChange={(e) => handleChangeBidForm('status', e.target.value as Bid['status'])} label="Status"><MenuItem value="draft">Draft</MenuItem><MenuItem value="submitted">Submitted</MenuItem><MenuItem value="accepted">Accepted</MenuItem><MenuItem value="rejected">Rejected</MenuItem><MenuItem value="expired">Expired</MenuItem></Select></FormControl></Grid>
-             <Grid item xs={12}><Typography variant="subtitle2" gutterBottom>Tags</Typography><Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, mb: 1 }}><>{bidForm.tags.map((tag) => (<Chip key={tag} label={tag} onDelete={() => handleRemoveTag(tag)} size="small" sx={{ borderRadius: 1 }}/>))}</><TextField size="small" variant="standard" placeholder="Add tag..." sx={{ flexGrow: 1, minWidth: 150 }} value={tagInput} onChange={(e) => setTagInput(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter' && tagInput.trim()) { e.preventDefault(); handleAddTag(tagInput.trim()); setTagInput(''); }}}/></Box></Grid>
-             <Grid item xs={12}><Typography variant="subtitle1" sx={{ mt: 1, mb: 1 }}>Payment Terms</Typography><Divider sx={{ mb: 2 }}/><FormControl fullWidth sx={{ mb: 2 }}><InputLabel id="payment-template-label">Schedule Template</InputLabel><Select labelId="payment-template-label" value={paymentTemplate} label="Schedule Template" onChange={handlePaymentTemplateChange}><MenuItem value="standard">Standard (50/50)</MenuItem><MenuItem value="trades">Trades (30/40/30)</MenuItem><MenuItem value="custom">Custom</MenuItem></Select></FormControl><Grid container spacing={2}><Grid item xs={12} sm={6}><TextField fullWidth label="Down Payment (%)" type="number" InputProps={{ endAdornment: <InputAdornment position="end">%</InputAdornment> }} value={bidForm.paymentTerms.downPaymentPercent} onChange={(e) => { const val = Math.max(0, Math.min(100, Number(e.target.value))); handleChangePaymentTerms('downPaymentPercent', val); setPaymentTemplate('custom'); }}/><FormHelperText>{formatCurrency(bidForm.totalAmount * bidForm.paymentTerms.downPaymentPercent / 100)}</FormHelperText></Grid><Grid item xs={12}><Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}><Typography variant="subtitle2">Installments</Typography><Button size="small" startIcon={<AddIcon />} onClick={handleAddInstallment}>Add</Button></Box>{bidForm.paymentTerms.installments.map((installment) => (<Box key={installment.id} sx={{ p: 2, mb: 1, border: `1px solid ${alpha(theme.palette.divider, 0.2)}`, borderRadius: 1, position: 'relative' }}><IconButton size="small" sx={{ position: 'absolute', top: 4, right: 4 }} onClick={() => handleRemoveInstallment(installment.id)}><DeleteIcon fontSize="small"/></IconButton><Grid container spacing={2}><Grid item xs={12} sm={6}><TextField fullWidth required label="Name" value={installment.name} onChange={(e) => handleChangeInstallment(installment.id, 'name', e.target.value)}/></Grid><Grid item xs={12} sm={6}><TextField fullWidth required label="Percent (%)" type="number" value={installment.percent} onChange={(e) => { const val = Math.max(0, Number(e.target.value)); handleChangeInstallment(installment.id, 'percent', val); setPaymentTemplate('custom'); }} helperText={`${formatCurrency(bidForm.totalAmount * installment.percent / 100)}`}/></Grid><Grid item xs={12} sm={6}><FormControl fullWidth><InputLabel>Phase</InputLabel><Select value={installment.phaseId || ''} label="Phase" onChange={(e) => { const pId = e.target.value; const pName = phases.find(p => p.id === pId)?.name || ''; handleChangeInstallment(installment.id, 'phaseId', pId); handleChangeInstallment(installment.id, 'phaseName', pName); }}>{phases.map((p) => (<MenuItem key={p.id} value={p.id}>{p.name}</MenuItem>))}</Select></FormControl></Grid><Grid item xs={12}><TextField fullWidth label="Milestone Description" value={installment.milestoneDescription} onChange={(e) => handleChangeInstallment(installment.id, 'milestoneDescription', e.target.value)}/></Grid></Grid></Box>))}{bidForm.paymentTerms.downPaymentPercent + bidForm.paymentTerms.installments.reduce((s, i) => s + i.percent, 0) !== 100 && (<Alert severity="warning" sx={{ mt: 1 }}>Percentages must total 100%</Alert>)}</Grid></Grid></Grid>
-             <Grid item xs={12}><TextField fullWidth multiline rows={3} label="Notes / Exclusions" value={bidForm.notes} onChange={(e) => handleChangeBidForm('notes', e.target.value)}/></Grid>
-          </Grid>
-        </DialogContent>
-        <DialogActions sx={{ p: 2, justifyContent: 'space-between' }}>
-          <Button onClick={handleCloseBidForm}>Cancel</Button>
-          <Button variant="contained" onClick={handleSubmitBid} disabled={ isSaving || !bidForm.title || !bidForm.subcontractorName || !bidForm.phaseId || (bidForm.paymentTerms.downPaymentPercent + bidForm.paymentTerms.installments.reduce((s, i) => s + i.percent, 0)) !== 100 }> {isSaving ? <CircularProgress size={24}/> : (editingBidId ? 'Update Bid' : 'Submit Bid')} </Button>
-        </DialogActions>
-      </Dialog>
-
-      <Dialog open={showQuickAddSubcontractor} onClose={() => setShowQuickAddSubcontractor(false)} maxWidth="xs" fullWidth>
-        <DialogTitle>Add New Subcontractor</DialogTitle>
-        <DialogContent>
-          <Grid container spacing={2} sx={{ mt: 0.5 }}>
-              <Grid item xs={12}><TextField fullWidth required label="Name" value={newSubcontractor.name} onChange={(e) => setNewSubcontractor(prev => ({ ...prev, name: e.target.value }))} /></Grid>
-              <Grid item xs={12}><FormControl fullWidth><InputLabel>Specialty</InputLabel><Select value={newSubcontractor.specialty} label="Specialty" onChange={(e) => setNewSubcontractor(prev => ({ ...prev, specialty: e.target.value }))}>{CONSTRUCTION_SPECIALTIES.map((s) => (<MenuItem key={s} value={s}>{s}</MenuItem>))}</Select></FormControl></Grid>
-              <Grid item xs={12}><TextField fullWidth label="Phone" value={newSubcontractor.contact.phone} onChange={(e) => setNewSubcontractor(prev => ({ ...prev, contact: { ...prev.contact, phone: e.target.value } }))} /></Grid>
-              <Grid item xs={12}><TextField fullWidth label="Email" type="email" value={newSubcontractor.contact.email} onChange={(e) => setNewSubcontractor(prev => ({ ...prev, contact: { ...prev.contact, email: e.target.value } }))} /></Grid>
-          </Grid>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setShowQuickAddSubcontractor(false)}>Cancel</Button>
-          <Button variant="contained" onClick={handleQuickAddSubcontractor} disabled={!newSubcontractor.name || isSaving}> {isSaving ? <CircularProgress size={24}/> : 'Add'} </Button>
-        </DialogActions>
-      </Dialog>
     </>
   );
 };
