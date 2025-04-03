@@ -203,44 +203,97 @@ const ReusableBidForm: React.FC<ReusableBidFormProps> = ({
   const [paymentTemplate, setPaymentTemplate] = useState('standard');
   const [tagInput, setTagInput] = useState('');
 
+  // Log initial mounting for debugging
+  console.log('ReusableBidForm mounted/updated with props:', {
+    initialBidData: initialBidData ? { ...initialBidData } : null,
+    editingBidId,
+    isDialog,
+    open,
+  });
+
   // Track initialization to prevent infinite loops
   const initialized = React.useRef(false);
 
-  // Effect to update form data when initialBidData or editingBidId changes
+  // At the beginning of the component, after hooks
   useEffect(() => {
-    // Skip if no initialBidData
-    if (!initialBidData) return;
+    console.log("ReusableBidForm MOUNT - initialBidData:", initialBidData);
+    console.log("ReusableBidForm MOUNT - editingBidId:", editingBidId);
+    console.log("ReusableBidForm MOUNT - initialized ref:", initialized.current);
+  }, []);
+
+  // At the beginning of the component add a check
+  useEffect(() => {
+    // Print a debug warning if editingBidId is present but initialBidData is null
+    if (editingBidId && !initialBidData) {
+      console.warn("ReusableBidForm WARNING: editingBidId is present but initialBidData is null", {
+        editingBidId,
+        initialBidData
+      });
+    }
+  }, [editingBidId, initialBidData]);
+
+  // Update the existing useEffect
+  useEffect(() => {
+    console.log("ReusableBidForm initialBidData change - initialBidData:", initialBidData);
+    console.log("ReusableBidForm initialBidData change - editingBidId:", editingBidId);
+    console.log("ReusableBidForm initialBidData change - initialized ref:", initialized.current);
     
-    // If editing mode changes, or form hasn't been initialized yet, update the form
-    if (!initialized.current || (editingBidId !== null && editingBidId !== undefined)) {
-      console.log('Initializing bid form with data:', initialBidData, 'editingBidId:', editingBidId);
+    // Skip if no initialBidData
+    if (!initialBidData) {
+      console.log("ReusableBidForm - No initialBidData, skipping form initialization");
+      return;
+    }
+
+    // Safe access to nested properties with optional chaining
+    const installments = initialBidData.paymentTerms?.installments || [];
+    console.log("ReusableBidForm - Installments from initialBidData:", installments);
+    
+    // Only update form if editingBidId exists or we haven't initialized
+    if (editingBidId || !initialized.current) {
+      console.log("ReusableBidForm - Updating form with initialBidData");
       
-      // Create a copy of initialBidData with defaults for any missing fields
       const updatedFormData = {
         ...defaultBidForm,
         ...initialBidData,
-        // Ensure these nested objects are properly set
+        // Ensure nested objects are properly initialized
         paymentTerms: {
           ...defaultBidForm.paymentTerms,
           ...(initialBidData.paymentTerms || {}),
+          // Ensure installments array is properly initialized
+          installments: Array.isArray(initialBidData.paymentTerms?.installments) 
+            ? [...(initialBidData.paymentTerms?.installments || [])]
+            : [...defaultBidForm.paymentTerms.installments]
         },
         // Ensure arrays are properly initialized
-        tags: initialBidData.tags || defaultBidForm.tags,
-        attachments: initialBidData.attachments || defaultBidForm.attachments
+        tags: Array.isArray(initialBidData.tags) ? [...initialBidData.tags] : [],
+        attachments: Array.isArray(initialBidData.attachments) ? [...initialBidData.attachments] : []
       };
       
-      console.log('Setting bid form to:', updatedFormData);
       setBidForm(updatedFormData);
+      console.log("ReusableBidForm - Form updated with data:", updatedFormData);
       initialized.current = true;
     }
   }, [initialBidData, editingBidId]);
 
   // Form change handlers
   const handleChangeBidForm = (field: string, value: any) => {
-    setBidForm(prev => ({
-      ...prev,
-      [field]: value
-    }));
+    console.log(`ReusableBidForm - Changing field "${field}" to:`, value);
+    console.log(`ReusableBidForm - Current form state:`, bidForm);
+    
+    // Ensure we're not accidentally preventing updates
+    if (typeof value === 'undefined') {
+      console.warn(`ReusableBidForm - Attempt to set "${field}" to undefined, using null instead`);
+      value = null;
+    }
+    
+    setBidForm(prev => {
+      const newState = {
+        ...prev,
+        [field]: value
+      };
+      console.log(`ReusableBidForm - New form state after updating ${field}:`, newState);
+      return newState;
+    });
   };
 
   const handleChangePaymentTerms = (field: string, value: any) => {
@@ -369,7 +422,61 @@ const ReusableBidForm: React.FC<ReusableBidFormProps> = ({
 
   // Submit handler
   const handleSubmit = async () => {
-    await onSubmit(bidForm);
+    console.log('Submitting bid form data:', JSON.stringify(bidForm, null, 2));
+    
+    // Validate form data
+    if (!bidForm.title) {
+      console.warn('Bid title is required');
+      // You could add more validation handling here
+    }
+    
+    if (!bidForm.subcontractorName) {
+      console.warn('Subcontractor name is required');
+      // You could add more validation handling here
+    }
+    
+    // Ensure payment terms percentages add up to 100%
+    const totalPercent = bidForm.paymentTerms.downPaymentPercent +
+      bidForm.paymentTerms.installments.reduce((sum, item) => sum + item.percent, 0);
+      
+    if (Math.abs(totalPercent - 100) > 0.1) {
+      console.warn(`Payment terms percentages don't add up to 100%: ${totalPercent}%`);
+      // You could add more validation handling here
+    }
+    
+    // Ensure all installments have valid data
+    let installmentsValid = true;
+    bidForm.paymentTerms.installments.forEach((item, index) => {
+      if (!item.name) {
+        console.warn(`Installment ${index + 1} is missing a name`);
+        installmentsValid = false;
+      }
+      if (item.percent <= 0) {
+        console.warn(`Installment ${index + 1} has an invalid percentage: ${item.percent}`);
+        installmentsValid = false;
+      }
+    });
+    
+    // Create a clean copy of the form data
+    const cleanFormData = {
+      ...bidForm,
+      totalAmount: Number(bidForm.totalAmount) || 0,
+      timeline: Number(bidForm.timeline) || 30,
+      paymentTerms: {
+        ...bidForm.paymentTerms,
+        downPaymentPercent: Number(bidForm.paymentTerms.downPaymentPercent) || 0,
+        installments: bidForm.paymentTerms.installments.map(item => ({
+          ...item,
+          percent: Number(item.percent) || 0
+        }))
+      }
+    };
+    
+    try {
+      await onSubmit(cleanFormData);
+    } catch (error) {
+      console.error('Error submitting bid form:', error);
+    }
   };
 
   const formContent = (

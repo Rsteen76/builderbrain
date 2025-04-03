@@ -55,6 +55,15 @@ const BidFormDialog: React.FC<BidFormDialogProps> = ({
   isSaving,
   onAddSubcontractor,
 }) => {
+  // Log props for debugging
+  console.log('BidFormDialog props:', { 
+    open, 
+    initialBidData, 
+    editingBidId, 
+    phasesCount: phases.length, 
+    subcontractorsCount: subcontractors.length 
+  });
+  
   return (
     <ReusableBidForm
       open={open}

@@ -1846,13 +1846,14 @@ const ProjectDetailPage: React.FC = () => {
     const bidToEdit = bids.find(b => b.id === bidId);
     
     if (bidToEdit) {
-      console.log('Editing bid:', bidToEdit);
+      console.log('Editing bid:', JSON.stringify(bidToEdit, null, 2));
       
       // Store the ID of the bid being edited
       setEditingBidId(bidId);
       
       // Get the payment schedule from the bid, if any
       const paymentSchedule = bidToEdit.paymentSchedule || [];
+      console.log('Original payment schedule:', JSON.stringify(paymentSchedule, null, 2));
       
       // Calculate down payment and installments from payment schedule
       let downPaymentPercent = 20; // Default
@@ -1879,6 +1880,24 @@ const ProjectDetailPage: React.FC = () => {
         }
       }
       
+      // Ensure submission deadline is properly converted
+      let submissionDeadline: Date | undefined = undefined;
+      if (bidToEdit.submissionDeadline) {
+        try {
+          submissionDeadline = bidToEdit.submissionDeadline instanceof Date 
+            ? bidToEdit.submissionDeadline 
+            : new Date(bidToEdit.submissionDeadline);
+            
+          // Check if the date is valid
+          if (isNaN(submissionDeadline.getTime())) {
+            submissionDeadline = undefined;
+          }
+        } catch (error) {
+          console.error('Error converting submission deadline:', error);
+          submissionDeadline = undefined;
+        }
+      }
+      
       // Create the form data to edit
       const formData = {
         title: bidToEdit.title || '',
@@ -1889,7 +1908,7 @@ const ProjectDetailPage: React.FC = () => {
         phaseName: bidToEdit.phaseName || (phases.length > 0 ? phases[0].name : ''),
         scope: bidToEdit.scope || '',
         timeline: bidToEdit.timeline || 30,
-        submissionDeadline: bidToEdit.submissionDeadline || undefined,
+        submissionDeadline: submissionDeadline,
         paymentTerms: {
           downPaymentPercent: downPaymentPercent,
           installments: installments
@@ -1903,19 +1922,20 @@ const ProjectDetailPage: React.FC = () => {
                 ? bidToEdit.status 
                 : 'submitted',
         attachments: Array.isArray(bidToEdit.attachments) 
-                    ? bidToEdit.attachments.map(att => typeof att === 'string' ? att : (att && typeof att === 'object' && 'url' in att ? att.url : ''))
-                    : [],
-        tags: bidToEdit.tags || []
+                     ? bidToEdit.attachments.map(att => typeof att === 'string' ? att : (att && typeof att === 'object' && 'url' in att ? att.url : ''))
+                     : [],
+        tags: Array.isArray(bidToEdit.tags) ? [...bidToEdit.tags] : []
       };
       
       // Update the form state
-      console.log('Setting bid form with data:', formData);
+      console.log('Setting bid form with data:', JSON.stringify(formData, null, 2));
       setBidForm(formData);
       
       // Open the form modal
       setBidFormOpen(true);
     } else {
       console.error(`Bid with ID ${bidId} not found`);
+      showNotification(`Bid with ID ${bidId} not found`, 'error');
     }
   };
   

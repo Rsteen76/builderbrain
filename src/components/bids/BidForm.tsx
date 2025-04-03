@@ -7,6 +7,11 @@ import {
   Button,
   CircularProgress,
   Alert,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  TextField,
 } from '@mui/material';
 import { ArrowBack as ArrowBackIcon } from '@mui/icons-material';
 import { v4 as uuidv4 } from 'uuid';
@@ -14,8 +19,9 @@ import { useAuth } from '../../contexts/AuthContext';
 import { BidService } from '../../services/bid';
 import { ProjectService } from '../../services/project';
 import { SubcontractorService } from '../../services/subcontractor';
-import { Bid, Project, Subcontractor } from '../../types';
+import { Bid, Project, Subcontractor, BidPaymentStage } from '../../types';
 import ReusableBidForm from './ReusableBidForm';
+import { toast } from 'react-hot-toast';
 
 const BidForm: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -28,9 +34,18 @@ const BidForm: React.FC = () => {
   const [success, setSuccess] = useState<string | null>(null);
   const [projects, setProjects] = useState<Project[]>([]);
   const [subcontractors, setSubcontractors] = useState<Subcontractor[]>([]);
+  const [bidData, setBidData] = useState<Partial<Bid> | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+  const [initialBidData, setInitialBidData] = useState<any>(null);
+  const [showAddSubcontractor, setShowAddSubcontractor] = useState(false);
+  const [bidId, setBidId] = useState<string | null>(id || null);
   
   // Fetch data
+  useEffect(() => {
+    console.log("BidForm initialization - id:", id);
+    console.log("Current initialBidData:", initialBidData);
+  }, []);
+
   useEffect(() => {
     const fetchData = async () => {
       if (!user?.uid) return;
@@ -44,22 +59,111 @@ const BidForm: React.FC = () => {
         // Fetch subcontractors
         const subcontractorsList = await SubcontractorService.getSubcontractors(user.uid);
         setSubcontractors(subcontractorsList);
+        
+        // If editing, fetch the bid data
+        if (id) {
+          console.log('Fetching bid data for editing, ID:', id);
+          const bidToEdit = await BidService.getBid(user.uid, id);
+          
+          if (!bidToEdit) {
+            setError(`Bid with ID ${id} not found`);
+            return;
+          }
+          
+          console.log('Retrieved bid data from server:', JSON.stringify(bidToEdit, null, 2));
+          setBidData(bidToEdit);
+          
+          // Process payment schedule into form format
+          const paymentSchedule = bidToEdit.paymentSchedule || [];
+          
+          let downPaymentPercent = 20; // Default
+          let installments = [{id: uuidv4(), name: 'Final Payment', percent: 80, milestoneDescription: 'Upon completion'}];
+          
+          if (paymentSchedule.length > 0) {
+            // Find down payment
+            const downPayment = paymentSchedule.find(p => p.name === 'Down Payment');
+            if (downPayment) {
+              downPaymentPercent = downPayment.percentage || 20;
+            }
+            
+            // Extract installments (all except down payment)
+            const installmentPayments = paymentSchedule.filter(p => p.name !== 'Down Payment');
+            if (installmentPayments.length > 0) {
+              installments = installmentPayments.map(p => ({
+                id: p.id || uuidv4(),
+                name: p.name || 'Installment',
+                percent: p.percentage || 0,
+                milestoneDescription: p.description || '',
+                phaseId: p.phaseId || bidToEdit.phaseId,
+                phaseName: p.phaseName || bidToEdit.phaseName
+              }));
+            }
+          }
+          
+          // Ensure submission deadline is properly converted
+          let submissionDeadline: Date | undefined = undefined;
+          if (bidToEdit.submissionDeadline) {
+            try {
+              submissionDeadline = bidToEdit.submissionDeadline instanceof Date 
+                ? bidToEdit.submissionDeadline 
+                : new Date(bidToEdit.submissionDeadline);
+                
+              // Check if the date is valid
+              if (isNaN(submissionDeadline.getTime())) {
+                submissionDeadline = undefined;
+              }
+            } catch (error) {
+              console.error('Error converting submission deadline:', error);
+              submissionDeadline = undefined;
+            }
+          }
+          
+          // Format bid data for the form
+          const formattedBidData = {
+            title: bidToEdit.title || '',
+            subcontractorName: bidToEdit.subcontractorName || '',
+            subcontractorId: bidToEdit.subcontractorId || '',
+            totalAmount: bidToEdit.totalAmount || 0,
+            phaseId: bidToEdit.phaseId || '',
+            phaseName: bidToEdit.phaseName || '',
+            scope: bidToEdit.scope || '',
+            timeline: bidToEdit.timeline || 30,
+            submissionDeadline: submissionDeadline,
+            paymentTerms: {
+              downPaymentPercent: downPaymentPercent,
+              installments: installments
+            },
+            notes: bidToEdit.notes || '',
+            status: bidToEdit.status || 'draft',
+            attachments: Array.isArray(bidToEdit.attachments) 
+                         ? bidToEdit.attachments.map(att => typeof att === 'string' ? att : (att && typeof att === 'object' && 'url' in att ? att.url : ''))
+                         : [],
+            tags: Array.isArray(bidToEdit.tags) ? [...bidToEdit.tags] : []
+          };
+          
+          console.log('Setting initial bid data for form:', JSON.stringify(formattedBidData, null, 2));
+          setInitialBidData(formattedBidData);
+          setBidId(id);
+        }
       } catch (err) {
-        setError('Error loading data. Please try again.');
         console.error('Error fetching data:', err);
+        setError('Error loading data. Please try again.');
       } finally {
         setLoading(false);
       }
     };
 
     fetchData();
-  }, [user?.uid]);
+  }, [user?.uid, id]);
 
   // Handle form submission
   const handleSubmit = async (bidFormData: any) => {
+    console.log("BidForm - handleSubmit called with data:", bidFormData);
     if (!user?.uid) return;
     
+    console.log('Submitting bid form data:', JSON.stringify(bidFormData, null, 2));
     setIsSaving(true);
+    
     try {
       const now = new Date();
       
@@ -87,7 +191,7 @@ const BidForm: React.FC = () => {
           updatedAt: now
         },
         ...bidFormData.paymentTerms.installments.map((installment: any) => ({
-          id: uuidv4(),
+          id: installment.id || uuidv4(),
           name: installment.name,
           percentage: installment.percent,
           amount: (bidFormData.totalAmount * installment.percent) / 100,
@@ -136,6 +240,9 @@ const BidForm: React.FC = () => {
       };
       
       if (id) {
+        console.log('Updating existing bid:', id);
+        console.log('Update data:', JSON.stringify(bidData, null, 2));
+        
         // Update existing bid
         await BidService.updateBid(id, bidData);
         setSuccess('Bid updated successfully');
@@ -155,11 +262,16 @@ const BidForm: React.FC = () => {
         navigate(-1);
       }, 1500);
     } catch (err) {
-      setError('Error saving bid. Please try again.');
       console.error('Error saving bid:', err);
+      setError('Error saving bid. Please try again.');
     } finally {
       setIsSaving(false);
     }
+  };
+
+  const handleAddSubcontractor = () => {
+    // Toggle the state to show/hide the QuickAddSubcontractor dialog
+    setShowAddSubcontractor(true);
   };
 
   if (loading) {
@@ -204,8 +316,39 @@ const BidForm: React.FC = () => {
           subcontractors={subcontractors}
           isDialog={false}
           isSaving={isSaving}
+          initialBidData={initialBidData}
+          editingBidId={bidId}
+          onAddSubcontractor={handleAddSubcontractor}
         />
       </Paper>
+
+      {showAddSubcontractor && (
+        <Dialog
+          open={showAddSubcontractor}
+          onClose={() => setShowAddSubcontractor(false)}
+          aria-labelledby="quick-add-subcontractor-dialog"
+        >
+          <DialogTitle id="quick-add-subcontractor-dialog">Add New Subcontractor</DialogTitle>
+          <DialogContent>
+            <TextField
+              autoFocus
+              margin="dense"
+              label="Subcontractor Name"
+              fullWidth
+              variant="outlined"
+              // Add your state and onChange handling here
+            />
+            {/* Add more fields as needed */}
+          </DialogContent>
+          <DialogActions>
+            <Button onClick={() => setShowAddSubcontractor(false)}>Cancel</Button>
+            <Button onClick={() => {
+              // Handle saving the new subcontractor
+              setShowAddSubcontractor(false);
+            }}>Add</Button>
+          </DialogActions>
+        </Dialog>
+      )}
     </Box>
   );
 };
