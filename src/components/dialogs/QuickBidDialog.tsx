@@ -16,6 +16,9 @@ import ReusableBidForm from '../bids/ReusableBidForm';
 import QuickAddSubcontractorDialog from './QuickAddSubcontractorDialog';
 import { SubcontractorService } from '../../services/subcontractor';
 import { useAuth } from '../../contexts/AuthContext';
+import { BidService } from '../../services/bid';
+import { ProjectService } from '../../services/project';
+import { toast } from 'react-hot-toast';
 
 interface QuickBidData {
   phaseId: string;
@@ -32,6 +35,8 @@ interface QuickBidDialogProps {
   isSaving: boolean;
   phases: Phase[];
   subcontractors: Subcontractor[];
+  projectId?: string;
+  projectName?: string;
 }
 
 const QuickBidDialog: React.FC<QuickBidDialogProps> = ({
@@ -42,6 +47,8 @@ const QuickBidDialog: React.FC<QuickBidDialogProps> = ({
   isSaving,
   phases,
   subcontractors,
+  projectId,
+  projectName,
 }) => {
   const { user } = useAuth();
   const [showAddSubcontractor, setShowAddSubcontractor] = useState(false);
@@ -63,12 +70,37 @@ const QuickBidDialog: React.FC<QuickBidDialogProps> = ({
   }, [open, phaseId, subcontractors]);
 
   const handleSubmit = async (bidForm: any) => {
-    onSubmit({
-      phaseId: bidForm.phaseId || phaseId || '',
-      contractorName: bidForm.subcontractorName,
-      amount: bidForm.totalAmount,
-      description: bidForm.scope,
-    });
+    try {
+      // Add phase information to the bid
+      const bidWithPhase = {
+        ...bidForm,
+        phaseId: phaseId,
+        phaseName: phases.find(p => p.id === phaseId)?.name || '',
+        projectId: projectId,
+        projectName: projectName,
+        status: 'submitted'
+      };
+
+      // Create the bid - need to pass userId as first parameter
+      const newBid = await BidService.createBid(user?.uid || '', bidWithPhase);
+      
+      // Add the new bid to the project's bids
+      if (projectId) {
+        // Update the project to include the new bid
+        await ProjectService.updateProject(projectId, {
+          bids: [newBid]
+        });
+      }
+      
+      // Close the dialog after successful submission
+      onClose();
+      
+      // Show success message
+      toast.success('Bid created successfully');
+    } catch (error) {
+      console.error('Error creating bid:', error);
+      toast.error('Failed to create bid');
+    }
   };
 
   const handleAddSubcontractor = async (subcontractorData: {

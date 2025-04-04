@@ -616,9 +616,13 @@ const ProjectDetailPage: React.FC = () => {
 
   // Add this function to handle opening the bid dialog for a specific phase
   const handleOpenQuickBidDialog = (phaseId: string) => {
+    console.log('Opening quick bid dialog for phase:', phaseId);
     setCurrentPhaseForBid(phaseId);
     setNewBidDialogOpen(true);
-    console.log('QuickBidDialog opened with phaseId:', phaseId);
+    // Set the active tab to 'phases' when opening the quick bid dialog
+    // Find the index of the 'phases' tab
+    const phasesTabIndex = 1; // Assuming 'phases' is the second tab (index 1)
+    setTabValue(phasesTabIndex);
   };
 
   // Replace handleAddQuickBid with a version that uses the shared utility
