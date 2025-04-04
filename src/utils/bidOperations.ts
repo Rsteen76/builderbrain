@@ -247,17 +247,24 @@ export const submitBid = async (
 /**
  * Delete a bid and return whether the operation was successful
  */
-export const deleteBid = async (bidId: string): Promise<boolean> => {
+export const deleteBid = async (bidId: string, selectedExpenseIds?: string[]): Promise<boolean> => {
   try {
-    // First, delete any associated expenses
-    const expenses = await findExpensesForBid(bidId);
-    for (const expense of expenses) {
-      if (expense.id) {
-        await ExpenseService.deleteExpense(expense.id);
+    // If specific expense IDs are provided, only delete those expenses
+    if (selectedExpenseIds && selectedExpenseIds.length > 0) {
+      for (const expenseId of selectedExpenseIds) {
+        await ExpenseService.deleteExpense(expenseId);
+      }
+    } else {
+      // If no specific expenses are selected, delete all expenses associated with the bid
+      const expenses = await findExpensesForBid(bidId);
+      for (const expense of expenses) {
+        if (expense.id) {
+          await ExpenseService.deleteExpense(expense.id);
+        }
       }
     }
 
-    // Then delete the bid
+    // Delete the bid
     await BidService.deleteBid(bidId);
     return true;
   } catch (error) {

@@ -108,7 +108,7 @@ import TemplateAdjuster from '../components/projects/TemplateAdjuster';
 import { Project, Task, Phase, Bid, Subcontractor, BidPaymentStage, ProjectPhase } from '../types';
 import { Expense, ExpenseCategory, ExpenseStatus } from '../types/expense.types';
 import { v4 as uuidv4 } from 'uuid';
-import BidDeletionDialog from '../components/dialogs/BidDeletionDialog';
+import BidDeletionWrapper from '../components/bids/BidDeletionWrapper';
 
 // Import extracted tab components
 import ProjectOverviewTab from '../components/projects/detailTabs/ProjectOverviewTab';
@@ -154,7 +154,7 @@ import Autocomplete from '@mui/material/Autocomplete';
 import toast from 'react-hot-toast'; // Add toast import
 
 // Import bid operations
-import { submitBid, deleteBid as deleteBidOp, findExistingExpenseForPaymentStage as findExpense } from '../utils/bidOperations';
+import { submitBid, findExistingExpenseForPaymentStage as findExpense } from '../utils/bidOperations';
 
 // Enhanced status indicators
 const getStatusColor = (status: string): string => {
@@ -256,7 +256,7 @@ const ProjectDetailPage: React.FC = () => {
   const [tabValue, setTabValue] = useState(0);
   const [menuAnchorEl, setMenuAnchorEl] = useState<null | HTMLElement>(null);
   const [isSaving, setIsSaving] = useState(false);
-  const [bidToDelete, setBidToDelete] = useState<{id: string, title: string} | null>(null);
+  const [bidToDelete, setBidToDelete] = useState<Bid | null>(null);
   const [phasesBeingUpdated, setPhasesBeingUpdated] = useState<{ [id: string]: ProjectPhase }>({});
   const [expensesData, setExpensesData] = useState<{ name: string; value: number; color: string }[]>([]);
   const [quickUpdateMode, setQuickUpdateMode] = useState(false);
@@ -1473,52 +1473,6 @@ const ProjectDetailPage: React.FC = () => {
     }
   };
 
-  // Replace handleDeleteBid with a version that uses the BidDeletionDialog
-  const handleDeleteBid = (bidId: string) => {
-    // Find the bid to get its title
-    const bid = bids.find(b => b.id === bidId);
-    if (bid) {
-      setBidToDelete({
-        id: bidId,
-        title: bid.title || bid.scope || 'Unnamed Bid'
-      });
-    }
-  };
-
-  // Add a function to handle the actual deletion after confirmation
-  const handleConfirmBidDeletion = () => {
-    if (!bidToDelete) return;
-    
-    // Delete from database using the shared utility
-    deleteBidOp(bidToDelete.id)
-      .then((success) => {
-        if (success) {
-          // If successful, update local state
-          setBids(prevBids => prevBids.filter(b => b.id !== bidToDelete.id));
-          showNotification('Bid deleted successfully', 'success');
-        } else {
-          throw new Error('Operation failed');
-        }
-      })
-      .catch(error => {
-        console.error('Error deleting bid:', error);
-        showNotification('Failed to delete bid: ' + (error instanceof Error ? error.message : 'Unknown error'), 'error');
-      })
-      .finally(() => {
-        // Close the dialog
-        setBidToDelete(null);
-      });
-  };
-
-  // Replace the findExistingExpenseForPaymentStage function implementation
-  // Cast the result to the locally defined EnhancedExpense type
-  const findExistingExpenseForPaymentStage = async (bidId: string, paymentStageId: string): Promise<EnhancedExpense | null> => {
-    if (!user?.uid) return null;
-    // Cast the return type of the imported function
-    const result = await findExpense(user.uid, bidId, paymentStageId);
-    return result as EnhancedExpense | null; 
-  };
-
   // Cancel quick updates
   const handleCancelQuickUpdates = () => {
     setQuickUpdateMode(false);
@@ -1806,6 +1760,17 @@ const ProjectDetailPage: React.FC = () => {
     );
   }
 
+  // Add function to handle bid deletion
+  const handleBidDeleted = () => {
+    if (bidToDelete) {
+      // Update local state to remove the bid
+      setBids(prevBids => prevBids.filter(b => b.id !== bidToDelete.id));
+      setRecentBids(prevBids => prevBids.filter(b => b.id !== bidToDelete.id));
+      setBidToDelete(null);
+      showNotification('Bid deleted successfully', 'success');
+    }
+  };
+
   // Main component return statement (Corrected Structure)
   return (
     <>
@@ -1892,7 +1857,7 @@ const ProjectDetailPage: React.FC = () => {
               bids={bids}
               expenses={expenses}
               phaseProposedCosts={phaseProposedCosts}
-              phaseActualCosts={phaseActualCosts} // Pass the calculated actual costs
+              phaseActualCosts={phaseActualCosts}
               theme={theme}
               handleAddPhase={handleAddPhase}
               handleUpdatePhase={handleUpdatePhase}
@@ -1912,9 +1877,8 @@ const ProjectDetailPage: React.FC = () => {
               theme={theme}
               handleAddBid={handleAddBid}
               handleEditBid={handleEditBid}
-              handleDeleteBid={handleDeleteBid}
               formatCurrency={formatCurrency}
-              formatDate={formatDate} 
+              formatDate={formatDate}
             />
           )}
           {tabValue === 3 && (
@@ -2239,13 +2203,11 @@ const ProjectDetailPage: React.FC = () => {
       
       {/* Add the BidDeletionDialog */}
       {bidToDelete && user && (
-        <BidDeletionDialog
-          open={!!bidToDelete}
-          onClose={() => setBidToDelete(null)}
-          onConfirm={handleConfirmBidDeletion}
-          bidId={bidToDelete.id}
-          bidTitle={bidToDelete.title}
+        <BidDeletionWrapper
+          bid={bidToDelete}
           userId={user.uid}
+          onBidDeleted={handleBidDeleted}
+          variant="icon"
         />
       )}
     </>

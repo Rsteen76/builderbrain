@@ -26,6 +26,7 @@ interface BidDeletionDialogProps {
   bidId: string;
   bidTitle: string;
   userId: string;
+  onExpensesSelected?: (expenseIds: string[]) => void;
 }
 
 const BidDeletionDialog: React.FC<BidDeletionDialogProps> = ({
@@ -35,6 +36,7 @@ const BidDeletionDialog: React.FC<BidDeletionDialogProps> = ({
   bidId,
   bidTitle,
   userId,
+  onExpensesSelected
 }) => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -44,45 +46,48 @@ const BidDeletionDialog: React.FC<BidDeletionDialogProps> = ({
 
   useEffect(() => {
     if (open) {
+      setLoading(true);
+      setError(null);
+      setSelectedExpenses([]);
+      setSelectAll(false);
       loadExpenses();
     }
   }, [open, bidId]);
 
   const loadExpenses = async () => {
-    setLoading(true);
-    setError(null);
-    
     try {
       const associatedExpenses = await findExpensesForBid(bidId);
       setExpenses(associatedExpenses);
       // Pre-select all expenses by default
-      setSelectedExpenses(associatedExpenses.map(expense => expense.id || '').filter(Boolean));
+      const expenseIds = associatedExpenses.map(expense => expense.id || '').filter(Boolean);
+      setSelectedExpenses(expenseIds);
       setSelectAll(true);
-      setLoading(false);
+      onExpensesSelected?.(expenseIds);
     } catch (err) {
       console.error('Error loading expenses:', err);
       setError('Failed to load associated expenses');
+    } finally {
       setLoading(false);
     }
   };
 
   const handleToggleExpense = (expenseId: string) => {
     setSelectedExpenses(prev => {
-      if (prev.includes(expenseId)) {
-        return prev.filter(id => id !== expenseId);
-      } else {
-        return [...prev, expenseId];
-      }
+      const newSelected = prev.includes(expenseId)
+        ? prev.filter(id => id !== expenseId)
+        : [...prev, expenseId];
+      onExpensesSelected?.(newSelected);
+      return newSelected;
     });
   };
 
   const handleSelectAll = () => {
-    if (selectAll) {
-      setSelectedExpenses([]);
-    } else {
-      setSelectedExpenses(expenses.map(exp => exp.id || '').filter(Boolean));
-    }
+    const newSelected = selectAll
+      ? []
+      : expenses.map(exp => exp.id || '').filter(Boolean);
+    setSelectedExpenses(newSelected);
     setSelectAll(!selectAll);
+    onExpensesSelected?.(newSelected);
   };
 
   const handleConfirm = () => {
@@ -90,8 +95,14 @@ const BidDeletionDialog: React.FC<BidDeletionDialogProps> = ({
   };
 
   return (
-    <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
-      <DialogTitle>Delete Bid</DialogTitle>
+    <Dialog 
+      open={open} 
+      onClose={onClose} 
+      maxWidth="sm" 
+      fullWidth
+      aria-labelledby="delete-bid-dialog-title"
+    >
+      <DialogTitle id="delete-bid-dialog-title">Delete Bid</DialogTitle>
       <DialogContent>
         {error && (
           <Alert severity="error" sx={{ mb: 2 }}>

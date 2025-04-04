@@ -1,12 +1,12 @@
 import React, { useState } from 'react';
 import { Button, IconButton, Tooltip } from '@mui/material';
 import { Delete as DeleteIcon } from '@mui/icons-material';
-import { Bid } from '../../types';
+import { Bid, BidSummary } from '../../types';
 import BidDeletionDialog from '../dialogs/BidDeletionDialog';
 import { deleteBid } from '../../utils/bidOperations';
 
 interface BidDeletionWrapperProps {
-  bid: Bid;
+  bid: Bid | BidSummary;
   userId: string;
   onBidDeleted: () => void;
   variant?: 'icon' | 'button';
@@ -20,6 +20,7 @@ const BidDeletionWrapper: React.FC<BidDeletionWrapperProps> = ({
 }) => {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [selectedExpenses, setSelectedExpenses] = useState<string[]>([]);
 
   const handleOpenDialog = () => {
     setDialogOpen(true);
@@ -29,13 +30,19 @@ const BidDeletionWrapper: React.FC<BidDeletionWrapperProps> = ({
     setDialogOpen(false);
   };
 
+  const handleExpensesSelected = (expenseIds: string[]) => {
+    setSelectedExpenses(expenseIds);
+  };
+
   const handleConfirmDeletion = async () => {
     setDeleting(true);
     try {
-      // Delete the bid
-      const success = await deleteBid(bid.id);
+      // Delete the bid and its selected expenses
+      const success = await deleteBid(bid.id, selectedExpenses);
       if (success) {
         onBidDeleted();
+      } else {
+        console.error('Failed to delete bid');
       }
     } catch (error) {
       console.error('Error deleting bid:', error);
@@ -75,8 +82,9 @@ const BidDeletionWrapper: React.FC<BidDeletionWrapperProps> = ({
         onClose={handleCloseDialog}
         onConfirm={handleConfirmDeletion}
         bidId={bid.id}
-        bidTitle={bid.title || bid.scope || 'Unnamed Bid'}
+        bidTitle={bid.title || 'Unnamed Bid'}
         userId={userId}
+        onExpensesSelected={handleExpensesSelected}
       />
     </>
   );

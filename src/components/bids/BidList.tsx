@@ -63,6 +63,7 @@ import {
 import { formatCurrency } from '../../utils/formatters';
 import { Bid } from '../../types';
 import { useAuth } from '../../contexts/AuthContext';
+import BidDeletionWrapper from './BidDeletionWrapper';
 
 // Status colors
 const bidStatusColors: Record<Bid['status'], string> = {
@@ -108,6 +109,7 @@ interface BidRowProps {
   onEdit: (bid: BidSummary) => void;
   onDelete: (bid: BidSummary) => void;
   onDuplicate: (bid: BidSummary) => void;
+  theme: any;
 }
 
 const BidRow: React.FC<BidRowProps> = ({ 
@@ -115,11 +117,11 @@ const BidRow: React.FC<BidRowProps> = ({
   onView, 
   onEdit, 
   onDelete, 
-  onDuplicate 
+  onDuplicate,
+  theme,
 }) => {
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
   const open = Boolean(anchorEl);
-  const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
 
   const handleClick = (event: React.MouseEvent<HTMLButtonElement>) => {
@@ -488,9 +490,9 @@ const BidList: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [filter, setFilter] = useState<BidFilter>({});
   const [sort, setSort] = useState<BidSort>({ field: 'submissionDeadline', direction: 'asc' });
-  const [deleteTarget, setDeleteTarget] = useState<BidSummary | null>(null);
   const [showFilters, setShowFilters] = useState(false);
   const [activeTab, setActiveTab] = useState(0);
+  const theme = useTheme();
 
   const fetchBids = async () => {
     if (!user?.uid) {
@@ -564,23 +566,10 @@ const BidList: React.FC = () => {
   };
 
   const handleDeleteRequest = (bid: BidSummary) => {
-    setDeleteTarget(bid);
-  };
-
-  const handleDeleteConfirm = async () => {
-    if (!deleteTarget) return;
-    try {
-      await BidService.deleteBid(deleteTarget.id);
-      setBids(prevBids => prevBids.filter(b => b.id !== deleteTarget.id));
-      setDeleteTarget(null);
-    } catch (err) {
-      console.error("Error deleting bid:", err);
-      setError('Failed to delete bid. Please try again.');
-    }
-  };
-
-  const handleCloseDeleteDialog = () => {
-    setDeleteTarget(null);
+    // Update the local state to remove the deleted bid
+    setBids(prevBids => prevBids.filter(b => b.id !== bid.id));
+    // Show a notification that the bid was deleted
+    // Note: The actual deletion is handled by BidDeletionWrapper
   };
 
   const handleTabChange = (_: React.SyntheticEvent, newValue: number) => {
@@ -726,26 +715,11 @@ const BidList: React.FC = () => {
               onEdit={handleEdit}
               onDelete={handleDeleteRequest}
               onDuplicate={handleDuplicate}
+              theme={theme}
             />
           ))}
         </Box>
       )}
-
-      <Dialog
-        open={Boolean(deleteTarget)}
-        onClose={handleCloseDeleteDialog}
-      >
-        <DialogTitle>Confirm Deletion</DialogTitle>
-        <DialogContent>
-          <DialogContentText>
-            Are you sure you want to delete the bid "{deleteTarget?.title}"? This action cannot be undone.
-          </DialogContentText>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={handleCloseDeleteDialog}>Cancel</Button>
-          <Button onClick={handleDeleteConfirm} color="error">Delete</Button>
-        </DialogActions>
-      </Dialog>
     </Box>
   );
 };

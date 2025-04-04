@@ -41,6 +41,7 @@ import { BidService } from '../../services/bid';
 import LineItemsTable from './LineItemsTable';
 import { formatCurrency, formatDate } from '../../utils/formatters';
 import { useAuth } from '../../contexts/AuthContext';
+import BidDeletionWrapper from './BidDeletionWrapper';
 
 // Status chip colors (Align with Bid['status'] from types/index.ts)
 const STATUS_COLORS: Record<Bid['status'], string> = {
@@ -240,29 +241,6 @@ const BidDetails: React.FC = () => {
     navigate('/bids/new', { state: { duplicate: bid } });
   };
   
-  const handleDelete = () => {
-    setDeleteDialogOpen(true);
-  };
-  
-  const handleDeleteConfirm = async () => {
-    if (!id) return;
-    
-    try {
-      // Use the added deleteBid method
-      await BidService.deleteBid(id);
-      navigate('/bids');
-    } catch (err) {
-      console.error('Error deleting bid:', err);
-      setError('Failed to delete bid');
-    } finally {
-      setDeleteDialogOpen(false);
-    }
-  };
-  
-  const handleDeleteCancel = () => {
-    setDeleteDialogOpen(false);
-  };
-  
   const handleBack = () => {
     navigate('/bids');
   };
@@ -338,14 +316,12 @@ const BidDetails: React.FC = () => {
           >
             Duplicate
           </Button>
-          <Button 
-            variant="outlined" 
-            color="error" 
-            startIcon={<DeleteIcon />} 
-            onClick={handleDelete}
-          >
-            Delete
-          </Button>
+          <BidDeletionWrapper
+            bid={bid}
+            userId={user?.uid || ''}
+            onBidDeleted={() => navigate('/bids')}
+            variant="button"
+          />
         </Box>
       </Box>
       
@@ -708,23 +684,6 @@ const BidDetails: React.FC = () => {
           </Grid>
         )}
       </Box>
-      
-      {/* Delete confirmation dialog */}
-      <Dialog
-        open={deleteDialogOpen}
-        onClose={handleDeleteCancel}
-      >
-        <DialogTitle>Confirm Delete</DialogTitle>
-        <DialogContent>
-          <DialogContentText>
-            Are you sure you want to delete this bid? This action cannot be undone.
-          </DialogContentText>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={handleDeleteCancel}>Cancel</Button>
-          <Button onClick={handleDeleteConfirm} color="error">Delete</Button>
-        </DialogActions>
-      </Dialog>
     </Box>
   );
 };

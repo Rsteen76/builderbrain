@@ -41,6 +41,7 @@ import {
   CardContent,
   CardActions,
   LinearProgress,
+  CircularProgress,
 } from '@mui/material';
 import {
   Add as AddIcon,
@@ -75,8 +76,14 @@ import {
   Store as StoreIcon,
   School as SchoolIcon,
   Factory as FactoryIcon,
+  Refresh as RefreshIcon,
+  Visibility as VisibilityIcon,
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
+import BidDeletionWrapper from './BidDeletionWrapper';
+import { useAuth } from '../../contexts/AuthContext';
+import { Bid, BidSummary } from '../../types';
+import { BidService } from '../../services/bid';
 
 interface BidItem {
   id: string;
@@ -92,22 +99,6 @@ interface BidItem {
   laborRate: number;
   markup: number;
   isExpanded: boolean;
-}
-
-interface Bid {
-  id: string;
-  title: string;
-  client: string;
-  projectType: string;
-  status: 'draft' | 'sent' | 'accepted' | 'rejected' | 'converted';
-  createdAt: string;
-  updatedAt: string;
-  items: BidItem[];
-  total: number;
-  notes: string;
-  validUntil: string;
-  terms: string;
-  conditions: string;
 }
 
 interface ProjectTemplate {
@@ -214,8 +205,11 @@ const constructionCategories = [
 const BidManager: React.FC = () => {
   const theme = useTheme();
   const navigate = useNavigate();
+  const { user } = useAuth();
   const [activeTab, setActiveTab] = useState(0);
   const [bids, setBids] = useState<Bid[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [selectedBid, setSelectedBid] = useState<Bid | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [showNewBidDialog, setShowNewBidDialog] = useState(false);
@@ -224,44 +218,57 @@ const BidManager: React.FC = () => {
   const [showHistory, setShowHistory] = useState(false);
   const [showUpload, setShowUpload] = useState(false);
 
-  // Sample data - In production, this would come from your backend
-  const sampleBids: Bid[] = [
-    {
-      id: '1',
-      title: 'Single Family Home Renovation',
-      client: 'John Smith',
-      projectType: 'residential',
-      status: 'draft',
-      createdAt: '2024-01-15',
-      updatedAt: '2024-01-15',
-      items: [],
-      total: 0,
-      notes: 'Complete renovation of 2,500 sq ft home',
-      validUntil: '2024-02-15',
-      terms: 'Net 30',
-      conditions: 'Standard construction terms apply',
-    },
-    {
-      id: '2',
-      title: 'Office Building Extension',
-      client: 'TechCorp Inc.',
-      projectType: 'commercial',
-      status: 'sent',
-      createdAt: '2024-01-10',
-      updatedAt: '2024-01-12',
-      items: [],
-      total: 0,
-      notes: '5,000 sq ft office extension',
-      validUntil: '2024-02-10',
-      terms: 'Net 45',
-      conditions: 'Subject to building permit',
-    },
-  ];
+  const fetchBids = async () => {
+    if (!user?.uid) {
+      setError("User not authenticated.");
+      setLoading(false);
+      return;
+    }
+    
+    setLoading(true);
+    setError(null);
+    
+    try {
+      // Get the status filter based on the active tab
+      let statusFilter;
+      switch (activeTab) {
+        case 1: // Drafts
+          statusFilter = 'draft';
+          break;
+        case 2: // Sent
+          statusFilter = 'submitted';
+          break;
+        case 3: // Accepted
+          statusFilter = 'accepted';
+          break;
+        case 4: // Rejected
+          statusFilter = ['rejected', 'expired'];
+          break;
+        case 5: // Converted
+          statusFilter = 'converted';
+          break;
+        default: // All bids
+          statusFilter = undefined;
+      }
+      
+      // Fetch bids from the database
+      const fetchedBids = await BidService.getBids(
+        user.uid,
+        statusFilter ? { status: statusFilter } : undefined
+      );
+      
+      setBids(fetchedBids);
+    } catch (err) {
+      console.error("Error fetching bids:", err);
+      setError('Failed to load bids. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
-    // In production, fetch bids from your backend
-    setBids(sampleBids);
-  }, []);
+    fetchBids();
+  }, [user, activeTab]);
 
   const handleTabChange = (event: React.SyntheticEvent, newValue: number) => {
     setActiveTab(newValue);
@@ -271,28 +278,40 @@ const BidManager: React.FC = () => {
     setShowNewBidDialog(true);
   };
 
+  const handleRefresh = () => {
+    fetchBids();
+  };
+
+  const handleViewBid = (bid: Bid) => {
+    navigate(`/bids/${bid.id}`);
+  };
+
+  const handleEditBid = (bid: Bid) => {
+    navigate(`/bids/${bid.id}/edit`);
+  };
+
   const handleConvertToProject = (bid: Bid) => {
     // Implementation for converting bid to project
     navigate(`/projects/new?fromBid=${bid.id}`);
   };
 
-  const handleSaveBid = (bid: Bid) => {
-    // Implementation for saving bid
+  const handleBidDeleted = (bidId: string) => {
+    console.log(`Bid ${bidId} successfully deleted`);
+    // Remove the bid from the local state
+    setBids(prevBids => prevBids.filter(b => b.id !== bidId));
   };
 
-  const handleDeleteBid = (bid: Bid) => {
-    // Implementation for deleting bid
-  };
-
-  const getStatusColor = (status: Bid['status']) => {
+  const getStatusColor = (status: string) => {
     switch (status) {
       case 'draft':
         return theme.palette.grey[500];
+      case 'submitted':
       case 'sent':
         return theme.palette.info.main;
       case 'accepted':
         return theme.palette.success.main;
       case 'rejected':
+      case 'expired':
         return theme.palette.error.main;
       case 'converted':
         return theme.palette.primary.main;
@@ -300,6 +319,14 @@ const BidManager: React.FC = () => {
         return theme.palette.grey[500];
     }
   };
+
+  const filteredBids = searchQuery.trim() === '' 
+    ? bids 
+    : bids.filter(bid => 
+        bid.title?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        bid.projectName?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        bid.subcontractorName?.toLowerCase().includes(searchQuery.toLowerCase())
+      );
 
   return (
     <Box sx={{ p: 3 }}>
@@ -331,7 +358,7 @@ const BidManager: React.FC = () => {
             <Button
               variant="outlined"
               startIcon={<HistoryIcon />}
-              onClick={() => setShowHistory(true)}
+              onClick={() => setShowTemplateDialog(true)}
             >
               Templates
             </Button>
@@ -349,6 +376,9 @@ const BidManager: React.FC = () => {
             >
               New Bid
             </Button>
+            <IconButton onClick={handleRefresh}>
+              <RefreshIcon />
+            </IconButton>
           </Box>
         </Box>
 
@@ -365,80 +395,119 @@ const BidManager: React.FC = () => {
           <Tab label="Converted" />
         </Tabs>
 
-        <Grid container spacing={3}>
-          {bids.map((bid) => (
-            <Grid item xs={12} md={6} key={bid.id}>
-              <Card>
-                <CardContent>
-                  <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 2 }}>
-                    <Box>
-                      <Typography variant="h6" component="div">
-                        {bid.title}
+        {loading ? (
+          <Box sx={{ display: 'flex', justifyContent: 'center', my: 4 }}>
+            <CircularProgress />
+          </Box>
+        ) : error ? (
+          <Alert severity="error" sx={{ mb: 3 }}>
+            {error}
+          </Alert>
+        ) : filteredBids.length === 0 ? (
+          <Box sx={{ textAlign: 'center', py: 4 }}>
+            <Typography variant="h6" color="text.secondary">
+              No bids found
+            </Typography>
+            <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+              {searchQuery 
+                ? "No bids match your search criteria" 
+                : "Create a new bid to get started"}
+            </Typography>
+            <Button
+              variant="contained"
+              startIcon={<AddIcon />}
+              onClick={handleNewBid}
+              sx={{ mt: 2 }}
+            >
+              Create New Bid
+            </Button>
+          </Box>
+        ) : (
+          <Grid container spacing={3}>
+            {filteredBids.map((bid) => (
+              <Grid item xs={12} md={6} key={bid.id}>
+                <Card>
+                  <CardContent>
+                    <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 2 }}>
+                      <Box>
+                        <Typography variant="h6" component="div">
+                          {bid.title || 'Untitled Bid'}
+                        </Typography>
+                        <Typography variant="body2" color="text.secondary">
+                          {bid.projectName || 'No Project'} • {bid.subcontractorName || 'No Subcontractor'}
+                        </Typography>
+                      </Box>
+                      <Chip
+                        label={bid.status.replace('_', ' ')}
+                        size="small"
+                        sx={{
+                          backgroundColor: alpha(getStatusColor(bid.status), 0.1),
+                          color: getStatusColor(bid.status),
+                          textTransform: 'capitalize'
+                        }}
+                      />
+                    </Box>
+
+                    <Box sx={{ mb: 2 }}>
+                      <Typography variant="body2" color="text.secondary" gutterBottom>
+                        Deadline: {bid.submissionDeadline ? new Date(bid.submissionDeadline).toLocaleDateString() : 'None'}
                       </Typography>
                       <Typography variant="body2" color="text.secondary">
-                        {bid.client}
+                        Created: {new Date(bid.createdAt).toLocaleDateString()}
                       </Typography>
                     </Box>
-                    <Chip
-                      label={bid.status}
-                      size="small"
-                      sx={{
-                        backgroundColor: alpha(getStatusColor(bid.status), 0.1),
-                        color: getStatusColor(bid.status),
-                      }}
-                    />
-                  </Box>
 
-                  <Box sx={{ mb: 2 }}>
-                    <Typography variant="body2" color="text.secondary" gutterBottom>
-                      Project Type: {projectTypes.find(t => t.id === bid.projectType)?.name}
-                    </Typography>
-                    <Typography variant="body2" color="text.secondary">
-                      Valid Until: {bid.validUntil}
-                    </Typography>
-                  </Box>
+                    <Box sx={{ mb: 2 }}>
+                      <Typography variant="h6" component="div">
+                        ${bid.totalAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </Typography>
+                      <Typography variant="body2" color="text.secondary">
+                        Total Bid Amount
+                      </Typography>
+                    </Box>
 
-                  <Box sx={{ mb: 2 }}>
-                    <Typography variant="h6" component="div">
-                      ${bid.total.toFixed(2)}
-                    </Typography>
-                    <Typography variant="body2" color="text.secondary">
-                      Total Bid Amount
-                    </Typography>
-                  </Box>
-
-                  <Typography variant="body2" color="text.secondary">
-                    {bid.notes}
-                  </Typography>
-                </CardContent>
-                <CardActions>
-                  <Button
-                    size="small"
-                    startIcon={<EditIcon />}
-                    onClick={() => setSelectedBid(bid)}
-                  >
-                    Edit
-                  </Button>
-                  <Button
-                    size="small"
-                    startIcon={<PrintIcon />}
-                  >
-                    Print
-                  </Button>
-                  {bid.status === 'accepted' && (
+                    {bid.notes && (
+                      <Typography variant="body2" color="text.secondary">
+                        {bid.notes}
+                      </Typography>
+                    )}
+                  </CardContent>
+                  <CardActions>
                     <Button
                       size="small"
-                      startIcon={<BuildIcon />}
-                      onClick={() => handleConvertToProject(bid)}
+                      startIcon={<EditIcon />}
+                      onClick={() => handleEditBid(bid)}
                     >
-                      Convert to Project
+                      Edit
                     </Button>
-                  )}
-                </CardActions>
-              </Card>
-            </Grid>
-          ))}
-        </Grid>
+                    <Button
+                      size="small"
+                      startIcon={<VisibilityIcon />}
+                      onClick={() => handleViewBid(bid)}
+                    >
+                      View
+                    </Button>
+                    <BidDeletionWrapper
+                      bid={bid}
+                      userId={user?.uid || ''}
+                      onBidDeleted={() => handleBidDeleted(bid.id)}
+                      variant="icon"
+                    />
+                    {bid.status === 'accepted' && (
+                      <Button
+                        size="small"
+                        startIcon={<BuildIcon />}
+                        onClick={() => handleConvertToProject(bid)}
+                      >
+                        Convert
+                      </Button>
+                    )}
+                  </CardActions>
+                </Card>
+              </Grid>
+            ))}
+          </Grid>
+        )}
       </Paper>
 
       {/* New Bid Dialog */}

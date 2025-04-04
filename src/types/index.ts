@@ -340,4 +340,20 @@ export interface FilterOptions {
   [key: string]: any;
 }
 
+export interface BidSummary {
+  id: string;
+  userId: string;
+  projectId: string;
+  projectName?: string;
+  subcontractorId?: string;
+  subcontractorName?: string;
+  title?: string;
+  status: Bid['status'];
+  priority?: Bid['priority'];
+  submissionDeadline?: Date;
+  totalAmount: number;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
 // Add more common types as needed

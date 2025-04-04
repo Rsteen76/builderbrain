@@ -41,7 +41,6 @@ interface ProjectBidsTabProps {
   theme: Theme;
   handleAddBid: () => void;
   handleEditBid: (bidId: string) => void;
-  handleDeleteBid: (bidId: string) => void;
   formatCurrency: (value: number) => string;
   formatDate: (date: Date | string) => string;
 }
@@ -52,7 +51,6 @@ const ProjectBidsTab: React.FC<ProjectBidsTabProps> = ({
   theme,
   handleAddBid,
   handleEditBid,
-  handleDeleteBid,
   formatCurrency,
   formatDate,
 }) => {
@@ -147,7 +145,10 @@ const ProjectBidsTab: React.FC<ProjectBidsTabProps> = ({
                         <BidDeletionWrapper
                           bid={bid}
                           userId={user?.uid || ''}
-                          onBidDeleted={() => handleDeleteBid(bid.id)}
+                          onBidDeleted={() => {
+                            // The parent component will handle the state update
+                            // through its own data fetching mechanism
+                          }}
                           variant="icon"
                         />
                       </TableCell>
@@ -284,11 +285,15 @@ const ProjectBidsTab: React.FC<ProjectBidsTabProps> = ({
                     <EditIcon fontSize="small" />
                   </IconButton>
                 </Tooltip>
-                <Tooltip title="Delete Bid">
-                  <IconButton size="small" onClick={() => handleDeleteBid(bid.id)} sx={{ color: 'error.main' }}>
-                    <DeleteIcon fontSize="small" />
-                  </IconButton>
-                </Tooltip>
+                <BidDeletionWrapper
+                  bid={bid}
+                  userId={user?.uid || ''}
+                  onBidDeleted={() => {
+                    // The parent component will handle the state update
+                    // through its own data fetching mechanism
+                  }}
+                  variant="icon"
+                />
               </Box>
             </Card>
           </Grid>
