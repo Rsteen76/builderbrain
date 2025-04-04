@@ -365,6 +365,15 @@ const ReusableBidForm: React.FC<ReusableBidFormProps> = ({
     
     // Update payment terms based on template
     switch(template) {
+      case 'one-time':
+        setBidForm(prev => ({
+          ...prev,
+          paymentTerms: {
+            downPaymentPercent: 100,
+            installments: []
+          }
+        }));
+        break;
       case 'standard':
         setBidForm(prev => ({
           ...prev,
@@ -741,6 +750,7 @@ const ReusableBidForm: React.FC<ReusableBidFormProps> = ({
                 onChange={handlePaymentTemplateChange}
                 sx={{ borderRadius: 1 }}
               >
+                <MenuItem value="one-time">One-time Payment (100%)</MenuItem>
                 <MenuItem value="standard">Standard (50/50)</MenuItem>
                 <MenuItem value="trades">Trades (30/40/30)</MenuItem>
                 <MenuItem value="custom">Custom</MenuItem>
