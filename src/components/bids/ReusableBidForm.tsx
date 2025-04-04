@@ -209,16 +209,28 @@ const ReusableBidForm: React.FC<ReusableBidFormProps> = ({
     editingBidId,
     isDialog,
     open,
+    subcontractorsCount: subcontractors.length,
+    subcontractors: subcontractors.map(s => ({ id: s.id, name: s.name }))
   });
 
   // Track initialization to prevent infinite loops
   const initialized = React.useRef(false);
+
+  // Add a useEffect to log subcontractors changes
+  useEffect(() => {
+    console.log('ReusableBidForm - subcontractors updated:', 
+      subcontractors.map(s => ({ id: s.id, name: s.name }))
+    );
+  }, [subcontractors]);
 
   // At the beginning of the component, after hooks
   useEffect(() => {
     console.log("ReusableBidForm MOUNT - initialBidData:", initialBidData);
     console.log("ReusableBidForm MOUNT - editingBidId:", editingBidId);
     console.log("ReusableBidForm MOUNT - initialized ref:", initialized.current);
+    console.log("ReusableBidForm MOUNT - subcontractors:", 
+      subcontractors.map(s => ({ id: s.id, name: s.name }))
+    );
   }, []);
 
   // At the beginning of the component add a check
@@ -626,11 +638,12 @@ const ReusableBidForm: React.FC<ReusableBidFormProps> = ({
             <Grid item xs={12} md={6}> 
               <Autocomplete
                 fullWidth
-                options={subcontractors}
-                getOptionLabel={(option) => option.name}
-                isOptionEqualToValue={(option, value) => option.id === value.id}
+                options={subcontractors || []}
+                getOptionLabel={(option) => option?.name || ''}
+                isOptionEqualToValue={(option, value) => option?.id === value?.id}
                 value={subcontractors.find(s => s.id === bidForm.subcontractorId) || null}
                 onChange={(_, newValue) => {
+                  console.log('Subcontractor selected:', newValue);
                   handleChangeBidForm('subcontractorName', newValue?.name || '');
                   handleChangeBidForm('subcontractorId', newValue?.id || '');
                 }}
@@ -645,8 +658,11 @@ const ReusableBidForm: React.FC<ReusableBidFormProps> = ({
                       ...params.InputProps,
                       sx: { borderRadius: 1 }
                     }} 
+                    helperText={subcontractors.length === 0 ? "No subcontractors available. Add a new one." : ""}
                   />
                 )}
+                noOptionsText="No subcontractors found"
+                loadingText="Loading subcontractors..."
               />
               {onAddSubcontractor && (
                 <Button

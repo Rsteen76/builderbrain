@@ -618,6 +618,7 @@ const ProjectDetailPage: React.FC = () => {
   const handleOpenQuickBidDialog = (phaseId: string) => {
     setCurrentPhaseForBid(phaseId);
     setNewBidDialogOpen(true);
+    console.log('QuickBidDialog opened with phaseId:', phaseId);
   };
 
   // Replace handleAddQuickBid with a version that uses the shared utility
@@ -1601,6 +1602,13 @@ const ProjectDetailPage: React.FC = () => {
     }
   }, [bidFormOpen, user?.uid]);
 
+  // Add useEffect to fetch subcontractors when quick bid dialog opens
+  useEffect(() => {
+    if (newBidDialogOpen) {
+      fetchSubcontractors();
+    }
+  }, [newBidDialogOpen, user?.uid]);
+
   // Re-add function to handle quick add of a new subcontractor
   const handleQuickAddSubcontractor = async (subcontractorData: {
     name: string;
@@ -1614,26 +1622,22 @@ const ProjectDetailPage: React.FC = () => {
     
     try {
       setIsSaving(true);
-      const subcontractorToCreate: Omit<Subcontractor, 'id' | 'userId' | 'createdAt' | 'updatedAt'> = {
+      const newSubcontractor = await SubcontractorService.createSubcontractor(user.uid, {
         name: subcontractorData.name,
         specialty: subcontractorData.specialty,
-        contact: {
-          phone: subcontractorData.contact.phone,
-          email: subcontractorData.contact.email
-        },
+        contact: subcontractorData.contact,
         rating: 0,
         totalProjects: 0
-      };
+      });
       
-      const createdSubcontractor = await SubcontractorService.createSubcontractor(user.uid, subcontractorToCreate);
-      setSubcontractors(prev => [createdSubcontractor, ...prev]);
-      setBidForm(prev => ({
-        ...prev,
-        subcontractorName: createdSubcontractor.name,
-        subcontractorId: createdSubcontractor.id
-      }));
-      setShowQuickAddSubcontractor(false);
+      // Update the subcontractors list
+      setSubcontractors(prev => [...prev, newSubcontractor]);
+      
+      // Show success notification
       showNotification('Subcontractor added successfully', 'success');
+      
+      // Close the dialog
+      setShowQuickAddSubcontractor(false);
     } catch (error) {
       console.error('Error adding subcontractor:', error);
       showNotification('Failed to add subcontractor: ' + (error instanceof Error ? error.message : 'Unknown error'), 'error');
