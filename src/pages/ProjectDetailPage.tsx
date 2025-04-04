@@ -108,6 +108,7 @@ import TemplateAdjuster from '../components/projects/TemplateAdjuster';
 import { Project, Task, Phase, Bid, Subcontractor, BidPaymentStage, ProjectPhase } from '../types';
 import { Expense, ExpenseCategory, ExpenseStatus } from '../types/expense.types';
 import { v4 as uuidv4 } from 'uuid';
+import BidDeletionDialog from '../components/dialogs/BidDeletionDialog';
 
 // Import extracted tab components
 import ProjectOverviewTab from '../components/projects/detailTabs/ProjectOverviewTab';
@@ -249,12 +250,15 @@ const ProjectDetailPage: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [project, setProject] = useState<Project | null>(null);
   const [phases, setPhases] = useState<ProjectPhase[]>([]);
-  const [phasesBeingUpdated, setPhasesBeingUpdated] = useState<{ [id: string]: ProjectPhase }>({});
-  const [bids, setBids] = useState<Bid[]>([]);
   const [expenses, setExpenses] = useState<Expense[]>([]);
-  const [expensesData, setExpensesData] = useState<{ name: string; value: number; color: string }[]>([]);
+  const [bids, setBids] = useState<Bid[]>([]);
+  const [recentBids, setRecentBids] = useState<Bid[]>([]);
   const [tabValue, setTabValue] = useState(0);
   const [menuAnchorEl, setMenuAnchorEl] = useState<null | HTMLElement>(null);
+  const [isSaving, setIsSaving] = useState(false);
+  const [bidToDelete, setBidToDelete] = useState<{id: string, title: string} | null>(null);
+  const [phasesBeingUpdated, setPhasesBeingUpdated] = useState<{ [id: string]: ProjectPhase }>({});
+  const [expensesData, setExpensesData] = useState<{ name: string; value: number; color: string }[]>([]);
   const [quickUpdateMode, setQuickUpdateMode] = useState(false);
   const [templateAdjusterOpen, setTemplateAdjusterOpen] = useState(false);
   
@@ -1169,8 +1173,6 @@ const ProjectDetailPage: React.FC = () => {
     setTemplateAdjusterOpen(false);
   };
 
-  const [isSaving, setIsSaving] = useState(false);
-
   // Add a useMemo for expense breakdown
   const expenseBreakdown = useMemo(() => {
     const breakdown = {
@@ -1314,7 +1316,7 @@ const ProjectDetailPage: React.FC = () => {
   };
 
   // Add a list of recently added bids for comparison
-  const [recentBids, setRecentBids] = useState<Bid[]>([]);
+//   const [recentBids, setRecentBids] = useState<Bid[]>([]);
 
   const handleCloseBidForm = () => {
     setBidFormOpen(false);
@@ -1471,19 +1473,28 @@ const ProjectDetailPage: React.FC = () => {
     }
   };
 
-  // Replace handleDeleteBid with a version that calls the shared utility
+  // Replace handleDeleteBid with a version that uses the BidDeletionDialog
   const handleDeleteBid = (bidId: string) => {
-    // Delete bid
-    if (!window.confirm('Are you sure you want to delete this bid?')) {
-      return;
+    // Find the bid to get its title
+    const bid = bids.find(b => b.id === bidId);
+    if (bid) {
+      setBidToDelete({
+        id: bidId,
+        title: bid.title || bid.scope || 'Unnamed Bid'
+      });
     }
+  };
+
+  // Add a function to handle the actual deletion after confirmation
+  const handleConfirmBidDeletion = () => {
+    if (!bidToDelete) return;
     
     // Delete from database using the shared utility
-    deleteBidOp(bidId)
+    deleteBidOp(bidToDelete.id)
       .then((success) => {
         if (success) {
           // If successful, update local state
-          setBids(prevBids => prevBids.filter(b => b.id !== bidId));
+          setBids(prevBids => prevBids.filter(b => b.id !== bidToDelete.id));
           showNotification('Bid deleted successfully', 'success');
         } else {
           throw new Error('Operation failed');
@@ -1492,6 +1503,10 @@ const ProjectDetailPage: React.FC = () => {
       .catch(error => {
         console.error('Error deleting bid:', error);
         showNotification('Failed to delete bid: ' + (error instanceof Error ? error.message : 'Unknown error'), 'error');
+      })
+      .finally(() => {
+        // Close the dialog
+        setBidToDelete(null);
       });
   };
 
@@ -2221,6 +2236,18 @@ const ProjectDetailPage: React.FC = () => {
           </Button>
         </DialogActions>
       </Dialog>
+      
+      {/* Add the BidDeletionDialog */}
+      {bidToDelete && user && (
+        <BidDeletionDialog
+          open={!!bidToDelete}
+          onClose={() => setBidToDelete(null)}
+          onConfirm={handleConfirmBidDeletion}
+          bidId={bidToDelete.id}
+          bidTitle={bidToDelete.title}
+          userId={user.uid}
+        />
+      )}
     </>
   );
 };

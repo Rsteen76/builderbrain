@@ -2,6 +2,8 @@ import { v4 as uuidv4 } from 'uuid';
 import { BidService } from '../services/bid';
 import { ExpenseService } from '../services/expense';
 import { Bid, BidPaymentStage, Expense } from '../types';
+import { db } from '../config/firebase';
+import { collection, query, where, getDocs } from 'firebase/firestore';
 
 // Extended Expense type that includes bid references
 interface EnhancedExpense extends Expense {
@@ -40,14 +42,39 @@ export const findExistingExpenseForPaymentStage = async (
  */
 export const submitBid = async (
   userId: string,
-  bidFormData: any,
+  bidData: {
+    title: string;
+    subcontractorName: string;
+    subcontractorId?: string;
+    totalAmount: number;
+    phaseId?: string;
+    phaseName?: string;
+    scope: string;
+    timeline: number;
+    submissionDeadline?: Date;
+    paymentTerms: {
+      downPaymentPercent: number;
+      installments: {
+        id: string;
+        name: string;
+        percent: number;
+        milestoneDescription: string;
+        phaseId?: string;
+        phaseName?: string;
+      }[];
+    };
+    notes: string;
+    status: 'draft' | 'submitted' | 'accepted' | 'rejected' | 'expired';
+    attachments: string[];
+    tags: string[];
+  },
   editingBidId: string | null,
   projectId: string,
   projectName: string
 ): Promise<Bid | null> => {
   if (!userId) return null;
   
-  console.log('Submitting bid form data:', JSON.stringify(bidFormData, null, 2));
+  console.log('Submitting bid form data:', JSON.stringify(bidData, null, 2));
   
   try {
     const now = new Date();
@@ -64,28 +91,28 @@ export const submitBid = async (
     }
     
     // Create payment schedule
-    const paymentSchedule = [
+    const paymentSchedule: BidPaymentStage[] = [
       {
         id: uuidv4(),
         name: 'Down Payment',
-        percentage: bidFormData.paymentTerms.downPaymentPercent,
-        amount: (bidFormData.totalAmount * bidFormData.paymentTerms.downPaymentPercent) / 100,
-        status: 'pending',
-        phaseId: bidFormData.phaseId,
-        phaseName: bidFormData.phaseName,
+        percentage: bidData.paymentTerms.downPaymentPercent,
+        amount: (bidData.totalAmount * bidData.paymentTerms.downPaymentPercent) / 100,
+        status: 'pending' as const,
+        phaseId: bidData.phaseId,
+        phaseName: bidData.phaseName,
         dueDate: now,
         description: 'Initial payment to start work',
         createdAt: now,
         updatedAt: now
       },
-      ...bidFormData.paymentTerms.installments.map((installment: any) => ({
+      ...bidData.paymentTerms.installments.map(installment => ({
         id: installment.id || uuidv4(),
         name: installment.name,
         percentage: installment.percent,
-        amount: (bidFormData.totalAmount * installment.percent) / 100,
-        status: 'pending',
-        phaseId: installment.phaseId || bidFormData.phaseId,
-        phaseName: installment.phaseName || bidFormData.phaseName,
+        amount: (bidData.totalAmount * installment.percent) / 100,
+        status: 'pending' as const,
+        phaseId: installment.phaseId || bidData.phaseId,
+        phaseName: installment.phaseName || bidData.phaseName,
         dueDate: now,
         description: installment.milestoneDescription,
         createdAt: now,
@@ -95,44 +122,32 @@ export const submitBid = async (
     
     // Create a clean copy of the bid data with Dates properly handled
     const cleanBidData: Partial<Bid> = {
-      title: bidFormData.title || '',
-      subcontractorName: bidFormData.subcontractorName || '',
-      contractorName: bidFormData.subcontractorName || '', // Ensure both names are set
-      subcontractorId: bidFormData.subcontractorId || '',
-      totalAmount: bidFormData.totalAmount || 0,
-      phaseId: bidFormData.phaseId || '',
-      phaseName: bidFormData.phaseName || '',
-      scope: bidFormData.scope || '',
-      timeline: bidFormData.timeline || 30,
-      notes: bidFormData.notes || '',
-      status: (bidFormData.status === 'draft' || 
-               bidFormData.status === 'submitted' || 
-               bidFormData.status === 'accepted' || 
-               bidFormData.status === 'rejected' || 
-               bidFormData.status === 'expired') 
-               ? bidFormData.status 
-               : 'submitted',
-      tags: Array.isArray(bidFormData.tags) ? bidFormData.tags : [],
-      attachments: Array.isArray(bidFormData.attachments) ? bidFormData.attachments : [],
+      title: bidData.title || '',
+      subcontractorName: bidData.subcontractorName || '',
+      contractorName: bidData.subcontractorName || '', // Ensure both names are set
+      subcontractorId: bidData.subcontractorId || '',
+      totalAmount: bidData.totalAmount || 0,
+      phaseId: bidData.phaseId || '',
+      phaseName: bidData.phaseName || '',
+      scope: bidData.scope || '',
+      timeline: bidData.timeline || 30,
+      notes: bidData.notes || '',
+      status: bidData.status,
+      tags: Array.isArray(bidData.tags) ? bidData.tags : [],
+      attachments: Array.isArray(bidData.attachments) ? bidData.attachments : [],
       projectId: projectId,
       projectName: projectName,
       paymentSchedule,
+      createdBy: userId,
+      createdAt: now,
       updatedAt: now,
+      submissionDeadline: bidData.submissionDeadline || null,
       paymentProgress: {
         paid: 0,
-        pending: bidFormData.totalAmount,
-        remaining: bidFormData.totalAmount
+        pending: bidData.totalAmount,
+        remaining: bidData.totalAmount
       }
     };
-    
-    // Ensure dates are proper Date objects or null
-    if (bidFormData.submissionDeadline) {
-      cleanBidData.submissionDeadline = bidFormData.submissionDeadline instanceof Date 
-        ? bidFormData.submissionDeadline 
-        : new Date(bidFormData.submissionDeadline);
-    } else {
-      cleanBidData.submissionDeadline = null;
-    }
     
     let resultBid: Bid;
     
@@ -161,7 +176,7 @@ export const submitBid = async (
     }
     
     // Handle expenses ONLY when status transitions to 'accepted'
-    const isNewlyAccepted = bidFormData.status === 'accepted' && (!existingBid || existingBid.status !== 'accepted');
+    const isNewlyAccepted = bidData.status === 'accepted' && (!existingBid || existingBid.status !== 'accepted');
 
     if (isNewlyAccepted) {
       console.log(`Bid ${editingBidId || resultBid.id} is newly accepted. Creating expenses...`);
@@ -185,14 +200,14 @@ export const submitBid = async (
             const expenseData: Omit<EnhancedExpense, 'id' | 'userId' | 'createdBy' | 'createdAt' | 'updatedAt'> = {
               projectId: projectId,
               category: 'subcontractor',
-              description: `${stage.name} (${stage.percentage}%) - ${bidFormData.title}`,
+              description: `${stage.name} (${stage.percentage}%) - ${bidData.title}`,
               amount: stage.amount,
               date: new Date(),
               status: 'pending',
-              vendor: bidFormData.subcontractorName || '',
-              notes: `This expense is for payment stage: ${stage.name} (${stage.percentage}%) for accepted bid: ${bidFormData.title}`,
-              phaseId: stage.phaseId || bidFormData.phaseId || '',
-              phaseName: stage.phaseName || bidFormData.phaseName || '',
+              vendor: bidData.subcontractorName || '',
+              notes: `This expense is for payment stage: ${stage.name} (${stage.percentage}%) for accepted bid: ${bidData.title}`,
+              phaseId: stage.phaseId || bidData.phaseId || '',
+              phaseName: stage.phaseName || bidData.phaseName || '',
               bidId: editingBidId || resultBid.id,
               paymentStageId: stage.id
             };
@@ -234,10 +249,38 @@ export const submitBid = async (
  */
 export const deleteBid = async (bidId: string): Promise<boolean> => {
   try {
+    // First, delete any associated expenses
+    const expenses = await findExpensesForBid(bidId);
+    for (const expense of expenses) {
+      if (expense.id) {
+        await ExpenseService.deleteExpense(expense.id);
+      }
+    }
+
+    // Then delete the bid
     await BidService.deleteBid(bidId);
     return true;
   } catch (error) {
     console.error('Error deleting bid:', error);
     return false;
+  }
+};
+
+/**
+ * Find all expenses associated with a bid
+ */
+export const findExpensesForBid = async (bidId: string): Promise<Expense[]> => {
+  try {
+    const expensesRef = collection(db, 'expenses');
+    const q = query(expensesRef, where('bidId', '==', bidId));
+    const querySnapshot = await getDocs(q);
+    
+    return querySnapshot.docs.map(doc => ({
+      id: doc.id,
+      ...doc.data()
+    } as Expense));
+  } catch (error) {
+    console.error('Error finding expenses for bid:', error);
+    return [];
   }
 }; 

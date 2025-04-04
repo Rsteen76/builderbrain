@@ -32,6 +32,8 @@ import {
   Gavel as BidsIcon,
 } from '@mui/icons-material';
 import { Bid, BidPaymentStage } from '../../../types';
+import BidDeletionWrapper from '../../bids/BidDeletionWrapper';
+import { useAuth } from '../../../hooks/useAuth';
 
 interface ProjectBidsTabProps {
   bids: Bid[];
@@ -54,6 +56,8 @@ const ProjectBidsTab: React.FC<ProjectBidsTabProps> = ({
   formatCurrency,
   formatDate,
 }) => {
+  const { user } = useAuth();
+
   return (
     <Box>
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
@@ -140,6 +144,12 @@ const ProjectBidsTab: React.FC<ProjectBidsTabProps> = ({
                         >
                           View
                         </Button>
+                        <BidDeletionWrapper
+                          bid={bid}
+                          userId={user?.uid || ''}
+                          onBidDeleted={() => handleDeleteBid(bid.id)}
+                          variant="icon"
+                        />
                       </TableCell>
                     </TableRow>
                   );

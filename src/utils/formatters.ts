@@ -4,38 +4,11 @@
  * @param options Formatting options
  * @returns Formatted currency string
  */
-export const formatCurrency = (
-  value: number | string, 
-  options: { 
-    locale?: string; 
-    currency?: string;
-    minimumFractionDigits?: number;
-    maximumFractionDigits?: number;
-  } = {}
-): string => {
-  if (value === null || value === undefined) {
-    return '$0.00';
-  }
-  
-  const numericValue = typeof value === 'string' ? parseFloat(value) : value;
-  
-  if (isNaN(numericValue)) {
-    return '$0.00';
-  }
-  
-  const {
-    locale = 'en-US',
-    currency = 'USD',
-    minimumFractionDigits = 2,
-    maximumFractionDigits = 2
-  } = options;
-  
-  return new Intl.NumberFormat(locale, {
+export const formatCurrency = (amount: number): string => {
+  return new Intl.NumberFormat('en-US', {
     style: 'currency',
-    currency,
-    minimumFractionDigits,
-    maximumFractionDigits
-  }).format(numericValue);
+    currency: 'USD',
+  }).format(amount);
 };
 
 /**
