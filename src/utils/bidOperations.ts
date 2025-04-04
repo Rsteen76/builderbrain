@@ -52,6 +52,17 @@ export const submitBid = async (
   try {
     const now = new Date();
     
+    // Fetch existing bid data if we are editing
+    let existingBid: Bid | null = null;
+    if (editingBidId) {
+      try {
+        existingBid = await BidService.getBid(userId, editingBidId);
+      } catch (fetchError) {
+        console.error(`Error fetching existing bid ${editingBidId} during update:`, fetchError);
+        // Decide whether to proceed or throw error
+      }
+    }
+    
     // Create payment schedule
     const paymentSchedule = [
       {
@@ -149,8 +160,11 @@ export const submitBid = async (
       resultBid = await BidService.createBid(userId, newBid);
     }
     
-    // Handle expenses for accepted bids
-    if (bidFormData.status === 'accepted') {
+    // Handle expenses ONLY when status transitions to 'accepted'
+    const isNewlyAccepted = bidFormData.status === 'accepted' && (!existingBid || existingBid.status !== 'accepted');
+
+    if (isNewlyAccepted) {
+      console.log(`Bid ${editingBidId || resultBid.id} is newly accepted. Creating expenses...`);
       try {
         // Create expenses for all payment stages that don't already have an expense
         for (const stage of paymentSchedule) {

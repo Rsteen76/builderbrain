@@ -164,7 +164,7 @@ export class ExpenseService {
     category?: Expense['category'];
     startDate?: Date;
     endDate?: Date;
-    status?: Expense['status'];
+    status?: Expense['status'] | Expense['status'][];
     phaseId?: string;
     subcontractorId?: string;
   }): Promise<Expense[]> {
@@ -188,7 +188,15 @@ export class ExpenseService {
         }
         
         if (filters.status) {
-          q = query(q, where('status', '==', filters.status));
+          if (Array.isArray(filters.status)) {
+            if (filters.status.length > 0 && filters.status.length <= 10) {
+              q = query(q, where('status', 'in', filters.status));
+            } else if (filters.status.length > 10) {
+              console.warn("ExpenseService: Cannot filter by more than 10 statuses at once.");
+            }
+          } else {
+            q = query(q, where('status', '==', filters.status));
+          }
         }
         
         if (filters.startDate) {

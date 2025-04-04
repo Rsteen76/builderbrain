@@ -348,37 +348,62 @@ export class BidService {
   // Update bid (Input uses imported Bid type)
   static async updateBid(id: string, bidData: Partial<Omit<Bid, 'id' | 'userId' | 'versions' | 'currentVersionId' | 'createdAt' | 'updatedAt'>>): Promise<void> {
     const bidRef = doc(this.collection, id);
-    // Security rules check ownership
-    
-    const updatePayload = { ...bidData }; 
-    const firestoreUpdateData: Partial<FirestoreBid> = {
-        updatedAt: Timestamp.fromDate(new Date()),
+    const updatePayload: any = { 
+      ...bidData, 
+      updatedAt: Timestamp.fromDate(new Date()) 
     };
 
-    // Convert specific fields
-    if (updatePayload.submissionDeadline !== undefined) firestoreUpdateData.submissionDeadline = updatePayload.submissionDeadline ? Timestamp.fromDate(updatePayload.submissionDeadline) : null;
-    if (updatePayload.startDate !== undefined) firestoreUpdateData.startDate = updatePayload.startDate ? Timestamp.fromDate(updatePayload.startDate) : null;
-    if (updatePayload.completionDate !== undefined) firestoreUpdateData.completionDate = updatePayload.completionDate ? Timestamp.fromDate(updatePayload.completionDate) : null;
-    
-    // Copy other allowed fields, ensure types match FirestoreBid
-    if (updatePayload.status !== undefined) firestoreUpdateData.status = updatePayload.status;
-    if (updatePayload.priority !== undefined) firestoreUpdateData.priority = updatePayload.priority;
-    if (updatePayload.totalAmount !== undefined) firestoreUpdateData.totalAmount = updatePayload.totalAmount;
-    if (updatePayload.projectName !== undefined) firestoreUpdateData.projectName = updatePayload.projectName;
-    if (updatePayload.subcontractorId !== undefined) firestoreUpdateData.subcontractorId = updatePayload.subcontractorId;
-    if (updatePayload.subcontractorName !== undefined) firestoreUpdateData.subcontractorName = updatePayload.subcontractorName;
-    if (updatePayload.title !== undefined) firestoreUpdateData.title = updatePayload.title;
-    if (updatePayload.scope !== undefined) firestoreUpdateData.scope = updatePayload.scope;
-    if (updatePayload.tags !== undefined) firestoreUpdateData.tags = Array.isArray(updatePayload.tags) ? updatePayload.tags : (updatePayload.tags ? [updatePayload.tags] : []);
-    if (updatePayload.updatedBy !== undefined) firestoreUpdateData.updatedBy = updatePayload.updatedBy;
-    if (updatePayload.notes !== undefined) firestoreUpdateData.notes = updatePayload.notes;
-    if (updatePayload.requiresInsurance !== undefined) firestoreUpdateData.requiresInsurance = updatePayload.requiresInsurance;
-    if (updatePayload.requiresBond !== undefined) firestoreUpdateData.requiresBond = updatePayload.requiresBond;
-    if (updatePayload.isPublic !== undefined) firestoreUpdateData.isPublic = updatePayload.isPublic;
-    if (updatePayload.isApproved !== undefined) firestoreUpdateData.isApproved = updatePayload.isApproved;
-    // Do NOT allow updating versions or currentVersionId directly here
+    // Explicitly handle paymentSchedule conversion
+    if (bidData.paymentSchedule && Array.isArray(bidData.paymentSchedule)) {
+      updatePayload.paymentSchedule = bidData.paymentSchedule.map(stage => {
+        const firestoreStage: any = { ...stage };
+        // Convert date fields within the stage to Timestamps
+        if (stage.createdAt instanceof Date) {
+          firestoreStage.createdAt = Timestamp.fromDate(stage.createdAt);
+        }
+        if (stage.updatedAt instanceof Date) {
+          firestoreStage.updatedAt = Timestamp.fromDate(stage.updatedAt);
+        }
+        if (stage.dueDate instanceof Date) {
+          firestoreStage.dueDate = Timestamp.fromDate(stage.dueDate);
+        } else if (stage.dueDate === null) {
+          firestoreStage.dueDate = null; // Allow null
+        } else {
+          delete firestoreStage.dueDate; // Remove if not a Date or null
+        }
+        if (stage.paymentDate instanceof Date) {
+          firestoreStage.paymentDate = Timestamp.fromDate(stage.paymentDate);
+        } else if (stage.paymentDate === null) {
+          firestoreStage.paymentDate = null; // Allow null
+        } else {
+          delete firestoreStage.paymentDate; // Remove if not a Date or null
+        }
+        // Ensure phaseId and phaseName are included
+        firestoreStage.phaseId = stage.phaseId || '';
+        firestoreStage.phaseName = stage.phaseName || '';
+        return firestoreStage;
+      });
+    }
 
-    await updateDoc(bidRef, firestoreUpdateData);
+    // Convert top-level dates
+    for (const key in updatePayload) {
+      // Check if it's a direct property and needs conversion
+      if (Object.prototype.hasOwnProperty.call(updatePayload, key)) {
+        if (updatePayload[key] instanceof Date && ['submissionDeadline', 'startDate', 'completionDate'].includes(key)) {
+          updatePayload[key] = Timestamp.fromDate(updatePayload[key]);
+        } else if (updatePayload[key] === null && ['submissionDeadline', 'startDate', 'completionDate'].includes(key)) {
+          // Ensure null dates are passed correctly
+          updatePayload[key] = null;
+        }
+      }
+    }
+    
+    // Remove undefined fields before updating to avoid errors
+    const finalPayload = this.removeUndefined(updatePayload);
+
+    console.log(`BidService: Updating bid ${id} with payload:`, JSON.stringify(finalPayload, null, 2));
+
+    await updateDoc(bidRef, finalPayload);
   }
 
   // Update line item (Input uses imported LineItem type)

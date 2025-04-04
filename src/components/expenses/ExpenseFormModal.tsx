@@ -146,6 +146,7 @@ const ExpenseFormModal: React.FC<ExpenseFormModalProps> = ({
     notes: '',
     subcontractorId: '',
     subcontractorName: '',
+    phaseId: '',
     phaseName: '',
   });
   const [errors, setErrors] = useState<FormErrors>({});
@@ -166,45 +167,78 @@ const ExpenseFormModal: React.FC<ExpenseFormModalProps> = ({
     'painting', 'flooring', 'roofing', 'concrete', 'foundation',
     'rough-in', 'top-out', 'fixtures', 'inspection', 'permit'
   ]);
+  const [currentProjectPhases, setCurrentProjectPhases] = useState<ProjectPhase[]>([]);
 
   const isEditMode = !!expense?.id;
 
-  // Get phase options from project phases
+  // Get phase options based on the currentProjectPhases state
   const PHASE_OPTIONS = useMemo(() => {
-    // If we have project phases, use them
-    if (projectPhases && projectPhases.length > 0) {
-      return projectPhases.map(phase => ({
-        value: phase.id || '',
-        label: phase.name || ''
-      }));
-    }
-    
-    // Fallback to hardcoded options if no phases are provided
-    return [
-      { value: 'planning', label: 'Planning' },
-      { value: 'foundation', label: 'Foundation' },
-      { value: 'framing', label: 'Framing' },
-      { value: 'electrical', label: 'Electrical' },
-      { value: 'plumbing', label: 'Plumbing' },
-      { value: 'drywall', label: 'Drywall' },
-      { value: 'finishing', label: 'Finishing' },
-      { value: 'exterior', label: 'Exterior' },
-      { value: 'landscaping', label: 'Landscaping' },
-      { value: 'inspection', label: 'Inspection' },
-    ];
-  }, [projectPhases]);
+    return currentProjectPhases.map(phase => ({
+      value: phase.id || '',
+      label: phase.name || 'Unnamed Phase'
+    }));
+  }, [currentProjectPhases]);
 
-  // Update form data when expense prop changes
+  // Effect to initialize form and phases when opening/editing
   useEffect(() => {
-    if (expense) {
-      setFormData({
-        ...expense,
-        date: expense.date ? new Date(expense.date) : new Date(),
-      });
-      // Set tags if they exist in the expense
-      setTags(expense.tags || []);
+    if (open) {
+      let initialPhases: ProjectPhase[] = [];
+      let initialFormData: Partial<Expense> = {
+        description: '',
+        amount: 0,
+        category: 'other',
+        date: new Date(),
+        status: 'pending',
+        projectId: '',
+        phaseId: '',
+        phaseName: '',
+        vendor: '',
+        notes: '',
+        subcontractorId: '',
+        subcontractorName: '',
+        tags: [],
+      };
+
+      if (expense && isEditMode) {
+        // Editing existing expense
+        initialFormData = {
+          ...initialFormData, // Start with defaults
+          ...expense,
+          date: expense.date ? new Date(expense.date) : new Date(),
+        };
+        // Try getting phases from prop first, then lookup in projects list
+        initialPhases = projectPhases && projectPhases.length > 0 
+            ? projectPhases 
+            : projects.find(p => p.id === expense.projectId)?.phases || [];
+        console.log(`Edit Mode - Initializing with expense:`, expense, `Initial phases:`, initialPhases);
+      } else {
+        // Creating new expense - reset form data
+        console.log('Create Mode - Resetting form data');
+      }
+      
+      setFormData(initialFormData);
+      setCurrentProjectPhases(initialPhases); 
+      setTags(initialFormData.tags || []);
+      setErrors({}); // Clear errors on open
+      setBackendError(null);
+      // Reset other relevant states if necessary (receipt, line items etc.)
+      setReceiptFile(null);
+      setReceiptPreview(initialFormData.receiptUrl || null);
+      setLineItems(initialFormData.lineItems?.map(li => ({ 
+          id: li.id || uuidv4(), 
+          description: li.description || '', 
+          quantity: li.quantity || 0, 
+          unitPrice: li.unitCost || 0, 
+          totalPrice: li.totalCost || 0
+        })) || []);
+      setShowLineItems(!!initialFormData.lineItems && initialFormData.lineItems.length > 0);
+
+    } else {
+       // Optional: Reset state when modal is closed if desired
+       // setFormData({ ... initial empty state ... });
+       // setCurrentProjectPhases([]);
     }
-  }, [expense]);
+  }, [open, expense, isEditMode, projects, projectPhases]); // Rerun when opening or expense/projects change
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
@@ -224,18 +258,27 @@ const ExpenseFormModal: React.FC<ExpenseFormModalProps> = ({
 
   const handleSelectChange = (e: SelectChangeEvent) => {
     const { name, value } = e.target;
-    
-    if (name === 'subcontractorId') {
-      // This will be handled by SubcontractorSelector's onChange
-      return;
+
+    if (name === 'projectId') {
+      const selectedProject = projects.find(p => p.id === value);
+      const phases = selectedProject?.phases || [];
+      console.log(`Project changed to ${value}. Found phases:`, phases);
+      setCurrentProjectPhases(phases); // Update the phases state
+      setFormData({
+        ...formData,
+        projectId: value,
+        phaseId: '', // Reset phase selection when project changes
+        phaseName: '',
+      });
+    } else {
+       // Handle other selects (like category, status)
+       setFormData({
+         ...formData,
+         [name]: value,
+       });
     }
     
-    setFormData({
-      ...formData,
-      [name]: value,
-    });
-
-    // Clear the error for this field if it exists
+    // Clear error for the changed field
     if (errors[name as keyof FormErrors]) {
       setErrors({
         ...errors,
@@ -246,11 +289,12 @@ const ExpenseFormModal: React.FC<ExpenseFormModalProps> = ({
 
   const handlePhaseChange = (event: SelectChangeEvent<string>) => {
     const phaseId = event.target.value;
-    const selectedPhase = PHASE_OPTIONS.find(phase => phase.value === phaseId);
+    // Find selected phase from currentProjectPhases state
+    const selectedPhase = currentProjectPhases.find(phase => phase.id === phaseId);
     setFormData(prev => ({
       ...prev,
       phaseId: phaseId || undefined,
-      phaseName: selectedPhase?.label || undefined, // Set name based on selected ID
+      phaseName: selectedPhase?.name || undefined, // Set name based on selected ID
     }));
   };
 
@@ -750,24 +794,24 @@ const ExpenseFormModal: React.FC<ExpenseFormModalProps> = ({
         
           {/* Building Phase + Category Row */}
         <Grid item xs={12} sm={6}>
-          <FormControl fullWidth size="small" error={!!errors.phaseName}>
+          <FormControl fullWidth size="small" error={!!errors.phaseId}>
             <InputLabel id="phase-label">Phase</InputLabel>
             <Select
               labelId="phase-label"
-              id="phaseName"
-              name="phaseName" // Keep name for potential form libraries, but use onChange
-              value={formData.phaseId || ''} // Value should be the phaseId
+              id="phaseId"
+              name="phaseId"
+              value={formData.phaseId || ''}
               label="Phase"
-              onChange={handlePhaseChange} // Use the specific phase handler
+              onChange={handlePhaseChange}
               startAdornment={
                 <InputAdornment position="start">
                   <BuildingPhaseIcon fontSize="small" color="action" />
                 </InputAdornment>
               }
-              disabled={PHASE_OPTIONS.length === 0 || !formData.projectId}
+              disabled={!formData.projectId || currentProjectPhases.length === 0}
             >
               <MenuItem value="">
-                <em>{formData.projectId ? 'None' : 'Select a Project First'}</em>
+                <em>{formData.projectId ? (currentProjectPhases.length > 0 ? 'Select Phase' : 'No Phases Available') : 'Select Project First'}</em>
               </MenuItem>
               {PHASE_OPTIONS.map((option) => (
                 <MenuItem key={option.value} value={option.value}>
@@ -775,10 +819,7 @@ const ExpenseFormModal: React.FC<ExpenseFormModalProps> = ({
                 </MenuItem>
               ))}
             </Select>
-            {errors.phaseName && <FormHelperText>{errors.phaseName}</FormHelperText>}
-            {PHASE_OPTIONS.length === 0 && formData.projectId && (
-              <FormHelperText>No phases defined for this project.</FormHelperText>
-            )}
+            {errors.phaseId && <FormHelperText>{errors.phaseId}</FormHelperText>}
           </FormControl>
         </Grid>
         
