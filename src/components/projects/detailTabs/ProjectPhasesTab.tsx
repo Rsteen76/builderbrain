@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useCallback } from 'react';
 import {
   Box,
   Stack,
@@ -20,7 +20,8 @@ import {
   Collapse,
   Badge,
   Fade,
-  useTheme
+  useTheme,
+  useMediaQuery
 } from '@mui/material';
 import {
   Edit as EditIcon,
@@ -62,6 +63,8 @@ interface ProjectPhasesTabProps {
   phases: ProjectPhase[];
   bids: Bid[];
   expenses: Expense[];
+  phaseProposedCosts: Record<string, number>;
+  phaseActualCosts: Record<string, number>;
   theme: Theme;
   handleAddPhase: () => void;
   handleUpdatePhase: (phaseId: string) => void;
@@ -78,6 +81,8 @@ const ProjectPhasesTab: React.FC<ProjectPhasesTabProps> = ({
   phases,
   bids,
   expenses,
+  phaseProposedCosts,
+  phaseActualCosts,
   theme,
   handleAddPhase,
   handleUpdatePhase,
@@ -89,6 +94,9 @@ const ProjectPhasesTab: React.FC<ProjectPhasesTabProps> = ({
   getStatusColor,
   formatCurrency,
 }) => {
+  // Get breakpoint for responsive design
+  const isXs = useMediaQuery(theme.breakpoints.only('xs'));
+  
   // Add state for expanded details
   const [expandedPhases, setExpandedPhases] = useState<Record<string, boolean>>({});
   const appTheme = useTheme();
@@ -170,9 +178,9 @@ const ProjectPhasesTab: React.FC<ProjectPhasesTabProps> = ({
   };
   
   // Get phase expenses
-  const getPhaseExpenses = (phaseId: string) => {
+  const getPhaseExpenses = useCallback((phaseId: string) => {
     return expenses.filter(expense => expense.phaseId === phaseId);
-  };
+  }, [expenses]);
 
   // Helper to get status text
   const getStatusText = (status: string) => {
@@ -192,6 +200,12 @@ const ProjectPhasesTab: React.FC<ProjectPhasesTabProps> = ({
         return <InfoIcon />;
     }
   };
+
+  // Calculate percentage of budget used for a phase
+  const calculateBudgetPercentage = useCallback((phaseId: string, budget: number) => {
+    if (budget === 0) return 0;
+    return (phaseActualCosts[phaseId] || 0) / budget * 100;
+  }, [phaseActualCosts]);
 
   return (
     <Box>
@@ -351,763 +365,917 @@ const ProjectPhasesTab: React.FC<ProjectPhasesTabProps> = ({
       {/* Phase Cards */}
       {phases.length > 0 ? (
         <Grid container spacing={3}>
-          {phases.map((phase, index) => (
-            <Grid item xs={12} key={phase.id}>
-              <Fade in={true} timeout={300} style={{ transitionDelay: `${index * 100}ms` }}>
-                <Card 
-                  elevation={0}
-                  sx={{ 
-                    borderRadius: 3,
-                    border: `1px solid ${alpha(theme.palette.divider, 0.08)}`,
-                    boxShadow: `0 2px 12px ${alpha(theme.palette.common.black, 0.04)}`,
-                    overflow: 'visible',
-                    transition: 'transform 0.3s ease, box-shadow 0.3s ease',
-                    position: 'relative',
-                    '&:hover': {
-                      boxShadow: `0 4px 20px ${alpha(theme.palette.common.black, 0.08)}`,
-                      transform: 'translateY(-2px)',
-                    }
-                  }}
-                >
-                  {/* Status Badge */}
-                  <Box 
-                    sx={{
-                      position: 'absolute',
-                      top: -12, 
-                      right: 24,
-                      zIndex: 2,
+          {phases.map((phase, index) => {
+            const progress = phase.budget > 0 ? (phase.actualCost / phase.budget) * 100 : 0;
+            const isExpanded = expandedPhases[phase.id];
+            const phaseBids = getPhaseBids(phase.id);
+            const phaseExpenses = getPhaseExpenses(phase.id);
+            const proposedCost = phaseProposedCosts[phase.id] || 0;
+            const actualCost = phaseActualCosts[phase.id] || 0;
+            const budget = phase.budget || 0;
+            const budgetUsedPercentage = calculateBudgetPercentage(phase.id, budget);
+
+            return (
+              <Grid item xs={12} md={6} key={phase.id}>
+                <Fade in={true} timeout={300} style={{ transitionDelay: `${index * 100}ms` }}>
+                  <Card 
+                    elevation={0}
+                    sx={{ 
+                      borderRadius: 3,
+                      border: `1px solid ${alpha(theme.palette.divider, 0.08)}`,
+                      boxShadow: `0 2px 12px ${alpha(theme.palette.common.black, 0.04)}`,
+                      overflow: 'visible',
+                      transition: 'transform 0.3s ease, box-shadow 0.3s ease',
+                      position: 'relative',
+                      '&:hover': {
+                        boxShadow: `0 4px 20px ${alpha(theme.palette.common.black, 0.08)}`,
+                        transform: 'translateY(-2px)',
+                      },
+                      height: '100%',
+                      display: 'flex',
+                      flexDirection: 'column'
                     }}
                   >
-                    <Chip
-                      icon={getStatusIcon(phase.status)}
-                      label={getStatusText(phase.status)}
-                      size="medium"
+                    {/* Status Badge */}
+                    <Box 
                       sx={{
-                        fontWeight: 600,
-                        bgcolor: alpha(getStatusColor(phase.status), 0.1),
-                        color: getStatusColor(phase.status),
-                        borderRadius: 2,
-                        boxShadow: `0 2px 6px ${alpha(getStatusColor(phase.status), 0.3)}`
+                        position: 'absolute',
+                        top: -10, 
+                        right: 20,
+                        zIndex: 2,
                       }}
-                    />
-                  </Box>
-
-                  {/* Phase Header */}
-                  <CardHeader
-                    avatar={
-                      <Avatar 
-                        sx={{ 
-                          bgcolor: alpha(theme.palette.primary.main, 0.1),
-                          color: theme.palette.primary.main,
-                          width: 46,
-                          height: 46,
-                          boxShadow: `0 2px 6px ${alpha(theme.palette.primary.main, 0.15)}`,
-                          fontSize: '1.2rem',
-                          fontWeight: 'bold'
-                        }}
-                      >
-                        {index + 1}
-                      </Avatar>
-                    }
-                    title={
-                      <Typography variant="h6" sx={{ 
-                        fontWeight: 600, 
-                        fontSize: '1.25rem',
-                        mb: 0.5,
-                        background: `linear-gradient(45deg, ${theme.palette.text.primary}, ${alpha(theme.palette.text.primary, 0.7)})`,
-                        WebkitBackgroundClip: 'text',
-                        WebkitTextFillColor: 'transparent',
-                      }}>
-                        {phase.name}
-                      </Typography>
-                    }
-                    subheader={
-                      <Box sx={{ display: 'flex', alignItems: 'center', color: theme.palette.text.secondary }}>
-                        <ScheduleIcon sx={{ fontSize: '0.9rem', mr: 1, opacity: 0.7 }} />
-                        <Typography variant="body2" component="span">
-                          {new Date(phase.startDate).toLocaleDateString()} - {new Date(phase.endDate).toLocaleDateString()}
-                        </Typography>
-                      </Box>
-                    }
-                    action={
-                      <Stack direction="row" spacing={1}>
-                        <IconButton 
-                          size="small" 
-                          onClick={() => handleUpdatePhase(phase.id)}
-                          sx={{ 
-                            border: `1px solid ${alpha(theme.palette.primary.main, 0.2)}`,
-                            borderRadius: 2,
-                            color: theme.palette.primary.main,
-                            '&:hover': {
-                              bgcolor: alpha(theme.palette.primary.main, 0.1),
-                            }
-                          }}
-                        >
-                          <EditIcon fontSize="small" />
-                        </IconButton>
-                        <IconButton 
-                          size="small" 
-                          onClick={() => handleDeletePhase(phase.id)}
-                          sx={{ 
-                            border: `1px solid ${alpha(theme.palette.error.main, 0.2)}`,
-                            borderRadius: 2,
-                            color: theme.palette.error.main,
-                            '&:hover': {
-                              bgcolor: alpha(theme.palette.error.main, 0.1),
-                            }
-                          }}
-                        >
-                          <DeleteIcon fontSize="small" />
-                        </IconButton>
-                      </Stack>
-                    }
-                    sx={{ 
-                      pb: 1,
-                      '& .MuiCardHeader-content': { 
-                        overflow: 'hidden' 
-                      },
-                    }}
-                  />
-
-                  {/* Progress Bar */}
-                  <Box sx={{ px: 2, pt: 1, pb: 2 }}>
-                    <Box sx={{ 
-                      display: 'flex', 
-                      justifyContent: 'space-between', 
-                      alignItems: 'center',
-                      mb: 1 
-                    }}>
-                      <Typography 
-                        variant="body2" 
-                        color="text.secondary"
-                        sx={{ 
-                          display: 'flex', 
-                          alignItems: 'center',
-                          fontWeight: 500,
-                        }}
-                      >
-                        <ConstructionIcon sx={{ fontSize: '0.9rem', mr: 1 }} />
-                        Progress
-                      </Typography>
-                      <Typography 
-                        variant="body2" 
-                        fontWeight="bold" 
+                    >
+                      <Chip
+                        icon={getStatusIcon(phase.status)}
+                        label={getStatusText(phase.status)}
+                        size="small"
                         sx={{
-                          color: phase.progress > 70 
-                            ? theme.palette.success.main 
-                            : phase.progress > 30 
-                              ? theme.palette.warning.main 
-                              : theme.palette.info.main,
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: 0.5
+                          fontWeight: 600,
+                          fontSize: '0.75rem',
+                          bgcolor: alpha(getStatusColor(phase.status), 0.1),
+                          color: getStatusColor(phase.status),
+                          borderRadius: 3,
+                          boxShadow: `0 2px 6px ${alpha(getStatusColor(phase.status), 0.3)}`,
+                          '& .MuiChip-icon': {
+                            fontSize: '0.9rem',
+                            mr: 0.3
+                          }
                         }}
-                      >
-                        {phase.progress >= 100 ? <CheckCircleIcon fontSize="small" /> : null}
-                        {phase.progress}%
-                      </Typography>
+                      />
                     </Box>
 
-                    <LinearProgress 
-                      variant="determinate" 
-                      value={phase.progress} 
-                      sx={{ 
-                        height: 10, 
-                        borderRadius: 5,
-                        mb: 1,
-                        bgcolor: alpha(theme.palette.primary.main, 0.07),
-                        '& .MuiLinearProgress-bar': {
-                          background: phase.progress >= 100
-                            ? `linear-gradient(45deg, ${theme.palette.success.main}, ${alpha(theme.palette.success.main, 0.7)})`
-                            : `linear-gradient(45deg, ${theme.palette.primary.main}, ${alpha(theme.palette.primary.main, 0.7)})`,
-                          borderRadius: 5,
-                        }
-                      }} 
-                    />
-                  </Box>
-
-                  <Divider sx={{ mx: 2, opacity: 0.6 }} />
-                  
-                  {/* Content Section */}
-                  <CardContent sx={{ pt: 2, px: 2 }}>
-                    <Grid container spacing={3}>
-                      <Grid item xs={12} md={8}>
-                        {/* Description Box */}
-                        <Box sx={{ 
-                          mb: 2,
-                          p: 1.5,
-                          borderRadius: 2,
-                          bgcolor: alpha(theme.palette.background.default, 0.5),
-                          border: `1px dashed ${alpha(theme.palette.divider, 0.2)}`,
-                          color: theme.palette.text.secondary,
-                          fontSize: '0.9rem',
-                          lineHeight: 1.5
-                        }}>
-                          {phase.description}
-                        </Box>
-
-                        {/* Phase Stats */}
-                        <Grid container spacing={2} sx={{ mb: 2.5 }}>
-                          <Grid item xs={4}>
-                            <Paper 
-                              elevation={0} 
-                              sx={{ 
-                                p: 1.5, 
-                                textAlign: 'center',
-                                borderRadius: 2,
-                                bgcolor: alpha(theme.palette.info.main, 0.1),
-                                height: '100%',
-                                display: 'flex',
-                                flexDirection: 'column',
-                                justifyContent: 'center',
-                              }}
-                            >
-                              <TaskIcon 
-                                sx={{ 
-                                  color: theme.palette.info.main,
-                                  fontSize: '1.6rem',
-                                  mb: 0.5
-                                }} 
-                              />
-                              <Typography 
-                                variant="h6" 
-                                color="text.primary" 
-                                sx={{ fontSize: '1.2rem', fontWeight: 700 }}
-                              >
-                                {phase.tasks?.length || 0}
-                              </Typography>
-                              <Typography variant="body2" color="text.secondary">Tasks</Typography>
-                            </Paper>
-                          </Grid>
-                          <Grid item xs={4}>
-                            <Paper 
-                              elevation={0} 
-                              sx={{ 
-                                p: 1.5, 
-                                textAlign: 'center',
-                                borderRadius: 2,
-                                bgcolor: alpha(theme.palette.primary.main, 0.1),
-                                height: '100%',
-                                display: 'flex',
-                                flexDirection: 'column',
-                                justifyContent: 'center',
-                              }}
-                            >
-                              <AttachMoneyIcon 
-                                sx={{ 
-                                  color: theme.palette.primary.main,
-                                  fontSize: '1.6rem',
-                                  mb: 0.5
-                                }} 
-                              />
-                              <Typography 
-                                variant="h6" 
-                                color="text.primary" 
-                                sx={{ fontSize: '1.2rem', fontWeight: 700 }}
-                              >
-                                {formatCurrency(phase.budget)}
-                              </Typography>
-                              <Typography variant="body2" color="text.secondary">Budget</Typography>
-                            </Paper>
-                          </Grid>
-                          <Grid item xs={4}>
-                            <Paper 
-                              elevation={0} 
-                              sx={{ 
-                                p: 1.5, 
-                                textAlign: 'center',
-                                borderRadius: 2,
-                                bgcolor: phase.actualCost > phase.budget 
-                                  ? alpha(theme.palette.error.main, 0.1)
-                                  : alpha(theme.palette.success.main, 0.1),
-                                height: '100%',
-                                display: 'flex',
-                                flexDirection: 'column',
-                                justifyContent: 'center',
-                              }}
-                            >
-                              <ReceiptIcon 
-                                sx={{ 
-                                  color: phase.actualCost > phase.budget
-                                    ? theme.palette.error.main
-                                    : theme.palette.success.main,
-                                  fontSize: '1.6rem',
-                                  mb: 0.5
-                                }} 
-                              />
-                              <Typography 
-                                variant="h6" 
-                                color={phase.actualCost > phase.budget ? "error" : "text.primary"}
-                                sx={{ fontSize: '1.2rem', fontWeight: 700 }}
-                              >
-                                {formatCurrency(phase.actualCost)}
-                              </Typography>
-                              <Typography variant="body2" color="text.secondary">Actual Cost</Typography>
-                            </Paper>
-                          </Grid>
-                        </Grid>
-                        
-                        {/* Toggle Details Button */}
-                        <Button 
-                          variant="outlined" 
-                          fullWidth
-                          size="medium"
-                          color="primary"
-                          onClick={() => handleToggleExpand(phase.id)}
-                          startIcon={expandedPhases[phase.id] ? <ExpandLessIcon /> : <ExpandMoreIcon />}
+                    {/* Phase Header */}
+                    <CardHeader
+                      avatar={
+                        <Avatar 
                           sx={{ 
-                            borderRadius: 2,
-                            mb: 1,
-                            fontWeight: 500,
-                            borderWidth: '1px',
-                            '&:hover': {
-                              borderWidth: '1px',
-                              bgcolor: alpha(theme.palette.primary.main, 0.04),
-                            }
+                            bgcolor: alpha(theme.palette.primary.main, 0.1),
+                            color: theme.palette.primary.main,
+                            width: 42,
+                            height: 42,
+                            boxShadow: `0 2px 6px ${alpha(theme.palette.primary.main, 0.15)}`,
+                            fontSize: '1.1rem',
+                            fontWeight: 'bold'
                           }}
                         >
-                          {expandedPhases[phase.id] ? 'Hide Details' : 'Show Details'}
-                        </Button>
-                        
-                        {/* Collapsible Content */}
-                        <Collapse in={expandedPhases[phase.id]} timeout="auto">
-                          <Box sx={{ mt: 2 }}>
-                            {/* Bids Section */}
-                            <Box sx={{ mb: 3 }}>
-                              <Box sx={{ 
-                                display: 'flex',
-                                justifyContent: 'space-between',
-                                alignItems: 'center',
-                                mb: 1.5,
-                                pb: 1,
-                                borderBottom: `1px dashed ${alpha(theme.palette.divider, 0.3)}`
-                              }}>
+                          {index + 1}
+                        </Avatar>
+                      }
+                      title={
+                        <Typography variant="h6" sx={{ 
+                          fontWeight: 600, 
+                          fontSize: '1.15rem',
+                          mb: 0.2,
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                          whiteSpace: 'nowrap',
+                          background: `linear-gradient(45deg, ${theme.palette.text.primary}, ${alpha(theme.palette.text.primary, 0.7)})`,
+                          WebkitBackgroundClip: 'text',
+                          WebkitTextFillColor: 'transparent',
+                        }}>
+                          {phase.name}
+                        </Typography>
+                      }
+                      subheader={
+                        <Box sx={{ display: 'flex', alignItems: 'center', color: theme.palette.text.secondary }}>
+                          <ScheduleIcon sx={{ fontSize: '0.9rem', mr: 0.5, opacity: 0.7 }} />
+                          <Typography variant="body2" component="span" sx={{ fontSize: '0.8rem' }}>
+                            {new Date(phase.startDate).toLocaleDateString()} - {new Date(phase.endDate).toLocaleDateString()}
+                          </Typography>
+                        </Box>
+                      }
+                      action={
+                        <Stack direction="row" spacing={0.5}>
+                          <IconButton 
+                            size="small" 
+                            onClick={() => handleUpdatePhase(phase.id)}
+                            sx={{ 
+                              border: `1px solid ${alpha(theme.palette.primary.main, 0.2)}`,
+                              borderRadius: 1.5,
+                              color: theme.palette.primary.main,
+                              padding: '4px',
+                              '&:hover': {
+                                bgcolor: alpha(theme.palette.primary.main, 0.1),
+                              }
+                            }}
+                          >
+                            <EditIcon sx={{ fontSize: '1rem' }} />
+                          </IconButton>
+                          <IconButton 
+                            size="small" 
+                            onClick={() => handleDeletePhase(phase.id)}
+                            sx={{ 
+                              border: `1px solid ${alpha(theme.palette.error.main, 0.2)}`,
+                              borderRadius: 1.5,
+                              color: theme.palette.error.main,
+                              padding: '4px',
+                              '&:hover': {
+                                bgcolor: alpha(theme.palette.error.main, 0.1),
+                              }
+                            }}
+                          >
+                            <DeleteIcon sx={{ fontSize: '1rem' }} />
+                          </IconButton>
+                        </Stack>
+                      }
+                      sx={{ 
+                        pb: 1,
+                        pt: 2,
+                        px: 2,
+                        '& .MuiCardHeader-content': { 
+                          overflow: 'hidden' 
+                        },
+                      }}
+                    />
+
+                    {/* Progress Bar */}
+                    <Box sx={{ px: 2, pt: 0.5, pb: 1.5 }}>
+                      <Box sx={{ 
+                        display: 'flex', 
+                        justifyContent: 'space-between', 
+                        alignItems: 'center',
+                        mb: 0.5
+                      }}>
+                        <Typography 
+                          variant="body2" 
+                          color="text.secondary"
+                          sx={{ 
+                            display: 'flex', 
+                            alignItems: 'center',
+                            fontWeight: 500,
+                            fontSize: '0.75rem'
+                          }}
+                        >
+                          <ConstructionIcon sx={{ fontSize: '0.9rem', mr: 0.5 }} />
+                          Progress
+                        </Typography>
+                        <Typography 
+                          variant="body2" 
+                          fontWeight="bold" 
+                          sx={{
+                            color: progress > 100 
+                              ? theme.palette.error.main 
+                              : progress > 70 
+                                ? theme.palette.success.main 
+                                : progress > 30 
+                                  ? theme.palette.warning.main 
+                                  : theme.palette.info.main,
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: 0.5,
+                            fontSize: '0.75rem',
+                            padding: '2px 8px',
+                            borderRadius: 10,
+                            bgcolor: progress > 100 
+                              ? alpha(theme.palette.error.main, 0.1)
+                              : progress > 70 
+                                ? alpha(theme.palette.success.main, 0.1)
+                                : progress > 30 
+                                  ? alpha(theme.palette.warning.main, 0.1)
+                                  : alpha(theme.palette.info.main, 0.1)
+                          }}
+                        >
+                          {progress >= 100 ? <CheckCircleIcon fontSize="small" /> : null}
+                          {progress.toFixed(0)}%
+                        </Typography>
+                      </Box>
+
+                      <LinearProgress
+                        variant="determinate"
+                        value={Math.min(budgetUsedPercentage, 100)}
+                        sx={{
+                          height: 8,
+                          borderRadius: 5,
+                          backgroundColor: alpha(theme.palette.primary.main, 0.1),
+                          '& .MuiLinearProgress-bar': {
+                            borderRadius: 5,
+                            backgroundColor: 
+                              actualCost > budget
+                                ? theme.palette.error.main
+                                : theme.palette.success.main,
+                          },
+                        }}
+                      />
+                    </Box>
+
+                    <Divider sx={{ mx: 2, opacity: 0.6 }} />
+                    
+                    {/* Content Section - Allow flex grow */}
+                    <CardContent sx={{ pt: 2, px: 2.5, flexGrow: 1 }}>
+                      <Grid container spacing={3}>
+                        <Grid item xs={12} md={7}>
+                          {/* Description Box */}
+                          <Box sx={{ 
+                            mb: 2.5,
+                            p: 2,
+                            borderRadius: 2,
+                            bgcolor: alpha(theme.palette.background.default, 0.5),
+                            border: `1px dashed ${alpha(theme.palette.divider, 0.2)}`,
+                            color: theme.palette.text.secondary,
+                            fontSize: '0.95rem',
+                            lineHeight: 1.5,
+                            maxHeight: '80px',
+                            overflow: 'auto',
+                            minHeight: '50px',
+                            display: 'flex',
+                            alignItems: 'center',
+                          }}>
+                            {phase.description || <Typography variant="body2" sx={{ fontStyle: 'italic', opacity: 0.7 }}>No description</Typography>}
+                          </Box>
+
+                          {/* Phase Stats */}
+                          <Grid container spacing={2.5} sx={{ mb: 2.5 }}>
+                            {/* Tasks */}
+                            <Grid item xs={6}>
+                              <Paper 
+                                elevation={0} 
+                                sx={{ 
+                                  p: 2, 
+                                  textAlign: 'center',
+                                  borderRadius: 2,
+                                  bgcolor: alpha(theme.palette.info.main, 0.1),
+                                  height: '100%',
+                                  display: 'flex',
+                                  flexDirection: 'column',
+                                  justifyContent: 'center',
+                                }}
+                              >
+                                <TaskIcon 
+                                  sx={{ 
+                                    color: theme.palette.info.main,
+                                    fontSize: '1.6rem',
+                                    mb: 0.75
+                                  }} 
+                                />
                                 <Typography 
-                                  variant="subtitle1" 
-                                  sx={{ 
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    fontWeight: 600,
-                                  }}
+                                  variant="h6" 
+                                  color="text.primary" 
+                                  sx={{ fontSize: '1.3rem', fontWeight: 700 }}
                                 >
-                                  <BusinessIcon sx={{ mr: 1, fontSize: '1.2rem' }} />
-                                  Bids 
-                                  <Chip 
-                                    label={getPhaseBids(phase.id).length}
-                                    size="small"
-                                    sx={{ ml: 1, height: 20, fontSize: '0.7rem' }}
-                                  />
+                                  {phase.tasks?.length || 0}
                                 </Typography>
-                                <Button
-                                  size="small"
-                                  startIcon={<AddIcon fontSize="small" />}
-                                  onClick={() => handleOpenQuickBidDialog(phase.id)}
-                                  color="primary"
-                                  variant="outlined"
+                                <Typography variant="body2" color="text.secondary" sx={{ fontSize: '0.9rem' }}>Tasks</Typography>
+                              </Paper>
+                            </Grid>
+                            
+                            {/* Budget */}
+                            <Grid item xs={6}>
+                              <Paper 
+                                elevation={0} 
+                                sx={{ 
+                                  p: 2, 
+                                  textAlign: 'center',
+                                  borderRadius: 2,
+                                  bgcolor: alpha(theme.palette.primary.main, 0.1),
+                                  height: '100%',
+                                  display: 'flex',
+                                  flexDirection: 'column',
+                                  justifyContent: 'center',
+                                }}
+                              >
+                                <AttachMoneyIcon 
                                   sx={{ 
-                                    borderRadius: 4,
-                                    fontSize: '0.75rem',
-                                    py: 0.5,
-                                  }}
+                                    color: theme.palette.primary.main,
+                                    fontSize: '1.6rem',
+                                    mb: 0.75
+                                  }} 
+                                />
+                                <Typography 
+                                  variant="h6" 
+                                  color="text.primary" 
+                                  sx={{ fontSize: '1.3rem', fontWeight: 700 }}
                                 >
-                                  Add Bid
-                                </Button>
-                              </Box>
-                              
-                              {getPhaseBids(phase.id).length > 0 ? (
-                                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-                                  {getPhasePayments(phase.id)
-                                    .slice(0, 4)
-                                    .map((item, index) => (
-                                      <Card
-                                        key={`${item.bidId}-${item.payment.id || index}`}
-                                        elevation={0}
-                                        sx={{ 
-                                          p: 1.5,
-                                          borderRadius: 2,
-                                          bgcolor: theme.palette.background.paper,
-                                          border: `1px solid ${alpha(theme.palette.divider, 0.1)}`,
-                                          transition: 'transform 0.2s',
-                                          '&:hover': {
-                                            transform: 'translateX(4px)',
-                                            boxShadow: `0 2px 8px ${alpha(theme.palette.common.black, 0.05)}`,
-                                          }
-                                        }}
-                                      >
-                                        <Box sx={{ 
-                                          display: 'flex', 
-                                          justifyContent: 'space-between',
-                                          alignItems: 'center',
-                                        }}>
-                                          <Box sx={{ maxWidth: '60%' }}>
-                                            <Typography 
-                                              variant="body1" 
-                                              noWrap 
-                                              sx={{ fontWeight: 600 }}
+                                  {formatCurrency(phase.budget)}
+                                </Typography>
+                                <Typography variant="body2" color="text.secondary" sx={{ fontSize: '0.9rem' }}>Budget</Typography>
+                              </Paper>
+                            </Grid>
+                            
+                            {/* Proposed Cost */}
+                            <Grid item xs={6}>
+                              <Paper 
+                                elevation={0} 
+                                sx={{ 
+                                  p: 2, 
+                                  textAlign: 'center',
+                                  borderRadius: 2,
+                                  bgcolor: alpha(theme.palette.warning.main, 0.1),
+                                  height: '100%',
+                                  display: 'flex',
+                                  flexDirection: 'column',
+                                  justifyContent: 'center',
+                                }}
+                              >
+                                <ConstructionIcon 
+                                  sx={{ 
+                                    color: theme.palette.warning.main,
+                                    fontSize: '1.6rem',
+                                    mb: 0.75
+                                  }} 
+                                />
+                                <Typography 
+                                  variant="h6" 
+                                  color="text.primary" 
+                                  sx={{ fontSize: '1.3rem', fontWeight: 700 }}
+                                >
+                                  {formatCurrency(proposedCost)}
+                                </Typography>
+                                <Typography variant="body2" color="text.secondary" sx={{ fontSize: '0.9rem' }}>Proposed</Typography>
+                              </Paper>
+                            </Grid>
+                            
+                            {/* Actual Cost */}
+                            <Grid item xs={6}>
+                              <Paper 
+                                elevation={0} 
+                                sx={{
+                                  p: 2, 
+                                  textAlign: 'center',
+                                  borderRadius: 2,
+                                  bgcolor: actualCost > budget 
+                                    ? alpha(theme.palette.error.main, 0.1)
+                                    : alpha(theme.palette.success.main, 0.1),
+                                  height: '100%',
+                                  display: 'flex',
+                                  flexDirection: 'column',
+                                  justifyContent: 'center',
+                                }}
+                              >
+                                <ReceiptIcon 
+                                  sx={{ 
+                                    color: actualCost > budget
+                                      ? theme.palette.error.main
+                                      : theme.palette.success.main,
+                                    fontSize: '1.6rem',
+                                    mb: 0.75
+                                  }} 
+                                />
+                                <Typography 
+                                  variant="h6" 
+                                  color={actualCost > budget ? "error" : "text.primary"}
+                                  sx={{ fontSize: '1.3rem', fontWeight: 700 }}
+                                >
+                                  {formatCurrency(actualCost)}
+                                </Typography>
+                                <Typography variant="body2" color="text.secondary" sx={{ fontSize: '0.9rem' }}>Actual</Typography>
+                              </Paper>
+                            </Grid>
+                          </Grid>
+                          
+                          {/* Toggle Details Button */}
+                          <Button 
+                            variant="outlined" 
+                            fullWidth
+                            size="medium"
+                            color="primary"
+                            onClick={() => handleToggleExpand(phase.id)}
+                            startIcon={isExpanded ? <ExpandLessIcon /> : <ExpandMoreIcon />}
+                            sx={{ 
+                              borderRadius: 2,
+                              my: 1.5,
+                              py: 1,
+                              fontWeight: 500,
+                              fontSize: '0.95rem',
+                              borderWidth: '1px',
+                              '&:hover': {
+                                borderWidth: '1px',
+                                bgcolor: alpha(theme.palette.primary.main, 0.04),
+                              }
+                            }}
+                          >
+                            {isExpanded ? 'Hide Details' : 'Show Details'}
+                          </Button>
+                          
+                          {/* Collapsible Content */}
+                          <Collapse in={isExpanded} timeout="auto">
+                            <Box sx={{ mt: 1 }}>
+                              {/* Bids Section */}
+                              <Box sx={{ mb: 3 }}>
+                                <Box sx={{ 
+                                  display: 'flex',
+                                  justifyContent: 'space-between',
+                                  alignItems: 'center',
+                                  mb: 1.5,
+                                  pb: 1,
+                                  borderBottom: `1px dashed ${alpha(theme.palette.divider, 0.3)}`
+                                }}>
+                                  <Typography 
+                                    variant="subtitle1" 
+                                    sx={{ 
+                                      display: 'flex',
+                                      alignItems: 'center',
+                                      fontWeight: 600,
+                                      fontSize: '1rem'
+                                    }}
+                                  >
+                                    <BusinessIcon sx={{ mr: 1, fontSize: '1.2rem' }} />
+                                    Bids 
+                                    <Chip 
+                                      label={phaseBids.length}
+                                      size="small"
+                                      sx={{ ml: 1, height: 20, fontSize: '0.7rem' }}
+                                    />
+                                  </Typography>
+                                  <Button
+                                    size="small"
+                                    startIcon={<AddIcon fontSize="small" />}
+                                    onClick={() => handleOpenQuickBidDialog(phase.id)}
+                                    color="primary"
+                                    variant="outlined"
+                                    sx={{ 
+                                      borderRadius: 4,
+                                      fontSize: '0.75rem',
+                                      py: 0.5,
+                                    }}
+                                  >
+                                    Add Bid
+                                  </Button>
+                                </Box>
+                                
+                                {phaseBids.length > 0 ? (
+                                  <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+                                    {getPhasePayments(phase.id)
+                                      .slice(0, 4)
+                                      .map((item, index) => (
+                                        <Card
+                                          key={`${item.bidId}-${item.payment.id || index}`}
+                                          elevation={0}
+                                          sx={{ 
+                                            p: 1.5,
+                                            borderRadius: 2,
+                                            bgcolor: theme.palette.background.paper,
+                                            border: `1px solid ${alpha(theme.palette.divider, 0.1)}`,
+                                            transition: 'transform 0.2s',
+                                            '&:hover': {
+                                              transform: 'translateX(4px)',
+                                              boxShadow: `0 2px 8px ${alpha(theme.palette.common.black, 0.05)}`,
+                                            }
+                                          }}
+                                        >
+                                          <Box sx={{ 
+                                            display: 'flex', 
+                                            justifyContent: 'space-between',
+                                            alignItems: 'center',
+                                          }}>
+                                            <Box sx={{ maxWidth: '60%' }}>
+                                              <Typography 
+                                                variant="body1" 
+                                                noWrap 
+                                                sx={{ fontWeight: 600 }}
+                                              >
+                                                {item.subcontractorName}
+                                              </Typography>
+                                              <Typography 
+                                                variant="caption" 
+                                                color="text.secondary"
+                                                sx={{ display: 'block' }}
+                                              >
+                                                {item.bidTitle} - {item.payment.name}
+                                              </Typography>
+                                            </Box>
+                                            <Badge
+                                              color={
+                                                item.payment.status === 'paid' ? 'success' :
+                                                item.payment.status === 'overdue' ? 'error' :
+                                                'primary'
+                                              }
+                                              badgeContent={
+                                                item.payment.status === 'paid' ? 'PAID' :
+                                                item.payment.status === 'overdue' ? 'DUE' :
+                                                'PENDING'
+                                              }
+                                              sx={{ mr: 1 }}
                                             >
-                                              {item.subcontractorName}
-                                            </Typography>
-                                            <Typography 
-                                              variant="caption" 
-                                              color="text.secondary"
-                                              sx={{ display: 'block' }}
-                                            >
-                                              {item.bidTitle} - {item.payment.name}
-                                            </Typography>
+                                              <Typography 
+                                                variant="body1" 
+                                                fontWeight="bold"
+                                                sx={{ 
+                                                  color: 'text.primary',
+                                                  display: 'flex',
+                                                  alignItems: 'center',
+                                                }}
+                                              >
+                                                {formatCurrency(item.payment.amount)}
+                                              </Typography>
+                                            </Badge>
                                           </Box>
-                                          <Badge
-                                            color={
-                                              item.payment.status === 'paid' ? 'success' :
-                                              item.payment.status === 'overdue' ? 'error' :
-                                              'primary'
+                                        </Card>
+                                      ))
+                                    }
+                                    
+                                    {getPhasePayments(phase.id).length > 4 && (
+                                      <Button 
+                                        onClick={() => handleViewPhaseDetails(phase.id)}
+                                        sx={{ alignSelf: 'center', mt: 1 }}
+                                      >
+                                        +{getPhasePayments(phase.id).length - 4} more payments
+                                      </Button>
+                                    )}
+                                  </Box>
+                                ) : (
+                                  <Box sx={{ 
+                                    p: 2, 
+                                    textAlign: 'center', 
+                                    bgcolor: alpha(theme.palette.background.paper, 0.5),
+                                    borderRadius: 2,
+                                    border: `1px dashed ${alpha(theme.palette.divider, 0.2)}`,
+                                  }}>
+                                    <Typography variant="body2" color="text.secondary">
+                                      No bids yet for this phase
+                                    </Typography>
+                                  </Box>
+                                )}
+                              </Box>
+
+                              {/* Expenses Section */}
+                              <Box sx={{ mb: 1 }}>
+                                <Box sx={{ 
+                                  display: 'flex',
+                                  justifyContent: 'space-between',
+                                  alignItems: 'center',
+                                  mb: 1.5,
+                                  pb: 1,
+                                  borderBottom: `1px dashed ${alpha(theme.palette.divider, 0.3)}`
+                                }}>
+                                  <Typography 
+                                    variant="subtitle1" 
+                                    sx={{ 
+                                      display: 'flex',
+                                      alignItems: 'center',
+                                      fontWeight: 600,
+                                    }}
+                                  >
+                                    <ReceiptIcon sx={{ mr: 1, fontSize: '1.2rem' }} />
+                                    Expenses 
+                                    <Chip 
+                                      label={phaseExpenses.length}
+                                      size="small"
+                                      sx={{ ml: 1, height: 20, fontSize: '0.7rem' }}
+                                    />
+                                  </Typography>
+                                  <Button
+                                    size="small"
+                                    startIcon={<AddIcon fontSize="small" />}
+                                    onClick={() => handleOpenQuickExpenseDialog(phase.id)}
+                                    color="primary"
+                                    variant="outlined"
+                                    sx={{ 
+                                      borderRadius: 4,
+                                      fontSize: '0.75rem',
+                                      py: 0.5,
+                                    }}
+                                  >
+                                    Add Expense
+                                  </Button>
+                                </Box>
+                                
+                                {phaseExpenses.length > 0 ? (
+                                  <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+                                    {phaseExpenses
+                                      .slice(0, 3)
+                                      .map(expense => (
+                                        <Card
+                                          key={expense.id}
+                                          elevation={0}
+                                          sx={{ 
+                                            p: 1.5,
+                                            borderRadius: 2,
+                                            bgcolor: theme.palette.background.paper,
+                                            border: `1px solid ${alpha(theme.palette.divider, 0.1)}`,
+                                            transition: 'transform 0.2s',
+                                            '&:hover': {
+                                              transform: 'translateX(4px)',
+                                              boxShadow: `0 2px 8px ${alpha(theme.palette.common.black, 0.05)}`,
                                             }
-                                            badgeContent={
-                                              item.payment.status === 'paid' ? 'PAID' :
-                                              item.payment.status === 'overdue' ? 'DUE' :
-                                              'PENDING'
-                                            }
-                                            sx={{ mr: 1 }}
-                                          >
+                                          }}
+                                        >
+                                          <Box sx={{ 
+                                            display: 'flex', 
+                                            justifyContent: 'space-between',
+                                            alignItems: 'center',
+                                          }}>
+                                            <Box sx={{ maxWidth: '70%' }}>
+                                              <Typography 
+                                                variant="body1" 
+                                                noWrap 
+                                                sx={{ fontWeight: 600 }}
+                                              >
+                                                {expense.description || 'Unnamed expense'}
+                                              </Typography>
+                                              <Box sx={{ display: 'flex', alignItems: 'center', mt: 0.5 }}>
+                                                <Chip 
+                                                  label={expense.category} 
+                                                  size="small"
+                                                  sx={{ 
+                                                    height: 20, 
+                                                    fontSize: '0.7rem',
+                                                    mr: 1,
+                                                    bgcolor: theme.palette.grey[100]
+                                                  }}
+                                                />
+                                                {expense.vendor && (
+                                                  <Typography variant="caption" color="text.secondary">
+                                                    {expense.vendor}
+                                                  </Typography>
+                                                )}
+                                              </Box>
+                                            </Box>
                                             <Typography 
                                               variant="body1" 
                                               fontWeight="bold"
-                                              sx={{ 
-                                                color: 'text.primary',
-                                                display: 'flex',
-                                                alignItems: 'center',
-                                              }}
+                                              sx={{ color: theme.palette.error.main }}
                                             >
-                                              {formatCurrency(item.payment.amount)}
+                                              {formatCurrency(expense.amount)}
                                             </Typography>
-                                          </Badge>
-                                        </Box>
-                                      </Card>
-                                    ))
-                                  }
-                                  
-                                  {getPhasePayments(phase.id).length > 4 && (
-                                    <Button 
-                                      onClick={() => handleViewPhaseDetails(phase.id)}
-                                      sx={{ alignSelf: 'center', mt: 1 }}
-                                    >
-                                      +{getPhasePayments(phase.id).length - 4} more payments
-                                    </Button>
-                                  )}
-                                </Box>
-                              ) : (
-                                <Box sx={{ 
-                                  p: 2, 
-                                  textAlign: 'center', 
-                                  bgcolor: alpha(theme.palette.background.paper, 0.5),
-                                  borderRadius: 2,
-                                  border: `1px dashed ${alpha(theme.palette.divider, 0.2)}`,
-                                }}>
-                                  <Typography variant="body2" color="text.secondary">
-                                    No bids yet for this phase
-                                  </Typography>
-                                </Box>
-                              )}
-                            </Box>
-
-                            {/* Expenses Section */}
-                            <Box sx={{ mb: 1 }}>
-                              <Box sx={{ 
-                                display: 'flex',
-                                justifyContent: 'space-between',
-                                alignItems: 'center',
-                                mb: 1.5,
-                                pb: 1,
-                                borderBottom: `1px dashed ${alpha(theme.palette.divider, 0.3)}`
-                              }}>
-                                <Typography 
-                                  variant="subtitle1" 
-                                  sx={{ 
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    fontWeight: 600,
-                                  }}
-                                >
-                                  <ReceiptIcon sx={{ mr: 1, fontSize: '1.2rem' }} />
-                                  Expenses 
-                                  <Chip 
-                                    label={getPhaseExpenses(phase.id).length}
-                                    size="small"
-                                    sx={{ ml: 1, height: 20, fontSize: '0.7rem' }}
-                                  />
-                                </Typography>
-                                <Button
-                                  size="small"
-                                  startIcon={<AddIcon fontSize="small" />}
-                                  onClick={() => handleOpenQuickExpenseDialog(phase.id)}
-                                  color="primary"
-                                  variant="outlined"
-                                  sx={{ 
-                                    borderRadius: 4,
-                                    fontSize: '0.75rem',
-                                    py: 0.5,
-                                  }}
-                                >
-                                  Add Expense
-                                </Button>
-                              </Box>
-                              
-                              {getPhaseExpenses(phase.id).length > 0 ? (
-                                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-                                  {getPhaseExpenses(phase.id)
-                                    .slice(0, 3)
-                                    .map(expense => (
-                                      <Card
-                                        key={expense.id}
-                                        elevation={0}
-                                        sx={{ 
-                                          p: 1.5,
-                                          borderRadius: 2,
-                                          bgcolor: theme.palette.background.paper,
-                                          border: `1px solid ${alpha(theme.palette.divider, 0.1)}`,
-                                          transition: 'transform 0.2s',
-                                          '&:hover': {
-                                            transform: 'translateX(4px)',
-                                            boxShadow: `0 2px 8px ${alpha(theme.palette.common.black, 0.05)}`,
-                                          }
-                                        }}
-                                      >
-                                        <Box sx={{ 
-                                          display: 'flex', 
-                                          justifyContent: 'space-between',
-                                          alignItems: 'center',
-                                        }}>
-                                          <Box sx={{ maxWidth: '70%' }}>
-                                            <Typography 
-                                              variant="body1" 
-                                              noWrap 
-                                              sx={{ fontWeight: 600 }}
-                                            >
-                                              {expense.description || 'Unnamed expense'}
-                                            </Typography>
-                                            <Box sx={{ display: 'flex', alignItems: 'center', mt: 0.5 }}>
-                                              <Chip 
-                                                label={expense.category} 
-                                                size="small"
-                                                sx={{ 
-                                                  height: 20, 
-                                                  fontSize: '0.7rem',
-                                                  mr: 1,
-                                                  bgcolor: theme.palette.grey[100]
-                                                }}
-                                              />
-                                              {expense.vendor && (
-                                                <Typography variant="caption" color="text.secondary">
-                                                  {expense.vendor}
-                                                </Typography>
-                                              )}
-                                            </Box>
                                           </Box>
-                                          <Typography 
-                                            variant="body1" 
-                                            fontWeight="bold"
-                                            sx={{ color: theme.palette.error.main }}
-                                          >
-                                            {formatCurrency(expense.amount)}
-                                          </Typography>
-                                        </Box>
-                                      </Card>
-                                    ))
-                                  }
-                                  
-                                  {getPhaseExpenses(phase.id).length > 3 && (
-                                    <Button 
-                                      onClick={() => handleViewPhaseDetails(phase.id)}
-                                      sx={{ alignSelf: 'center', mt: 1 }}
-                                    >
-                                      +{getPhaseExpenses(phase.id).length - 3} more expenses
-                                    </Button>
-                                  )}
-                                </Box>
-                              ) : (
-                                <Box sx={{ 
-                                  p: 2, 
-                                  textAlign: 'center', 
-                                  bgcolor: alpha(theme.palette.background.paper, 0.5),
-                                  borderRadius: 2,
-                                  border: `1px dashed ${alpha(theme.palette.divider, 0.2)}`,
-                                }}>
-                                  <Typography variant="body2" color="text.secondary">
-                                    No expenses yet for this phase
-                                  </Typography>
-                                </Box>
-                              )}
+                                        </Card>
+                                      ))
+                                    }
+                                    
+                                    {phaseExpenses.length > 3 && (
+                                      <Button 
+                                        onClick={() => handleViewPhaseDetails(phase.id)}
+                                        sx={{ alignSelf: 'center', mt: 1 }}
+                                      >
+                                        +{phaseExpenses.length - 3} more expenses
+                                      </Button>
+                                    )}
+                                  </Box>
+                                ) : (
+                                  <Box sx={{ 
+                                    p: 2, 
+                                    textAlign: 'center', 
+                                    bgcolor: alpha(theme.palette.background.paper, 0.5),
+                                    borderRadius: 2,
+                                    border: `1px dashed ${alpha(theme.palette.divider, 0.2)}`,
+                                  }}>
+                                    <Typography variant="body2" color="text.secondary">
+                                      No expenses yet for this phase
+                                    </Typography>
+                                  </Box>
+                                )}
+                              </Box>
                             </Box>
-                          </Box>
-                        </Collapse>
-                      </Grid>
-                      
-                      <Grid item xs={12} md={4}>
-                        <Box sx={{ 
-                          height: 220,
-                          display: 'flex',
-                          flexDirection: 'column',
-                          alignItems: 'center', 
-                          justifyContent: 'center'
-                        }}>
+                          </Collapse>
+                        </Grid>
+                        
+                        <Grid item xs={12} md={5}>
                           <Box sx={{ 
-                            height: 180, 
-                            width: 180,
-                            position: 'relative',
+                            height: 250,
                             display: 'flex',
-                            alignItems: 'center',
+                            flexDirection: 'column',
+                            alignItems: 'center', 
                             justifyContent: 'center'
                           }}>
-                            <ResponsiveContainer width="100%" height="100%">
-                              <PieChart>
-                                <Pie
-                                  data={[
-                                    { name: 'Budget', value: phase.budget, color: theme.palette.primary.main },
-                                    { name: 'Actual', value: Math.max(phase.actualCost, 0), color: theme.palette.error.main }
-                                  ]}
-                                  cx="50%"
-                                  cy="50%"
-                                  innerRadius={45}
-                                  outerRadius={70}
-                                  paddingAngle={2}
-                                  dataKey="value"
-                                  strokeWidth={0}
+                            <Box sx={{ 
+                              height: 200, 
+                              width: 200,
+                              position: 'relative',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center'
+                            }}>
+                              <ResponsiveContainer width="100%" height="100%">
+                                <PieChart
+                                  width={isXs ? 180 : 200}
+                                  height={180}
+                                  margin={{ top: 5, right: 5, bottom: 5, left: 5 }}
                                 >
-                                  {[
-                                    { name: 'Budget', value: phase.budget, color: theme.palette.primary.main },
-                                    { name: 'Actual', value: Math.max(phase.actualCost, 0), color: 
-                                      phase.actualCost > phase.budget 
-                                        ? theme.palette.error.main 
-                                        : theme.palette.success.main 
-                                    }
-                                  ].map((entry, index) => (
-                                    <Cell 
-                                      key={`cell-${index}`} 
-                                      fill={entry.color} 
-                                      stroke="none"
-                                      fillOpacity={index === 0 ? 0.9 : 0.7}
-                                    />
-                                  ))}
-                                </Pie>
-                                <RechartsTooltip formatter={(value: any) => formatCurrency(value as number)} />
-                              </PieChart>
-                            </ResponsiveContainer>
+                                  <Pie
+                                    data={[
+                                      { name: 'Budget', value: budget, color: theme.palette.primary.main },
+                                      { name: 'Proposed', value: proposedCost, color: theme.palette.warning.main },
+                                      { name: 'Actual', value: Math.max(actualCost, 0), color: 
+                                        actualCost > budget 
+                                          ? theme.palette.error.main 
+                                          : theme.palette.success.main 
+                                      },
+                                    ]}
+                                    cx="50%"
+                                    cy="50%"
+                                    innerRadius={45}
+                                    outerRadius={80}
+                                    paddingAngle={2}
+                                    dataKey="value"
+                                    strokeWidth={0}
+                                  >
+                                    {[
+                                      { name: 'Budget', value: budget, color: theme.palette.primary.main },
+                                      { name: 'Proposed', value: proposedCost, color: theme.palette.warning.main },
+                                      { name: 'Actual', value: Math.max(actualCost, 0), color: 
+                                        actualCost > budget 
+                                          ? theme.palette.error.main 
+                                          : theme.palette.success.main 
+                                      }
+                                    ].map((entry, index) => (
+                                      <Cell 
+                                        key={`cell-${index}`} 
+                                        fill={entry.color} 
+                                        stroke="none"
+                                        fillOpacity={index === 0 ? 0.9 : index === 1 ? 0.8 : 0.7}
+                                      />
+                                    ))}
+                                  </Pie>
+                                  <RechartsTooltip formatter={(value: any) => formatCurrency(value as number)} />
+                                </PieChart>
+                              </ResponsiveContainer>
+                              
+                              {/* Center content */}
+                              <Box 
+                                sx={{ 
+                                  position: 'absolute',
+                                  display: 'flex',
+                                  flexDirection: 'column',
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
+                                  textAlign: 'center',
+                                  bgcolor: alpha(theme.palette.background.paper, 0.8),
+                                  borderRadius: '50%',
+                                  width: 80,
+                                  height: 80,
+                                  boxShadow: `0 0 10px ${alpha(theme.palette.common.black, 0.05)}`
+                                }}
+                              >
+                                <Typography 
+                                  variant="caption" 
+                                  color="text.secondary"
+                                  sx={{ display: 'block', fontSize: '0.85rem' }}
+                                >
+                                  Spent
+                                </Typography>
+                                <Typography 
+                                  variant="h6" 
+                                  fontWeight="bold"
+                                  color={
+                                    actualCost > budget 
+                                      ? theme.palette.error.main
+                                      : theme.palette.text.primary
+                                  }
+                                  sx={{ lineHeight: 1.2, fontSize: '1.4rem' }}
+                                >
+                                  {budget > 0 ? Math.round((actualCost / budget) * 100) : 0}%
+                                </Typography>
+                              </Box>
+                            </Box>
                             
-                            {/* Center content */}
-                            <Box 
-                              sx={{ 
-                                position: 'absolute',
-                                display: 'flex',
-                                flexDirection: 'column',
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                                textAlign: 'center'
-                              }}
-                            >
-                              <Typography 
-                                variant="caption" 
-                                color="text.secondary"
-                                sx={{ display: 'block', mb: 0.5 }}
-                              >
-                                Spent
-                              </Typography>
-                              <Typography 
-                                variant="h6" 
-                                fontWeight="bold"
-                                color={
-                                  phase.actualCost > phase.budget 
-                                    ? theme.palette.error.main
-                                    : theme.palette.text.primary
-                                }
-                              >
-                                {Math.round((phase.actualCost / phase.budget) * 100)}%
-                              </Typography>
-                              <Typography variant="caption" color="text.secondary">
-                                of budget
-                              </Typography>
+                            {/* Budget vs Actual Legend */}
+                            <Box sx={{ 
+                              display: 'flex', 
+                              flexWrap: 'wrap',
+                              gap: 2.5,
+                              justifyContent: 'center',
+                              mt: 2.5 
+                            }}>
+                              <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                                <Box 
+                                  sx={{ 
+                                    width: 14, 
+                                    height: 14, 
+                                    borderRadius: '50%', 
+                                    bgcolor: theme.palette.primary.main,
+                                    mr: 0.75 
+                                  }} 
+                                />
+                                <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.85rem' }}>
+                                  Budget
+                                </Typography>
+                              </Box>
+                              <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                                <Box 
+                                  sx={{ 
+                                    width: 14, 
+                                    height: 14, 
+                                    borderRadius: '50%', 
+                                    bgcolor: theme.palette.warning.main,
+                                    mr: 0.75
+                                  }} 
+                                />
+                                <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.85rem' }}>
+                                  Proposed
+                                </Typography>
+                              </Box>
+                              <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                                <Box 
+                                  sx={{ 
+                                    width: 14, 
+                                    height: 14, 
+                                    borderRadius: '50%', 
+                                    bgcolor: actualCost > budget 
+                                      ? theme.palette.error.main 
+                                      : theme.palette.success.main,
+                                    mr: 0.75
+                                  }} 
+                                />
+                                <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.85rem' }}>
+                                  Actual
+                                </Typography>
+                              </Box>
                             </Box>
                           </Box>
-                          
-                          {/* Budget vs Actual Legend */}
-                          <Box sx={{ 
-                            display: 'flex', 
-                            gap: 3, 
-                            justifyContent: 'center',
-                            mt: 1.5 
-                          }}>
-                            <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                              <Box 
-                                sx={{ 
-                                  width: 12, 
-                                  height: 12, 
-                                  borderRadius: '50%', 
-                                  bgcolor: theme.palette.primary.main,
-                                  mr: 1 
-                                }} 
-                              />
-                              <Typography variant="caption" color="text.secondary">
-                                Budget: {formatCurrency(phase.budget)}
-                              </Typography>
-                            </Box>
-                            <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                              <Box 
-                                sx={{ 
-                                  width: 12, 
-                                  height: 12, 
-                                  borderRadius: '50%', 
-                                  bgcolor: phase.actualCost > phase.budget 
-                                    ? theme.palette.error.main 
-                                    : theme.palette.success.main,
-                                  mr: 1 
-                                }} 
-                              />
-                              <Typography variant="caption" color="text.secondary">
-                                Actual: {formatCurrency(phase.actualCost)}
-                              </Typography>
-                            </Box>
-                          </Box>
-                        </Box>
+                        </Grid>
                       </Grid>
-                    </Grid>
-                  </CardContent>
-                  
-                  {/* Card footer */}
-                  <Box 
-                    sx={{ 
-                      borderTop: `1px solid ${alpha(theme.palette.divider, 0.08)}`,
-                      py: 1.5,
-                      px: 2,
-                      textAlign: 'right',
-                      bgcolor: alpha(theme.palette.background.default, 0.4),
-                      borderBottomLeftRadius: 3,
-                      borderBottomRightRadius: 3,
-                    }}
-                  >
-                    <Button 
-                      variant="contained" 
-                      size="medium"
-                      onClick={() => handleViewPhaseDetails(phase.id)}
+                    </CardContent>
+                    
+                    {/* Card footer - Pushed to bottom */}
+                    <Box 
                       sx={{ 
-                        px: 3,
-                        borderRadius: 2,
-                        background: 'transparent',
-                        color: theme.palette.primary.main,
-                        fontWeight: 600,
-                        position: 'relative',
-                        overflow: 'hidden',
-                        border: `1px solid ${alpha(theme.palette.primary.main, 0.5)}`,
-                        '&:hover': {
-                          background: alpha(theme.palette.primary.main, 0.05),
-                          border: `1px solid ${theme.palette.primary.main}`,
-                        },
+                        borderTop: `1px solid ${alpha(theme.palette.divider, 0.08)}`,
+                        py: 1.75,
+                        px: 2.5,
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center',
+                        bgcolor: alpha(theme.palette.background.default, 0.4),
+                        borderBottomLeftRadius: 3,
+                        borderBottomRightRadius: 3,
+                        marginTop: 'auto'
                       }}
                     >
-                      View Phase Details
-                    </Button>
-                  </Box>
-                </Card>
-              </Fade>
-            </Grid>
-          ))}
+                      <Box display="flex" gap={2}>
+                        <Tooltip title="Add Bid">
+                          <IconButton 
+                            size="small" 
+                            onClick={() => handleOpenQuickBidDialog(phase.id)}
+                            sx={{ 
+                              color: theme.palette.primary.main,
+                              bgcolor: alpha(theme.palette.primary.main, 0.1),
+                              '&:hover': {
+                                bgcolor: alpha(theme.palette.primary.main, 0.2),
+                              },
+                              borderRadius: 1.5,
+                              padding: '7px'
+                            }}
+                          >
+                            <BusinessIcon fontSize="small" />
+                          </IconButton>
+                        </Tooltip>
+                        <Tooltip title="Add Expense">
+                          <IconButton 
+                            size="small" 
+                            onClick={() => handleOpenQuickExpenseDialog(phase.id)}
+                            sx={{ 
+                              color: theme.palette.error.main,
+                              bgcolor: alpha(theme.palette.error.main, 0.1),
+                              '&:hover': {
+                                bgcolor: alpha(theme.palette.error.main, 0.2),
+                              },
+                              borderRadius: 1.5,
+                              padding: '7px'
+                            }}
+                          >
+                            <ReceiptIcon fontSize="small" />
+                          </IconButton>
+                        </Tooltip>
+                      </Box>
+                      
+                      <Button 
+                        variant="text" 
+                        size="small"
+                        onClick={() => handleViewPhaseDetails(phase.id)}
+                        endIcon={<ExpandMoreIcon 
+                          sx={{ 
+                            transform: isExpanded ? 'rotate(180deg)' : 'rotate(0deg)',
+                            transition: 'transform 0.3s'
+                          }} 
+                        />}
+                        sx={{ 
+                          fontWeight: 500,
+                          color: theme.palette.text.secondary,
+                          fontSize: '0.9rem',
+                          '&:hover': {
+                            backgroundColor: 'transparent',
+                            color: theme.palette.primary.main,
+                          },
+                        }}
+                      >
+                        {isExpanded ? 'Hide Details' : 'View Details'}
+                      </Button>
+                    </Box>
+                  </Card>
+                </Fade>
+              </Grid>
+            );
+          })}
         </Grid>
       ) : (
         <Box sx={{ 

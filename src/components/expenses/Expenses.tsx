@@ -317,6 +317,9 @@ const Expenses: React.FC = () => {
     setSubmitting(true);
     
     try {
+      // Get the expense data before updating
+      const expenseToUpdate = expenses.find(e => e.id === expenseId);
+      
       // Update status to paid
       await ExpenseService.markAsPaid(expenseId);
       
@@ -326,6 +329,21 @@ const Expenses: React.FC = () => {
           ? { ...e, status: 'paid' } 
           : e
       ));
+
+      // If we have project-related expense, trigger a refresh using a custom event
+      if (expenseToUpdate?.projectId) {
+        // Create and dispatch a custom event to notify ProjectDetailPage
+        const event = new CustomEvent('expense-status-changed', {
+          detail: {
+            expenseId,
+            projectId: expenseToUpdate.projectId,
+            phaseId: expenseToUpdate.phaseId,
+            oldStatus: expenseToUpdate.status,
+            newStatus: 'paid'
+          }
+        });
+        window.dispatchEvent(event);
+      }
       
       setSnackbar({
         open: true,

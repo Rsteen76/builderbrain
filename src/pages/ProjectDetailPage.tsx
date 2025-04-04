@@ -447,6 +447,34 @@ const ProjectDetailPage: React.FC = () => {
     }
   }, [refreshAllProjectData]);
   
+  // Add event listener for expense status changes
+  useEffect(() => {
+    const handleExpenseStatusChanged = (event: Event) => {
+      // Check if this is our custom event and if it's for this project
+      const customEvent = event as CustomEvent<{
+        expenseId: string;
+        projectId: string;
+        phaseId?: string;
+        oldStatus: string;
+        newStatus: string;
+      }>;
+      
+      if (customEvent.detail && customEvent.detail.projectId === projectId) {
+        console.log('Expense status changed, refreshing project data:', customEvent.detail);
+        // Refresh all project data including expenses
+        refreshAllProjectData();
+      }
+    };
+    
+    // Add event listener
+    window.addEventListener('expense-status-changed', handleExpenseStatusChanged);
+    
+    // Cleanup function to remove event listener
+    return () => {
+      window.removeEventListener('expense-status-changed', handleExpenseStatusChanged);
+    };
+  }, [projectId, refreshAllProjectData]);
+  
   // Update handleTabChange to refresh data when switching to expenses tab
   const handleTabChange = (event: React.SyntheticEvent, newValue: number) => {
     setTabValue(newValue);
@@ -1017,6 +1045,27 @@ const ProjectDetailPage: React.FC = () => {
       percentUsed: totalBudget > 0 ? (totalActual / totalBudget) * 100 : 0
     };
   }, [phases, project?.budget, expenses]);
+
+  // Calculate ACTUAL phase costs based on PAID expenses only
+  const phaseActualCosts = useMemo(() => {
+    const costs: Record<string, number> = {};
+    
+    // Initialize costs for all phases with 0
+    phases.forEach(phase => {
+      costs[phase.id] = 0;
+    });
+    
+    // Sum up paid expense amounts by phase
+    expenses
+      .filter(expense => expense.status === 'paid')
+      .forEach(expense => {
+        if (expense.phaseId && costs[expense.phaseId] !== undefined) {
+          costs[expense.phaseId] += expense.amount || 0;
+        }
+      });
+    
+    return costs;
+  }, [phases, expenses]);
 
   // Generate combined expenses for charts
   const combinedExpenses = useMemo(() => {
@@ -1674,6 +1723,44 @@ const ProjectDetailPage: React.FC = () => {
     }
   };
 
+  // --- Calculate Proposed Costs for Phases ---
+  const phaseProposedCosts = useMemo(() => {
+    const costs: Record<string, number> = {};
+    
+    // Initialize costs for all phases with 0
+    phases.forEach(phase => {
+      costs[phase.id] = 0;
+    });
+    
+    // Calculate from accepted bids
+    phases.forEach(phase => {
+      const acceptedPhaseBids = bids.filter(bid => 
+        bid.phaseId === phase.id && bid.status === 'accepted'
+      );
+      
+      // Sum up all accepted bids for this phase
+      costs[phase.id] = acceptedPhaseBids.reduce((sum, bid) => sum + (bid.totalAmount || 0), 0);
+      
+      // Find expenses that are related to these bids but already paid
+      // This avoids double-counting in both proposed and actual
+      const paidBidExpenses = expenses.filter(expense => 
+        expense.phaseId === phase.id && 
+        expense.status === 'paid' && 
+        expense.bidId && 
+        acceptedPhaseBids.some(bid => bid.id === expense.bidId)
+      );
+      
+      // Subtract paid expenses from the proposed costs to avoid double counting
+      const paidBidExpensesTotal = paidBidExpenses.reduce((sum, expense) => 
+        sum + (expense.amount || 0), 0
+      );
+      
+      costs[phase.id] -= paidBidExpensesTotal;
+    });
+    
+    return costs;
+  }, [phases, bids, expenses]);
+
   // Loading and Error states
   if (loading) {
     return (
@@ -1781,6 +1868,8 @@ const ProjectDetailPage: React.FC = () => {
               phases={phases}
               bids={bids}
               expenses={expenses}
+              phaseProposedCosts={phaseProposedCosts}
+              phaseActualCosts={phaseActualCosts} // Pass the calculated actual costs
               theme={theme}
               handleAddPhase={handleAddPhase}
               handleUpdatePhase={handleUpdatePhase}

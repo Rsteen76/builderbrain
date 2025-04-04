@@ -40,6 +40,7 @@ interface Expense {
   projectName?: string;
   category: string;
   status: string;
+  phaseId?: string;
 }
 
 interface PaymentFormModalProps {
@@ -102,6 +103,20 @@ const PaymentFormModal: React.FC<PaymentFormModalProps> = ({
     if (!validateForm()) return;
     
     setLoading(true);
+    
+    // Create and dispatch the custom event to notify ProjectDetailPage
+    if (expense?.projectId) {
+      const event = new CustomEvent('expense-status-changed', {
+        detail: {
+          expenseId: expense.id,
+          projectId: expense.projectId,
+          phaseId: expense.phaseId, // This might be undefined, which is fine
+          oldStatus: expense.status,
+          newStatus: 'paid'
+        }
+      });
+      window.dispatchEvent(event);
+    }
     
     // Simulate API call delay
     setTimeout(() => {
