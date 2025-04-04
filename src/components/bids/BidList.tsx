@@ -63,7 +63,8 @@ import {
 import { formatCurrency } from '../../utils/formatters';
 import { Bid } from '../../types';
 import { useAuth } from '../../contexts/AuthContext';
-import BidDeletionWrapper from './BidDeletionWrapper';
+import { openBidDeleteDialog } from '../dialogs/BidDeletePortal';
+import BidDeletePortal from '../dialogs/BidDeletePortal';
 
 // Status colors
 const bidStatusColors: Record<Bid['status'], string> = {
@@ -107,7 +108,7 @@ interface BidRowProps {
   bid: BidSummary;
   onView: (bid: BidSummary) => void;
   onEdit: (bid: BidSummary) => void;
-  onDelete: (bid: BidSummary) => void;
+  onDeleteRequest: (bid: BidSummary) => void;
   onDuplicate: (bid: BidSummary) => void;
   theme: any;
 }
@@ -116,7 +117,7 @@ const BidRow: React.FC<BidRowProps> = ({
   bid, 
   onView, 
   onEdit, 
-  onDelete, 
+  onDeleteRequest, 
   onDuplicate,
   theme,
 }) => {
@@ -271,7 +272,7 @@ const BidRow: React.FC<BidRowProps> = ({
                   <ListItemText>Duplicate</ListItemText>
                 </MenuItem>
                 <Divider />
-                <MenuItem onClick={() => handleAction(onDelete)} sx={{ color: 'error.main' }}>
+                <MenuItem onClick={() => handleAction(onDeleteRequest)} sx={{ color: 'error.main' }}>
                   <ListItemIcon sx={{ color: 'error.main' }}>
                     <DeleteIcon fontSize="small" />
                   </ListItemIcon>
@@ -537,6 +538,23 @@ const BidList: React.FC = () => {
     }
   }, [user, filter, sort, authLoading]);
 
+  // Listen for global bid deletion events
+  useEffect(() => {
+    const handleBidDeletedEvent = (event: CustomEvent<{ bidId: string }>) => {
+      const { bidId } = event.detail;
+      console.log('BidList: Received bid-deleted event for bid ID:', bidId);
+      setBids(prevBids => prevBids.filter(b => b.id !== bidId));
+    };
+
+    // Add event listener
+    window.addEventListener('bid-deleted', handleBidDeletedEvent as EventListener);
+
+    // Cleanup
+    return () => {
+      window.removeEventListener('bid-deleted', handleBidDeletedEvent as EventListener);
+    };
+  }, []);
+
   const handleSearchChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     setSearchTerm(event.target.value);
   };
@@ -566,15 +584,20 @@ const BidList: React.FC = () => {
   };
 
   const handleDeleteRequest = (bid: BidSummary) => {
-    // Update the local state to remove the deleted bid
-    setBids(prevBids => prevBids.filter(b => b.id !== bid.id));
-    // Show a notification that the bid was deleted
-    // Note: The actual deletion is handled by BidDeletionWrapper
+    console.log('BidList: handleDeleteRequest called for bid ID:', bid.id);
+    openBidDeleteDialog(bid);
   };
 
   const handleTabChange = (_: React.SyntheticEvent, newValue: number) => {
     setActiveTab(newValue);
-    fetchBids();
+    let statusFilter: BidFilter = {};
+    switch(newValue) {
+      case 1: statusFilter = { status: 'draft' }; break;
+      case 2: statusFilter = { status: 'submitted' }; break;
+      case 3: statusFilter = { status: 'accepted' }; break;
+      case 4: statusFilter = { status: ['rejected', 'expired'] }; break;
+    }
+    setFilter(statusFilter);
   };
 
   const filteredBids = bids.filter(bid => {
@@ -678,7 +701,7 @@ const BidList: React.FC = () => {
           <Tab label="All Bids" />
           <Tab label="Drafts" />
           <Tab label="Submitted" />
-          <Tab label="Awarded" />
+          <Tab label="Accepted" />
           <Tab label="Rejected/Expired" />
         </Tabs>
       </Box>
@@ -695,7 +718,7 @@ const BidList: React.FC = () => {
           <Typography variant="body2" color="text.secondary" paragraph>
             {searchTerm 
               ? "No bids match your search criteria. Try using different keywords."
-              : "There are no bids yet. Create your first bid to get started."}
+              : "There are no bids yet for the selected status. Create your first bid to get started."}
           </Typography>
           <Button 
             variant="contained" 
@@ -713,7 +736,7 @@ const BidList: React.FC = () => {
               bid={bid}
               onView={handleView}
               onEdit={handleEdit}
-              onDelete={handleDeleteRequest}
+              onDeleteRequest={handleDeleteRequest}
               onDuplicate={handleDuplicate}
               theme={theme}
             />

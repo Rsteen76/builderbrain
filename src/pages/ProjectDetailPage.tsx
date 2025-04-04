@@ -108,7 +108,8 @@ import TemplateAdjuster from '../components/projects/TemplateAdjuster';
 import { Project, Task, Phase, Bid, Subcontractor, BidPaymentStage, ProjectPhase } from '../types';
 import { Expense, ExpenseCategory, ExpenseStatus } from '../types/expense.types';
 import { v4 as uuidv4 } from 'uuid';
-import BidDeletionWrapper from '../components/bids/BidDeletionWrapper';
+import { openBidDeleteDialog } from '../components/dialogs/BidDeletePortal';
+import BidDeletePortal from '../components/dialogs/BidDeletePortal';
 
 // Import extracted tab components
 import ProjectOverviewTab from '../components/projects/detailTabs/ProjectOverviewTab';
@@ -256,7 +257,6 @@ const ProjectDetailPage: React.FC = () => {
   const [tabValue, setTabValue] = useState(0);
   const [menuAnchorEl, setMenuAnchorEl] = useState<null | HTMLElement>(null);
   const [isSaving, setIsSaving] = useState(false);
-  const [bidToDelete, setBidToDelete] = useState<Bid | null>(null);
   const [phasesBeingUpdated, setPhasesBeingUpdated] = useState<{ [id: string]: ProjectPhase }>({});
   const [expensesData, setExpensesData] = useState<{ name: string; value: number; color: string }[]>([]);
   const [quickUpdateMode, setQuickUpdateMode] = useState(false);
@@ -291,6 +291,33 @@ const ProjectDetailPage: React.FC = () => {
     subcontractorId: '',
     subcontractorName: '',
   });
+  
+  // Listen for global bid deletion events - MOVED HERE before any returns
+  useEffect(() => {
+    const handleBidDeletedEvent = (event: CustomEvent<{ bidId: string }>) => {
+      const { bidId } = event.detail;
+      console.log('ProjectDetailPage: Received bid-deleted event for bid ID:', bidId);
+      
+      setBids(prevBids => {
+        console.log(`ProjectDetailPage: Filtering bids. Removing ID: ${bidId}. Current count: ${prevBids.length}`);
+        const newBids = prevBids.filter(b => b.id !== bidId);
+        console.log(`ProjectDetailPage: New bid count: ${newBids.length}`);
+        return newBids;
+      });
+      
+      // Fix type error by explicitly typing the function
+      setRecentBids((prevBids: Bid[]) => prevBids.filter(b => b.id !== bidId));
+      showNotification('Bid deleted successfully', 'success');
+    };
+
+    // Add event listener
+    window.addEventListener('bid-deleted', handleBidDeletedEvent as EventListener);
+
+    // Cleanup
+    return () => {
+      window.removeEventListener('bid-deleted', handleBidDeletedEvent as EventListener);
+    };
+  }, []);  
   
   // Function to fetch expenses
   const fetchExpenses = async (projectId: string) => {
@@ -1760,14 +1787,13 @@ const ProjectDetailPage: React.FC = () => {
     );
   }
 
-  // Add function to handle bid deletion
-  const handleBidDeleted = () => {
-    if (bidToDelete) {
-      // Update local state to remove the bid
-      setBids(prevBids => prevBids.filter(b => b.id !== bidToDelete.id));
-      setRecentBids(prevBids => prevBids.filter(b => b.id !== bidToDelete.id));
-      setBidToDelete(null);
-      showNotification('Bid deleted successfully', 'success');
+  // Now we can simplify the handleDeleteBidRequest function
+  const handleDeleteBidRequest = (bidId: string) => {
+    const bidFound = bids.find(b => b.id === bidId);
+    console.log('ProjectDetailPage: handleDeleteBidRequest for ID:', bidId, 'Found:', !!bidFound);
+    if (bidFound) {
+      openBidDeleteDialog(bidFound);
+      // No need to handle state updates here - they'll be handled by the global event listener
     }
   };
 
@@ -2200,16 +2226,6 @@ const ProjectDetailPage: React.FC = () => {
           </Button>
         </DialogActions>
       </Dialog>
-      
-      {/* Add the BidDeletionDialog */}
-      {bidToDelete && user && (
-        <BidDeletionWrapper
-          bid={bidToDelete}
-          userId={user.uid}
-          onBidDeleted={handleBidDeleted}
-          variant="icon"
-        />
-      )}
     </>
   );
 };

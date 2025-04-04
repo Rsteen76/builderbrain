@@ -32,7 +32,7 @@ import {
   Gavel as BidsIcon,
 } from '@mui/icons-material';
 import { Bid, BidPaymentStage } from '../../../types';
-import BidDeletionWrapper from '../../bids/BidDeletionWrapper';
+import { openBidDeleteDialog } from '../../dialogs/BidDeletePortal';
 import { useAuth } from '../../../hooks/useAuth';
 
 interface ProjectBidsTabProps {
@@ -55,6 +55,13 @@ const ProjectBidsTab: React.FC<ProjectBidsTabProps> = ({
   formatDate,
 }) => {
   const { user } = useAuth();
+
+  const handleDeleteBid = (bidId: string) => {
+    const bidToDelete = bids.find(bid => bid.id === bidId);
+    if (bidToDelete) {
+      openBidDeleteDialog(bidToDelete);
+    }
+  };
 
   return (
     <Box>
@@ -142,15 +149,6 @@ const ProjectBidsTab: React.FC<ProjectBidsTabProps> = ({
                         >
                           View
                         </Button>
-                        <BidDeletionWrapper
-                          bid={bid}
-                          userId={user?.uid || ''}
-                          onBidDeleted={() => {
-                            // The parent component will handle the state update
-                            // through its own data fetching mechanism
-                          }}
-                          variant="icon"
-                        />
                       </TableCell>
                     </TableRow>
                   );
@@ -259,18 +257,14 @@ const ProjectBidsTab: React.FC<ProjectBidsTabProps> = ({
                     <Typography variant="body2" color="text.secondary" sx={{ mb: 0.5 }}>Documents</Typography>
                     {bid.attachments.map((doc: any, index: number) => {
                       const docName = typeof doc === 'string' ? doc : doc.name;
-                      const docUrl = typeof doc === 'string' ? '#' : doc.url;
+                      const docUrl = typeof doc === 'string' ? doc : doc.url;
                       
                       return (
-                        <Chip
-                          key={index}
-                          label={docName}
-                          size="small"
-                          icon={<DocumentIcon fontSize="small" />}
-                          clickable
-                          onClick={() => window.open(docUrl, '_blank')}
-                          sx={{ mr: 0.5, mb: 0.5, borderRadius: 1 }}
-                        />
+                        <Tooltip title={docName || 'Document'} key={index}>
+                          <IconButton size="small" href={docUrl} target="_blank" rel="noopener noreferrer">
+                            <DocumentIcon fontSize="small" />
+                          </IconButton>
+                        </Tooltip>
                       );
                     })}
                   </Box>
@@ -285,15 +279,11 @@ const ProjectBidsTab: React.FC<ProjectBidsTabProps> = ({
                     <EditIcon fontSize="small" />
                   </IconButton>
                 </Tooltip>
-                <BidDeletionWrapper
-                  bid={bid}
-                  userId={user?.uid || ''}
-                  onBidDeleted={() => {
-                    // The parent component will handle the state update
-                    // through its own data fetching mechanism
-                  }}
-                  variant="icon"
-                />
+                <Tooltip title="Delete Bid">
+                  <IconButton size="small" onClick={() => handleDeleteBid(bid.id)} color="error">
+                    <DeleteIcon fontSize="small" />
+                  </IconButton>
+                </Tooltip>
               </Box>
             </Card>
           </Grid>

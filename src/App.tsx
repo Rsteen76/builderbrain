@@ -1,16 +1,17 @@
-import React, { Suspense, lazy } from 'react';
+import React, { Suspense, lazy, useContext } from 'react';
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import { ThemeProvider, CssBaseline, GlobalStyles } from '@mui/material';
 import { LocalizationProvider } from '@mui/x-date-pickers';
 import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns';
 import theme from './theme';
 import MainLayout from './components/layout/MainLayout';
-import { AuthProvider } from './contexts/AuthContext';
+import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { QueryProvider } from './contexts/QueryContext';
 import ProtectedRoute from './components/auth/ProtectedRoute';
 import ProjectDetailPage from './pages/ProjectDetailPage';
 import NewResidentialProjectForm from './components/projects/NewResidentialProjectForm';
 import ResidentialTemplateLanding from './components/landing/ResidentialTemplateLanding';
+import BidDeletePortal from './components/dialogs/BidDeletePortal';
 
 // Lazy load components
 const Dashboard = lazy(() => import('./components/dashboard/Dashboard'));
@@ -32,6 +33,26 @@ const Settings = lazy(() => import('./components/settings/Settings'));
 const Login = lazy(() => import('./components/auth/Login'));
 const SignUp = lazy(() => import('./components/auth/SignUp'));
 const Payments = lazy(() => import('./components/payments/Payments'));
+
+// Create a wrapper component for the BidDeletePortal
+const BidDeletePortalWrapper = () => {
+  const { user } = useAuth();
+  
+  // Only render if user is logged in
+  if (!user) return null;
+  
+  return (
+    <BidDeletePortal 
+      userId={user.uid} 
+      onBidDeleted={(bidId) => {
+        // Dispatch a custom event that other components can listen for
+        window.dispatchEvent(new CustomEvent('bid-deleted', { 
+          detail: { bidId } 
+        }));
+      }}
+    />
+  );
+};
 
 const App: React.FC = () => {
   return (
@@ -159,6 +180,9 @@ const App: React.FC = () => {
                     <Route path="templates" element={<ProtectedRoute><ProjectTemplates /></ProtectedRoute>} />
                   </Route>
                 </Routes>
+                
+                {/* Add the global bid delete portal */}
+                <BidDeletePortalWrapper />
               </Suspense>
             </Router>
           </AuthProvider>

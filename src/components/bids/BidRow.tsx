@@ -13,17 +13,17 @@ import {
   Visibility as VisibilityIcon,
   Edit as EditIcon,
   ContentCopy as ContentCopyIcon,
+  Delete as DeleteIcon,
 } from '@mui/icons-material';
 import { useAuth } from '../../hooks/useAuth';
 import { formatCurrency, formatDate } from '../../utils/formatters';
 import { BidSummary } from '../../types';
-import BidDeletionWrapper from './BidDeletionWrapper';
 
 interface BidRowProps {
   bid: BidSummary;
   onView: (bid: BidSummary) => void;
   onEdit: (bid: BidSummary) => void;
-  onDelete: (bid: BidSummary) => void;
+  onDeleteRequest: (bid: BidSummary) => void;
   onDuplicate: (bid: BidSummary) => void;
   theme: Theme;
 }
@@ -32,7 +32,7 @@ const BidRow: React.FC<BidRowProps> = ({
   bid,
   onView,
   onEdit,
-  onDelete,
+  onDeleteRequest,
   onDuplicate,
   theme,
 }) => {
@@ -113,12 +113,11 @@ const BidRow: React.FC<BidRowProps> = ({
               <EditIcon fontSize="small" />
             </IconButton>
           </Tooltip>
-          <BidDeletionWrapper
-            bid={bid}
-            userId={user?.uid || ''}
-            onBidDeleted={() => onDelete(bid)}
-            variant="icon"
-          />
+          <Tooltip title="Delete Bid">
+            <IconButton size="small" onClick={() => onDeleteRequest(bid)} color="error">
+              <DeleteIcon fontSize="small" />
+            </IconButton>
+          </Tooltip>
           <Tooltip title="Duplicate Bid">
             <IconButton size="small" onClick={() => onDuplicate(bid)}>
               <ContentCopyIcon fontSize="small" />

@@ -248,27 +248,38 @@ export const submitBid = async (
  * Delete a bid and return whether the operation was successful
  */
 export const deleteBid = async (bidId: string, selectedExpenseIds?: string[]): Promise<boolean> => {
+  console.log(`Starting deletion process for bid ID: ${bidId}`);
   try {
     // If specific expense IDs are provided, only delete those expenses
     if (selectedExpenseIds && selectedExpenseIds.length > 0) {
+      console.log(`Deleting specified expenses for bid ${bidId}:`, selectedExpenseIds);
       for (const expenseId of selectedExpenseIds) {
+        console.log(`Attempting to delete expense ID: ${expenseId}`);
         await ExpenseService.deleteExpense(expenseId);
+        console.log(`Successfully deleted expense ID: ${expenseId}`);
       }
     } else {
       // If no specific expenses are selected, delete all expenses associated with the bid
+      console.log(`Finding all associated expenses for bid ${bidId}`);
       const expenses = await findExpensesForBid(bidId);
+      console.log(`Found ${expenses.length} associated expenses for bid ${bidId}`);
       for (const expense of expenses) {
         if (expense.id) {
+          console.log(`Attempting to delete associated expense ID: ${expense.id}`);
           await ExpenseService.deleteExpense(expense.id);
+          console.log(`Successfully deleted associated expense ID: ${expense.id}`);
         }
       }
     }
 
     // Delete the bid
+    console.log(`Attempting to delete bid ID: ${bidId}`);
     await BidService.deleteBid(bidId);
+    console.log(`Successfully deleted bid ID: ${bidId}. Returning true.`);
     return true;
   } catch (error) {
-    console.error('Error deleting bid:', error);
+    console.error(`Error during deletion process for bid ID: ${bidId}`, error);
+    console.log(`Deletion failed for bid ID: ${bidId}. Returning false.`);
     return false;
   }
 };
@@ -277,17 +288,19 @@ export const deleteBid = async (bidId: string, selectedExpenseIds?: string[]): P
  * Find all expenses associated with a bid
  */
 export const findExpensesForBid = async (bidId: string): Promise<Expense[]> => {
+  console.log(`findExpensesForBid called for bidId: ${bidId}`);
   try {
     const expensesRef = collection(db, 'expenses');
     const q = query(expensesRef, where('bidId', '==', bidId));
     const querySnapshot = await getDocs(q);
-    
+    console.log(`Firestore query for expenses with bidId=${bidId} returned ${querySnapshot.docs.length} documents.`);
+
     return querySnapshot.docs.map(doc => ({
       id: doc.id,
       ...doc.data()
     } as Expense));
   } catch (error) {
-    console.error('Error finding expenses for bid:', error);
+    console.error(`Error finding expenses for bid ${bidId}:`, error);
     return [];
   }
 }; 
