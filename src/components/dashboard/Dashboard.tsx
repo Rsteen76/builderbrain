@@ -65,10 +65,13 @@ import {
   AddCircleOutline as AddCircleOutlineIcon,
   Business as CommercialIcon,
   Landscape as LandscapeIcon,
+  ArrowUpward as ArrowUpwardIcon,
+  AccessTime as AccessTimeIcon,
+  Star as StarIcon,
+  Place as PlaceIcon,
   Flag as FlagIcon,
   Error as ErrorIcon,
   Today as TodayIcon,
-  AccessTime as AccessTimeIcon,
   CalendarToday as CalendarTodayIcon,
   Alarm as AlarmIcon,
   PriorityHigh as PriorityHighIcon,
@@ -151,90 +154,96 @@ const StatCard: React.FC<StatCardProps> = ({
       sx={{
         height: '100%',
         cursor: onClick ? 'pointer' : 'default',
-        transition: 'all 0.2s ease',
+        transition: 'all 0.3s ease',
         borderRadius: 2,
-        border: `1px solid ${alpha(theme.palette.divider, 0.1)}`,
-        boxShadow: `0 2px 8px ${alpha(theme.palette.common.black, 0.04)}`,
+        border: 'none',
+        background: `linear-gradient(135deg, ${alpha(color, 0.08)} 0%, ${alpha(color, 0.03)} 100%)`,
+        position: 'relative',
+        overflow: 'hidden',
         '&:hover': {
           transform: onClick ? 'translateY(-4px)' : 'none',
-          boxShadow: onClick ? `0 4px 12px ${alpha(theme.palette.common.black, 0.08)}` : `0 2px 8px ${alpha(theme.palette.common.black, 0.04)}`,
+          boxShadow: onClick ? theme.shadows[4] : 'none',
+        },
+        '&:before': {
+          content: '""',
+          position: 'absolute',
+          width: '140px',
+          height: '140px',
+          background: `radial-gradient(circle, ${alpha(color, 0.2)} 0%, transparent 70%)`,
+          borderRadius: '50%',
+          top: '-80px',
+          right: '-50px',
+          zIndex: 0,
         },
       }}
       onClick={onClick}
     >
-      <CardContent sx={{ p: { xs: 2, sm: 2.5 } }}>
-        <Stack 
-          direction="row" 
-          spacing={2} 
-          alignItems="center" 
+      <CardContent sx={{ p: 2, position: 'relative', zIndex: 1 }}>
+        <Box 
           sx={{ 
-            mb: { xs: 1.5, sm: 2 },
-            '& .MuiAvatar-root': {
-              width: { xs: 40, sm: 48 },
-              height: { xs: 40, sm: 48 },
-            }
+            display: 'flex', 
+            justifyContent: 'space-between',
+            alignItems: 'flex-start',
+            mb: 2
           }}
         >
           <Avatar
             sx={{
-              bgcolor: alpha(color, 0.1),
-              color: color,
-              transition: 'all 0.2s ease',
+              bgcolor: color,
+              color: '#fff',
+              width: 40,
+              height: 40,
+              boxShadow: `0 2px 8px ${alpha(color, 0.3)}`,
             }}
           >
             {icon}
           </Avatar>
-          <Typography 
-            variant="h6" 
-            fontWeight={500}
-            sx={{ 
-              fontSize: { xs: '0.95rem', sm: '1.1rem' }
-            }}
-          >
-            {title}
-          </Typography>
-        </Stack>
-        <Stack spacing={0.5}>
-          <Typography 
-            variant="h4" 
-            component="div" 
-            sx={{ 
-              fontWeight: 600,
-              fontSize: { xs: '1.75rem', sm: '2rem' },
-              lineHeight: 1.2,
-            }}
-          >
-            {value}
-          </Typography>
+          
           {change && (
-            <Stack 
-              direction="row" 
-              spacing={0.5} 
-              alignItems="center"
-              sx={{ 
-                mt: 0.5,
-                '& .MuiChip-root': {
-                  height: { xs: 20, sm: 24 },
-                  '& .MuiChip-label': {
-                    px: { xs: 1, sm: 1.5 },
-                    fontSize: { xs: '0.75rem', sm: '0.875rem' },
-                  }
+            <Chip
+              icon={<ArrowUpwardIcon fontSize="small" />}
+              label={change}
+              size="small"
+              sx={{
+                backgroundColor: alpha(theme.palette.success.main, 0.12),
+                color: theme.palette.success.dark,
+                fontWeight: 600,
+                borderRadius: '6px',
+                py: 0.5,
+                height: 'auto',
+                '& .MuiChip-icon': {
+                  fontSize: '0.75rem',
+                  ml: 0.5,
+                  mr: -0.25,
                 }
               }}
-            >
-              <Chip
-                label={change}
-                size="small"
-                sx={{
-                  backgroundColor: alpha(theme.palette.success.main, 0.1),
-                  color: theme.palette.success.main,
-                  fontWeight: 500,
-                  borderRadius: '4px',
-                }}
-              />
-            </Stack>
+            />
           )}
-        </Stack>
+        </Box>
+        
+        <Typography 
+          variant="h4" 
+          component="div" 
+          sx={{ 
+            fontWeight: 700,
+            fontSize: { xs: '1.5rem', sm: '1.75rem' },
+            mb: 0.5,
+            color: theme.palette.text.primary,
+            lineHeight: 1.2
+          }}
+        >
+          {value}
+        </Typography>
+        
+        <Typography 
+          variant="body1" 
+          sx={{ 
+            color: theme.palette.text.secondary,
+            fontWeight: 500,
+          }}
+        >
+          {title}
+        </Typography>
       </CardContent>
     </Card>
   );
@@ -264,12 +273,23 @@ const ProjectCard: React.FC<ProjectCardProps> = ({
   location
 }) => {
   const theme = useTheme();
-  const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
   
   const statusColors = {
     'on-track': theme.palette.success.main,
     'at-risk': theme.palette.warning.main,
     completed: theme.palette.info.main,
+  };
+
+  const statusBg = {
+    'on-track': alpha(theme.palette.success.main, 0.12),
+    'at-risk': alpha(theme.palette.warning.main, 0.12),
+    completed: alpha(theme.palette.info.main, 0.12),
+  };
+
+  const getProgressColor = () => {
+    if (progress > 75) return theme.palette.success.main;
+    if (progress > 40) return theme.palette.info.main;
+    return theme.palette.warning.main;
   };
 
   return (
@@ -278,164 +298,165 @@ const ProjectCard: React.FC<ProjectCardProps> = ({
       sx={{
         height: '100%',
         cursor: 'pointer',
-        transition: 'all 0.2s ease',
+        transition: 'all 0.3s ease',
         borderRadius: 2,
-        border: `1px solid ${alpha(theme.palette.divider, 0.1)}`,
-        boxShadow: `0 2px 8px ${alpha(theme.palette.common.black, 0.04)}`,
-        position: 'relative',
-        overflow: 'hidden',
+        backgroundColor: '#fff',
+        boxShadow: '0 2px 8px rgba(0, 0, 0, 0.06)',
         '&:hover': {
           transform: 'translateY(-4px)',
-          boxShadow: `0 4px 12px ${alpha(theme.palette.common.black, 0.08)}`,
+          boxShadow: '0 10px 20px rgba(0, 0, 0, 0.08)',
         },
       }}
       onClick={onClick}
     >
-      <Box
-        sx={{
-          position: 'absolute',
-          top: 0,
-          right: 0,
-          left: 0,
-          height: '4px',
-          background: `linear-gradient(90deg, ${statusColors[status]} 0%, ${alpha(statusColors[status], 0.6)} 100%)`,
+      <Box 
+        sx={{ 
+          p: 2,
+          position: 'relative',
         }}
-      />
-      <CardContent sx={{ p: { xs: 2, sm: 2.5 } }}>
-        <Stack 
-          direction="row" 
-          justifyContent="space-between" 
-          alignItems="flex-start" 
-          spacing={2}
-          sx={{ mb: { xs: 1.5, sm: 2 } }}
+      >
+        <Box
+          sx={{
+            display: 'inline-flex',
+            position: 'absolute',
+            top: 10,
+            right: 16,
+            borderRadius: 1.5,
+            py: 0.5,
+            px: 1,
+            backgroundColor: statusBg[status],
+          }}
         >
-          <Stack spacing={0.5}>
-            <Typography 
-              variant="h6" 
-              component="div" 
-              fontWeight={600}
-              sx={{ 
-                fontSize: { xs: '1rem', sm: '1.1rem' },
-                lineHeight: 1.3,
-                overflow: 'hidden',
-                textOverflow: 'ellipsis',
-                display: '-webkit-box',
-                WebkitLineClamp: 1,
-                WebkitBoxOrient: 'vertical',
-              }}
-            >
-              {title}
-            </Typography>
-            {location && (
-              <Typography 
-                variant="body2" 
-                color="text.secondary" 
-                sx={{ 
-                  display: 'flex', 
-                  alignItems: 'center', 
-                  gap: 0.5,
-                  fontSize: { xs: '0.75rem', sm: '0.875rem' }
-                }}
-              >
-                <BusinessIcon fontSize="small" />
-                {location}
-              </Typography>
-            )}
-          </Stack>
-          <Chip
-            label={status.replace('-', ' ')}
-            size="small"
+          <Typography
+            variant="caption"
             sx={{
-              backgroundColor: alpha(statusColors[status], 0.1),
               color: statusColors[status],
-              fontWeight: 500,
-              borderRadius: '4px',
-              textTransform: 'capitalize',
-              height: { xs: 20, sm: 24 },
-              '& .MuiChip-label': {
-                px: { xs: 1, sm: 1.5 },
-                fontSize: { xs: '0.75rem', sm: '0.875rem' },
-              }
+              fontWeight: 600,
+              textTransform: 'uppercase',
+              fontSize: '0.6875rem',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 0.5
             }}
-          />
-        </Stack>
-        <Box sx={{ mb: { xs: 1.5, sm: 2 } }}>
-          <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1, alignItems: 'center' }}>
+          >
+            {status === 'on-track' && <CheckCircleIcon sx={{ fontSize: '0.875rem' }} />}
+            {status === 'at-risk' && <WarningIcon sx={{ fontSize: '0.875rem' }} />}
+            {status === 'completed' && <StarIcon sx={{ fontSize: '0.875rem' }} />}
+            {status.replace('-', ' ')}
+          </Typography>
+        </Box>
+        
+        <Typography 
+          variant="subtitle1" 
+          component="div" 
+          fontWeight={600}
+          sx={{ 
+            mr: 7,
+            mb: 1,
+          }}
+        >
+          {title}
+        </Typography>
+        
+        {location && (
+          <Typography 
+            variant="body2" 
+            color="text.secondary" 
+            sx={{ 
+              display: 'flex', 
+              alignItems: 'center', 
+              gap: 0.5,
+              mb: 1,
+              fontSize: '0.75rem'
+            }}
+          >
+            <PlaceIcon fontSize="inherit" />
+            {location}
+          </Typography>
+        )}
+        
+        <Box sx={{ my: 1.5 }}>
+          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 0.5 }}>
             <Typography 
               variant="body2" 
-              color="text.secondary" 
-              sx={{ 
-                fontSize: { xs: '0.75rem', sm: '0.875rem' },
-                fontWeight: 500
-              }}
+              color="text.primary" 
+              sx={{ fontWeight: 600, fontSize: '0.75rem' }}
             >
               Progress
             </Typography>
             <Typography 
               variant="body2" 
               sx={{ 
-                fontSize: { xs: '0.75rem', sm: '0.875rem' },
-                color: progress > 75 ? theme.palette.success.main : theme.palette.text.secondary, 
-                fontWeight: 500
+                color: getProgressColor(),
+                fontWeight: 600,
+                fontSize: '0.75rem'
               }}
             >
               {progress}%
             </Typography>
           </Box>
-          <LinearProgress
-            variant="determinate"
-            value={progress}
-            sx={{
-              height: { xs: 6, sm: 8 },
-              borderRadius: 4,
-              backgroundColor: alpha(theme.palette.primary.main, 0.1),
-              '& .MuiLinearProgress-bar': {
-                borderRadius: 4,
-                backgroundImage: `linear-gradient(90deg, ${theme.palette.primary.main}, ${theme.palette.primary.light})`,
-              },
-            }}
-          />
+          <Box sx={{ position: 'relative', height: 6, borderRadius: 3, bgcolor: alpha(theme.palette.divider, 0.1) }}>
+            <Box 
+              sx={{
+                position: 'absolute',
+                top: 0,
+                left: 0,
+                height: '100%',
+                borderRadius: 3,
+                width: `${progress}%`,
+                background: getProgressColor(),
+                transition: 'width 1s ease-in-out',
+              }}
+            />
+          </Box>
         </Box>
-        <Stack 
-          direction="row" 
-          spacing={2} 
-          sx={{ 
-            '& .MuiAvatar-root': {
-              width: { xs: 24, sm: 28 },
-              height: { xs: 24, sm: 28 },
-            },
-            '& .MuiTypography-root': {
-              fontSize: { xs: '0.75rem', sm: '0.875rem' }
-            }
+
+        <Box 
+          sx={{
+            mt: 2,
+            display: 'flex',
+            flexWrap: 'wrap',
+            gap: 1.5,
+            justifyContent: 'flex-start'
           }}
-          divider={<Divider orientation="vertical" flexItem />}
         >
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-            <Avatar sx={{ bgcolor: alpha(theme.palette.primary.main, 0.1) }}>
-              <ScheduleIcon sx={{ fontSize: { xs: 14, sm: 16 }, color: theme.palette.primary.main }} />
-            </Avatar>
-            <Typography variant="body2">
-              Due: {dueDate}
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+            <AccessTimeIcon sx={{ fontSize: '0.875rem', color: theme.palette.text.secondary }} />
+            <Typography 
+              variant="body2"
+              color="text.secondary"
+              fontWeight={500}
+              sx={{ fontSize: '0.75rem' }}
+            >
+              {dueDate}
             </Typography>
           </Box>
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-            <Avatar sx={{ bgcolor: alpha(theme.palette.success.main, 0.1) }}>
-              <MoneyIcon sx={{ fontSize: { xs: 14, sm: 16 }, color: theme.palette.success.main }} />
-            </Avatar>
-            <Typography variant="body2">
+          
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+            <MoneyIcon sx={{ fontSize: '0.875rem', color: theme.palette.success.main }} />
+            <Typography 
+              variant="body2"
+              color="text.secondary"
+              fontWeight={500}
+              sx={{ fontSize: '0.75rem' }}
+            >
               {budget}
             </Typography>
           </Box>
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-            <Avatar sx={{ bgcolor: alpha(theme.palette.warning.main, 0.1) }}>
-              <GroupIcon sx={{ fontSize: { xs: 14, sm: 16 }, color: theme.palette.warning.main }} />
-            </Avatar>
-            <Typography variant="body2">
+          
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+            <GroupIcon sx={{ fontSize: '0.875rem', color: theme.palette.warning.main }} />
+            <Typography 
+              variant="body2"
+              color="text.secondary"
+              fontWeight={500}
+              sx={{ fontSize: '0.75rem' }}
+            >
               {team} members
             </Typography>
           </Box>
-        </Stack>
-      </CardContent>
+        </Box>
+      </Box>
     </Card>
   );
 };
@@ -1759,4 +1780,4 @@ const Dashboard: React.FC = () => {
   );
 };
 
-export default Dashboard; 
+export default Dashboard;
