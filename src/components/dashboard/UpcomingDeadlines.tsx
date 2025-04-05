@@ -246,58 +246,6 @@ const UpcomingDeadlines: React.FC<UpcomingDeadlinesProps> = ({ nextMilestone, ta
 
   return (
     <Box sx={{ mb: 4 }}>
-      <Box sx={{
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        mb: 2.5,
-        px: 0.5,
-      }}>
-        <Stack direction="row" alignItems="center" spacing={1.5}>
-          <Box 
-            sx={{ 
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              width: 34,
-              height: 34,
-              borderRadius: '12px',
-              bgcolor: alpha(theme.palette.warning.main, 0.08),
-            }}
-          >
-            <ScheduleIcon 
-              sx={{ fontSize: 20, color: theme.palette.warning.main }} 
-            />
-          </Box>
-          
-          <Typography
-            variant="h6"
-            fontWeight={600}
-            sx={{ fontSize: '1.125rem' }}
-          >
-            Upcoming Deadlines
-          </Typography>
-        </Stack>
-        
-        <Button
-          variant="text"
-          size="small"
-          endIcon={<ArrowForwardIcon fontSize="small" />}
-          onClick={() => navigate('/calendar')}
-          sx={{
-            fontSize: '0.75rem',
-            fontWeight: 500,
-            color: theme.palette.text.secondary,
-            '&:hover': {
-              bgcolor: 'transparent',
-              color: theme.palette.primary.main,
-            }
-          }}
-        >
-          View Calendar
-        </Button>
-      </Box>
-      
       <Paper
         elevation={0}
         sx={{
@@ -306,8 +254,60 @@ const UpcomingDeadlines: React.FC<UpcomingDeadlinesProps> = ({ nextMilestone, ta
           overflow: 'hidden',
         }}
       >
-        <Box sx={{ p: 3 }}>
-          <Grid container spacing={3}>
+        <Box sx={{ p: 2 }}>
+          <Box sx={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            mb: 2,
+            px: 0.5,
+          }}>
+            <Stack direction="row" alignItems="center" spacing={1.5}>
+              <Box 
+                sx={{ 
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  width: 40,
+                  height: 40,
+                  borderRadius: '12px',
+                  bgcolor: alpha(theme.palette.warning.main, 0.08),
+                }}
+              >
+                <ScheduleIcon 
+                  sx={{ fontSize: 24, color: theme.palette.warning.main }} 
+                />
+              </Box>
+              
+              <Typography
+                variant="h6"
+                fontWeight={600}
+                sx={{ fontSize: '1.25rem' }}
+              >
+                Upcoming Deadlines
+              </Typography>
+            </Stack>
+            
+            <Button
+              variant="text"
+              size="small"
+              endIcon={<ArrowForwardIcon fontSize="small" />}
+              onClick={() => navigate('/calendar')}
+              sx={{
+                fontSize: '0.75rem',
+                fontWeight: 500,
+                color: theme.palette.text.secondary,
+                '&:hover': {
+                  bgcolor: 'transparent',
+                  color: theme.palette.primary.main,
+                }
+              }}
+            >
+              View Calendar
+            </Button>
+          </Box>
+          
+          <Grid container spacing={2}>
             <Grid item xs={12} md={6}>
               <Typography 
                 variant="subtitle1" 

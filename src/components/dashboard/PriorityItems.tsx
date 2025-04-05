@@ -348,217 +348,219 @@ const PriorityItems: React.FC<PriorityItemsProps> = ({ upcomingTasks, overduePay
 
   return (
     <Box sx={{ mb: 4 }}>
-      <Box sx={{
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        mb: 2,
-        px: 0.5,
-      }}>
-        <Stack direction="row" alignItems="center" spacing={1.5}>
-          <Box 
-            sx={{ 
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              width: 34,
-              height: 34,
-              borderRadius: '12px',
-              bgcolor: alpha(theme.palette.error.main, 0.08),
-            }}
-          >
-            <PriorityHighIcon 
-              sx={{ fontSize: 20, color: theme.palette.error.main }} 
-            />
-          </Box>
-          
-          <Stack direction="row" alignItems="center" spacing={1}>
-            <Typography
-              variant="h6"
-              fontWeight={600}
-              sx={{ fontSize: '1.125rem' }}
-            >
-              Priority Items
-            </Typography>
+      <Paper
+        elevation={0}
+        sx={{
+          borderRadius: 3,
+          border: `1px solid ${alpha(theme.palette.divider, 0.08)}`,
+          overflow: 'hidden',
+        }}
+      >
+        <Box sx={{ p: 2 }}>
+          <Box sx={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            mb: 2,
+            px: 0.5,
+          }}>
+            <Stack direction="row" alignItems="center" spacing={1.5}>
+              <Box 
+                sx={{ 
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  width: 40,
+                  height: 40,
+                  borderRadius: '12px',
+                  bgcolor: alpha(theme.palette.error.main, 0.08),
+                }}
+              >
+                <PriorityHighIcon 
+                  sx={{ fontSize: 24, color: theme.palette.error.main }} 
+                />
+              </Box>
+              
+              <Stack direction="row" alignItems="center" spacing={1}>
+                <Typography
+                  variant="h6"
+                  fontWeight={600}
+                  sx={{ fontSize: '1.25rem' }}
+                >
+                  Priority Items
+                </Typography>
+                
+                {totalPriorityItems > 0 && (
+                  <Badge 
+                    badgeContent={totalPriorityItems} 
+                    color="error"
+                    sx={{
+                      '& .MuiBadge-badge': {
+                        fontWeight: 'bold',
+                        minWidth: '22px',
+                        height: '22px',
+                        fontSize: '0.75rem',
+                      }
+                    }}
+                  />
+                )}
+              </Stack>
+            </Stack>
             
-            {totalPriorityItems > 0 && (
-              <Badge 
-                badgeContent={totalPriorityItems} 
-                color="error"
+            <Stack direction="row" spacing={1}>
+              <Tooltip title={expanded ? "Collapse" : "Expand"}>
+                <IconButton 
+                  size="small" 
+                  onClick={() => setExpanded(!expanded)}
+                  sx={{ color: theme.palette.text.secondary }}
+                >
+                  {expanded ? <KeyboardArrowUpIcon /> : <KeyboardArrowDownIcon />}
+                </IconButton>
+              </Tooltip>
+              
+              <Button
+                variant="text"
+                size="small"
+                endIcon={<ArrowForwardIcon fontSize="small" />}
+                onClick={() => navigate(activeTab === 0 ? '/tasks' : '/finance/payments')}
                 sx={{
-                  '& .MuiBadge-badge': {
-                    fontWeight: 'bold',
-                    minWidth: '22px',
-                    height: '22px',
-                    fontSize: '0.75rem',
+                  fontSize: '0.75rem',
+                  fontWeight: 500,
+                  color: theme.palette.text.secondary,
+                  '&:hover': {
+                    bgcolor: 'transparent',
+                    color: theme.palette.primary.main,
                   }
                 }}
-              />
-            )}
-          </Stack>
-        </Stack>
-        
-        <Stack direction="row" spacing={1}>
-          <Tooltip title={expanded ? "Collapse" : "Expand"}>
-            <IconButton 
-              size="small" 
-              onClick={() => setExpanded(!expanded)}
-              sx={{ color: theme.palette.text.secondary }}
-            >
-              {expanded ? <KeyboardArrowUpIcon /> : <KeyboardArrowDownIcon />}
-            </IconButton>
-          </Tooltip>
-          
-          <Button
-            variant="text"
-            size="small"
-            endIcon={<ArrowForwardIcon fontSize="small" />}
-            onClick={() => navigate(activeTab === 0 ? '/tasks' : '/finance/payments')}
-            sx={{
-              fontSize: '0.75rem',
-              fontWeight: 500,
-              color: theme.palette.text.secondary,
-              '&:hover': {
-                bgcolor: 'transparent',
-                color: theme.palette.primary.main,
-              }
-            }}
-          >
-            View All
-          </Button>
-        </Stack>
-      </Box>
-      
-      <Collapse in={expanded}>
-        <Paper
-          elevation={0}
-          sx={{
-            borderRadius: 3,
-            border: `1px solid ${alpha(theme.palette.divider, 0.08)}`,
-            overflow: 'hidden',
-          }}
-        >
-          <Box sx={{ borderBottom: 1, borderColor: 'divider' }}>
-            <Tabs 
-              value={activeTab} 
-              onChange={handleChangeTab}
-              variant="fullWidth"
-              sx={{
-                '& .MuiTab-root': {
-                  minHeight: 56,
-                  fontWeight: 600,
-                },
-                '& .MuiTabs-indicator': {
-                  height: 3,
-                }
-              }}
-            >
-              <Tab 
-                icon={
-                  <Badge 
-                    badgeContent={upcomingTasks.length} 
-                    color="error"
-                    sx={{ 
-                      '& .MuiBadge-badge': { 
-                        fontSize: '0.65rem', 
-                        height: '16px', 
-                        minWidth: '16px',
-                      } 
-                    }}
-                  >
-                    <AssignmentIcon />
-                  </Badge>
-                } 
-                label="Upcoming Tasks" 
-                iconPosition="start"
-                sx={{ 
-                  fontSize: '0.825rem',
-                  textTransform: 'none',
-                }}
-              />
-              <Tab 
-                icon={
-                  <Badge 
-                    badgeContent={overduePayments.length} 
-                    color="error"
-                    sx={{ 
-                      '& .MuiBadge-badge': { 
-                        fontSize: '0.65rem', 
-                        height: '16px', 
-                        minWidth: '16px',
-                      } 
-                    }}
-                  >
-                    <MoneyIcon />
-                  </Badge>
-                } 
-                label="Overdue Payments" 
-                iconPosition="start"
-                sx={{ 
-                  fontSize: '0.825rem',
-                  textTransform: 'none',
-                }}
-              />
-            </Tabs>
+              >
+                View All
+              </Button>
+            </Stack>
           </Box>
           
-          <Box sx={{ p: 2.5, maxHeight: '400px', overflowY: 'auto' }}>
-            {activeTab === 0 && (
-              <Box>
-                {upcomingTasks.length > 0 ? (
-                  upcomingTasks
-                    .sort((a, b) => {
-                      // Sort by priority first
-                      const priorityOrder = { urgent: 0, high: 1, medium: 2, low: 3 };
-                      if (priorityOrder[a.priority] !== priorityOrder[b.priority]) {
-                        return priorityOrder[a.priority] - priorityOrder[b.priority];
-                      }
-                      // Then by due date
-                      return new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime();
-                    })
-                    .map((task, index) => (
-                      <TaskCard key={task.id} task={task} />
-                    ))
-                ) : (
-                  <Box sx={{ textAlign: 'center', py: 4 }}>
-                    <CheckCircleIcon color="success" sx={{ fontSize: 48, mb: 1, opacity: 0.6 }} />
-                    <Typography variant="body1" color="text.secondary">
-                      No upcoming tasks. You're all caught up!
-                    </Typography>
-                    <Button
-                      variant="outlined"
-                      size="small"
-                      sx={{ mt: 2 }}
-                      onClick={() => navigate('/tasks/new')}
+          <Collapse in={expanded}>
+            <Box sx={{ borderBottom: 1, borderColor: 'divider' }}>
+              <Tabs 
+                value={activeTab} 
+                onChange={handleChangeTab}
+                variant="fullWidth"
+                sx={{
+                  '& .MuiTab-root': {
+                    minHeight: 56,
+                    fontWeight: 600,
+                  },
+                  '& .MuiTabs-indicator': {
+                    height: 3,
+                  }
+                }}
+              >
+                <Tab 
+                  icon={
+                    <Badge 
+                      badgeContent={upcomingTasks.length} 
+                      color="error"
+                      sx={{ 
+                        '& .MuiBadge-badge': { 
+                          fontSize: '0.65rem', 
+                          height: '16px', 
+                          minWidth: '16px',
+                        } 
+                      }}
                     >
-                      Create New Task
-                    </Button>
-                  </Box>
-                )}
-              </Box>
-            )}
+                      <AssignmentIcon />
+                    </Badge>
+                  } 
+                  label="Upcoming Tasks" 
+                  iconPosition="start"
+                  sx={{ 
+                    fontSize: '0.825rem',
+                    textTransform: 'none',
+                  }}
+                />
+                <Tab 
+                  icon={
+                    <Badge 
+                      badgeContent={overduePayments.length} 
+                      color="error"
+                      sx={{ 
+                        '& .MuiBadge-badge': { 
+                          fontSize: '0.65rem', 
+                          height: '16px', 
+                          minWidth: '16px',
+                        } 
+                      }}
+                    >
+                      <MoneyIcon />
+                    </Badge>
+                  } 
+                  label="Overdue Payments" 
+                  iconPosition="start"
+                  sx={{ 
+                    fontSize: '0.825rem',
+                    textTransform: 'none',
+                  }}
+                />
+              </Tabs>
+            </Box>
             
-            {activeTab === 1 && (
-              <Box>
-                {overduePayments.length > 0 ? (
-                  overduePayments
-                    .sort((a, b) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime())
-                    .map((payment, index) => (
-                      <PaymentCard key={payment.id} payment={payment} />
-                    ))
-                ) : (
-                  <Box sx={{ textAlign: 'center', py: 4 }}>
-                    <CheckCircleIcon color="success" sx={{ fontSize: 48, mb: 1, opacity: 0.6 }} />
-                    <Typography variant="body1" color="text.secondary">
-                      No overdue payments. Everything is up to date!
-                    </Typography>
-                  </Box>
-                )}
-              </Box>
-            )}
-          </Box>
-        </Paper>
-      </Collapse>
+            <Box sx={{ p: 2.5, maxHeight: '400px', overflowY: 'auto' }}>
+              {activeTab === 0 && (
+                <Box>
+                  {upcomingTasks.length > 0 ? (
+                    upcomingTasks
+                      .sort((a, b) => {
+                        // Sort by priority first
+                        const priorityOrder = { urgent: 0, high: 1, medium: 2, low: 3 };
+                        if (priorityOrder[a.priority] !== priorityOrder[b.priority]) {
+                          return priorityOrder[a.priority] - priorityOrder[b.priority];
+                        }
+                        // Then by due date
+                        return new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime();
+                      })
+                      .map((task, index) => (
+                        <TaskCard key={task.id} task={task} />
+                      ))
+                  ) : (
+                    <Box sx={{ textAlign: 'center', py: 4 }}>
+                      <CheckCircleIcon color="success" sx={{ fontSize: 48, mb: 1, opacity: 0.6 }} />
+                      <Typography variant="body1" color="text.secondary">
+                        No upcoming tasks. You're all caught up!
+                      </Typography>
+                      <Button
+                        variant="outlined"
+                        size="small"
+                        sx={{ mt: 2 }}
+                        onClick={() => navigate('/tasks/new')}
+                      >
+                        Create New Task
+                      </Button>
+                    </Box>
+                  )}
+                </Box>
+              )}
+              
+              {activeTab === 1 && (
+                <Box>
+                  {overduePayments.length > 0 ? (
+                    overduePayments
+                      .sort((a, b) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime())
+                      .map((payment, index) => (
+                        <PaymentCard key={payment.id} payment={payment} />
+                      ))
+                  ) : (
+                    <Box sx={{ textAlign: 'center', py: 4 }}>
+                      <CheckCircleIcon color="success" sx={{ fontSize: 48, mb: 1, opacity: 0.6 }} />
+                      <Typography variant="body1" color="text.secondary">
+                        No overdue payments. Everything is up to date!
+                      </Typography>
+                    </Box>
+                  )}
+                </Box>
+              )}
+            </Box>
+          </Collapse>
+        </Box>
+      </Paper>
     </Box>
   );
 };

@@ -306,76 +306,87 @@ const ProjectInsights: React.FC<ProjectInsightsProps> = ({ stats, onRefresh }) =
 
   return (
     <Box sx={{ mb: 4 }}>
-      <Box sx={{
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        mb: 2.5,
-        px: 0.5,
-      }}>
-        <Stack direction="row" alignItems="center" spacing={1.5}>
-          <Box 
-            sx={{ 
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              width: 34,
-              height: 34,
-              borderRadius: '12px',
-              bgcolor: alpha(theme.palette.secondary.main, 0.08),
-            }}
-          >
-            <AssessmentIcon 
-              color="secondary" 
-              sx={{ fontSize: 20 }} 
-            />
+      <Paper
+        elevation={0}
+        sx={{
+          borderRadius: 3,
+          border: `1px solid ${alpha(theme.palette.divider, 0.08)}`,
+          overflow: 'hidden',
+        }}
+      >
+        <Box sx={{ p: 2 }}>
+          <Box sx={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            mb: 2,
+            px: 0.5,
+          }}>
+            <Stack direction="row" alignItems="center" spacing={1.5}>
+              <Box 
+                sx={{ 
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  width: 40,
+                  height: 40,
+                  borderRadius: '12px',
+                  bgcolor: alpha(theme.palette.secondary.main, 0.08),
+                }}
+              >
+                <AssessmentIcon 
+                  color="secondary" 
+                  sx={{ fontSize: 24 }} 
+                />
+              </Box>
+              
+              <Typography
+                variant="h6"
+                fontWeight={600}
+                sx={{ fontSize: '1.25rem' }}
+              >
+                Project Insights
+              </Typography>
+            </Stack>
+            
+            <Tooltip title="Refresh data" arrow>
+              <IconButton 
+                onClick={handleRefresh}
+                disabled={isRefreshing}
+                sx={{
+                  transition: 'transform 0.3s ease',
+                  '&:hover': { transform: 'rotate(30deg)' },
+                }}
+              >
+                <RefreshIcon 
+                  fontSize="small" 
+                  sx={{ 
+                    animation: isRefreshing ? 'spin 1s linear infinite' : 'none',
+                    '@keyframes spin': {
+                      '0%': { transform: 'rotate(0deg)' },
+                      '100%': { transform: 'rotate(360deg)' },
+                    }
+                  }} 
+                />
+              </IconButton>
+            </Tooltip>
           </Box>
-          
-          <Typography
-            variant="h6"
-            fontWeight={600}
-            sx={{ fontSize: '1.125rem' }}
-          >
-            Project Insights
-          </Typography>
-        </Stack>
-        
-        <Tooltip title="Refresh data" arrow>
-          <IconButton 
-            onClick={handleRefresh}
-            disabled={isRefreshing}
-            sx={{
-              transition: 'transform 0.3s ease',
-              '&:hover': { transform: 'rotate(30deg)' },
-            }}
-          >
-            <RefreshIcon 
-              fontSize="small" 
-              sx={{ 
-                animation: isRefreshing ? 'spin 1s linear infinite' : 'none',
-                '@keyframes spin': {
-                  '0%': { transform: 'rotate(0deg)' },
-                  '100%': { transform: 'rotate(360deg)' },
-                }
-              }} 
-            />
-          </IconButton>
-        </Tooltip>
-      </Box>
 
-      {isRefreshing && (
-        <Box sx={{ width: '100%', mb: 2 }}>
-          <LinearProgress sx={{ height: 4, borderRadius: 2 }} />
-        </Box>
-      )}
+          {isRefreshing && (
+            <Box sx={{ width: '100%', mb: 2 }}>
+              <LinearProgress sx={{ height: 4, borderRadius: 2 }} />
+            </Box>
+          )}
 
-      <Grid container spacing={2.5}>
-        {insights.map((insight, index) => (
-          <Grid item xs={12} sm={6} md={3} key={index}>
-            <InsightCard {...insight} index={index} />
+          <Grid container spacing={2}>
+            {insights.map((insight, index) => (
+              <Grid item xs={12} sm={6} md={3} key={index}>
+                <InsightCard {...insight} index={index} />
+              </Grid>
+            ))}
           </Grid>
-        ))}
-      </Grid>
+        </Box>
+      </Paper>
     </Box>
   );
 };

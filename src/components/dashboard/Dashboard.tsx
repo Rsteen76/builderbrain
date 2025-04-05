@@ -1005,7 +1005,7 @@ const Dashboard: React.FC = () => {
     ];
 
     return (
-      <Box sx={{ mb: 4 }}>
+      <Box sx={{ mb: 3 }}>
         <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
           <Typography variant="h5" component="h2" sx={{ fontWeight: 600 }}>
             Project Templates
@@ -1116,22 +1116,7 @@ const Dashboard: React.FC = () => {
       subtitle={`Welcome back, ${user?.displayName || 'User'}`}
       icon={DashboardIcon}
     >
-      <Container maxWidth="lg" sx={{ py: { xs: 2, sm: 3 } }}>
-        {/* Page header */}
-        <Box sx={{ mb: { xs: 2, sm: 3 } }}>
-          <Typography 
-            variant="h4" 
-            component="h1" 
-            fontWeight={600}
-            sx={{ mb: 1, fontSize: { xs: '1.5rem', sm: '1.75rem' } }}
-          >
-            Dashboard
-          </Typography>
-          <Typography variant="body1" color="text.secondary">
-            Welcome back! Here's an overview of your construction projects.
-          </Typography>
-        </Box>
-        
+      <Container maxWidth="lg" sx={{ py: { xs: 1, sm: 2 } }}>
         {/* Quick Actions Section */}
         <QuickActions />
         

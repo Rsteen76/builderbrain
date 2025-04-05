@@ -471,114 +471,125 @@ const RecentProjects: React.FC<RecentProjectsProps> = ({ projects }) => {
 
   return (
     <Box sx={{ mb: 4 }}>
-      <Box sx={{
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        mb: 2.5,
-        px: 0.5,
-      }}>
-        <Stack direction="row" alignItems="center" spacing={1.5}>
-          <Box 
-            sx={{ 
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              width: 34,
-              height: 34,
-              borderRadius: '12px',
-              bgcolor: alpha(theme.palette.primary.main, 0.08),
-            }}
-          >
-            <AssessmentIcon 
-              color="primary" 
-              sx={{ fontSize: 20 }} 
-            />
+      <Paper
+        elevation={0}
+        sx={{
+          borderRadius: 3,
+          border: `1px solid ${alpha(theme.palette.divider, 0.08)}`,
+          overflow: 'hidden',
+        }}
+      >
+        <Box sx={{ p: 2 }}>
+          <Box sx={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            mb: 2,
+            px: 0.5,
+          }}>
+            <Stack direction="row" alignItems="center" spacing={1.5}>
+              <Box 
+                sx={{ 
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  width: 40,
+                  height: 40,
+                  borderRadius: '12px',
+                  bgcolor: alpha(theme.palette.primary.main, 0.08),
+                }}
+              >
+                <AssessmentIcon 
+                  color="primary" 
+                  sx={{ fontSize: 24 }} 
+                />
+              </Box>
+              
+              <Typography
+                variant="h6"
+                fontWeight={600}
+                sx={{ fontSize: '1.25rem' }}
+              >
+                Recent Projects
+              </Typography>
+            </Stack>
+            
+            <Button
+              variant="text"
+              size="small"
+              endIcon={<ArrowForwardIcon fontSize="small" />}
+              onClick={() => navigate('/projects')}
+              sx={{
+                fontSize: '0.75rem',
+                fontWeight: 500,
+                color: theme.palette.text.secondary,
+                '&:hover': {
+                  bgcolor: 'transparent',
+                  color: theme.palette.primary.main,
+                }
+              }}
+            >
+              View All Projects
+            </Button>
           </Box>
-          
-          <Typography
-            variant="h6"
-            fontWeight={600}
-            sx={{ fontSize: '1.125rem' }}
-          >
-            Recent Projects
-          </Typography>
-        </Stack>
-        
-        <Button
-          variant="text"
-          size="small"
-          endIcon={<ArrowForwardIcon fontSize="small" />}
-          onClick={() => navigate('/projects')}
-          sx={{
-            fontSize: '0.75rem',
-            fontWeight: 500,
-            color: theme.palette.text.secondary,
-            '&:hover': {
-              bgcolor: 'transparent',
-              color: theme.palette.primary.main,
-            }
-          }}
-        >
-          View All Projects
-        </Button>
-      </Box>
 
-      {recentProjects.length === 0 ? (
-        <Box 
-          sx={{ 
-            textAlign: 'center', 
-            py: 6,
-            px: 2,
-            bgcolor: alpha(theme.palette.background.paper, 0.6),
-            borderRadius: 3,
-            border: `1px dashed ${alpha(theme.palette.divider, 0.5)}`,
-          }}
-        >
-          <AssessmentIcon sx={{ fontSize: 48, color: alpha(theme.palette.text.secondary, 0.4), mb: 2 }} />
-          <Typography variant="h6" color="text.secondary" gutterBottom>
-            No projects found
-          </Typography>
-          <Typography variant="body2" color="text.secondary" sx={{ mb: 3, maxWidth: 400, mx: 'auto' }}>
-            You haven't created any projects yet. Get started by creating your first construction project.
-          </Typography>
-          <Button
-            variant="contained"
-            color="primary"
-            disableElevation
-            onClick={() => navigate('/projects/new')}
-          >
-            Create New Project
-          </Button>
-        </Box>
-      ) : (
-        <Grid container spacing={3}>
-          {recentProjects.map((project, index) => (
-            <Grid item xs={12} sm={6} md={4} key={project.id}>
-              <ProjectCard 
-                project={formatProjectForDisplay(project, index)} 
-                index={index}
-              />
+          {recentProjects.length === 0 ? (
+            <Box 
+              sx={{ 
+                textAlign: 'center', 
+                py: 6,
+                px: 2,
+                bgcolor: alpha(theme.palette.background.paper, 0.6),
+                borderRadius: 3,
+                border: `1px dashed ${alpha(theme.palette.divider, 0.5)}`,
+              }}
+            >
+              <AssessmentIcon sx={{ fontSize: 48, color: alpha(theme.palette.text.secondary, 0.4), mb: 2 }} />
+              <Typography variant="h6" color="text.secondary" gutterBottom>
+                No projects found
+              </Typography>
+              <Typography variant="body2" color="text.secondary" sx={{ mb: 3, maxWidth: 400, mx: 'auto' }}>
+                You haven't created any projects yet. Get started by creating your first construction project.
+              </Typography>
+              <Button
+                variant="contained"
+                color="primary"
+                disableElevation
+                onClick={() => navigate('/projects/new')}
+              >
+                Create New Project
+              </Button>
+            </Box>
+          ) : (
+            <Grid container spacing={2}>
+              {recentProjects.map((project, index) => (
+                <Grid item xs={12} sm={6} md={4} key={project.id}>
+                  <ProjectCard 
+                    project={formatProjectForDisplay(project, index)} 
+                    index={index}
+                  />
+                </Grid>
+              ))}
             </Grid>
-          ))}
-        </Grid>
-      )}
-      
-      {recentProjects.length > 0 && (
-        <Box sx={{ mt: 2, textAlign: 'center' }}>
-          <Button 
-            variant="outlined"
-            color="primary"
-            onClick={() => navigate('/projects/new')}
-            sx={{
-              borderRadius: 6,
-              px: 3,
-            }}
-          >
-            Create New Project
-          </Button>
+          )}
+          
+          {recentProjects.length > 0 && (
+            <Box sx={{ mt: 2, textAlign: 'center' }}>
+              <Button 
+                variant="outlined"
+                color="primary"
+                onClick={() => navigate('/projects/new')}
+                sx={{
+                  borderRadius: 6,
+                  px: 3,
+                }}
+              >
+                Create New Project
+              </Button>
+            </Box>
+          )}
         </Box>
-      )}
+      </Paper>
     </Box>
   );
 };

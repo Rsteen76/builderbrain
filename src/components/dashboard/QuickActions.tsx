@@ -27,13 +27,18 @@ import {
   ReceiptLong as ExpenseIcon,
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
+import { useAuth } from '../../contexts/AuthContext';
+import { ProjectService } from '../../services/project';
+import { ExpenseService } from '../../services/expense';
+import ExpenseFormModal from '../expenses/ExpenseFormModal';
 
 interface ActionCardProps {
   title: string;
   description: string;
   icon: React.ReactNode;
   primaryIcon: React.ReactNode;
-  path: string;
+  path?: string;
+  onClick?: () => void;
   color: string;
   delay: number;
 }
@@ -44,7 +49,8 @@ const ActionCard: React.FC<ActionCardProps> = ({
   description, 
   icon,
   primaryIcon, 
-  path, 
+  path,
+  onClick,
   color,
   delay
 }) => {
@@ -52,6 +58,14 @@ const ActionCard: React.FC<ActionCardProps> = ({
   const navigate = useNavigate();
   const [isHovered, setIsHovered] = useState(false);
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
+  
+  const handleClick = () => {
+    if (onClick) {
+      onClick();
+    } else if (path) {
+      navigate(path);
+    }
+  };
   
   return (
     <Grow in={true} style={{ transformOrigin: '0 0 0' }} timeout={300 + delay * 100}>
@@ -94,7 +108,7 @@ const ActionCard: React.FC<ActionCardProps> = ({
           },
           cursor: 'pointer',
         }}
-        onClick={() => navigate(path)}
+        onClick={handleClick}
         onMouseEnter={() => setIsHovered(true)}
         onMouseLeave={() => setIsHovered(false)}
       >
@@ -179,7 +193,40 @@ const ActionCard: React.FC<ActionCardProps> = ({
 const QuickActions: React.FC = () => {
   const theme = useTheme();
   const navigate = useNavigate();
+  const { user } = useAuth();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
+  const [expenseModalOpen, setExpenseModalOpen] = useState(false);
+  const [projects, setProjects] = useState<any[]>([]);
+
+  // Fetch projects when component mounts
+  React.useEffect(() => {
+    const fetchProjects = async () => {
+      if (user?.uid) {
+        try {
+          const fetchedProjects = await ProjectService.getProjects(user.uid);
+          setProjects(fetchedProjects);
+        } catch (error) {
+          console.error('Error fetching projects:', error);
+        }
+      }
+    };
+    fetchProjects();
+  }, [user]);
+
+  const handleAddExpense = () => {
+    setExpenseModalOpen(true);
+  };
+
+  const handleSaveExpense = async (expenseData: any) => {
+    if (user?.uid) {
+      try {
+        await ExpenseService.createExpense(user.uid, expenseData);
+        // You might want to show a success message or refresh the dashboard data here
+      } catch (error) {
+        console.error('Error creating expense:', error);
+      }
+    }
+  };
 
   const actions = [
     {
@@ -214,7 +261,7 @@ const QuickActions: React.FC = () => {
       description: 'Track costs and manage budget',
       icon: <ReceiptIcon sx={{ fontSize: 24 }} />,
       primaryIcon: <ExpenseIcon sx={{ fontSize: 24 }} />,
-      path: '/expenses/new',
+      onClick: handleAddExpense,
       color: theme.palette.info.main,
       delay: 3,
     },
@@ -291,6 +338,13 @@ const QuickActions: React.FC = () => {
           </Grid>
         ))}
       </Grid>
+
+      <ExpenseFormModal
+        open={expenseModalOpen}
+        onClose={() => setExpenseModalOpen(false)}
+        onSave={handleSaveExpense}
+        projects={projects}
+      />
     </Box>
   );
 };
