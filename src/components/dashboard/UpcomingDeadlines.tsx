@@ -292,7 +292,7 @@ const UpcomingDeadlines: React.FC<UpcomingDeadlinesProps> = ({ nextMilestone, ta
               variant="text"
               size="small"
               endIcon={<ArrowForwardIcon fontSize="small" />}
-              onClick={() => navigate('/calendar')}
+              onClick={() => navigate('/timeline')}
               sx={{
                 fontSize: '0.75rem',
                 fontWeight: 500,
@@ -303,7 +303,7 @@ const UpcomingDeadlines: React.FC<UpcomingDeadlinesProps> = ({ nextMilestone, ta
                 }
               }}
             >
-              View Calendar
+              View Full Timeline
             </Button>
           </Box>
           
@@ -410,10 +410,10 @@ const UpcomingDeadlines: React.FC<UpcomingDeadlinesProps> = ({ nextMilestone, ta
                       variant="contained"
                       disableElevation
                       fullWidth
-                      onClick={() => navigate('/calendar')}
+                      onClick={() => navigate('/timeline')}
                       startIcon={<CalendarTodayIcon />}
                     >
-                      Open Full Calendar
+                      View Project Timeline
                     </Button>
                   </Box>
                 </Box>

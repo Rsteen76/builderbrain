@@ -25,6 +25,7 @@ import {
   TaskAlt as TaskIcon,
   People as TeamIcon,
   ReceiptLong as ExpenseIcon,
+  CalendarToday as CalendarIcon,
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
@@ -72,10 +73,10 @@ const ActionCard: React.FC<ActionCardProps> = ({
       <Paper
         elevation={isHovered ? 4 : 0}
         sx={{
-          p: 2.5,
+          p: 1.75,
           height: '100%',
           position: 'relative',
-          borderRadius: 3,
+          borderRadius: 2.5,
           transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
           border: `1px solid ${isHovered ? 'transparent' : alpha(theme.palette.divider, 0.08)}`,
           background: isHovered 
@@ -89,19 +90,19 @@ const ActionCard: React.FC<ActionCardProps> = ({
             top: 0,
             left: 0,
             right: 0,
-            height: '4px',
+            height: '3px',
             background: color,
             borderRadius: '4px 4px 0 0',
           } : {},
           '&:after': {
             content: '""',
             position: 'absolute',
-            width: '200px',
-            height: '200px',
+            width: '150px',
+            height: '150px',
             background: `radial-gradient(circle, ${alpha(color, 0.1)} 0%, transparent 70%)`,
             borderRadius: '50%',
-            bottom: '-100px',
-            right: '-100px',
+            bottom: '-75px',
+            right: '-75px',
             opacity: isHovered ? 1 : 0,
             transition: 'opacity 0.3s ease',
             zIndex: 0,
@@ -118,7 +119,7 @@ const ActionCard: React.FC<ActionCardProps> = ({
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'space-between',
-              mb: 1,
+              mb: 0.75,
             }}
           >
             <Box
@@ -126,9 +127,9 @@ const ActionCard: React.FC<ActionCardProps> = ({
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-                width: 46,
-                height: 46,
-                borderRadius: 2,
+                width: 38,
+                height: 38,
+                borderRadius: 1.5,
                 backgroundColor: alpha(color, isHovered ? 0.15 : 0.08),
                 color: color,
                 transition: 'all 0.3s ease',
@@ -137,7 +138,7 @@ const ActionCard: React.FC<ActionCardProps> = ({
             >
               <Zoom in={isHovered} timeout={200}>
                 <Box sx={{ position: 'absolute' }}>
-                  {primaryIcon}
+                  {React.cloneElement(primaryIcon as React.ReactElement, { sx: { fontSize: 20 } })}
                 </Box>
               </Zoom>
               
@@ -145,7 +146,7 @@ const ActionCard: React.FC<ActionCardProps> = ({
                 opacity: isHovered ? 0 : 1, 
                 transition: 'opacity 0.2s ease',
               }}>
-                {icon}
+                {React.cloneElement(icon as React.ReactElement, { sx: { fontSize: 20 } })}
               </Box>
             </Box>
 
@@ -156,9 +157,10 @@ const ActionCard: React.FC<ActionCardProps> = ({
                 transform: isHovered ? 'translateX(0)' : 'translateX(-5px)',
                 opacity: isHovered ? 1 : 0,
                 transition: 'all 0.3s ease',
+                padding: 0.5,
               }}
             >
-              <ArrowForwardIcon fontSize="small" />
+              <ArrowForwardIcon fontSize="small" sx={{ fontSize: 16 }} />
             </IconButton>
           </Box>
 
@@ -168,7 +170,9 @@ const ActionCard: React.FC<ActionCardProps> = ({
             sx={{ 
               color: isHovered ? color : theme.palette.text.primary,
               transition: 'color 0.2s ease',
-              mb: 0.5,
+              mb: 0.25,
+              fontSize: '0.875rem',
+              lineHeight: 1.2,
             }}
           >
             {title}
@@ -178,7 +182,8 @@ const ActionCard: React.FC<ActionCardProps> = ({
             variant="body2"
             sx={{ 
               color: alpha(theme.palette.text.secondary, 0.8),
-              fontSize: '0.75rem',
+              fontSize: '0.7rem',
+              lineHeight: 1.3,
               pr: 1,
             }}
           >
@@ -248,13 +253,22 @@ const QuickActions: React.FC = () => {
       delay: 1,
     },
     {
+      title: 'Calendar',
+      description: 'View all project events and deadlines',
+      icon: <CalendarIcon sx={{ fontSize: 24 }} />,
+      primaryIcon: <CalendarIcon sx={{ fontSize: 24 }} />,
+      path: '/calendar',
+      color: theme.palette.secondary.main,
+      delay: 2,
+    },
+    {
       title: 'Add Team Member',
       description: 'Invite contractors or employees',
       icon: <GroupIcon sx={{ fontSize: 24 }} />,
       primaryIcon: <TeamIcon sx={{ fontSize: 24 }} />,
       path: '/team',
       color: theme.palette.warning.main,
-      delay: 2,
+      delay: 3,
     },
     {
       title: 'Add Expense',
@@ -263,7 +277,7 @@ const QuickActions: React.FC = () => {
       primaryIcon: <ExpenseIcon sx={{ fontSize: 24 }} />,
       onClick: handleAddExpense,
       color: theme.palette.info.main,
-      delay: 3,
+      delay: 4,
     },
   ];
 
@@ -271,7 +285,7 @@ const QuickActions: React.FC = () => {
     <Box 
       sx={{ 
         position: 'relative',
-        mb: 4,
+        mb: 3,
         pt: 1,
         pb: 0.5,
       }}
@@ -280,7 +294,7 @@ const QuickActions: React.FC = () => {
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'space-between',
-        mb: 2.5,
+        mb: 1.5,
         px: 0.5,
       }}>
         <Stack direction="row" alignItems="center" spacing={1.5}>
@@ -289,22 +303,22 @@ const QuickActions: React.FC = () => {
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              width: 34,
-              height: 34,
-              borderRadius: '12px',
+              width: 30,
+              height: 30,
+              borderRadius: '10px',
               bgcolor: alpha(theme.palette.primary.main, 0.08),
             }}
           >
             <ConstructionIcon 
               color="primary" 
-              sx={{ fontSize: 20 }} 
+              sx={{ fontSize: 18 }} 
             />
           </Box>
           
           <Typography
             variant="h6"
             fontWeight={600}
-            sx={{ fontSize: '1.125rem' }}
+            sx={{ fontSize: '1rem' }}
           >
             Quick Actions
           </Typography>
@@ -331,9 +345,9 @@ const QuickActions: React.FC = () => {
         </Tooltip>
       </Box>
 
-      <Grid container spacing={2.5}>
+      <Grid container spacing={2}>
         {actions.map((action, index) => (
-          <Grid item xs={12} sm={6} md={3} key={index}>
+          <Grid item xs={6} sm={4} md={2.4} key={index}>
             <ActionCard {...action} />
           </Grid>
         ))}

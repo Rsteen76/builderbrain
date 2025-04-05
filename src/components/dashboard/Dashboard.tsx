@@ -79,6 +79,7 @@ import {
   InsertChart as InsertChartIcon,
   TrendingDown as TrendingDownIcon,
   Receipt as ReceiptIcon,
+  AddBusiness as AddBusinessIcon,
 } from '@mui/icons-material';
 import { useNavigate, Link } from 'react-router-dom';
 import { Project, Task as ProjectTask } from '../../types';

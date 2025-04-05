@@ -34,6 +34,8 @@ const Settings = lazy(() => import('./components/settings/Settings'));
 const Login = lazy(() => import('./components/auth/Login'));
 const SignUp = lazy(() => import('./components/auth/SignUp'));
 const Payments = lazy(() => import('./components/payments/Payments'));
+const Timeline = lazy(() => import('./components/timeline/Timeline'));
+const Calendar = lazy(() => import('./components/calendar/Calendar'));
 
 // Create a wrapper component for the BidDeletePortal
 const BidDeletePortalWrapper = () => {
@@ -180,6 +182,8 @@ const App: React.FC = () => {
                     <Route path="subcontractors/:id/edit" element={<ProtectedRoute><SubcontractorForm /></ProtectedRoute>} />
                     <Route path="settings" element={<ProtectedRoute><Settings /></ProtectedRoute>} />
                     <Route path="templates" element={<ProtectedRoute><ProjectTemplates /></ProtectedRoute>} />
+                    <Route path="timeline" element={<ProtectedRoute><Timeline /></ProtectedRoute>} />
+                    <Route path="calendar" element={<ProtectedRoute><Calendar /></ProtectedRoute>} />
                   </Route>
                 </Routes>
                 

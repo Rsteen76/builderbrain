@@ -86,11 +86,11 @@ const InsightCard: React.FC<InsightCardProps> = ({
       <Card
         elevation={isHovered ? 2 : 0}
         sx={{
-          p: 2.5,
+          p: 1.75,
           height: '100%',
           cursor: onClick ? 'pointer' : 'default',
           transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
-          borderRadius: 3,
+          borderRadius: 2.5,
           border: '1px solid',
           borderColor: isHovered 
             ? alpha(color, 0.5) 
@@ -121,23 +121,23 @@ const InsightCard: React.FC<InsightCardProps> = ({
             display: 'flex', 
             alignItems: 'center',
             justifyContent: 'space-between',
-            mb: 2
+            mb: 1.5
           }}>
             <Box
               sx={{
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-                width: 42,
-                height: 42,
-                borderRadius: 2,
+                width: 36,
+                height: 36,
+                borderRadius: 1.5,
                 background: alpha(color, 0.12),
                 color: color,
                 transition: 'all 0.3s ease',
                 transform: isHovered ? 'scale(1.05)' : 'scale(1)',
               }}
             >
-              {icon}
+              {React.cloneElement(icon as React.ReactElement, { sx: { fontSize: 20 } })}
             </Box>
             
             {formattedChange && (
@@ -152,10 +152,10 @@ const InsightCard: React.FC<InsightCardProps> = ({
                   backgroundColor: alpha(changeColor, 0.15),
                   color: changeColor,
                   fontWeight: 600,
-                  fontSize: '0.7rem',
-                  height: 24,
+                  fontSize: '0.65rem',
+                  height: 22,
                   '.MuiChip-icon': {
-                    fontSize: '0.75rem',
+                    fontSize: '0.7rem',
                     color: 'inherit',
                   }
                 }}
@@ -167,9 +167,9 @@ const InsightCard: React.FC<InsightCardProps> = ({
             variant="h4" 
             component="div" 
             sx={{
-              fontSize: '1.75rem',
+              fontSize: '1.5rem',
               fontWeight: 700,
-              mb: 0.5,
+              mb: 0.25,
               color: isHovered ? color : theme.palette.text.primary,
               transition: 'color 0.2s ease',
             }}
@@ -181,7 +181,7 @@ const InsightCard: React.FC<InsightCardProps> = ({
             variant="body2" 
             sx={{ 
               color: theme.palette.text.secondary,
-              fontSize: '0.8125rem',
+              fontSize: '0.75rem',
             }}
           >
             {title}
@@ -199,7 +199,7 @@ const InsightCard: React.FC<InsightCardProps> = ({
                 }}
               >
                 {icon && React.cloneElement(icon as React.ReactElement, { 
-                  sx: { fontSize: 70 } 
+                  sx: { fontSize: 60 } 
                 })}
               </Box>
             </Fade>
@@ -248,30 +248,12 @@ const ProjectInsights: React.FC<ProjectInsightsProps> = ({ stats, onRefresh }) =
       suffix: '%',
     },
     {
-      title: 'Team Members',
-      value: stats.teamMembers,
-      icon: <GroupIcon />,
-      color: theme.palette.info.main,
-      onClick: () => navigate('/team'),
-      change: 2, // Example data - in real app get from API
-      positiveChangeIsGood: true,
-    },
-    {
       title: 'Tasks Due Soon',
       value: stats.tasksDue,
       icon: <AssignmentIcon />,
       color: stats.tasksDue > 10 ? theme.palette.warning.main : theme.palette.secondary.main,
       onClick: () => navigate('/tasks?filter=upcoming'),
       change: stats.tasksDue > 10 ? 15 : -5, // Example data - in real app get from API
-      positiveChangeIsGood: false,
-    },
-    {
-      title: 'Projects at Risk',
-      value: stats.projectsAtRisk,
-      icon: <WarningIcon />,
-      color: stats.projectsAtRisk > 0 ? theme.palette.error.main : theme.palette.success.main,
-      onClick: () => navigate('/projects?status=at-risk'),
-      change: stats.projectsAtRisk > 0 ? 23 : -15, // Example data - in real app get from API
       positiveChangeIsGood: false,
     },
     {
@@ -305,21 +287,21 @@ const ProjectInsights: React.FC<ProjectInsightsProps> = ({ stats, onRefresh }) =
   ];
 
   return (
-    <Box sx={{ mb: 4 }}>
+    <Box sx={{ mb: 3 }}>
       <Paper
         elevation={0}
         sx={{
-          borderRadius: 3,
+          borderRadius: 2.5,
           border: `1px solid ${alpha(theme.palette.divider, 0.08)}`,
           overflow: 'hidden',
         }}
       >
-        <Box sx={{ p: 2 }}>
+        <Box sx={{ p: 1.75 }}>
           <Box sx={{
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'space-between',
-            mb: 2,
+            mb: 1.5,
             px: 0.5,
           }}>
             <Stack direction="row" alignItems="center" spacing={1.5}>
@@ -328,22 +310,22 @@ const ProjectInsights: React.FC<ProjectInsightsProps> = ({ stats, onRefresh }) =
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  width: 40,
-                  height: 40,
-                  borderRadius: '12px',
+                  width: 34,
+                  height: 34,
+                  borderRadius: '10px',
                   bgcolor: alpha(theme.palette.secondary.main, 0.08),
                 }}
               >
                 <AssessmentIcon 
                   color="secondary" 
-                  sx={{ fontSize: 24 }} 
+                  sx={{ fontSize: 20 }} 
                 />
               </Box>
               
               <Typography
                 variant="h6"
                 fontWeight={600}
-                sx={{ fontSize: '1.25rem' }}
+                sx={{ fontSize: '1rem' }}
               >
                 Project Insights
               </Typography>
@@ -351,6 +333,7 @@ const ProjectInsights: React.FC<ProjectInsightsProps> = ({ stats, onRefresh }) =
             
             <Tooltip title="Refresh data" arrow>
               <IconButton 
+                size="small"
                 onClick={handleRefresh}
                 disabled={isRefreshing}
                 sx={{
@@ -361,6 +344,7 @@ const ProjectInsights: React.FC<ProjectInsightsProps> = ({ stats, onRefresh }) =
                 <RefreshIcon 
                   fontSize="small" 
                   sx={{ 
+                    fontSize: 18,
                     animation: isRefreshing ? 'spin 1s linear infinite' : 'none',
                     '@keyframes spin': {
                       '0%': { transform: 'rotate(0deg)' },
@@ -373,14 +357,14 @@ const ProjectInsights: React.FC<ProjectInsightsProps> = ({ stats, onRefresh }) =
           </Box>
 
           {isRefreshing && (
-            <Box sx={{ width: '100%', mb: 2 }}>
-              <LinearProgress sx={{ height: 4, borderRadius: 2 }} />
+            <Box sx={{ width: '100%', mb: 1.5 }}>
+              <LinearProgress sx={{ height: 3, borderRadius: 1.5 }} />
             </Box>
           )}
 
-          <Grid container spacing={2}>
+          <Grid container spacing={1.5}>
             {insights.map((insight, index) => (
-              <Grid item xs={12} sm={6} md={3} key={index}>
+              <Grid item xs={6} sm={4} md={4} lg={2} key={index}>
                 <InsightCard {...insight} index={index} />
               </Grid>
             ))}
