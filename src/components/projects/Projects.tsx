@@ -27,7 +27,8 @@ import {
   Menu,
   MenuItem,
   Fade,
-  Badge
+  Badge,
+  CardActions,
 } from '@mui/material';
 import {
   Search as SearchIcon,
@@ -48,9 +49,13 @@ import {
   Star as StarIcon,
   CheckCircle as CheckCircleIcon,
   Settings as SettingsIcon,
-  SortByAlpha as SortIcon
+  SortByAlpha as SortIcon,
+  House as HouseIcon,
+  Construction as ConstructionIcon,
+  Landscape as LandscapeIcon,
+  AddCircleOutline as AddCircleOutlineIcon,
 } from '@mui/icons-material';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import { Project } from '../../types';
 import { ProjectService } from '../../services/project';
 import { useAuth } from '../../contexts/AuthContext';
@@ -868,6 +873,107 @@ const Projects: React.FC = () => {
     handleCloseContextMenu();
   };
 
+  // Project templates section
+  const renderTemplatesSection = () => {
+    const templates = [
+      {
+        id: 'residential',
+        name: 'Residential Construction',
+        icon: <HouseIcon fontSize="large" />,
+        description: 'Single-family homes, multi-family units, renovations, and additions.',
+        route: '/projects/new-residential',
+        color: theme.palette.primary.main,
+      },
+      {
+        id: 'commercial',
+        name: 'Commercial Building',
+        icon: <BusinessIcon fontSize="large" />,
+        description: 'Office buildings, retail spaces, warehouses, and industrial facilities.',
+        route: '/projects/new-custom',
+        params: { template: 'commercial' },
+        color: theme.palette.secondary.main,
+      },
+      {
+        id: 'renovation',
+        name: 'Renovation Project',
+        icon: <ConstructionIcon fontSize="large" />,
+        description: 'Remodeling existing structures, tenant improvements, and historic renovations.',
+        route: '/projects/new-custom',
+        params: { template: 'renovation' },
+        color: '#ff9800', // Orange
+      },
+      {
+        id: 'landscaping',
+        name: 'Landscaping Project',
+        icon: <LandscapeIcon fontSize="large" />,
+        description: 'Outdoor spaces, hardscaping, softscaping, and landscape construction.',
+        route: '/projects/new-custom',
+        params: { template: 'landscaping' },
+        color: '#4caf50', // Green
+      },
+      {
+        id: 'custom',
+        name: 'Custom Project',
+        icon: <AddCircleOutlineIcon fontSize="large" />,
+        description: 'Create your own project structure with custom phases tailored to your specific needs.',
+        route: '/projects/new-custom',
+        color: '#9c27b0', // Purple
+      },
+    ];
+
+    return (
+      <Box sx={{ mb: 4, mt: 2 }}>
+        <Typography variant="h6" fontWeight={600} gutterBottom>
+          Start a New Project
+        </Typography>
+        <Grid container spacing={2}>
+          {templates.map((template) => (
+            <Grid item xs={6} sm={4} md={2.4} key={template.id}>
+              <Card 
+                sx={{ 
+                  height: '100%',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  transition: 'transform 0.2s',
+                  '&:hover': {
+                    transform: 'translateY(-4px)',
+                    boxShadow: 4,
+                  },
+                  cursor: 'pointer',
+                }}
+                onClick={() => {
+                  if (template.params) {
+                    navigate(template.route, { state: template.params });
+                  } else {
+                    navigate(template.route);
+                  }
+                }}
+              >
+                <Box 
+                  sx={{ 
+                    p: 2, 
+                    display: 'flex', 
+                    justifyContent: 'center', 
+                    alignItems: 'center',
+                    color: 'white',
+                    bgcolor: template.color,
+                  }}
+                >
+                  {template.icon}
+                </Box>
+                <CardContent sx={{ flexGrow: 1, p: 1.5 }}>
+                  <Typography variant="subtitle1" component="h3" gutterBottom sx={{ fontWeight: 600 }}>
+                    {template.name}
+                  </Typography>
+                </CardContent>
+              </Card>
+            </Grid>
+          ))}
+        </Grid>
+      </Box>
+    );
+  };
+
   return (
     <PageLayout
       title="Projects"
@@ -944,397 +1050,402 @@ const Projects: React.FC = () => {
         overflowX: 'hidden'
       }}
     >
-      {/* Search Box */}
-      <Paper 
-        elevation={0} 
-        sx={{ 
-          p: { xs: 1.5, sm: 2 },
-          mb: { xs: 2, sm: 3 },
-          borderRadius: 2, 
-          border: '1px solid rgba(0,0,0,0.08)',
-          width: '100%',
-        }}
-      >
-        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5, width: '100%' }}>
-          <TextField
-            fullWidth
-            variant="outlined"
-            size="small"
-            placeholder="Search projects by name, description, location..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            InputProps={{
-              startAdornment: (
-                <InputAdornment position="start">
-                  <SearchIcon color="action" />
-                </InputAdornment>
-              ),
-            }}
-            sx={{ 
-              '& .MuiOutlinedInput-root': {
-                borderRadius: 1.5,
-                backgroundColor: alpha(theme.palette.common.black, 0.02),
-              }
-            }}
-          />
-          
-          <Tabs
-            value={selectedTab}
-            onChange={handleTabChange}
-            variant="scrollable"
-            scrollButtons={isMobile ? "auto" : false}
-            allowScrollButtonsMobile
-            aria-label="project tabs"
-            sx={{
-              minHeight: 38,
-              '& .MuiTabs-scrollButtons': {
-                '&.Mui-disabled': { opacity: 0.3 },
-              },
-              '& .MuiTabs-indicator': {
-                height: 3,
-                borderRadius: '3px 3px 0 0',
-                backgroundColor: theme.palette.primary.main,
-              },
-              '& .MuiTab-root': {
-                textTransform: 'none',
-                fontWeight: 500,
-                minHeight: 38,
-                fontSize: { xs: '0.7rem', sm: '0.8rem' },
-                px: { xs: 1, sm: 2 },
-                '&.Mui-selected': {
-                  color: theme.palette.primary.main,
-                  fontWeight: 600,
+      <Container maxWidth="xl" sx={{ mt: 2 }}>
+        {/* Project Templates Section */}
+        {renderTemplatesSection()}
+        
+        {/* Search Box */}
+        <Paper 
+          elevation={0} 
+          sx={{ 
+            p: { xs: 1.5, sm: 2 },
+            mb: { xs: 2, sm: 3 },
+            borderRadius: 2, 
+            border: '1px solid rgba(0,0,0,0.08)',
+            width: '100%',
+          }}
+        >
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5, width: '100%' }}>
+            <TextField
+              fullWidth
+              variant="outlined"
+              size="small"
+              placeholder="Search projects by name, description, location..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              InputProps={{
+                startAdornment: (
+                  <InputAdornment position="start">
+                    <SearchIcon color="action" />
+                  </InputAdornment>
+                ),
+              }}
+              sx={{ 
+                '& .MuiOutlinedInput-root': {
+                  borderRadius: 1.5,
+                  backgroundColor: alpha(theme.palette.common.black, 0.02),
                 }
-              }
-            }}
-          >
-            <Tab 
-              label={
-                <Stack direction="row" spacing={0.75} alignItems="center">
-                  <span>All</span>
-                  <Chip 
-                    label={tabCounts.all} 
-                    size="small" 
-                    sx={{ 
-                      height: { xs: 16, sm: 18 },
-                      fontSize: { xs: '0.6rem', sm: '0.65rem' },
-                      fontWeight: 600,
-                      backgroundColor: alpha(theme.palette.primary.main, 0.1),
-                      color: theme.palette.primary.main,
-                      '& .MuiChip-label': {
-                        px: { xs: 0.5, sm: 0.75 }
-                      }
-                    }} 
-                  />
-                </Stack>
-              } 
+              }}
             />
-            <Tab 
-              label={
-                <Stack direction="row" spacing={0.75} alignItems="center">
-                  <span>Active</span>
-                  <Chip 
-                    label={tabCounts.active} 
-                    size="small" 
-                    sx={{ 
-                      height: { xs: 16, sm: 18 },
-                      fontSize: { xs: '0.6rem', sm: '0.65rem' },
-                      fontWeight: 600,
-                      backgroundColor: alpha(theme.palette.primary.main, 0.1),
-                      color: theme.palette.primary.main,
-                      '& .MuiChip-label': {
-                        px: { xs: 0.5, sm: 0.75 }
-                      }
-                    }} 
-                  />
-                </Stack>
-              } 
-            />
-            {/* ...other tabs with same styling adjustments... */}
-          </Tabs>
-        </Box>
-      </Paper>
+            
+            <Tabs
+              value={selectedTab}
+              onChange={handleTabChange}
+              variant="scrollable"
+              scrollButtons={isMobile ? "auto" : false}
+              allowScrollButtonsMobile
+              aria-label="project tabs"
+              sx={{
+                minHeight: 38,
+                '& .MuiTabs-scrollButtons': {
+                  '&.Mui-disabled': { opacity: 0.3 },
+                },
+                '& .MuiTabs-indicator': {
+                  height: 3,
+                  borderRadius: '3px 3px 0 0',
+                  backgroundColor: theme.palette.primary.main,
+                },
+                '& .MuiTab-root': {
+                  textTransform: 'none',
+                  fontWeight: 500,
+                  minHeight: 38,
+                  fontSize: { xs: '0.7rem', sm: '0.8rem' },
+                  px: { xs: 1, sm: 2 },
+                  '&.Mui-selected': {
+                    color: theme.palette.primary.main,
+                    fontWeight: 600,
+                  }
+                }
+              }}
+            >
+              <Tab 
+                label={
+                  <Stack direction="row" spacing={0.75} alignItems="center">
+                    <span>All</span>
+                    <Chip 
+                      label={tabCounts.all} 
+                      size="small" 
+                      sx={{ 
+                        height: { xs: 16, sm: 18 },
+                        fontSize: { xs: '0.6rem', sm: '0.65rem' },
+                        fontWeight: 600,
+                        backgroundColor: alpha(theme.palette.primary.main, 0.1),
+                        color: theme.palette.primary.main,
+                        '& .MuiChip-label': {
+                          px: { xs: 0.5, sm: 0.75 }
+                        }
+                      }} 
+                    />
+                  </Stack>
+                } 
+              />
+              <Tab 
+                label={
+                  <Stack direction="row" spacing={0.75} alignItems="center">
+                    <span>Active</span>
+                    <Chip 
+                      label={tabCounts.active} 
+                      size="small" 
+                      sx={{ 
+                        height: { xs: 16, sm: 18 },
+                        fontSize: { xs: '0.6rem', sm: '0.65rem' },
+                        fontWeight: 600,
+                        backgroundColor: alpha(theme.palette.primary.main, 0.1),
+                        color: theme.palette.primary.main,
+                        '& .MuiChip-label': {
+                          px: { xs: 0.5, sm: 0.75 }
+                        }
+                      }} 
+                    />
+                  </Stack>
+                } 
+              />
+              {/* ...other tabs with same styling adjustments... */}
+            </Tabs>
+          </Box>
+        </Paper>
 
-      {/* Project Grid/List - ensure responsive */}
-      <Box sx={{ width: '100%' }}>
-        {loading ? (
-          <Box sx={{ width: '100%' }}>
-            {viewMode === 'grid' ? (
+        {/* Project Grid/List - ensure responsive */}
+        <Box sx={{ width: '100%' }}>
+          {loading ? (
+            <Box sx={{ width: '100%' }}>
+              {viewMode === 'grid' ? (
+                <Grid container spacing={{ xs: 1.5, sm: 2, md: 2.5 }}>
+                  {[...Array(6)].map((_, index) => (
+                    <Grid item xs={12} sm={6} md={4} key={index} sx={{ width: '100%' }}>
+                      <Skeleton 
+                        variant="rectangular" 
+                        height={isMobile ? 220 : 260} 
+                        sx={{ borderRadius: 2, width: '100%' }} 
+                      />
+                    </Grid>
+                  ))}
+                </Grid>
+              ) : (
+                // ...existing skeleton list code...
+                <Stack spacing={2}>
+                {[...Array(5)].map((_, index) => (
+                  <Skeleton 
+                    key={index}
+                    variant="rectangular" 
+                    height={isMobile ? 140 : 84} 
+                    sx={{ borderRadius: 2 }} 
+                  />
+                ))}
+              </Stack>
+              )}
+            </Box>
+          ) : filteredProjects.length === 0 ? (
+            <Paper 
+              elevation={0}
+              sx={{ 
+                p: { xs: 2.5, sm: 4 },
+                textAlign: 'center', 
+                borderRadius: 2,
+                border: '1px solid rgba(0,0,0,0.08)',
+                backgroundColor: '#ffffff',
+                width: '100%'
+              }}
+            >
+              {/* ...existing empty state content... */}
+              <Avatar 
+              sx={{ 
+                width: { xs: 50, sm: 64 }, 
+                height: { xs: 50, sm: 64 }, 
+                bgcolor: alpha(theme.palette.primary.main, 0.08),
+                color: theme.palette.primary.main,
+                mx: 'auto',
+                mb: 2
+              }}
+            >
+              <BusinessIcon sx={{ fontSize: { xs: 26, sm: 32 } }} />
+            </Avatar>
+            
+            <Typography 
+              variant="h5" 
+              fontWeight={600} 
+              gutterBottom 
+              sx={{ 
+                fontSize: { xs: '1.25rem', sm: '1.5rem'} 
+              }}
+            >
+              No Projects Found
+            </Typography>
+            <Typography 
+              variant="body1" 
+              color="text.secondary" 
+              paragraph
+              sx={{ maxWidth: 500, mx: 'auto' }}
+            >
+              {searchQuery ? 'Try different search terms or filters' : 'Get started by creating your first project'}
+            </Typography>
+            
+            {!searchQuery && (
+              <Button
+                variant="contained"
+                startIcon={<AddIcon />}
+                onClick={() => navigate('/projects/new')}
+                sx={{ mt: 1, borderRadius: 1.5 }}
+              >
+                Create New Project
+              </Button>
+            )}
+            </Paper>
+          ) : (
+            viewMode === 'grid' ? (
               <Grid container spacing={{ xs: 1.5, sm: 2, md: 2.5 }}>
-                {[...Array(6)].map((_, index) => (
-                  <Grid item xs={12} sm={6} md={4} key={index} sx={{ width: '100%' }}>
-                    <Skeleton 
-                      variant="rectangular" 
-                      height={isMobile ? 220 : 260} 
-                      sx={{ borderRadius: 2, width: '100%' }} 
+                {filteredProjects.map((project) => (
+                  <Grid item xs={12} sm={6} md={4} key={project.id} sx={{ width: '100%' }}>
+                    <ProjectCard 
+                      project={project} 
+                      onClick={() => navigate(`/projects/${project.id}`)} 
+                      onMenuClick={(e) => handleOpenContextMenu(e, project.id!)}
                     />
                   </Grid>
                 ))}
               </Grid>
             ) : (
-              // ...existing skeleton list code...
-              <Stack spacing={2}>
-              {[...Array(5)].map((_, index) => (
-                <Skeleton 
-                  key={index}
-                  variant="rectangular" 
-                  height={isMobile ? 140 : 84} 
-                  sx={{ borderRadius: 2 }} 
-                />
-              ))}
-            </Stack>
-            )}
-          </Box>
-        ) : filteredProjects.length === 0 ? (
-          <Paper 
-            elevation={0}
-            sx={{ 
-              p: { xs: 2.5, sm: 4 },
-              textAlign: 'center', 
-              borderRadius: 2,
-              border: '1px solid rgba(0,0,0,0.08)',
-              backgroundColor: '#ffffff',
-              width: '100%'
-            }}
-          >
-            {/* ...existing empty state content... */}
-            <Avatar 
-            sx={{ 
-              width: { xs: 50, sm: 64 }, 
-              height: { xs: 50, sm: 64 }, 
-              bgcolor: alpha(theme.palette.primary.main, 0.08),
-              color: theme.palette.primary.main,
-              mx: 'auto',
-              mb: 2
-            }}
-          >
-            <BusinessIcon sx={{ fontSize: { xs: 26, sm: 32 } }} />
-          </Avatar>
-          
-          <Typography 
-            variant="h5" 
-            fontWeight={600} 
-            gutterBottom 
-            sx={{ 
-              fontSize: { xs: '1.25rem', sm: '1.5rem'} 
-            }}
-          >
-            No Projects Found
-          </Typography>
-          <Typography 
-            variant="body1" 
-            color="text.secondary" 
-            paragraph
-            sx={{ maxWidth: 500, mx: 'auto' }}
-          >
-            {searchQuery ? 'Try different search terms or filters' : 'Get started by creating your first project'}
-          </Typography>
-          
-          {!searchQuery && (
-            <Button
-              variant="contained"
-              startIcon={<AddIcon />}
-              onClick={() => navigate('/projects/new')}
-              sx={{ mt: 1, borderRadius: 1.5 }}
-            >
-              Create New Project
-            </Button>
-          )}
-          </Paper>
-        ) : (
-          viewMode === 'grid' ? (
-            <Grid container spacing={{ xs: 1.5, sm: 2, md: 2.5 }}>
-              {filteredProjects.map((project) => (
-                <Grid item xs={12} sm={6} md={4} key={project.id} sx={{ width: '100%' }}>
-                  <ProjectCard 
+              <Stack spacing={{ xs: 1.5, sm: 2 }} sx={{ width: '100%' }}>
+                {filteredProjects.map((project) => (
+                  <ProjectListItem 
+                    key={project.id} 
                     project={project} 
                     onClick={() => navigate(`/projects/${project.id}`)} 
                     onMenuClick={(e) => handleOpenContextMenu(e, project.id!)}
                   />
-                </Grid>
-              ))}
-            </Grid>
-          ) : (
-            <Stack spacing={{ xs: 1.5, sm: 2 }} sx={{ width: '100%' }}>
-              {filteredProjects.map((project) => (
-                <ProjectListItem 
-                  key={project.id} 
-                  project={project} 
-                  onClick={() => navigate(`/projects/${project.id}`)} 
-                  onMenuClick={(e) => handleOpenContextMenu(e, project.id!)}
-                />
-              ))}
-            </Stack>
-          )
-        )}
-      </Box>
+                ))}
+              </Stack>
+            )
+          )}
+        </Box>
 
-      {/* Context Menu for Projects - unchanged */}
-      {/* ...existing menus code... */}
-      <Menu
-        anchorEl={contextMenuAnchor}
-        open={Boolean(contextMenuAnchor)}
-        onClose={handleCloseContextMenu}
-        anchorOrigin={{
-          vertical: 'bottom',
-          horizontal: 'right',
-        }}
-        transformOrigin={{
-          vertical: 'top',
-          horizontal: 'right',
-        }}
-        PaperProps={{
-          elevation: 2,
-          sx: {
-            minWidth: 180,
-            borderRadius: 1.5,
-            boxShadow: '0 4px 20px rgba(0,0,0,0.1)',
-          }
-        }}
-      >
-        <MenuItem 
-          onClick={() => {
-            navigate(`/projects/${selectedProjectId}`);
-            handleCloseContextMenu();
+        {/* Context Menu for Projects - unchanged */}
+        {/* ...existing menus code... */}
+        <Menu
+          anchorEl={contextMenuAnchor}
+          open={Boolean(contextMenuAnchor)}
+          onClose={handleCloseContextMenu}
+          anchorOrigin={{
+            vertical: 'bottom',
+            horizontal: 'right',
           }}
-          dense
+          transformOrigin={{
+            vertical: 'top',
+            horizontal: 'right',
+          }}
+          PaperProps={{
+            elevation: 2,
+            sx: {
+              minWidth: 180,
+              borderRadius: 1.5,
+              boxShadow: '0 4px 20px rgba(0,0,0,0.1)',
+            }
+          }}
         >
-          View Project
-        </MenuItem>
-        <MenuItem 
-          onClick={() => selectedProjectId && handleProjectEdit(selectedProjectId)} 
-          dense
-        >
-          Edit Project
-        </MenuItem>
-        <Divider sx={{ my: 0.5 }} />
-        <MenuItem 
-          onClick={() => selectedProjectId && handleProjectDelete(selectedProjectId)}
-          sx={{ color: theme.palette.error.main }}
-          dense
-        >
-          Delete Project
-        </MenuItem>
-      </Menu>
+          <MenuItem 
+            onClick={() => {
+              navigate(`/projects/${selectedProjectId}`);
+              handleCloseContextMenu();
+            }}
+            dense
+          >
+            View Project
+          </MenuItem>
+          <MenuItem 
+            onClick={() => selectedProjectId && handleProjectEdit(selectedProjectId)} 
+            dense
+          >
+            Edit Project
+          </MenuItem>
+          <Divider sx={{ my: 0.5 }} />
+          <MenuItem 
+            onClick={() => selectedProjectId && handleProjectDelete(selectedProjectId)}
+            sx={{ color: theme.palette.error.main }}
+            dense
+          >
+            Delete Project
+          </MenuItem>
+        </Menu>
 
-      {/* Filter Menu */}
-      <Menu
-        anchorEl={filterMenuAnchor}
-        open={Boolean(filterMenuAnchor)}
-        onClose={handleFilterMenuClose}
-        TransitionComponent={Fade}
-        PaperProps={{
-          elevation: 2,
-          sx: {
-            minWidth: 220,
-            borderRadius: 1.5,
-            boxShadow: '0 4px 20px rgba(0,0,0,0.1)',
-          }
-        }}
-      >
-        <Typography 
-          variant="subtitle2" 
-          sx={{ px: 2, py: 1, fontWeight: 600, color: 'text.secondary' }}
-        >
-          Sort Projects
-        </Typography>
-        
-        <MenuItem 
-          onClick={() => handleSort('name')}
-          selected={filterOptions.sortBy === 'name'}
-          sx={{ 
-            fontSize: '0.875rem',
-            '&.Mui-selected': {
-              bgcolor: alpha(theme.palette.primary.main, 0.08),
-              '&:hover': {
-                bgcolor: alpha(theme.palette.primary.main, 0.12),
-              }
+        {/* Filter Menu */}
+        <Menu
+          anchorEl={filterMenuAnchor}
+          open={Boolean(filterMenuAnchor)}
+          onClose={handleFilterMenuClose}
+          TransitionComponent={Fade}
+          PaperProps={{
+            elevation: 2,
+            sx: {
+              minWidth: 220,
+              borderRadius: 1.5,
+              boxShadow: '0 4px 20px rgba(0,0,0,0.1)',
             }
           }}
         >
-          <Box component="span" sx={{ display: 'flex', alignItems: 'center', width: '100%' }}>
-            <SortIcon fontSize="small" sx={{ mr: 1, fontSize: '1rem', opacity: 0.7 }} />
-            Name
-            <Box component="span" sx={{ ml: 'auto' }}>
-              {filterOptions.sortBy === 'name' && (
-                filterOptions.sortDirection === 'asc' ? '↑' : '↓'
-              )}
-            </Box>
-          </Box>
-        </MenuItem>
-        
-        <MenuItem 
-          onClick={() => handleSort('dueDate')}
-          selected={filterOptions.sortBy === 'dueDate'}
-          sx={{ 
-            fontSize: '0.875rem',
-            '&.Mui-selected': {
-              bgcolor: alpha(theme.palette.primary.main, 0.08),
-              '&:hover': {
-                bgcolor: alpha(theme.palette.primary.main, 0.12),
+          <Typography 
+            variant="subtitle2" 
+            sx={{ px: 2, py: 1, fontWeight: 600, color: 'text.secondary' }}
+          >
+            Sort Projects
+          </Typography>
+          
+          <MenuItem 
+            onClick={() => handleSort('name')}
+            selected={filterOptions.sortBy === 'name'}
+            sx={{ 
+              fontSize: '0.875rem',
+              '&.Mui-selected': {
+                bgcolor: alpha(theme.palette.primary.main, 0.08),
+                '&:hover': {
+                  bgcolor: alpha(theme.palette.primary.main, 0.12),
+                }
               }
-            }
-          }}
-        >
-          <Box component="span" sx={{ display: 'flex', alignItems: 'center', width: '100%' }}>
-            <CalendarIcon fontSize="small" sx={{ mr: 1, fontSize: '1rem', opacity: 0.7 }} />
-            Due Date
-            <Box component="span" sx={{ ml: 'auto' }}>
-              {filterOptions.sortBy === 'dueDate' && (
-                filterOptions.sortDirection === 'asc' ? '↑' : '↓'
-              )}
+            }}
+          >
+            <Box component="span" sx={{ display: 'flex', alignItems: 'center', width: '100%' }}>
+              <SortIcon fontSize="small" sx={{ mr: 1, fontSize: '1rem', opacity: 0.7 }} />
+              Name
+              <Box component="span" sx={{ ml: 'auto' }}>
+                {filterOptions.sortBy === 'name' && (
+                  filterOptions.sortDirection === 'asc' ? '↑' : '↓'
+                )}
+              </Box>
             </Box>
-          </Box>
-        </MenuItem>
-        
-        <MenuItem 
-          onClick={() => handleSort('budget')}
-          selected={filterOptions.sortBy === 'budget'}
-          sx={{ 
-            fontSize: '0.875rem',
-            '&.Mui-selected': {
-              bgcolor: alpha(theme.palette.primary.main, 0.08),
-              '&:hover': {
-                bgcolor: alpha(theme.palette.primary.main, 0.12),
+          </MenuItem>
+          
+          <MenuItem 
+            onClick={() => handleSort('dueDate')}
+            selected={filterOptions.sortBy === 'dueDate'}
+            sx={{ 
+              fontSize: '0.875rem',
+              '&.Mui-selected': {
+                bgcolor: alpha(theme.palette.primary.main, 0.08),
+                '&:hover': {
+                  bgcolor: alpha(theme.palette.primary.main, 0.12),
+                }
               }
-            }
-          }}
-        >
-          <Box component="span" sx={{ display: 'flex', alignItems: 'center', width: '100%' }}>
-            <MoneyIcon fontSize="small" sx={{ mr: 1, fontSize: '1rem', opacity: 0.7 }} />
-            Budget
-            <Box component="span" sx={{ ml: 'auto' }}>
-              {filterOptions.sortBy === 'budget' && (
-                filterOptions.sortDirection === 'asc' ? '↑' : '↓'
-              )}
+            }}
+          >
+            <Box component="span" sx={{ display: 'flex', alignItems: 'center', width: '100%' }}>
+              <CalendarIcon fontSize="small" sx={{ mr: 1, fontSize: '1rem', opacity: 0.7 }} />
+              Due Date
+              <Box component="span" sx={{ ml: 'auto' }}>
+                {filterOptions.sortBy === 'dueDate' && (
+                  filterOptions.sortDirection === 'asc' ? '↑' : '↓'
+                )}
+              </Box>
             </Box>
-          </Box>
-        </MenuItem>
-        
-        <MenuItem 
-          onClick={() => handleSort('progress')}
-          selected={filterOptions.sortBy === 'progress'}
-          sx={{ 
-            fontSize: '0.875rem',
-            '&.Mui-selected': {
-              bgcolor: alpha(theme.palette.primary.main, 0.08),
-              '&:hover': {
-                bgcolor: alpha(theme.palette.primary.main, 0.12),
+          </MenuItem>
+          
+          <MenuItem 
+            onClick={() => handleSort('budget')}
+            selected={filterOptions.sortBy === 'budget'}
+            sx={{ 
+              fontSize: '0.875rem',
+              '&.Mui-selected': {
+                bgcolor: alpha(theme.palette.primary.main, 0.08),
+                '&:hover': {
+                  bgcolor: alpha(theme.palette.primary.main, 0.12),
+                }
               }
-            }
-          }}
-        >
-          <Box component="span" sx={{ display: 'flex', alignItems: 'center', width: '100%' }}>
-            <AccessTimeIcon fontSize="small" sx={{ mr: 1, fontSize: '1rem', opacity: 0.7 }} />
-            Progress
-            <Box component="span" sx={{ ml: 'auto' }}>
-              {filterOptions.sortBy === 'progress' && (
-                filterOptions.sortDirection === 'asc' ? '↑' : '↓'
-              )}
+            }}
+          >
+            <Box component="span" sx={{ display: 'flex', alignItems: 'center', width: '100%' }}>
+              <MoneyIcon fontSize="small" sx={{ mr: 1, fontSize: '1rem', opacity: 0.7 }} />
+              Budget
+              <Box component="span" sx={{ ml: 'auto' }}>
+                {filterOptions.sortBy === 'budget' && (
+                  filterOptions.sortDirection === 'asc' ? '↑' : '↓'
+                )}
+              </Box>
             </Box>
-          </Box>
-        </MenuItem>
-      </Menu>
+          </MenuItem>
+          
+          <MenuItem 
+            onClick={() => handleSort('progress')}
+            selected={filterOptions.sortBy === 'progress'}
+            sx={{ 
+              fontSize: '0.875rem',
+              '&.Mui-selected': {
+                bgcolor: alpha(theme.palette.primary.main, 0.08),
+                '&:hover': {
+                  bgcolor: alpha(theme.palette.primary.main, 0.12),
+                }
+              }
+            }}
+          >
+            <Box component="span" sx={{ display: 'flex', alignItems: 'center', width: '100%' }}>
+              <AccessTimeIcon fontSize="small" sx={{ mr: 1, fontSize: '1rem', opacity: 0.7 }} />
+              Progress
+              <Box component="span" sx={{ ml: 'auto' }}>
+                {filterOptions.sortBy === 'progress' && (
+                  filterOptions.sortDirection === 'asc' ? '↑' : '↓'
+                )}
+              </Box>
+            </Box>
+          </MenuItem>
+        </Menu>
+      </Container>
     </PageLayout>
   );
 };

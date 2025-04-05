@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import {
   Box,
   Button,
@@ -154,6 +154,7 @@ const PROJECT_TEMPLATES = [
 
 const NewCustomProjectPage: React.FC = () => {
   const navigate = useNavigate();
+  const location = useLocation();
   const theme = useTheme();
   const { user } = useAuth();
   
@@ -177,6 +178,33 @@ const NewCustomProjectPage: React.FC = () => {
     }
   });
   const [customPhases, setCustomPhases] = useState<Phase[]>([]);
+  
+  // Add a constant for project types
+  const PROJECT_TYPE_OPTIONS = [
+    'Residential New Construction',
+    'Residential Renovation',
+    'Commercial New Construction',
+    'Commercial Renovation',
+    'Infrastructure',
+    'Landscaping',
+    'Interior Design',
+    'Electrical',
+    'Plumbing',
+    'HVAC',
+    'Roofing',
+    'Custom',
+  ];
+  
+  // Check for template parameter in location state
+  useEffect(() => {
+    const state = location.state as { template?: string } | null;
+    if (state?.template) {
+      const template = PROJECT_TEMPLATES.find(t => t.id === state.template);
+      if (template) {
+        handleSelectTemplate(template.id);
+      }
+    }
+  }, [location]);
   
   // Handle template selection
   const handleSelectTemplate = (templateId: string) => {
@@ -364,12 +392,20 @@ const NewCustomProjectPage: React.FC = () => {
             </Grid>
             
             <Grid item xs={12} md={6}>
-              <TextField
-                fullWidth
-                label="Project Type"
-                value={projectBasicData?.projectType || ''}
-                onChange={(e) => setProjectBasicData((prev: ProjectData) => ({ ...prev, projectType: e.target.value }))}
-              />
+              <FormControl fullWidth>
+                <InputLabel>Project Type</InputLabel>
+                <Select
+                  value={projectBasicData?.projectType || ''}
+                  label="Project Type"
+                  onChange={(e) => setProjectBasicData((prev: ProjectData) => ({ ...prev, projectType: e.target.value }))}
+                >
+                  {PROJECT_TYPE_OPTIONS.map((type) => (
+                    <MenuItem key={type} value={type}>
+                      {type}
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
             </Grid>
             
             <Grid item xs={12}>

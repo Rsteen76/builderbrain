@@ -28,6 +28,9 @@ import {
   ListItemAvatar,
   ListItemText,
   ButtonGroup,
+  CardMedia,
+  CardActionArea,
+  CardActions,
 } from '@mui/material';
 import {
   TrendingUp as TrendingUpIcon,
@@ -51,8 +54,11 @@ import {
   House as HouseIcon,
   Construction as ConstructionIcon,
   ClearAll as ClearAllIcon,
+  AddCircleOutline as AddCircleOutlineIcon,
+  Business as CommercialIcon,
+  Landscape as LandscapeIcon,
 } from '@mui/icons-material';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import { Project } from '../../types';
 import { ProjectService } from '../../services/project';
 import { useAuth } from '../../contexts/AuthContext';
@@ -585,6 +591,126 @@ const Dashboard: React.FC = () => {
     };
   };
 
+  // Add a templates section to the dashboard
+  const renderTemplatesSection = () => {
+    const templates = [
+      {
+        id: 'residential',
+        name: 'Residential Construction',
+        icon: <HouseIcon fontSize="large" />,
+        description: 'Single-family homes, multi-family units, renovations, and additions.',
+        route: '/projects/new-residential',
+        color: theme.palette.primary.main,
+      },
+      {
+        id: 'commercial',
+        name: 'Commercial Building',
+        icon: <CommercialIcon fontSize="large" />,
+        description: 'Office buildings, retail spaces, warehouses, and industrial facilities.',
+        route: '/projects/new-custom',
+        params: { template: 'commercial' },
+        color: theme.palette.secondary.main,
+      },
+      {
+        id: 'renovation',
+        name: 'Renovation Project',
+        icon: <ConstructionIcon fontSize="large" />,
+        description: 'Remodeling existing structures, tenant improvements, and historic renovations.',
+        route: '/projects/new-custom',
+        params: { template: 'renovation' },
+        color: '#ff9800', // Orange
+      },
+      {
+        id: 'landscaping',
+        name: 'Landscaping Project',
+        icon: <LandscapeIcon fontSize="large" />,
+        description: 'Outdoor spaces, hardscaping, softscaping, and landscape construction.',
+        route: '/projects/new-custom',
+        params: { template: 'landscaping' },
+        color: '#4caf50', // Green
+      },
+      {
+        id: 'custom',
+        name: 'Custom Project',
+        icon: <BusinessIcon fontSize="large" />,
+        description: 'Create your own project structure with custom phases tailored to your specific needs.',
+        route: '/projects/new-custom',
+        color: '#9c27b0', // Purple
+      },
+    ];
+
+    return (
+      <Box sx={{ mb: 4 }}>
+        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+          <Typography variant="h5" component="h2" sx={{ fontWeight: 600 }}>
+            Project Templates
+          </Typography>
+          <Button 
+            component={Link} 
+            to="/projects/new-custom"
+            variant="outlined" 
+            startIcon={<AddCircleOutlineIcon />}
+          >
+            New Custom Project
+          </Button>
+        </Box>
+        
+        <Grid container spacing={2}>
+          {templates.map((template) => (
+            <Grid item xs={12} sm={6} md={4} lg={2.4} key={template.id}>
+              <Card 
+                sx={{ 
+                  height: '100%',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  transition: 'transform 0.2s',
+                  '&:hover': {
+                    transform: 'translateY(-4px)',
+                    boxShadow: 4,
+                  },
+                  cursor: 'pointer',
+                }}
+                onClick={() => {
+                  if (template.params) {
+                    navigate(template.route, { state: template.params });
+                  } else {
+                    navigate(template.route);
+                  }
+                }}
+              >
+                <Box 
+                  sx={{ 
+                    p: 2, 
+                    display: 'flex', 
+                    justifyContent: 'center', 
+                    alignItems: 'center',
+                    color: 'white',
+                    bgcolor: template.color,
+                  }}
+                >
+                  {template.icon}
+                </Box>
+                <CardContent sx={{ flexGrow: 1 }}>
+                  <Typography variant="h6" component="h3" gutterBottom>
+                    {template.name}
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    {template.description}
+                  </Typography>
+                </CardContent>
+                <CardActions>
+                  <Button size="small" fullWidth>
+                    Start Project
+                  </Button>
+                </CardActions>
+              </Card>
+            </Grid>
+          ))}
+        </Grid>
+      </Box>
+    );
+  };
+
   if (loading && projects.length === 0) {
     return (
       <Container maxWidth="xl" sx={{ mt: 3 }}>
@@ -939,6 +1065,9 @@ const Dashboard: React.FC = () => {
             </Grid>
           </Paper>
         </Grid>
+
+        {/* Add the Templates Section After Other Sections */}
+        {renderTemplatesSection()}
       </Container>
     </PageLayout>
   );
