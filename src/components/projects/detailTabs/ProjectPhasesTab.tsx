@@ -1,103 +1,123 @@
-import React, { useState } from 'react';
+import React, { useState, useCallback } from 'react';
 import {
   Box,
-  Typography,
-  Grid,
+  Stack,
   Paper,
-  LinearProgress,
-  Card,
-  CardContent,
-  CardActions,
+  Typography,
   Button,
+  Tooltip,
   IconButton,
+  Grid,
+  LinearProgress,
   Chip,
+  Avatar,
+  alpha,
+  Theme,
+  Card,
+  CardHeader,
+  CardContent,
+  Divider,
+  Collapse,
+  Badge,
+  Fade,
+  useTheme,
+  useMediaQuery,
   Menu,
   MenuItem,
   ListItemIcon,
-  ListItemText,
-  Divider,
-  useTheme,
-  alpha,
-  Tooltip,
-  Stack,
-  Avatar,
+  ListItemText
 } from '@mui/material';
 import {
-  Add as AddIcon,
   Edit as EditIcon,
   Delete as DeleteIcon,
-  MoreVert as MoreVertIcon,
-  CheckCircle as CheckCircleIcon,
-  Flag as FlagIcon,
+  Add as AddIcon,
   Timeline as TimelineIcon,
-  Schedule as ScheduleIcon,
-  PlayArrow as PlayArrowIcon,
-  Pause as PauseIcon,
-  Assignment as AssignmentIcon,
-  AccessTime as ClockIcon,
+  Receipt as ReceiptIcon,
+  ExpandMore as ExpandMoreIcon,
+  ExpandLess as ExpandLessIcon,
+  CheckCircle as CheckCircleIcon,
+  DonutLarge as DonutLargeIcon,
   AttachMoney as AttachMoneyIcon,
-  AddTask as AddTaskIcon,
-  Event as EventIcon,
-  ArrowForward as ArrowForwardIcon,
-  Refresh as RefreshIcon,
+  Construction as ConstructionIcon,
+  Pending as PendingIcon,
+  Task as TaskIcon,
+  PriorityHigh as PriorityHighIcon,
+  Schedule as ScheduleIcon,
+  Done as DoneIcon,
+  Info as InfoIcon,
+  Business as BusinessIcon, // Added missing BusinessIcon import
+  MoreVert as MoreVertIcon,
+  CalendarToday as CalendarTodayIcon,
+  AccountBalanceWallet as AccountBalanceWalletIcon,
+  ReceiptLong as ReceiptLongIcon,
+  Handshake as HandshakeIcon,
+  Assignment as AssignmentIcon,
+  ChevronRight as ChevronRightIcon,
 } from '@mui/icons-material';
-import { formatCurrency, formatDate } from '../../../utils/formatters';
-import { Phase, ProjectPhase, Bid, Expense } from '../../../types';
+import {
+  ResponsiveContainer,
+  PieChart,
+  Pie,
+  Cell,
+  Tooltip as RechartsTooltip,
+  AreaChart, 
+  Area, 
+  XAxis, 
+  YAxis,
+  CartesianGrid,
+  Legend
+} from 'recharts';
 
-// Extend Phase to include the order property
-interface ExtendedPhase extends Phase {
-  order?: number;
-}
+import { ProjectPhase, Bid, Expense } from '../../../types';
+
+// Helper functions
+const getPhaseInitials = (phaseName: string): string => {
+  if (!phaseName) return '?';
+  return phaseName
+    .split(' ')
+    .map(word => word[0])
+    .join('')
+    .substring(0, 2)
+    .toUpperCase();
+};
+
+const formatPhaseDate = (date: Date | string | number | undefined): string => {
+  if (!date) return 'TBD';
+  try {
+    const dateObj = new Date(date);
+    // Check if the date is valid
+    if (isNaN(dateObj.getTime())) {
+      return 'Invalid date';
+    }
+    return dateObj.toLocaleDateString();
+  } catch (error) {
+    console.error('Error formatting date:', error);
+    return 'Invalid date';
+  }
+};
 
 interface ProjectPhasesTabProps {
-  phases: Phase[];
+  phases: ProjectPhase[];
+  bids: Bid[];
+  expenses: Expense[];
   phaseProposedCosts: Record<string, number>;
   phaseActualCosts: Record<string, number>;
-  theme: any;
+  theme: Theme;
   handleAddPhase: () => void;
   handleUpdatePhase: (phaseId: string) => void;
   handleDeletePhase: (phaseId: string) => void;
   handleOpenQuickBidDialog: (phaseId: string) => void;
   handleOpenQuickExpenseDialog: (phaseId: string) => void;
+  handleOpenTemplateAdjuster: (phaseId?: string) => void;
   handleViewPhaseDetails: (phaseId: string) => void;
-  bids: Bid[];
-  expenses: Expense[];
+  getStatusColor: (status: string) => string;
+  formatCurrency: (value: number) => string;
 }
-
-const getStatusIcon = (status?: string) => {
-  if (!status) return <ScheduleIcon />;
-  
-  switch (status) {
-    case 'completed':
-      return <CheckCircleIcon />;
-    case 'in_progress':
-      return <PlayArrowIcon />;
-    case 'on_hold':
-      return <PauseIcon />;
-    case 'not_started':
-    default:
-      return <ScheduleIcon />;
-  }
-};
-
-const getStatusColor = (status?: string, theme?: any) => {
-  if (!status || !theme) return theme?.palette.grey[500];
-  
-  switch (status) {
-    case 'completed':
-      return theme.palette.success.main;
-    case 'in_progress':
-      return theme.palette.primary.main;
-    case 'on_hold':
-      return theme.palette.warning.main;
-    case 'not_started':
-    default:
-      return theme.palette.grey[500];
-  }
-};
 
 const ProjectPhasesTab: React.FC<ProjectPhasesTabProps> = ({
   phases,
+  bids,
+  expenses,
   phaseProposedCosts,
   phaseActualCosts,
   theme,
@@ -106,569 +126,866 @@ const ProjectPhasesTab: React.FC<ProjectPhasesTabProps> = ({
   handleDeletePhase,
   handleOpenQuickBidDialog,
   handleOpenQuickExpenseDialog,
+  handleOpenTemplateAdjuster,
   handleViewPhaseDetails,
-  bids,
-  expenses,
+  getStatusColor,
+  formatCurrency,
 }) => {
-  const [anchorElMap, setAnchorElMap] = useState<{ [phaseId: string]: HTMLElement | null }>({});
+  // Get breakpoint for responsive design
+  const isXs = useMediaQuery(theme.breakpoints.only('xs'));
   
-  // Functions to handle menu open/close
-  const handleMenuOpen = (event: React.MouseEvent<HTMLElement>, phaseId: string) => {
+  // Add state for expanded details
+  const [expandedPhases, setExpandedPhases] = useState<Record<string, boolean>>({});
+  const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
+  const [selectedPhaseId, setSelectedPhaseId] = useState<string | null>(null);
+  const appTheme = useTheme();
+  
+  // Toggle expanded state for a phase
+  const handleToggleExpand = (phaseId: string) => {
+    setExpandedPhases(prev => ({
+      ...prev,
+      [phaseId]: !prev[phaseId]
+    }));
+  };
+
+  // Phase menu handling
+  const handlePhaseMenuOpen = (event: React.MouseEvent<HTMLElement>, phaseId: string) => {
     event.stopPropagation();
-    setAnchorElMap({
-      ...anchorElMap,
-      [phaseId]: event.currentTarget,
-    });
+    setAnchorEl(event.currentTarget);
+    setSelectedPhaseId(phaseId);
   };
 
-  const handleMenuClose = (phaseId: string) => {
-    setAnchorElMap({
-      ...anchorElMap,
-      [phaseId]: null,
-    });
+  const handlePhaseMenuClose = () => {
+    setAnchorEl(null);
+    setSelectedPhaseId(null);
   };
 
-  // Calculate timeline details
-  const getTimelineInfo = (phase: Phase) => {
-    if (!phase.startDate || !phase.endDate) {
-      return { daysTotal: 0, daysElapsed: 0, isOverdue: false };
+  // Function to get payments for a specific phase from all bids
+  const getPhasePayments = (phaseId: string) => {
+    const phasePayments: Array<{
+      bidId: string;
+      bidTitle: string;
+      subcontractorName: string;
+      payment: any;
+    }> = [];
+    
+    bids.forEach(bid => {
+      if (bid.paymentSchedule?.length) {
+        // Find all payments in this bid that belong to this phase
+        const paymentsForPhase = bid.paymentSchedule.filter(
+          payment => payment.phaseId === phaseId
+        );
+        
+        // If we found payments for this phase, add them to our results
+        if (paymentsForPhase.length > 0) {
+          paymentsForPhase.forEach(payment => {
+            phasePayments.push({
+              bidId: bid.id,
+              bidTitle: bid.title || 'Unnamed Bid',
+              subcontractorName: bid.subcontractorName || bid.contractorName || 'Unnamed',
+              payment
+            });
+          });
+        }
+      }
+      
+      // Also check for top-level phaseId (legacy support)
+      if (bid.phaseId === phaseId) {
+        console.log(`Found bid ${bid.id} with top-level phaseId ${phaseId}`);
+        // Add a synthetic payment for bids that have phaseId but no payment schedule
+        
+        // Ensure paymentSchedule exists AND is an array before calling .some()
+        const hasMatchingPaymentInSchedule = Array.isArray(bid.paymentSchedule) && 
+                                            bid.paymentSchedule.some(payment => payment.phaseId === phaseId);
+
+        if (!hasMatchingPaymentInSchedule) {
+          phasePayments.push({
+            bidId: bid.id,
+            bidTitle: bid.title || 'Unnamed Bid',
+            subcontractorName: bid.subcontractorName || bid.contractorName || 'Unnamed',
+            payment: {
+              id: `synthetic-${bid.id}`,
+              name: 'Full Payment',
+              amount: bid.totalAmount,
+              percentage: 100,
+              phaseId: bid.phaseId
+            }
+          });
+        }
+      }
+    });
+    
+    return phasePayments;
+  };
+  
+  // Function to get all the bids associated with a phase
+  const getPhaseBids = (phaseId: string) => {
+    // Get unique bids from the payments list
+    const phasePayments = getPhasePayments(phaseId);
+    const bidIds = new Set(phasePayments.map(item => item.bidId));
+    
+    // Return the full bid objects for these IDs
+    return bids.filter(bid => bidIds.has(bid.id));
+  };
+  
+  // Get phase expenses
+  const getPhaseExpenses = useCallback((phaseId: string) => {
+    return expenses.filter(expense => expense.phaseId === phaseId);
+  }, [expenses]);
+
+  // Helper to get status text
+  const getStatusText = (status: string) => {
+    return status.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+  };
+  
+  // Helper to get status icon
+  const getStatusIcon = (status: string) => {
+    switch (status.toLowerCase()) {
+      case 'completed':
+        return <DoneIcon />;
+      case 'in_progress':
+        return <ConstructionIcon />;
+      case 'not_started':
+        return <PendingIcon />;
+      default:
+        return <InfoIcon />;
     }
-    
-    const start = new Date(phase.startDate);
-    const end = new Date(phase.endDate);
-    const today = new Date();
-    
-    const daysTotal = Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24));
-    const daysElapsed = Math.ceil((Math.min(today.getTime(), end.getTime()) - start.getTime()) / (1000 * 60 * 60 * 24));
-    const isOverdue = today > end && phase.progress !== 100;
-    
-    return { daysTotal, daysElapsed, isOverdue };
   };
-  
-  // Calculate budget vs actual cost percentage for visual indicator
-  const getBudgetIndicator = (phase: Phase) => {
-    const budget = phase.budget || 0;
-    const actual = phase.actualCost || 0;
-    
-    if (budget === 0) return { percent: 0, status: 'neutral' };
-    
-    const percentage = (actual / budget) * 100;
-    
-    if (percentage > 100) return { percent: 100, status: 'over' };
-    if (percentage > 90) return { percent: percentage, status: 'warning' };
-    return { percent: percentage, status: 'good' };
-  };
-  
-  // Get CSS class based on phase position (to create connections between cards)
-  const getPhasePositionClass = (index: number, total: number) => {
-    if (total <= 1) return '';
-    if (index === 0) return 'first-phase';
-    if (index === total - 1) return 'last-phase';
-    return 'middle-phase';
-  };
-  
-  // Sort phases by order if available, otherwise by start date
-  const sortedPhases = [...phases].sort((a, b) => {
-    // Cast to ExtendedPhase to access potential order property
-    const phaseA = a as ExtendedPhase;
-    const phaseB = b as ExtendedPhase;
-    
-    // Sort by order field if both have it
-    if (phaseA.order !== undefined && phaseB.order !== undefined) {
-      return phaseA.order - phaseB.order;
-    }
-    
-    // Sort by start date if order is not available
-    const dateA = a.startDate ? new Date(a.startDate).getTime() : 0;
-    const dateB = b.startDate ? new Date(b.startDate).getTime() : 0;
-    return dateA - dateB;
-  });
-  
+
+  // Calculate percentage of budget used for a phase
+  const calculateBudgetPercentage = useCallback((phaseId: string, budget: number) => {
+    if (budget === 0) return 0;
+    return (phaseActualCosts[phaseId] || 0) / budget * 100;
+  }, [phaseActualCosts]);
+
   return (
-    <Box sx={{ py: 3 }}>
-      {/* Control Bar */}
+    <Box>
+      {/* Header with title and actions */}
       <Box 
         sx={{ 
-          display: 'flex', 
-          justifyContent: 'space-between', 
-          alignItems: 'center', 
-          mb: 3 
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          mb: 3,
+          position: 'relative',
+          pb: 2,
+          '&::after': {
+            content: '""',
+            position: 'absolute',
+            bottom: 0,
+            left: 0,
+            right: 0,
+            height: '3px',
+            background: `linear-gradient(90deg, ${alpha(appTheme.palette.primary.main, 0.7)} 0%, ${alpha(appTheme.palette.secondary.main, 0.5)} 100%)`,
+            borderRadius: '3px'
+          }
         }}
       >
-        <Typography variant="h6" sx={{ fontWeight: 600 }}>
-          Project Timeline & Phases
-        </Typography>
-        <Box sx={{ display: 'flex', gap: 1 }}>
-          <Button 
-            variant="outlined" 
-            startIcon={<RefreshIcon />}
-            size="small"
+        <Box display="flex" alignItems="center">
+          <DonutLargeIcon sx={{ 
+            fontSize: 38, 
+            color: theme.palette.primary.main,
+            mr: 2,
+            filter: `drop-shadow(0 2px 3px ${alpha(theme.palette.primary.main, 0.3)})`
+          }} />
+          <Box>
+            <Typography variant="h5" fontWeight={600}>Project Phases</Typography>
+            <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
+              Track project milestones and phase completion
+            </Typography>
+          </Box>
+        </Box>
+        
+        <Box display="flex" gap={1.5}>
+          <Button
+            variant="outlined"
+            startIcon={<EditIcon />}
+            size="medium"
+            color="secondary"
+            onClick={() => handleOpenTemplateAdjuster()}
+            sx={{ 
+              borderRadius: 2,
+              boxShadow: `0 2px 5px ${alpha(theme.palette.secondary.main, 0.2)}`,
+              fontWeight: 500,
+              '&:hover': {
+                boxShadow: `0 4px 8px ${alpha(theme.palette.secondary.main, 0.3)}`,
+              }
+            }}
           >
-            Refresh
+            Adjust Template
           </Button>
-          <Button 
-            variant="contained" 
-            color="primary" 
+          <Button
+            variant="contained"
             startIcon={<AddIcon />}
+            size="medium"
             onClick={handleAddPhase}
+            sx={{ 
+              borderRadius: 2,
+              background: `linear-gradient(45deg, ${theme.palette.primary.main}, ${alpha(theme.palette.primary.main, 0.8)})`,
+              boxShadow: `0 3px 6px ${alpha(theme.palette.primary.main, 0.25)}`,
+              fontWeight: 500,
+              '&:hover': {
+                boxShadow: `0 5px 10px ${alpha(theme.palette.primary.main, 0.35)}`,
+              }
+            }}
           >
             Add Phase
           </Button>
         </Box>
       </Box>
       
-      {phases.length === 0 ? (
-        <Paper
-          sx={{
-            p: 4,
-            textAlign: 'center',
-            background: alpha(theme.palette.primary.main, 0.05),
-            borderRadius: 2,
+      {/* Project Timeline Visualization */}
+      <Card 
+        elevation={0} 
+        sx={{ 
+          borderRadius: 3,
+          border: `1px solid ${alpha(theme.palette.divider, 0.08)}`,
+          boxShadow: `0 2px 12px ${alpha(theme.palette.common.black, 0.04)}`,
+          mb: 4,
+          overflow: 'hidden',
+          p: 0
+        }}
+      >
+        <Box 
+          sx={{ 
+            p: 2, 
+            background: `linear-gradient(45deg, ${alpha(theme.palette.background.default, 0.5)}, ${alpha(theme.palette.background.default, 0.8)})`,
+            borderBottom: `1px solid ${alpha(theme.palette.divider, 0.08)}`
           }}
         >
-          <TimelineIcon sx={{ fontSize: 60, color: alpha(theme.palette.text.secondary, 0.2), mb: 2 }} />
-          <Typography variant="h6" sx={{ mb: 1 }}>No Phases Defined Yet</Typography>
-          <Typography variant="body2" sx={{ mb: 3, color: 'text.secondary', maxWidth: 500, mx: 'auto' }}>
-            Break down your project into phases to track progress, budget, and timeline more effectively.
+          <Typography variant="h6" fontWeight={500} sx={{ display: 'flex', alignItems: 'center' }}>
+            <TimelineIcon sx={{ mr: 1.5, fontSize: '1.2rem', color: theme.palette.primary.main }} />
+            Project Timeline
           </Typography>
-          <Button
-            variant="contained"
-            color="primary"
-            startIcon={<AddIcon />}
-            onClick={handleAddPhase}
-          >
-            Create First Phase
-          </Button>
-        </Paper>
-      ) : (
-        <Box sx={{ position: 'relative' }}>
-          {/* Timeline connector - visual element connecting phase cards */}
-          <Box 
-            sx={{ 
-              position: 'absolute', 
-              left: { xs: '30px', md: '48px' }, 
-              top: '75px', 
-              bottom: '75px', 
-              width: '4px', 
-              background: alpha(theme.palette.primary.main, 0.2),
-              zIndex: 0,
-              display: { xs: 'none', md: 'block' }
-            }} 
-          />
-          
-          {/* Phase cards with connections */}
-          <Grid container spacing={3}>
-            {sortedPhases.map((phase, index) => {
-              // Ensure phase.id exists to avoid TypeScript errors
-              if (!phase.id) return null;
-              
-              const timelineInfo = getTimelineInfo(phase);
-              const budgetIndicator = getBudgetIndicator(phase);
-              const positionClass = getPhasePositionClass(index, sortedPhases.length);
-              const statusColor = getStatusColor(phase.status, theme);
-              
-              // Calculate progress percentage for the phase 
-              const progress = phase.progress || 0;
-              const proposedCost = phase.id ? phaseProposedCosts[phase.id] || 0 : 0;
-              const actualCost = phase.id ? phaseActualCosts[phase.id] || 0 : 0;
-              
-              return (
-                <Grid item xs={12} key={phase.id}>
-                  <Card 
-                    elevation={0}
-                    sx={{ 
-                      borderRadius: 2,
-                      border: `1px solid ${alpha(theme.palette.divider, 0.1)}`,
-                      position: 'relative',
-                      overflow: 'visible',
-                      transition: 'transform 0.2s, box-shadow 0.2s',
-                      boxShadow: `0 4px 12px ${alpha(theme.palette.primary.main, 0.05)}`,
-                      cursor: 'pointer',
-                      '&:hover': {
-                        transform: 'translateY(-4px)',
-                        boxShadow: `0 12px 20px ${alpha(theme.palette.primary.main, 0.1)}`,
-                      },
-                      ...(timelineInfo.isOverdue && {
-                        borderLeft: `4px solid ${theme.palette.error.main}`,
-                      }),
-                    }}
-                    onClick={() => handleViewPhaseDetails(phase.id as string)}
-                  >
-                    {/* Phase dot marker for timeline (visible on md and larger screens) */}
-                    <Box 
-                      sx={{ 
-                        display: { xs: 'none', md: 'flex' },
-                        position: 'absolute', 
-                        left: '-14px', 
-                        top: '40px', 
-                        zIndex: 1,
-                        width: '28px',
-                        height: '28px',
-                        borderRadius: '50%',
-                        bgcolor: 'background.paper',
-                        border: `2px solid ${statusColor}`,
-                        justifyContent: 'center',
-                        alignItems: 'center',
-                        color: statusColor,
-                        '& svg': {
-                          fontSize: '0.9rem'
-                        }
-                      }}
-                    >
-                      {getStatusIcon(phase.status)}
-                    </Box>
-                    
-                    <CardContent sx={{ p: 3 }}>
-                      <Grid container spacing={2}>
-                        {/* Phase Header Section */}
-                        <Grid item xs={12}>
-                          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                            {/* Phase title and status */}
-                            <Box>
-                              <Typography variant="h6" sx={{ fontWeight: 600, mb: 0.5 }}>
-                                {phase.name}
-                              </Typography>
-                              <Box sx={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 1 }}>
-                                <Chip 
-                                  size="small"
-                                  icon={getStatusIcon(phase.status)}
-                                  label={phase.status?.replace('_', ' ') || 'Not Started'}
-                                  sx={{ 
-                                    bgcolor: alpha(statusColor, 0.1),
-                                    color: statusColor,
-                                    borderRadius: 1,
-                                    fontWeight: 500,
-                                  }}
-                                />
-                                
-                                {timelineInfo.isOverdue && (
-                                  <Chip 
-                                    size="small"
-                                    label="Overdue"
-                                    color="error"
-                                    variant="outlined"
-                                    sx={{ borderRadius: 1 }}
-                                  />
-                                )}
-                              </Box>
-                            </Box>
-                            
-                            {/* Progress indicator */}
-                            <Box sx={{ textAlign: 'right' }}>
-                              <Typography variant="h5" sx={{ fontWeight: 700, color: 'primary.main' }}>
-                                {progress}%
-                              </Typography>
-                              <Typography variant="body2" color="text.secondary">
-                                Complete
-                              </Typography>
-                            </Box>
-                          </Box>
-                        </Grid>
-                        
-                        {/* Progress bar */}
-                        <Grid item xs={12}>
-                          <LinearProgress 
-                            variant="determinate" 
-                            value={progress} 
+        </Box>
+        
+        <Box sx={{ p: 2, height: 160 }}>
+          <ResponsiveContainer width="100%" height="100%">
+            <AreaChart
+              data={phases.map(phase => ({
+                name: phase.name,
+                budget: phase.budget,
+                spent: phase.actualCost,
+                progress: phase.progress,
+                status: phase.status,
+              }))}
+              margin={{ top: 10, right: 20, left: 20, bottom: 10 }}
+            >
+              <defs>
+                <linearGradient id="colorBudget" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="5%" stopColor={theme.palette.primary.main} stopOpacity={0.8}/>
+                  <stop offset="95%" stopColor={theme.palette.primary.main} stopOpacity={0.1}/>
+                </linearGradient>
+                <linearGradient id="colorSpent" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="5%" stopColor={theme.palette.secondary.main} stopOpacity={0.8}/>
+                  <stop offset="95%" stopColor={theme.palette.secondary.main} stopOpacity={0.1}/>
+                </linearGradient>
+              </defs>
+              <CartesianGrid strokeDasharray="3 3" stroke={alpha(theme.palette.divider, 0.2)} />
+              <XAxis dataKey="name" fontSize={12} tick={{ fill: theme.palette.text.secondary }} />
+              <YAxis fontSize={12} tick={{ fill: theme.palette.text.secondary }} />
+              <RechartsTooltip 
+                formatter={(value: any, name: string) => [
+                  `${formatCurrency(value)}`, 
+                  name === 'budget' ? 'Budget' : 'Spent'
+                ]}
+                labelFormatter={(label) => `Phase: ${label}`}
+              />
+              <Legend />
+              <Area 
+                type="monotone" 
+                dataKey="budget" 
+                name="Budget" 
+                stroke={theme.palette.primary.main} 
+                fillOpacity={1} 
+                fill="url(#colorBudget)" 
+              />
+              <Area 
+                type="monotone" 
+                dataKey="spent" 
+                name="Spent" 
+                stroke={theme.palette.secondary.main} 
+                fillOpacity={1} 
+                fill="url(#colorSpent)" 
+              />
+            </AreaChart>
+          </ResponsiveContainer>
+        </Box>
+      </Card>
+      
+      {/* Phase Cards */}
+      {phases.length > 0 ? (
+        <Grid container spacing={3}>
+          {phases.map((phase, index) => {
+            const progress = phase.budget > 0 ? (phase.actualCost / phase.budget) * 100 : 0;
+            const isExpanded = expandedPhases[phase.id];
+            const phaseBids = getPhaseBids(phase.id);
+            const phaseExpenses = getPhaseExpenses(phase.id);
+            const proposedCost = phaseProposedCosts[phase.id] || 0;
+            const actualCost = phaseActualCosts[phase.id] || 0;
+            const budget = phase.budget || 0;
+            const budgetUsedPercentage = calculateBudgetPercentage(phase.id, budget);
+
+            return (
+              <Grid item xs={12} md={6} lg={4} key={phase.id}>
+                <Card 
+                  elevation={2}
+                  sx={{ 
+                    height: '100%', 
+                    display: 'flex', 
+                    flexDirection: 'column',
+                    transition: 'all 0.2s ease-in-out',
+                    '&:hover': {
+                      transform: 'translateY(-3px)',
+                      boxShadow: 5
+                    },
+                    borderRadius: 2,
+                    overflow: 'hidden',
+                  }}
+                >
+                  <CardHeader
+                    avatar={
+                      <Avatar 
+                        sx={{ 
+                          width: 38, 
+                          height: 38, 
+                          bgcolor: getStatusColor(phase.status) 
+                        }}
+                      >
+                        {getPhaseInitials(phase.name)}
+                      </Avatar>
+                    }
+                    action={
+                      <Box>
+                        <Chip 
+                          label={getStatusText(phase.status)} 
+                          size="small"
+                          sx={{ 
+                            backgroundColor: alpha(getStatusColor(phase.status), 0.1),
+                            color: getStatusColor(phase.status),
+                            fontWeight: 600,
+                            fontSize: '0.7rem',
+                            height: 24,
+                            mr: 1
+                          }} 
+                        />
+                        <IconButton 
+                          aria-label="more options" 
+                          size="small"
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            handlePhaseMenuOpen(event, phase.id);
+                          }}
+                        >
+                          <MoreVertIcon fontSize="small" />
+                        </IconButton>
+                      </Box>
+                    }
+                    title={
+                      <Typography 
+                        variant="subtitle1" 
+                        sx={{ 
+                          fontWeight: 700, 
+                          fontSize: '1.1rem',
+                          mb: 0,
+                          lineHeight: 1.3
+                        }}
+                      >
+                        {phase.name}
+                      </Typography>
+                    }
+                    subheader={
+                      <Box sx={{ display: 'flex', alignItems: 'center', mt: 0 }}>
+                        <Tooltip title="Timeline">
+                          <CalendarTodayIcon 
+                            fontSize="small" 
                             sx={{ 
-                              height: 8, 
-                              mt: 1, 
-                              mb: 2,
-                              borderRadius: 4,
-                              backgroundColor: alpha(theme.palette.primary.main, 0.1),
-                              '& .MuiLinearProgress-bar': {
-                                borderRadius: 4,
-                                background: progress === 100 
-                                  ? `linear-gradient(90deg, ${theme.palette.success.main} 0%, ${theme.palette.success.dark} 100%)`
-                                  : `linear-gradient(90deg, ${theme.palette.primary.main} 0%, ${theme.palette.primary.dark} 100%)`,
-                              }
+                              color: theme.palette.text.secondary,
+                              fontSize: '0.9rem',
+                              mr: 0.5
                             }} 
                           />
-                        </Grid>
-                        
-                        {/* Details Grid */}
-                        <Grid item xs={12} md={4}>
-                          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
-                            {/* Timeline */}
-                            <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                              <Avatar 
-                                sx={{ 
-                                  width: 36, 
-                                  height: 36, 
-                                  mr: 1.5, 
-                                  bgcolor: alpha(theme.palette.info.main, 0.1),
-                                  color: theme.palette.info.main
-                                }}
-                              >
-                                <ClockIcon fontSize="small" />
-                              </Avatar>
-                              <Box>
-                                <Typography variant="body2" color="text.secondary">Timeline</Typography>
-                                <Typography variant="body1" sx={{ fontWeight: 500 }}>
-                                  {phase.startDate && phase.endDate 
-                                    ? `${formatDate(phase.startDate)} - ${formatDate(phase.endDate)}`
-                                    : 'Dates not set'}
-                                </Typography>
-                              </Box>
-                            </Box>
-                            
-                            {/* Duration */}
-                            <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                              <Avatar 
-                                sx={{ 
-                                  width: 36, 
-                                  height: 36, 
-                                  mr: 1.5, 
-                                  bgcolor: alpha(theme.palette.warning.main, 0.1), 
-                                  color: theme.palette.warning.main 
-                                }}
-                              >
-                                <EventIcon fontSize="small" />
-                              </Avatar>
-                              <Box>
-                                <Typography variant="body2" color="text.secondary">Duration</Typography>
-                                <Typography variant="body1" sx={{ fontWeight: 500 }}>
-                                  {timelineInfo.daysTotal > 0 
-                                    ? `${timelineInfo.daysElapsed} of ${timelineInfo.daysTotal} days (${Math.round((timelineInfo.daysElapsed / timelineInfo.daysTotal) * 100)}%)`
-                                    : 'Not specified'}
-                                </Typography>
-                              </Box>
-                            </Box>
-                          </Box>
-                        </Grid>
-                        
-                        <Grid item xs={12} md={4}>
-                          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
-                            {/* Budget */}
-                            <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                              <Avatar 
-                                sx={{ 
-                                  width: 36, 
-                                  height: 36, 
-                                  mr: 1.5, 
-                                  bgcolor: alpha(theme.palette.success.main, 0.1),
-                                  color: theme.palette.success.main 
-                                }}
-                              >
-                                <AttachMoneyIcon fontSize="small" />
-                              </Avatar>
-                              <Box>
-                                <Typography variant="body2" color="text.secondary">Budget</Typography>
-                                <Typography variant="body1" sx={{ fontWeight: 500 }}>
-                                  {formatCurrency(phase.budget || 0)}
-                                </Typography>
-                              </Box>
-                            </Box>
-                            
-                            {/* Actual Cost */}
-                            <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                              <Avatar 
-                                sx={{ 
-                                  width: 36, 
-                                  height: 36, 
-                                  mr: 1.5, 
-                                  bgcolor: alpha(theme.palette.primary.main, 0.1), 
-                                  color: theme.palette.primary.main 
-                                }}
-                              >
-                                <AttachMoneyIcon fontSize="small" />
-                              </Avatar>
-                              <Box>
-                                <Typography variant="body2" color="text.secondary">Actual Cost</Typography>
-                                <Stack direction="row" alignItems="center" spacing={1}>
-                                  <Typography variant="body1" sx={{ fontWeight: 500 }}>
-                                    {formatCurrency(phase.actualCost || 0)}
-                                  </Typography>
-                                  
-                                  {phase.budget > 0 && (
-                                    <Chip 
-                                      size="small" 
-                                      label={
-                                        budgetIndicator.status === 'over' 
-                                          ? 'Over Budget' 
-                                          : budgetIndicator.status === 'warning'
-                                            ? 'Near Budget'
-                                            : 'Under Budget'
-                                      }
-                                      sx={{ 
-                                        height: 20, 
-                                        fontWeight: 500,
-                                        backgroundColor: alpha(
-                                          budgetIndicator.status === 'over' 
-                                            ? theme.palette.error.main 
-                                            : budgetIndicator.status === 'warning'
-                                              ? theme.palette.warning.main
-                                              : theme.palette.success.main,
-                                          0.1
-                                        ),
-                                        color: budgetIndicator.status === 'over' 
-                                          ? theme.palette.error.main 
-                                          : budgetIndicator.status === 'warning'
-                                            ? theme.palette.warning.main
-                                            : theme.palette.success.main,
-                                      }}
-                                    />
-                                  )}
-                                </Stack>
-                              </Box>
-                            </Box>
-                          </Box>
-                        </Grid>
-                        
-                        <Grid item xs={12} md={4}>
-                          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
-                            {/* Expected costs */}
-                            <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                              <Avatar 
-                                sx={{ 
-                                  width: 36, 
-                                  height: 36, 
-                                  mr: 1.5, 
-                                  bgcolor: alpha(theme.palette.secondary.main, 0.1),
-                                  color: theme.palette.secondary.main
-                                }}
-                              >
-                                <AssignmentIcon fontSize="small" />
-                              </Avatar>
-                              <Box>
-                                <Typography variant="body2" color="text.secondary">Expected Cost</Typography>
-                                <Typography variant="body1" sx={{ fontWeight: 500 }}>
-                                  {formatCurrency(proposedCost || 0)}
-                                </Typography>
-                              </Box>
-                            </Box>
-                            
-                            {/* Description - truncated */}
-                            {phase.description && (
-                              <Box sx={{ pl: 6.5 }}>
-                                <Typography variant="body2" color="text.secondary" noWrap>
-                                  {phase.description?.length > 60 
-                                    ? `${phase.description.slice(0, 60)}...` 
-                                    : phase.description}
-                                </Typography>
-                              </Box>
-                            )}
-                          </Box>
-                        </Grid>
-                      </Grid>
-                    </CardContent>
-                    
-                    <Divider />
-                    
-                    <CardActions sx={{ p: 1.5, justifyContent: 'space-between' }}>
-                      <Box>
-                        <Tooltip title="View Phase Details">
-                          <Button
-                            size="small"
-                            startIcon={<ArrowForwardIcon />}
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleViewPhaseDetails(phase.id as string);
-                            }}
-                          >
-                            Details
-                          </Button>
                         </Tooltip>
+                        <Typography 
+                          variant="body2" 
+                          color="text.secondary"
+                          sx={{ fontSize: '0.8rem' }}
+                        >
+                          {formatPhaseDate(phase.startDate)} - {formatPhaseDate(phase.endDate)}
+                        </Typography>
                       </Box>
+                    }
+                    sx={{ 
+                      p: 1.5,
+                      pb: 0.5,
+                      '.MuiCardHeader-content': { minWidth: 0 } 
+                    }}
+                  />
+                  <CardContent 
+                    sx={{ 
+                      p: 1.5, 
+                      pt: 0.5,
+                      pb: '8px !important',
+                      flexGrow: 1,
+                      display: 'flex',
+                      flexDirection: 'column'
+                    }}
+                  >
+                    {/* Phase Stats - Compact row of key metrics */}
+                    <Grid 
+                      container 
+                      spacing={1} 
+                      sx={{ 
+                        mb: 1.5,
+                        mt: 0.5
+                      }}
+                    >
+                      {/* Tasks Summary */}
+                      <Grid item xs={6} sm={3}>
+                        <Paper 
+                          elevation={0} 
+                          sx={{ 
+                            p: 0.75, 
+                            textAlign: 'center',
+                            borderRadius: 2,
+                            bgcolor: alpha(theme.palette.info.main, 0.1),
+                            height: '100%',
+                            display: 'flex',
+                            flexDirection: 'column',
+                            justifyContent: 'center',
+                          }}
+                        >
+                          <TaskIcon 
+                            sx={{ 
+                              color: theme.palette.info.main,
+                              fontSize: '1.2rem',
+                              mb: 0.3
+                            }} 
+                          />
+                          <Typography 
+                            variant="h6" 
+                            color="text.primary" 
+                            sx={{ fontSize: '1rem', fontWeight: 700, lineHeight: 1.2 }}
+                          >
+                            {phase.tasks?.length || 0}
+                          </Typography>
+                          <Typography variant="body2" color="text.secondary" sx={{ fontSize: '0.7rem' }}>Tasks</Typography>
+                        </Paper>
+                      </Grid>
                       
-                      <Box sx={{ display: 'flex' }}>
-                        <Tooltip title="Add Expense">
+                      {/* Budget */}
+                      <Grid item xs={6} sm={3}>
+                        <Paper 
+                          elevation={0} 
+                          sx={{ 
+                            p: 0.75, 
+                            textAlign: 'center',
+                            borderRadius: 2,
+                            bgcolor: alpha(theme.palette.primary.main, 0.1),
+                            height: '100%',
+                            display: 'flex',
+                            flexDirection: 'column',
+                            justifyContent: 'center',
+                          }}
+                        >
+                          <AccountBalanceWalletIcon 
+                            sx={{ 
+                              color: theme.palette.primary.main,
+                              fontSize: '1.2rem',
+                              mb: 0.3
+                            }} 
+                          />
+                          <Typography 
+                            variant="h6" 
+                            color="text.primary" 
+                            sx={{ fontSize: '1rem', fontWeight: 700, lineHeight: 1.2 }}
+                          >
+                            {formatCurrency(budget)}
+                          </Typography>
+                          <Typography variant="body2" color="text.secondary" sx={{ fontSize: '0.7rem' }}>Budget</Typography>
+                        </Paper>
+                      </Grid>
+                      
+                      {/* Proposed Cost */}
+                      <Grid item xs={6} sm={3}>
+                        <Paper 
+                          elevation={0} 
+                          sx={{ 
+                            p: 0.75, 
+                            textAlign: 'center',
+                            borderRadius: 2,
+                            bgcolor: alpha(theme.palette.warning.main, 0.1),
+                            height: '100%',
+                            display: 'flex',
+                            flexDirection: 'column',
+                            justifyContent: 'center',
+                          }}
+                        >
+                          <ConstructionIcon 
+                            sx={{ 
+                              color: theme.palette.warning.main,
+                              fontSize: '1.2rem',
+                              mb: 0.3
+                            }} 
+                          />
+                          <Typography 
+                            variant="h6" 
+                            color="text.primary" 
+                            sx={{ fontSize: '1rem', fontWeight: 700, lineHeight: 1.2 }}
+                          >
+                            {formatCurrency(proposedCost)}
+                          </Typography>
+                          <Typography variant="body2" color="text.secondary" sx={{ fontSize: '0.7rem' }}>Proposed</Typography>
+                        </Paper>
+                      </Grid>
+                      
+                      {/* Actual Cost */}
+                      <Grid item xs={6} sm={3}>
+                        <Paper 
+                          elevation={0} 
+                          sx={{ 
+                            p: 0.75, 
+                            textAlign: 'center',
+                            borderRadius: 2,
+                            bgcolor: actualCost > budget 
+                              ? alpha(theme.palette.error.main, 0.1)
+                              : alpha(theme.palette.success.main, 0.1),
+                            height: '100%',
+                            display: 'flex',
+                            flexDirection: 'column',
+                            justifyContent: 'center',
+                          }}
+                        >
+                          <ReceiptIcon 
+                            sx={{ 
+                              color: actualCost > budget
+                                ? theme.palette.error.main
+                                : theme.palette.success.main,
+                              fontSize: '1.2rem',
+                              mb: 0.3
+                            }} 
+                          />
+                          <Typography 
+                            variant="h6" 
+                            color={actualCost > budget ? "error" : "text.primary"}
+                            sx={{ fontSize: '1rem', fontWeight: 700, lineHeight: 1.2 }}
+                          >
+                            {formatCurrency(actualCost)}
+                          </Typography>
+                          <Typography variant="body2" color="text.secondary" sx={{ fontSize: '0.7rem' }}>Actual</Typography>
+                        </Paper>
+                      </Grid>
+                    </Grid>
+
+                    {/* Budget progress indicator */}
+                    <Box 
+                      sx={{ 
+                        width: '100%', 
+                        mt: 0.5,
+                        mb: 1,
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between'
+                      }}
+                    >
+                      <Box sx={{ flexGrow: 1, mr: 1 }}>
+                        <LinearProgress
+                          variant="determinate"
+                          value={Math.min(budgetUsedPercentage, 100)}
+                          sx={{
+                            height: 6,
+                            borderRadius: 3,
+                            backgroundColor: alpha(theme.palette.primary.main, 0.1),
+                            '& .MuiLinearProgress-bar': {
+                              borderRadius: 3,
+                              backgroundColor: 
+                                actualCost > budget
+                                  ? theme.palette.error.main
+                                  : theme.palette.success.main,
+                            },
+                          }}
+                        />
+                      </Box>
+                      <Typography
+                        variant="body2"
+                        fontWeight="bold"
+                        color={
+                          actualCost > budget 
+                            ? theme.palette.error.main
+                            : theme.palette.text.primary
+                        }
+                        sx={{ lineHeight: 1.2, whiteSpace: 'nowrap' }}
+                      >
+                        {budget > 0 ? Math.round((actualCost / budget) * 100) : 0}%
+                      </Typography>
+                    </Box>
+
+                    {/* Chart area */}
+                    <Box sx={{ 
+                      display: 'flex', 
+                      justifyContent: 'center', 
+                      alignItems: 'center',
+                      flexGrow: 1,
+                      height: 160, 
+                      mt: 0.5
+                    }}>
+                      <ResponsiveContainer width="100%" height="100%">
+                        <PieChart
+                          width={isXs ? 160 : 180}
+                          height={160}
+                          margin={{ top: 0, right: 0, bottom: 0, left: 0 }}
+                        >
+                          <Pie
+                            data={[
+                              { name: 'Budget', value: budget, color: theme.palette.primary.main },
+                              { name: 'Proposed', value: proposedCost, color: theme.palette.warning.main },
+                              { name: 'Actual', value: Math.max(actualCost, 0), color: 
+                                actualCost > budget 
+                                  ? theme.palette.error.main 
+                                  : theme.palette.success.main 
+                              },
+                            ]}
+                            cx="50%"
+                            cy="50%"
+                            innerRadius={35}
+                            outerRadius={60}
+                            paddingAngle={2}
+                            dataKey="value"
+                          >
+                            {[
+                              { name: 'Budget', value: budget, color: theme.palette.primary.main },
+                              { name: 'Proposed', value: proposedCost, color: theme.palette.warning.main },
+                              { name: 'Actual', value: Math.max(actualCost, 0), color: 
+                                actualCost > budget 
+                                  ? theme.palette.error.main 
+                                  : theme.palette.success.main 
+                              },
+                            ].map((entry, index) => (
+                              <Cell 
+                                key={`cell-${index}`} 
+                                fill={entry.color}
+                                stroke={alpha(entry.color, 0.2)}
+                                strokeWidth={2}
+                              />
+                            ))}
+                          </Pie>
+                          <Legend 
+                            verticalAlign="bottom" 
+                            height={24}
+                            iconSize={8}
+                            iconType="circle"
+                            wrapperStyle={{ 
+                              fontSize: '0.75rem',
+                              marginTop: '-20px'
+                            }}
+                          />
+                          <RechartsTooltip
+                            formatter={(value: number) => formatCurrency(value)}
+                            contentStyle={{
+                              background: alpha(theme.palette.background.paper, 0.9),
+                              borderRadius: 4,
+                              fontSize: '0.8rem',
+                              boxShadow: '0 4px 20px rgba(0,0,0,0.1)',
+                              border: 'none',
+                              padding: '4px 8px'
+                            }}
+                          />
+                        </PieChart>
+                      </ResponsiveContainer>
+                    </Box>
+
+                    {/* Phase description - truncated */}
+                    <Box sx={{ 
+                      mt: 0.5,
+                      maxHeight: '60px',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      position: 'relative',
+                      display: phase.description ? 'block' : 'none'
+                    }}>
+                      <Typography 
+                        variant="body2" 
+                        color="text.secondary"
+                        sx={{ 
+                          fontSize: '0.8rem',
+                          display: '-webkit-box',
+                          WebkitLineClamp: 3,
+                          WebkitBoxOrient: 'vertical',
+                          overflow: 'hidden'
+                        }}
+                      >
+                        {phase.description}
+                      </Typography>
+                      <Box sx={{ 
+                        position: 'absolute',
+                        bottom: 0,
+                        left: 0,
+                        right: 0,
+                        height: '20px',
+                        background: 'linear-gradient(rgba(255,255,255,0), rgba(255,255,255,0.9))'
+                      }}/>
+                    </Box>
+
+                    {/* Footer actions */}
+                    <Box 
+                      sx={{ 
+                        display: 'flex', 
+                        justifyContent: 'space-between',
+                        alignItems: 'center',
+                        mt: 'auto',
+                        pt: 1
+                      }}
+                    >
+                      <Box sx={{ display: 'flex', gap: 0.5 }}>
+                        <Tooltip title="Add expense">
                           <IconButton 
                             size="small" 
                             onClick={(e) => {
                               e.stopPropagation();
-                              handleOpenQuickExpenseDialog(phase.id as string);
+                              handleOpenQuickExpenseDialog(phase.id);
                             }}
-                            sx={{ color: theme.palette.warning.main }}
+                            sx={{ p: 0.5 }}
                           >
-                            <AttachMoneyIcon fontSize="small" />
+                            <ReceiptLongIcon fontSize="small" />
                           </IconButton>
                         </Tooltip>
-                        
-                        <Tooltip title="Add Bid">
+                        <Tooltip title="Add bid">
                           <IconButton 
-                            size="small"
+                            size="small" 
                             onClick={(e) => {
                               e.stopPropagation();
-                              handleOpenQuickBidDialog(phase.id as string);
+                              handleOpenQuickBidDialog(phase.id);
                             }}
-                            sx={{ color: theme.palette.info.main }}
+                            sx={{ p: 0.5 }}
                           >
-                            <AddTaskIcon fontSize="small" />
+                            <HandshakeIcon fontSize="small" />
                           </IconButton>
                         </Tooltip>
-                        
-                        <Tooltip title="More Actions">
-                          <IconButton
-                            size="small"
-                            onClick={(e) => handleMenuOpen(e, phase.id as string)}
-                          >
-                            <MoreVertIcon fontSize="small" />
-                          </IconButton>
-                        </Tooltip>
-                        
-                        <Menu
-                          anchorEl={anchorElMap[phase.id]}
-                          open={Boolean(anchorElMap[phase.id])}
-                          onClose={() => handleMenuClose(phase.id as string)}
-                          onClick={(e) => e.stopPropagation()}
-                        >
-                          <MenuItem 
-                            onClick={() => {
-                              handleUpdatePhase(phase.id as string);
-                              handleMenuClose(phase.id as string);
-                            }}
-                          >
-                            <ListItemIcon>
-                              <EditIcon fontSize="small" />
-                            </ListItemIcon>
-                            <ListItemText>Edit Phase</ListItemText>
-                          </MenuItem>
-                          <MenuItem 
-                            onClick={() => {
-                              handleOpenQuickBidDialog(phase.id as string);
-                              handleMenuClose(phase.id as string);
-                            }}
-                          >
-                            <ListItemIcon>
-                              <AddTaskIcon fontSize="small" />
-                            </ListItemIcon>
-                            <ListItemText>Add Bid</ListItemText>
-                          </MenuItem>
-                          <MenuItem 
-                            onClick={() => {
-                              handleOpenQuickExpenseDialog(phase.id as string);
-                              handleMenuClose(phase.id as string);
-                            }}
-                          >
-                            <ListItemIcon>
-                              <AttachMoneyIcon fontSize="small" />
-                            </ListItemIcon>
-                            <ListItemText>Add Expense</ListItemText>
-                          </MenuItem>
-                          <Divider />
-                          <MenuItem 
-                            onClick={() => {
-                              handleDeletePhase(phase.id as string);
-                              handleMenuClose(phase.id as string);
-                            }}
-                            sx={{ color: 'error.main' }}
-                          >
-                            <ListItemIcon>
-                              <DeleteIcon fontSize="small" color="error" />
-                            </ListItemIcon>
-                            <ListItemText>Delete Phase</ListItemText>
-                          </MenuItem>
-                        </Menu>
                       </Box>
-                    </CardActions>
-                  </Card>
-                </Grid>
-              );
-            })}
-          </Grid>
+                      
+                      <Button
+                        size="small"
+                        endIcon={<ChevronRightIcon />}
+                        onClick={() => handleViewPhaseDetails(phase.id)}
+                        sx={{ 
+                          textTransform: 'none',
+                          fontSize: '0.75rem',
+                          py: 0.3,
+                          px: 0.8
+                        }}
+                      >
+                        Details
+                      </Button>
+                    </Box>
+                  </CardContent>
+                </Card>
+              </Grid>
+            );
+          })}
+        </Grid>
+      ) : (
+        <Box sx={{ 
+          display: 'flex', 
+          flexDirection: 'column', 
+          alignItems: 'center', 
+          justifyContent: 'center', 
+          py: 8,
+          borderRadius: 3,
+          border: `2px dashed ${alpha(theme.palette.primary.main, 0.2)}`,
+          bgcolor: alpha(theme.palette.background.default, 0.5),
+        }}>
+          <TimelineIcon sx={{ 
+            fontSize: 70, 
+            color: alpha(theme.palette.primary.main, 0.5),
+            mb: 2,
+            filter: `drop-shadow(0 2px 5px ${alpha(theme.palette.primary.main, 0.2)})`
+          }} />
+          <Typography variant="h5" color="text.primary" sx={{ fontWeight: 600 }}>No phases defined</Typography>
+          <Typography variant="body1" color="text.secondary" sx={{ mb: 3, mt: 1, textAlign: 'center', maxWidth: 400 }}>
+            Start by adding project phases to track progress, manage tasks, and monitor expenses.
+          </Typography>
+          <Button 
+            variant="contained" 
+            startIcon={<AddIcon />} 
+            size="large"
+            onClick={handleAddPhase}
+            sx={{ 
+              borderRadius: 2,
+              background: `linear-gradient(45deg, ${theme.palette.primary.main}, ${alpha(theme.palette.primary.main, 0.8)})`,
+              boxShadow: `0 3px 6px ${alpha(theme.palette.primary.main, 0.3)}`,
+              fontWeight: 600,
+              px: 3,
+              py: 1,
+              '&:hover': {
+                boxShadow: `0 5px 12px ${alpha(theme.palette.primary.main, 0.4)}`,
+              }
+            }}
+          >
+            Add First Phase
+          </Button>
         </Box>
       )}
+      
+      {/* Phase action menu */}
+      <Menu
+        anchorEl={anchorEl}
+        open={Boolean(anchorEl)}
+        onClose={handlePhaseMenuClose}
+        transformOrigin={{ horizontal: 'right', vertical: 'top' }}
+        anchorOrigin={{ horizontal: 'right', vertical: 'bottom' }}
+        PaperProps={{
+          elevation: 3,
+          sx: {
+            borderRadius: 2,
+            minWidth: 180,
+            p: 0.5,
+          }
+        }}
+      >
+        <MenuItem 
+          onClick={() => {
+            if (selectedPhaseId) {
+              handleUpdatePhase(selectedPhaseId);
+              handlePhaseMenuClose();
+            }
+          }}
+          sx={{ borderRadius: 1, py: 1 }}
+        >
+          <ListItemIcon>
+            <EditIcon fontSize="small" />
+          </ListItemIcon>
+          <ListItemText>Edit Phase</ListItemText>
+        </MenuItem>
+        <MenuItem 
+          onClick={() => {
+            if (selectedPhaseId) {
+              handleViewPhaseDetails(selectedPhaseId);
+              handlePhaseMenuClose();
+            }
+          }}
+          sx={{ borderRadius: 1, py: 1 }}
+        >
+          <ListItemIcon>
+            <ChevronRightIcon fontSize="small" />
+          </ListItemIcon>
+          <ListItemText>View Details</ListItemText>
+        </MenuItem>
+        <Divider sx={{ my: 0.5 }} />
+        <MenuItem 
+          onClick={() => {
+            if (selectedPhaseId) {
+              handleDeletePhase(selectedPhaseId);
+              handlePhaseMenuClose();
+            }
+          }}
+          sx={{ borderRadius: 1, py: 1, color: theme.palette.error.main }}
+        >
+          <ListItemIcon>
+            <DeleteIcon fontSize="small" color="error" />
+          </ListItemIcon>
+          <ListItemText>Delete Phase</ListItemText>
+        </MenuItem>
+      </Menu>
     </Box>
   );
 };

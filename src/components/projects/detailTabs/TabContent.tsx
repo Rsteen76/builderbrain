@@ -111,6 +111,9 @@ const TabContent: React.FC<TabContentProps> = ({
           handleOpenQuickBidDialog={handleOpenQuickBidDialog}
           handleOpenQuickExpenseDialog={handleOpenQuickExpenseDialog}
           handleViewPhaseDetails={handleViewPhaseDetails}
+          handleOpenTemplateAdjuster={handleOpenTemplateAdjuster}
+          getStatusColor={getStatusColor}
+          formatCurrency={formatCurrency}
         />
       )}
       {tabValue === 2 && (
