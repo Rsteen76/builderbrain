@@ -185,10 +185,14 @@ const ProjectSetupWizard: React.FC = () => {
 
   // Fix the addPhase function to include all required fields
   const addPhase = (phaseData?: Partial<Phase>) => {
+    const startDate = new Date();
+    const endDate = new Date(startDate);
+    endDate.setDate(startDate.getDate() + 30);  // End date is 30 days after start date
+    
     const defaultPhase: Phase = {
       name: '',
-      startDate: new Date(),
-      endDate: new Date(),
+      startDate: startDate,
+      endDate: endDate,
       status: 'not_started',
       progress: 0,
       budget: 0,

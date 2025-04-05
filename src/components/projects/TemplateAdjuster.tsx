@@ -79,6 +79,11 @@ const TemplateAdjuster: React.FC<TemplateAdjusterProps> = ({
 
   // Add a new phase
   const handleAddPhase = () => {
+    const today = new Date();
+    // Set end date to be 30 days from today
+    const endDate = new Date(today);
+    endDate.setDate(today.getDate() + 30);
+    
     const newPhase: PhaseWithPercentage = {
       name: `New Phase ${phases.length + 1}`,
       percentage: 0,
@@ -87,8 +92,8 @@ const TemplateAdjuster: React.FC<TemplateAdjusterProps> = ({
       budget: 0,
       actualCost: 0,
       tasks: [],
-      startDate: new Date(),
-      endDate: new Date()
+      startDate: today,
+      endDate: endDate
     };
     
     setPhases([...phases, newPhase]);

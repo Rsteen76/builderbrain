@@ -83,7 +83,17 @@ const getPhaseInitials = (phaseName: string): string => {
 
 const formatPhaseDate = (date: Date | string | number | undefined): string => {
   if (!date) return 'TBD';
-  return new Date(date).toLocaleDateString();
+  try {
+    const dateObj = new Date(date);
+    // Check if the date is valid
+    if (isNaN(dateObj.getTime())) {
+      return 'Invalid date';
+    }
+    return dateObj.toLocaleDateString();
+  } catch (error) {
+    console.error('Error formatting date:', error);
+    return 'Invalid date';
+  }
 };
 
 interface ProjectPhasesTabProps {

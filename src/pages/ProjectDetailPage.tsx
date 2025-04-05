@@ -337,14 +337,16 @@ const ProjectDetailPage: React.FC = () => {
       // Fetch the project to get phases from it
       const projectData = await ProjectService.getProject(projectId, user.uid);
       if (projectData && projectData.phases && projectData.phases.length > 0) {
-        setPhases(projectData.phases as ProjectPhase[]);
+        // Fix any invalid dates before setting phases
+        const phasesWithValidDates = ensureValidPhaseDates(projectData.phases as ProjectPhase[]);
+        setPhases(phasesWithValidDates);
         
         // Also initialize the phases being updated if in quick update mode
         if (quickUpdateMode) {
           const phasesMap: { [id: string]: ProjectPhase } = {};
-          projectData.phases.forEach((phase) => {
+          phasesWithValidDates.forEach((phase) => {
             if (phase.id) {
-              phasesMap[phase.id] = phase as ProjectPhase;
+              phasesMap[phase.id] = phase;
             }
           });
           setPhasesBeingUpdated(phasesMap);
@@ -355,6 +357,33 @@ const ProjectDetailPage: React.FC = () => {
     } catch (err) {
       console.error('Error fetching phases:', err);
     }
+  };
+  
+  // Function to ensure all phases have valid dates
+  const ensureValidPhaseDates = (phases: ProjectPhase[]): ProjectPhase[] => {
+    return phases.map(phase => {
+      let startDate = phase.startDate;
+      let endDate = phase.endDate;
+      
+      // Check if startDate is valid
+      if (!startDate || isNaN(new Date(startDate).getTime())) {
+        startDate = new Date();
+      }
+      
+      // Check if endDate is valid
+      if (!endDate || isNaN(new Date(endDate).getTime())) {
+        // Set endDate to 30 days after startDate
+        const newEndDate = new Date(startDate);
+        newEndDate.setDate(new Date(startDate).getDate() + 30);
+        endDate = newEndDate;
+      }
+      
+      return {
+        ...phase,
+        startDate,
+        endDate
+      };
+    });
   };
   
   // Function to fetch bids
