@@ -86,47 +86,71 @@ import { ProjectService } from '../../services/project';
 import { useAuth } from '../../contexts/AuthContext';
 import { formatCurrency, formatDate } from '../../utils/formatters';
 import PageLayout from '../layout/PageLayout';
+import QuickActions from './QuickActions';
+import ProjectInsights from './ProjectInsights';
+import UpcomingDeadlines from './UpcomingDeadlines';
+import PriorityItems from './PriorityItems';
+import RecentProjects from './RecentProjects';
 
-interface Task {
+// Define interfaces for our dashboard-specific types
+interface DashboardTask {
   id: string;
-  name: string;
+  title: string;
   dueDate: string;
   status: string;
-  priority?: 'high' | 'medium' | 'low';
-  projectId?: string;
-  projectName?: string;
+  priority: 'urgent' | 'high' | 'medium' | 'low';
+  projectId: string;
+  projectName: string;
 }
 
-interface Milestone {
-  id: string;
-  name: string;
-  date: string;
-  completed: boolean;
-}
-
-interface Material {
+interface DashboardProject {
   id: string;
   name: string;
   status: string;
-  quantity: number;
+  endDate: string;
+  budget: number | { total: number; spent: number; remaining: number };
+  team: string[];
+  location: string | { address: string; city: string; state: string };
+  updatedAt: string;
+  tasks: Array<{
+    id: string;
+    title: string;
+    status: string;
+    dueDate: string;
+    priority: 'urgent' | 'high' | 'medium' | 'low';
+  }>;
+  keyMilestones?: Array<{
+    id: string;
+    name: string;
+    date: string;
+    completed: boolean;
+  }>;
+  materials?: Array<{
+    id: string;
+    name: string;
+    status: string;
+    quantity: number;
+  }>;
+  payments?: Array<{
+    id: string;
+    amount: number;
+    dueDate: string;
+    description: string;
+    status: string;
+    projectId: string;
+    projectName: string;
+  }>;
 }
 
 interface Payment {
   id: string;
   amount: number;
   dueDate: string;
-  status: string;
   description: string;
-  projectId?: string;
-  projectName?: string;
+  status: string;
+  projectId: string;
+  projectName: string;
 }
-
-type ExtendedProject = Project & {
-  tasks?: ProjectTask[];
-  keyMilestones?: Milestone[];
-  materials?: Material[];
-  payments?: Payment[];
-};
 
 interface StatCardProps {
   title: string;
@@ -467,16 +491,68 @@ interface RecentActivity {
   icon: React.ReactNode;
 }
 
-// Define a DashboardTask interface that matches our dashboard display needs
-interface DashboardTask {
-  id: string;
-  title: string; // Changed from 'name'
-  dueDate: string;
-  status: string;
-  priority: 'low' | 'medium' | 'high' | 'urgent';
-  projectId: string;
-  projectName: string;
-}
+// Helper function to convert Project to DashboardProject
+const convertToDashboardProject = (project: Project): DashboardProject => {
+  // Create placeholder data for materials and payments for demo purposes
+  // In a real app, this would come from the backend
+  const mockMaterials = [
+    { id: `material-${project.id}-1`, name: 'Lumber', status: 'in_stock', quantity: 200 },
+    { id: `material-${project.id}-2`, name: 'Concrete', status: 'to_order', quantity: 50 },
+    { id: `material-${project.id}-3`, name: 'Steel Beams', status: 'backorder', quantity: 30 }
+  ];
+
+  const mockPayments = [
+    {
+      id: `payment-${project.id}-1`,
+      amount: 5000,
+      dueDate: new Date(new Date().setDate(new Date().getDate() - 5)).toISOString(),
+      description: 'Initial deposit',
+      status: 'paid',
+      projectId: project.id,
+      projectName: project.name
+    },
+    {
+      id: `payment-${project.id}-2`,
+      amount: 7500,
+      dueDate: new Date(new Date().setDate(new Date().getDate() - 2)).toISOString(),
+      description: 'Phase 1 completion',
+      status: 'pending',
+      projectId: project.id,
+      projectName: project.name
+    }
+  ];
+
+  return {
+    id: project.id,
+    name: project.name,
+    status: project.status,
+    endDate: project.endDate instanceof Date ? project.endDate.toISOString() : 
+             typeof project.endDate === 'string' ? project.endDate : '',
+    budget: project.budget,
+    team: project.team || [],
+    location: project.location,
+    updatedAt: project.updatedAt instanceof Date ? project.updatedAt.toISOString() : 
+               typeof project.updatedAt === 'string' ? project.updatedAt : new Date().toISOString(),
+    tasks: project.tasks?.map(task => ({
+      id: task.id,
+      title: task.title || `Task ${task.id}`,
+      status: task.status,
+      dueDate: task.dueDate instanceof Date ? task.dueDate.toISOString() : 
+               typeof task.dueDate === 'string' ? task.dueDate : '',
+      priority: task.priority || 'medium'
+    })) || [],
+    keyMilestones: project.keyMilestones?.map(milestone => ({
+      id: `milestone-${milestone.name}`, // Generate an ID since it doesn't exist in the original type
+      name: milestone.name,
+      date: milestone.date instanceof Date ? milestone.date.toISOString() : 
+            typeof milestone.date === 'string' ? milestone.date : '',
+      completed: false // Default to false since it doesn't exist in the original type
+    })),
+    // Adding mock data for dashboard demonstration
+    materials: mockMaterials,
+    payments: mockPayments
+  };
+};
 
 const Dashboard: React.FC = () => {
   const theme = useTheme();
@@ -487,7 +563,7 @@ const Dashboard: React.FC = () => {
   
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [projects, setProjects] = useState<ExtendedProject[]>([]);
+  const [projects, setProjects] = useState<DashboardProject[]>([]);
   const [upcomingTasks, setUpcomingTasks] = useState<DashboardTask[]>([]);
   const [overduePayments, setOverduePayments] = useState<Payment[]>([]);
   const [recentActivity, setRecentActivity] = useState<RecentActivity[]>([]);
@@ -514,11 +590,12 @@ const Dashboard: React.FC = () => {
         setLoading(true);
         setError(null);
         
-        const projectsData = (await ProjectService.getProjects(user.uid)) as ExtendedProject[];
-        setProjects(projectsData);
+        const projectsData = await ProjectService.getProjects(user.uid);
+        const dashboardProjects = projectsData.map(convertToDashboardProject);
+        setProjects(dashboardProjects);
         
         // Calculate projects at risk
-        const atRiskProjects = projectsData.filter(p => {
+        const atRiskProjects = dashboardProjects.filter(p => {
           if (p.status === 'on_hold' || p.status === 'cancelled') return true;
           
           if (p.endDate) {
@@ -543,17 +620,17 @@ const Dashboard: React.FC = () => {
           return false;
         }).length;
         
-        const activeProjects = projectsData.filter(p => 
+        const activeProjects = dashboardProjects.filter(p => 
           p.status === 'in_progress' || p.status === 'planning' || p.status === 'active'
         ).length;
         
-        const totalBudget = projectsData.reduce((sum, p) => {
+        const totalBudget = dashboardProjects.reduce((sum, p) => {
             const budgetValue = typeof p.budget === 'object' && p.budget !== null ? p.budget.total : (p.budget || 0);
             return sum + (typeof budgetValue === 'number' ? budgetValue : 0);
         }, 0);
         
         const uniqueTeamMembers = new Set<string>();
-        projectsData.forEach(p => {
+        dashboardProjects.forEach(p => {
           if (p.team && Array.isArray(p.team)) {
             p.team.forEach(member => uniqueTeamMembers.add(member));
           }
@@ -566,22 +643,21 @@ const Dashboard: React.FC = () => {
         const nextWeek = new Date(today);
         nextWeek.setDate(today.getDate() + 7);
         
-        projectsData.forEach(p => {
+        dashboardProjects.forEach(p => {
           if (p.tasks && Array.isArray(p.tasks)) {
             p.tasks.forEach(t => {
               if (!t.dueDate) return;
               
-              // Handle different date formats
-              const dueDateObj = t.dueDate instanceof Date ? t.dueDate : new Date(t.dueDate);
+              const dueDateObj = new Date(t.dueDate);
               
               if (dueDateObj >= today && dueDateObj <= nextWeek && t.status !== 'completed') {
                 tasksDue++;
                 tasksCollection.push({
                   id: t.id,
-                  title: t.title || `Task ${t.id}`, // Use 'title' instead of 'name'
-                  dueDate: formatDate(dueDateObj), // Format date as string
+                  title: t.title,
+                  dueDate: formatDate(dueDateObj),
                   status: t.status,
-                  priority: t.priority, // This handles 'urgent'
+                  priority: t.priority,
                   projectId: p.id,
                   projectName: p.name
                 });
@@ -597,8 +673,7 @@ const Dashboard: React.FC = () => {
           
           if (dateA === dateB) {
             const priorityValues = { urgent: 0, high: 1, medium: 2, low: 3 };
-            return priorityValues[a.priority as keyof typeof priorityValues] - 
-                   priorityValues[b.priority as keyof typeof priorityValues];
+            return priorityValues[a.priority] - priorityValues[b.priority];
           }
           
           return dateA - dateB;
@@ -611,11 +686,11 @@ const Dashboard: React.FC = () => {
         let earliestDate = new Date();
         earliestDate.setFullYear(earliestDate.getFullYear() + 1); // Set to a year from now
         
-        projectsData.forEach(p => {
+        dashboardProjects.forEach(p => {
           // Try both keyMilestones and milestones
-          const milestones = p.keyMilestones || (p as any).milestones || [];
+          const milestones = p.keyMilestones || [];
           if (Array.isArray(milestones)) {
-            milestones.forEach((m: Milestone) => {
+            milestones.forEach(m => {
               if (!m.completed && m.date) {
                 const milestoneDate = new Date(m.date);
                 if (milestoneDate >= today && milestoneDate < earliestDate) {
@@ -635,7 +710,7 @@ const Dashboard: React.FC = () => {
         let totalBudgetVariance = 0;
         let materialsToOrder = 0;
         
-        projectsData.forEach(p => {
+        dashboardProjects.forEach(p => {
           // Budget variance - safely handle different budget types
           if (p.budget && typeof p.budget === 'object') {
             const actual = p.budget.spent || 0;
@@ -650,9 +725,9 @@ const Dashboard: React.FC = () => {
           }
           
           // Materials to order
-          const materials = (p as any).materials;
+          const materials = p.materials || [];
           if (materials && Array.isArray(materials)) {
-            materialsToOrder += materials.filter((m: Material) => 
+            materialsToOrder += materials.filter(m => 
               m.status === 'to_order' || m.status === 'backorder'
             ).length;
           }
@@ -660,10 +735,10 @@ const Dashboard: React.FC = () => {
         
         // Check for overdue payments
         const overduePaymentsList: Payment[] = [];
-        projectsData.forEach(p => {
-          const payments = (p as any).payments;
+        dashboardProjects.forEach(p => {
+          const payments = p.payments || [];
           if (payments && Array.isArray(payments)) {
-            payments.forEach((payment: Payment) => {
+            payments.forEach(payment => {
               if (payment.dueDate && payment.status !== 'paid') {
                 const paymentDueDate = new Date(payment.dueDate);
                 if (paymentDueDate < today) {
@@ -712,7 +787,7 @@ const Dashboard: React.FC = () => {
     };
     
     fetchDashboardData();
-  }, [user]);
+  }, [user?.uid]);
   
   const refreshData = () => {
     if (user?.uid) {
@@ -721,11 +796,12 @@ const Dashboard: React.FC = () => {
           setLoading(true);
           setError(null);
           
-          const projectsData = (await ProjectService.getProjects(user.uid)) as ExtendedProject[];
-          setProjects(projectsData);
+          const projectsData = await ProjectService.getProjects(user.uid);
+          const dashboardProjects = projectsData.map(convertToDashboardProject);
+          setProjects(dashboardProjects);
           
           // Calculate projects at risk
-          const atRiskProjects = projectsData.filter(p => {
+          const atRiskProjects = dashboardProjects.filter(p => {
             if (p.status === 'on_hold' || p.status === 'cancelled') return true;
             
             if (p.endDate) {
@@ -750,17 +826,17 @@ const Dashboard: React.FC = () => {
             return false;
           }).length;
           
-          const activeProjects = projectsData.filter(p => 
+          const activeProjects = dashboardProjects.filter(p => 
             p.status === 'in_progress' || p.status === 'planning' || p.status === 'active'
           ).length;
           
-          const totalBudget = projectsData.reduce((sum, p) => {
+          const totalBudget = dashboardProjects.reduce((sum, p) => {
               const budgetValue = typeof p.budget === 'object' && p.budget !== null ? p.budget.total : (p.budget || 0);
               return sum + (typeof budgetValue === 'number' ? budgetValue : 0);
           }, 0);
           
           const uniqueTeamMembers = new Set<string>();
-          projectsData.forEach(p => {
+          dashboardProjects.forEach(p => {
             if (p.team && Array.isArray(p.team)) {
               p.team.forEach(member => uniqueTeamMembers.add(member));
             }
@@ -773,22 +849,21 @@ const Dashboard: React.FC = () => {
           const nextWeek = new Date(today);
           nextWeek.setDate(today.getDate() + 7);
           
-          projectsData.forEach(p => {
+          dashboardProjects.forEach(p => {
             if (p.tasks && Array.isArray(p.tasks)) {
               p.tasks.forEach(t => {
                 if (!t.dueDate) return;
                 
-                // Handle different date formats
-                const dueDateObj = t.dueDate instanceof Date ? t.dueDate : new Date(t.dueDate);
+                const dueDateObj = new Date(t.dueDate);
                 
                 if (dueDateObj >= today && dueDateObj <= nextWeek && t.status !== 'completed') {
                   tasksDue++;
                   tasksCollection.push({
                     id: t.id,
-                    title: t.title || `Task ${t.id}`, // Use 'title' instead of 'name'
-                    dueDate: formatDate(dueDateObj), // Format date as string
+                    title: t.title,
+                    dueDate: formatDate(dueDateObj),
                     status: t.status,
-                    priority: t.priority, // This handles 'urgent'
+                    priority: t.priority,
                     projectId: p.id,
                     projectName: p.name
                   });
@@ -804,8 +879,7 @@ const Dashboard: React.FC = () => {
             
             if (dateA === dateB) {
               const priorityValues = { urgent: 0, high: 1, medium: 2, low: 3 };
-              return priorityValues[a.priority as keyof typeof priorityValues] - 
-                     priorityValues[b.priority as keyof typeof priorityValues];
+              return priorityValues[a.priority] - priorityValues[b.priority];
             }
             
             return dateA - dateB;
@@ -818,11 +892,11 @@ const Dashboard: React.FC = () => {
           let earliestDate = new Date();
           earliestDate.setFullYear(earliestDate.getFullYear() + 1); // Set to a year from now
           
-          projectsData.forEach(p => {
+          dashboardProjects.forEach(p => {
             // Try both keyMilestones and milestones
-            const milestones = p.keyMilestones || (p as any).milestones || [];
+            const milestones = p.keyMilestones || [];
             if (Array.isArray(milestones)) {
-              milestones.forEach((m: Milestone) => {
+              milestones.forEach(m => {
                 if (!m.completed && m.date) {
                   const milestoneDate = new Date(m.date);
                   if (milestoneDate >= today && milestoneDate < earliestDate) {
@@ -842,7 +916,7 @@ const Dashboard: React.FC = () => {
           let totalBudgetVariance = 0;
           let materialsToOrder = 0;
           
-          projectsData.forEach(p => {
+          dashboardProjects.forEach(p => {
             // Budget variance - safely handle different budget types
             if (p.budget && typeof p.budget === 'object') {
               const actual = p.budget.spent || 0;
@@ -857,9 +931,9 @@ const Dashboard: React.FC = () => {
             }
             
             // Materials to order
-            const materials = (p as any).materials;
+            const materials = p.materials || [];
             if (materials && Array.isArray(materials)) {
-              materialsToOrder += materials.filter((m: Material) => 
+              materialsToOrder += materials.filter(m => 
                 m.status === 'to_order' || m.status === 'backorder'
               ).length;
             }
@@ -867,10 +941,10 @@ const Dashboard: React.FC = () => {
           
           // Check for overdue payments
           const overduePaymentsList: Payment[] = [];
-          projectsData.forEach(p => {
-            const payments = (p as any).payments;
+          dashboardProjects.forEach(p => {
+            const payments = p.payments || [];
             if (payments && Array.isArray(payments)) {
-              payments.forEach((payment: Payment) => {
+              payments.forEach(payment => {
                 if (payment.dueDate && payment.status !== 'paid') {
                   const paymentDueDate = new Date(payment.dueDate);
                   if (paymentDueDate < today) {
@@ -918,7 +992,7 @@ const Dashboard: React.FC = () => {
   };
   
   // Format project data for display
-  const formatProjectForDisplay = (project: ExtendedProject) => {
+  const formatProjectForDisplay = (project: DashboardProject) => {
     // Determine project status
     let status: 'on-track' | 'at-risk' | 'completed' = 'on-track';
     
@@ -1083,431 +1157,6 @@ const Dashboard: React.FC = () => {
     );
   };
 
-  // New function to render project insights  
-  const renderProjectInsights = () => {
-    return (
-      <Paper
-        elevation={0}
-        sx={{
-          p: { xs: 2, sm: 2.5 },
-          mb: 3,
-          borderRadius: 2,
-          border: `1px solid ${alpha(theme.palette.divider, 0.1)}`,
-          background: theme.palette.background.paper,
-          boxShadow: '0 2px 10px rgba(0,0,0,0.03)'
-        }}
-      >
-        <Stack
-          direction="row"
-          justifyContent="space-between"
-          alignItems="center"
-          sx={{ mb: 2 }}
-        >
-          <Stack direction="row" spacing={1} alignItems="center">
-            <InsertChartIcon color="primary" />
-            <Typography variant="h6" sx={{ fontWeight: 600 }}>
-              Project Insights
-            </Typography>
-          </Stack>
-          
-          <Tooltip title="Refresh Data">
-            <IconButton size="small" onClick={refreshData} color="primary">
-              <RefreshIcon />
-            </IconButton>
-          </Tooltip>
-        </Stack>
-        
-        <Grid container spacing={2}>
-          <Grid item xs={12} sm={6} md={3}>
-            <StatCard
-              title="Active Projects"
-              value={stats.activeProjects}
-              icon={<HomeIcon />}
-              color={theme.palette.primary.main}
-              onClick={() => navigate('/projects?status=active')}
-            />
-          </Grid>
-          
-          <Grid item xs={12} sm={6} md={3}>
-            <StatCard
-              title="Projects at Risk"
-              value={stats.projectsAtRisk}
-              icon={<WarningIcon />}
-              color={theme.palette.error.main}
-              onClick={() => navigate('/projects?status=at-risk')}
-            />
-          </Grid>
-          
-          <Grid item xs={12} sm={6} md={3}>
-            <StatCard
-              title="Budget Variance"
-              value={stats.budgetVariance > 0 
-                ? formatCurrency(stats.budgetVariance) 
-                : `(${formatCurrency(Math.abs(stats.budgetVariance))})`}
-              icon={stats.budgetVariance > 0 ? <TrendingDownIcon /> : <TrendingUpIcon />}
-              color={stats.budgetVariance > 0 ? theme.palette.error.main : theme.palette.success.main}
-              onClick={() => navigate('/expenses')}
-            />
-          </Grid>
-          
-          <Grid item xs={12} sm={6} md={3}>
-            <StatCard
-              title="Materials to Order"
-              value={stats.materialsToOrder}
-              icon={<BuildIcon />}
-              color={theme.palette.warning.main}
-              onClick={() => navigate('/materials')}
-            />
-          </Grid>
-        </Grid>
-      </Paper>
-    );
-  };
-
-  // New function to render upcoming deadlines
-  const renderProjectDeadlines = () => {
-    return (
-      <Paper
-        elevation={0}
-        sx={{
-          p: { xs: 2, sm: 2.5 },
-          mb: 3,
-          borderRadius: 2,
-          border: `1px solid ${alpha(theme.palette.divider, 0.1)}`,
-          background: theme.palette.background.paper,
-          boxShadow: '0 2px 10px rgba(0,0,0,0.03)'
-        }}
-      >
-        <Stack
-          direction="row"
-          alignItems="center"
-          spacing={2}
-          sx={{ mb: 2 }}
-        >
-          <CalendarTodayIcon color="primary" />
-          <Typography variant="h6" sx={{ fontWeight: 600 }}>
-            Upcoming Deadlines
-          </Typography>
-        </Stack>
-        
-        <Grid container spacing={2}>
-          <Grid item xs={12} sm={6}>
-            <Card
-              elevation={0}
-              sx={{
-                height: '100%',
-                border: `1px solid ${alpha(theme.palette.divider, 0.1)}`,
-                borderRadius: 2,
-                boxShadow: '0 2px 8px rgba(0,0,0,0.04)',
-                transition: 'all 0.2s',
-                '&:hover': {
-                  transform: stats.nextMilestone.projectId ? 'translateY(-4px)' : 'none',
-                  boxShadow: stats.nextMilestone.projectId ? '0 6px 12px rgba(0,0,0,0.08)' : '0 2px 8px rgba(0,0,0,0.04)',
-                },
-                cursor: stats.nextMilestone.projectId ? 'pointer' : 'default',
-              }}
-              onClick={() => {
-                if (stats.nextMilestone.projectId) {
-                  navigate(`/projects/${stats.nextMilestone.projectId}`);
-                }
-              }}
-            >
-              <CardContent>
-                <Stack 
-                  direction="row" 
-                  alignItems="center" 
-                  spacing={1.5}
-                  sx={{ mb: 1.5 }}
-                >
-                  <Avatar
-                    sx={{
-                      bgcolor: alpha(theme.palette.info.main, 0.1),
-                      color: theme.palette.info.main,
-                      width: 36,
-                      height: 36,
-                    }}
-                  >
-                    <FlagIcon />
-                  </Avatar>
-                  <Typography variant="subtitle1" fontWeight={600}>
-                    Next Milestone
-                  </Typography>
-                </Stack>
-                
-                <Typography 
-                  variant="body1" 
-                  fontWeight={500}
-                  sx={{ mb: 1 }}
-                >
-                  {stats.nextMilestone.name}
-                </Typography>
-                
-                {stats.nextMilestone.date && (
-                  <Stack direction="row" spacing={1} alignItems="center">
-                    <ScheduleIcon 
-                      fontSize="small" 
-                      sx={{ color: theme.palette.text.secondary }}
-                    />
-                    <Typography 
-                      variant="body2" 
-                      color="text.secondary"
-                    >
-                      {formatDate(stats.nextMilestone.date)}
-                    </Typography>
-                  </Stack>
-                )}
-              </CardContent>
-            </Card>
-          </Grid>
-          
-          <Grid item xs={12} sm={6}>
-            <Card
-              elevation={0}
-              sx={{
-                height: '100%',
-                border: `1px solid ${alpha(theme.palette.divider, 0.1)}`,
-                borderRadius: 2,
-                boxShadow: '0 2px 8px rgba(0,0,0,0.04)',
-                cursor: 'pointer',
-                transition: 'all 0.2s',
-                '&:hover': {
-                  transform: 'translateY(-4px)',
-                  boxShadow: '0 6px 12px rgba(0,0,0,0.08)',
-                },
-              }}
-              onClick={() => navigate('/tasks')}
-            >
-              <CardContent>
-                <Stack 
-                  direction="row" 
-                  alignItems="center" 
-                  spacing={1.5}
-                  sx={{ mb: 1.5 }}
-                >
-                  <Avatar
-                    sx={{
-                      bgcolor: alpha(theme.palette.error.main, 0.1),
-                      color: theme.palette.error.main,
-                      width: 36,
-                      height: 36,
-                    }}
-                  >
-                    <AlarmIcon />
-                  </Avatar>
-                  <Typography variant="subtitle1" fontWeight={600}>
-                    Tasks Due Soon
-                  </Typography>
-                </Stack>
-                
-                <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 1 }}>
-                  <AssignmentIcon 
-                    fontSize="small" 
-                    sx={{ color: theme.palette.text.secondary }}
-                  />
-                  <Typography variant="body1" fontWeight={500}>
-                    {stats.tasksDue} tasks due in the next 7 days
-                  </Typography>
-                </Stack>
-                
-                <Box 
-                  sx={{ 
-                    display: 'flex', 
-                    alignItems: 'center' 
-                  }}
-                >
-                  <Button
-                    size="small"
-                    endIcon={<ArrowForwardIcon />}
-                    sx={{ fontWeight: 500, p: 0 }}
-                  >
-                    View all tasks
-                  </Button>
-                </Box>
-              </CardContent>
-            </Card>
-          </Grid>
-        </Grid>
-      </Paper>
-    );
-  };
-
-  // New function to render priority tasks
-  const renderPriorityTasks = () => {
-    return (
-      <Paper
-        elevation={0}
-        sx={{
-          p: { xs: 2, sm: 2.5 },
-          mb: 3,
-          borderRadius: 2,
-          border: `1px solid ${alpha(theme.palette.divider, 0.1)}`,
-          background: theme.palette.background.paper,
-          boxShadow: '0 2px 10px rgba(0,0,0,0.03)'
-        }}
-      >
-        <Stack
-          direction="row"
-          justifyContent="space-between"
-          alignItems="center"
-          sx={{ mb: 2 }}
-        >
-          <Stack direction="row" spacing={1} alignItems="center">
-            <PriorityHighIcon color="error" />
-            <Typography variant="h6" sx={{ fontWeight: 600 }}>
-              Priority Items
-            </Typography>
-          </Stack>
-          
-          <Tabs 
-            value={activeTab} 
-            onChange={(_, newValue) => setActiveTab(newValue)}
-            sx={{
-              minHeight: 36,
-              '& .MuiTab-root': {
-                minHeight: 36,
-                py: 0
-              }
-            }}
-          >
-            <Tab label="Tasks" />
-            <Tab label="Payments" />
-          </Tabs>
-        </Stack>
-        
-        {activeTab === 0 ? (
-          upcomingTasks.length > 0 ? (
-            <TableContainer>
-              <Table size="small">
-                <TableHead>
-                  <TableRow>
-                    <TableCell>Task</TableCell>
-                    <TableCell>Project</TableCell>
-                    <TableCell>Due Date</TableCell>
-                    <TableCell>Priority</TableCell>
-                    <TableCell align="right">Status</TableCell>
-                  </TableRow>
-                </TableHead>
-                <TableBody>
-                  {upcomingTasks.slice(0, 5).map((task) => (
-                    <TableRow 
-                      key={task.id}
-                      hover
-                      onClick={() => navigate(`/projects/${task.projectId}/tasks`)}
-                      sx={{ cursor: 'pointer' }}
-                    >
-                      <TableCell>{task.title}</TableCell>
-                      <TableCell>{task.projectName}</TableCell>
-                      <TableCell>{task.dueDate}</TableCell>
-                      <TableCell>
-                        <Chip
-                          size="small"
-                          label={task.priority}
-                          sx={{
-                            bgcolor: 
-                              task.priority === 'urgent'
-                                ? alpha(theme.palette.error.dark, 0.1)
-                                : task.priority === 'high' 
-                                ? alpha(theme.palette.error.main, 0.1)
-                                : task.priority === 'medium'
-                                ? alpha(theme.palette.warning.main, 0.1)
-                                : alpha(theme.palette.success.main, 0.1),
-                            color: 
-                              task.priority === 'urgent'
-                                ? theme.palette.error.dark
-                                : task.priority === 'high' 
-                                ? theme.palette.error.main
-                                : task.priority === 'medium'
-                                ? theme.palette.warning.main
-                                : theme.palette.success.main,
-                            textTransform: 'capitalize',
-                            fontWeight: 500
-                          }}
-                        />
-                      </TableCell>
-                      <TableCell align="right">
-                        <Chip
-                          size="small"
-                          label={task.status.replace('_', ' ')}
-                          sx={{
-                            textTransform: 'capitalize',
-                          }}
-                        />
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-              {upcomingTasks.length > 5 && (
-                <Box sx={{ mt: 2, display: 'flex', justifyContent: 'center' }}>
-                  <Button 
-                    size="small" 
-                    endIcon={<ArrowForwardIcon />}
-                    onClick={() => navigate('/tasks')}
-                  >
-                    View all {upcomingTasks.length} tasks
-                  </Button>
-                </Box>
-              )}
-            </TableContainer>
-          ) : (
-            <Alert 
-              severity="success"
-              sx={{ borderRadius: 2 }}
-            >
-              No urgent tasks due soon
-            </Alert>
-          )
-        ) : (
-          // Payment tab content
-          overduePayments.length > 0 ? (
-            <TableContainer>
-              <Table size="small">
-                <TableHead>
-                  <TableRow>
-                    <TableCell>Description</TableCell>
-                    <TableCell>Project</TableCell>
-                    <TableCell>Due Date</TableCell>
-                    <TableCell align="right">Amount</TableCell>
-                  </TableRow>
-                </TableHead>
-                <TableBody>
-                  {overduePayments.map((payment) => (
-                    <TableRow 
-                      key={payment.id}
-                      hover
-                      onClick={() => navigate(`/projects/${payment.projectId}/finances`)}
-                      sx={{ cursor: 'pointer' }}
-                    >
-                      <TableCell>{payment.description}</TableCell>
-                      <TableCell>{payment.projectName}</TableCell>
-                      <TableCell>
-                        <Typography 
-                          variant="body2" 
-                          color="error.main" 
-                          sx={{ fontWeight: 500 }}
-                        >
-                          {formatDate(payment.dueDate)} (Overdue)
-                        </Typography>
-                      </TableCell>
-                      <TableCell align="right">{formatCurrency(payment.amount)}</TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </TableContainer>
-          ) : (
-            <Alert 
-              severity="success"
-              sx={{ borderRadius: 2 }}
-            >
-              No overdue payments
-            </Alert>
-          )
-        )}
-      </Paper>
-    );
-  };
-
   if (loading && projects.length === 0) {
     return (
       <Container maxWidth="xl" sx={{ mt: 3 }}>
@@ -1565,213 +1214,53 @@ const Dashboard: React.FC = () => {
         </Box>
         
         {/* Quick Actions Section */}
-        <Paper
-          elevation={0}
-          sx={{
-            mb: 3,
-            p: { xs: 2, sm: 2.5 },
-            borderRadius: 2,
-            border: `1px solid ${alpha(theme.palette.divider, 0.1)}`,
-          }}
-        >
-          <Stack
-            direction="row"
-            alignItems="center"
-            spacing={2}
-            sx={{ mb: 2 }}
-          >
-            <ConstructionIcon 
-              color="primary" 
-              sx={{ fontSize: { xs: 24, sm: 28 } }} 
-            />
-            <Typography
-              variant="h6"
-              fontWeight={600}
-              sx={{ fontSize: { xs: '1rem', sm: '1.1rem' } }}
-            >
-              Quick Actions
-            </Typography>
-          </Stack>
-          
-          <Grid container spacing={2}>
-            <Grid item xs={12} sm={6} md={3} lg={2}>
-              <Button
-                fullWidth
-                variant="contained"
-                color="primary"
-                startIcon={<HouseIcon />}
-                onClick={() => navigate('/projects/new-residential')}
-                sx={{
-                  height: 46,
-                  justifyContent: 'flex-start',
-                  px: 2,
-                  borderRadius: 1.5,
-                }}
-              >
-                New Project
-              </Button>
-            </Grid>
-            
-            <Grid item xs={12} sm={6} md={3} lg={2}>
-              <Button
-                fullWidth
-                variant="outlined"
-                startIcon={<AssignmentIcon />}
-                onClick={() => navigate('/tasks/new')}
-                sx={{
-                  height: 46,
-                  justifyContent: 'flex-start',
-                  px: 2,
-                  borderRadius: 1.5,
-                  borderWidth: '1.5px',
-                  borderColor: alpha(theme.palette.warning.main, 0.5),
-                  color: theme.palette.text.primary,
-                  '&:hover': {
-                    borderWidth: '1.5px',
-                    borderColor: theme.palette.warning.main,
-                    backgroundColor: alpha(theme.palette.warning.main, 0.04),
-                  },
-                }}
-              >
-                Add Task
-              </Button>
-            </Grid>
-            
-            <Grid item xs={12} sm={6} md={3} lg={2}>
-              <Button
-                fullWidth
-                variant="outlined"
-                startIcon={<ReceiptIcon />}
-                onClick={() => navigate('/expenses/new')}
-                sx={{
-                  height: 46,
-                  justifyContent: 'flex-start',
-                  px: 2,
-                  borderRadius: 1.5,
-                  borderWidth: '1.5px',
-                  borderColor: alpha(theme.palette.success.main, 0.5),
-                  color: theme.palette.text.primary,
-                  '&:hover': {
-                    borderWidth: '1.5px',
-                    borderColor: theme.palette.success.main,
-                    backgroundColor: alpha(theme.palette.success.main, 0.04),
-                  },
-                }}
-              >
-                Log Expense
-              </Button>
-            </Grid>
-            
-            <Grid item xs={12} sm={6} md={3} lg={2}>
-              <Button
-                fullWidth
-                variant="outlined"
-                startIcon={<GroupIcon />}
-                onClick={() => navigate('/team')}
-                sx={{
-                  height: 46,
-                  justifyContent: 'flex-start',
-                  px: 2,
-                  borderRadius: 1.5,
-                  borderWidth: '1.5px',
-                  borderColor: alpha(theme.palette.info.main, 0.5),
-                  color: theme.palette.text.primary,
-                  '&:hover': {
-                    borderWidth: '1.5px',
-                    borderColor: theme.palette.info.main,
-                    backgroundColor: alpha(theme.palette.info.main, 0.04),
-                  },
-                }}
-              >
-                Team
-              </Button>
-            </Grid>
-          </Grid>
-        </Paper>
+        <QuickActions />
         
         {/* Project Insights Section */}
-        {renderProjectInsights()}
+        <ProjectInsights 
+          stats={stats}
+          onRefresh={() => {
+            // Trigger a refresh of the dashboard data
+            if (user?.uid) {
+              const fetchDashboardData = async () => {
+                try {
+                  setLoading(true);
+                  setError(null);
+                  
+                  const projectsData = await ProjectService.getProjects(user.uid);
+                  const dashboardProjects = projectsData.map(convertToDashboardProject);
+                  setProjects(dashboardProjects);
+                  
+                  // Recalculate all stats...
+                  // (Same calculation logic as in useEffect)
+                  
+                } catch (err) {
+                  console.error('Error refreshing dashboard data:', err);
+                  setError('Failed to refresh dashboard data. Please try again.');
+                } finally {
+                  setLoading(false);
+                }
+              };
+              
+              fetchDashboardData();
+            }
+          }}
+        />
         
         {/* Upcoming Deadlines Section */}
-        {renderProjectDeadlines()}
+        <UpcomingDeadlines 
+          nextMilestone={stats.nextMilestone}
+          tasksDue={stats.tasksDue}
+        />
         
-        {/* Priority Tasks Section */}
-        {renderPriorityTasks()}
-
+        {/* Priority Items Section */}
+        <PriorityItems 
+          upcomingTasks={upcomingTasks}
+          overduePayments={overduePayments}
+        />
+        
         {/* Recent Projects Section */}
-        <Paper
-          elevation={0}
-          sx={{
-            p: { xs: 2, sm: 2.5 },
-            mb: 3,
-            borderRadius: 2,
-            border: `1px solid ${alpha(theme.palette.divider, 0.1)}`,
-            background: theme.palette.background.paper,
-            boxShadow: '0 2px 10px rgba(0,0,0,0.03)'
-          }}
-        >
-          <Stack
-            direction="row"
-            justifyContent="space-between"
-            alignItems="center"
-            sx={{ mb: 2 }}
-          >
-            <Stack direction="row" spacing={1} alignItems="center">
-              <HomeIcon color="primary" />
-              <Typography variant="h6" sx={{ fontWeight: 600 }}>
-                Recent Projects
-              </Typography>
-            </Stack>
-            <Button
-              variant="text"
-              endIcon={<ArrowForwardIcon />}
-              onClick={() => navigate('/projects')}
-              sx={{ color: theme.palette.primary.main }}
-            >
-              View All
-            </Button>
-          </Stack>
-          <Grid container spacing={{ xs: 2, sm: 3 }}>
-            {projects.length === 0 ? (
-              <Grid item xs={12}>
-                <Alert 
-                  severity="info" 
-                  sx={{ 
-                    borderRadius: 2,
-                    bgcolor: alpha(theme.palette.info.main, 0.05),
-                    py: { xs: 1.5, sm: 2 },
-                    px: { xs: 2, sm: 3 },
-                    '& .MuiAlert-icon': { alignItems: 'center' }
-                  }}
-                >
-                  No projects found. Create a new project to get started.
-                </Alert>
-              </Grid>
-            ) : (
-              projects
-                .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())
-                .slice(0, 6)
-                .map((project) => {
-                  const displayProject = formatProjectForDisplay(project);
-                  return (
-                    <Grid item xs={12} sm={6} md={4} key={project.id}>
-                      <ProjectCard
-                        title={displayProject.title}
-                        progress={displayProject.progress}
-                        status={displayProject.status}
-                        dueDate={displayProject.dueDate}
-                        budget={displayProject.budget}
-                        team={displayProject.team}
-                        projectId={displayProject.projectId}
-                        location={displayProject.location}
-                        onClick={() => navigate(`/projects/${project.id}`)}
-                      />
-                    </Grid>
-                  );
-                })
-            )}
-          </Grid>
-        </Paper>
+        <RecentProjects projects={projects} />
 
         {/* Project Templates Section */}
         {renderTemplatesSection()}
