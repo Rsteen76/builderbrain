@@ -21,6 +21,7 @@ import {
   IconButton,
   Chip,
   Alert,
+  AlertTitle,
   Divider,
   CircularProgress,
 } from '@mui/material';
@@ -354,6 +355,29 @@ const ProjectSetupWizard: React.FC = () => {
     if (!user?.uid) {
       setError('You must be logged in to create a project');
       return;
+    }
+
+    // Validate timeline before proceeding
+    const validation = validateProjectTimeline(projectData);
+    const hasErrors = validation.issues.some(issue => issue.severity === 'error');
+    const hasWarnings = validation.issues.some(issue => issue.severity === 'warning');
+    
+    // Don't allow project creation if there are critical errors
+    if (hasErrors) {
+      setError('Please fix the critical timeline issues before creating the project');
+      setActiveStep(3); // Ensure we stay on the review step
+      return;
+    }
+    
+    // If there are warnings but no errors, ask for confirmation
+    if (hasWarnings) {
+      const proceed = window.confirm(
+        'Your project has some timeline warnings that may affect project management. Proceed anyway?'
+      );
+      
+      if (!proceed) {
+        return;
+      }
     }
 
     setLoading(true);
@@ -790,6 +814,86 @@ const ProjectSetupWizard: React.FC = () => {
       case 3:
         return (
           <Box sx={{ mt: 2 }}>
+            <Typography variant="h6" gutterBottom>
+              Project Review Summary
+            </Typography>
+            
+            <Grid container spacing={3} mb={3}>
+              <Grid item xs={12} md={6}>
+                <Card variant="outlined">
+                  <CardContent>
+                    <Typography variant="h6" color="primary" gutterBottom>
+                      Project Details
+                    </Typography>
+                    <List dense>
+                      <ListItem>
+                        <ListItemText 
+                          primary="Project Name" 
+                          secondary={projectData.name || 'Not specified'}
+                        />
+                      </ListItem>
+                      <ListItem>
+                        <ListItemText 
+                          primary="Project Type" 
+                          secondary={projectData.projectType || 'Not specified'}
+                        />
+                      </ListItem>
+                      <ListItem>
+                        <ListItemText 
+                          primary="Timeline" 
+                          secondary={`${projectData.startDate ? new Date(projectData.startDate).toLocaleDateString() : 'Not set'} - ${projectData.endDate ? new Date(projectData.endDate).toLocaleDateString() : 'Not set'}`}
+                        />
+                      </ListItem>
+                      <ListItem>
+                        <ListItemText 
+                          primary="Budget" 
+                          secondary={`$${typeof projectData.budget === 'object' ? projectData.budget.total.toLocaleString() : (projectData.budget || 0).toLocaleString()}`}
+                        />
+                      </ListItem>
+                    </List>
+                  </CardContent>
+                </Card>
+              </Grid>
+              
+              <Grid item xs={12} md={6}>
+                <Card variant="outlined">
+                  <CardContent>
+                    <Typography variant="h6" color="primary" gutterBottom>
+                      Project Statistics
+                    </Typography>
+                    <List dense>
+                      <ListItem>
+                        <ListItemText 
+                          primary="Number of Phases" 
+                          secondary={projectData.phases?.length || 0}
+                        />
+                      </ListItem>
+                      <ListItem>
+                        <ListItemText 
+                          primary="Number of Milestones" 
+                          secondary={projectData.keyMilestones?.length || 0}
+                        />
+                      </ListItem>
+                      <ListItem>
+                        <ListItemText 
+                          primary="Required Permits" 
+                          secondary={projectData.requirements?.permits?.length || 0}
+                        />
+                      </ListItem>
+                      <ListItem>
+                        <ListItemText 
+                          primary="Required Inspections" 
+                          secondary={projectData.requirements?.inspections?.length || 0}
+                        />
+                      </ListItem>
+                    </List>
+                  </CardContent>
+                </Card>
+              </Grid>
+            </Grid>
+
+            <TimelineReviewSection projectData={projectData} />
+            
             <Grid container spacing={3}>
               <Grid item xs={12}>
                 <Typography variant="h6" gutterBottom>
@@ -971,7 +1075,7 @@ const ProjectSetupWizard: React.FC = () => {
             <Button
               variant="contained"
               onClick={handleFinish}
-              disabled={loading}
+              disabled={loading || validateProjectTimeline(projectData).issues.some(issue => issue.severity === 'error')}
               startIcon={loading ? <CircularProgress size={20} /> : null}
             >
               Create Project
@@ -984,3 +1088,250 @@ const ProjectSetupWizard: React.FC = () => {
 };
 
 export default ProjectSetupWizard;
+
+// Timeline analysis component to check if the project timeline is realistic
+interface TimelineValidationResult {
+  valid: boolean;
+  issues: {
+    severity: 'warning' | 'error' | 'info';
+    message: string;
+    recommendation?: string;
+  }[];
+}
+
+// Industry standard minimum phase durations in days
+const MIN_PHASE_DURATIONS: Record<string, number> = {
+  'Pre-Construction': 14,
+  'Site Work & Foundation': 14,
+  'Framing': 14,
+  'Exterior Finishing': 10,
+  'Rough-In Mechanical Systems': 10,
+  'Insulation & Drywall': 7,
+  'Interior Finishing': 14,
+  'Mechanical Trim-Out': 7,
+  'Landscaping & Exterior Work': 5,
+  'Final Inspection & Closeout': 3,
+  // Default for any other phase
+  'default': 7
+};
+
+const MIN_PROJECT_DURATION_DAYS = 90; // ~3 months minimum for a realistic residential project
+const MAX_PHASE_COUNT = 10; // Most residential projects have up to 10 major phases
+
+const validateProjectTimeline = (projectData: Partial<Project>): TimelineValidationResult => {
+  const issues: TimelineValidationResult['issues'] = [];
+  
+  // Check if start and end dates are defined
+  if (!projectData.startDate || !projectData.endDate) {
+    issues.push({
+      severity: 'error',
+      message: 'Project is missing start or end date',
+      recommendation: 'Please set both start and end dates for your project'
+    });
+    return { valid: false, issues };
+  }
+  
+  // Calculate project duration
+  const startDate = new Date(projectData.startDate);
+  const endDate = new Date(projectData.endDate);
+  const projectDurationDays = Math.ceil((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24));
+  
+  // Check if project duration is negative (end before start)
+  if (projectDurationDays <= 0) {
+    issues.push({
+      severity: 'error',
+      message: 'Project end date is before or same as start date',
+      recommendation: 'Please set an end date that is after the start date'
+    });
+    return { valid: false, issues };
+  }
+  
+  // Check if project is too short
+  if (projectDurationDays < MIN_PROJECT_DURATION_DAYS) {
+    issues.push({
+      severity: 'warning',
+      message: `Project duration (${projectDurationDays} days) is shorter than recommended minimum (${MIN_PROJECT_DURATION_DAYS} days)`,
+      recommendation: 'Consider extending your project timeline for a more realistic schedule'
+    });
+  }
+  
+  // Check phases
+  const phases = projectData.phases || [];
+  
+  // Warning if no phases
+  if (phases.length === 0) {
+    issues.push({
+      severity: 'warning',
+      message: 'Project has no phases defined',
+      recommendation: 'Consider adding phases to better organize your project timeline'
+    });
+  } else {
+    // Check if too many phases
+    if (phases.length > MAX_PHASE_COUNT) {
+      issues.push({
+        severity: 'info',
+        message: `Project has ${phases.length} phases, which is more than typical (${MAX_PHASE_COUNT})`,
+        recommendation: 'Consider consolidating some phases for easier management'
+      });
+    }
+    
+    // Check phase duration against industry standards
+    phases.forEach(phase => {
+      if (!phase.startDate || !phase.endDate) {
+        issues.push({
+          severity: 'warning',
+          message: `Phase "${phase.name}" is missing start or end date`,
+          recommendation: 'Please set both start and end dates for all phases'
+        });
+        return;
+      }
+      
+      const phaseStartDate = new Date(phase.startDate);
+      const phaseEndDate = new Date(phase.endDate);
+      const phaseDurationDays = Math.ceil((phaseEndDate.getTime() - phaseStartDate.getTime()) / (1000 * 60 * 60 * 24));
+      
+      // Get minimum recommended duration for this phase
+      const minDuration = MIN_PHASE_DURATIONS[phase.name] || MIN_PHASE_DURATIONS['default'];
+      
+      if (phaseDurationDays < minDuration) {
+        issues.push({
+          severity: 'warning',
+          message: `Phase "${phase.name}" duration (${phaseDurationDays} days) is shorter than industry standard minimum (${minDuration} days)`,
+          recommendation: 'Consider extending this phase duration for a more realistic timeline'
+        });
+      }
+      
+      // Check if phase is outside project timeline
+      if (phaseStartDate < startDate) {
+        issues.push({
+          severity: 'error',
+          message: `Phase "${phase.name}" starts before project start date`,
+          recommendation: 'Adjust phase start date to be within project timeline'
+        });
+      }
+      
+      if (phaseEndDate > endDate) {
+        issues.push({
+          severity: 'error',
+          message: `Phase "${phase.name}" ends after project end date`,
+          recommendation: 'Adjust phase end date to be within project timeline'
+        });
+      }
+    });
+    
+    // Check for phase overlaps (which could be intentional but worth noting)
+    for (let i = 0; i < phases.length; i++) {
+      for (let j = i + 1; j < phases.length; j++) {
+        const phase1 = phases[i];
+        const phase2 = phases[j];
+        
+        if (!phase1.startDate || !phase1.endDate || !phase2.startDate || !phase2.endDate) continue;
+        
+        const phase1Start = new Date(phase1.startDate);
+        const phase1End = new Date(phase1.endDate);
+        const phase2Start = new Date(phase2.startDate);
+        const phase2End = new Date(phase2.endDate);
+        
+        // Check for overlap
+        if ((phase1Start <= phase2End) && (phase1End >= phase2Start)) {
+          issues.push({
+            severity: 'info',
+            message: `Phases "${phase1.name}" and "${phase2.name}" overlap`,
+            recommendation: 'This may be intentional, but verify your phase scheduling'
+          });
+        }
+      }
+    }
+  }
+  
+  return {
+    valid: !issues.some(issue => issue.severity === 'error'),
+    issues
+  };
+};
+
+interface TimelineReviewSectionProps {
+  projectData: Partial<Project>;
+}
+
+const TimelineReviewSection: React.FC<TimelineReviewSectionProps> = ({ projectData }) => {
+  const validation = validateProjectTimeline(projectData);
+  
+  // Group issues by severity
+  const errorIssues = validation.issues.filter(issue => issue.severity === 'error');
+  const warningIssues = validation.issues.filter(issue => issue.severity === 'warning');
+  const infoIssues = validation.issues.filter(issue => issue.severity === 'info');
+  
+  return (
+    <Box mb={3}>
+      <Typography variant="h6" gutterBottom>
+        Timeline Analysis
+      </Typography>
+      
+      {validation.issues.length === 0 ? (
+        <Alert severity="success" sx={{ mb: 2 }}>
+          Your project timeline looks good! No issues detected.
+        </Alert>
+      ) : (
+        <>
+          {errorIssues.length > 0 && (
+            <Alert severity="error" sx={{ mb: 2 }}>
+              <AlertTitle>Critical Issues</AlertTitle>
+              <List dense>
+                {errorIssues.map((issue, index) => (
+                  <ListItem key={`error-${index}`}>
+                    <ListItemText 
+                      primary={issue.message} 
+                      secondary={issue.recommendation} 
+                    />
+                  </ListItem>
+                ))}
+              </List>
+            </Alert>
+          )}
+          
+          {warningIssues.length > 0 && (
+            <Alert severity="warning" sx={{ mb: 2 }}>
+              <AlertTitle>Warnings</AlertTitle>
+              <List dense>
+                {warningIssues.map((issue, index) => (
+                  <ListItem key={`warning-${index}`}>
+                    <ListItemText 
+                      primary={issue.message} 
+                      secondary={issue.recommendation} 
+                    />
+                  </ListItem>
+                ))}
+              </List>
+            </Alert>
+          )}
+          
+          {infoIssues.length > 0 && (
+            <Alert severity="info" sx={{ mb: 2 }}>
+              <AlertTitle>Recommendations</AlertTitle>
+              <List dense>
+                {infoIssues.map((issue, index) => (
+                  <ListItem key={`info-${index}`}>
+                    <ListItemText 
+                      primary={issue.message} 
+                      secondary={issue.recommendation} 
+                    />
+                  </ListItem>
+                ))}
+              </List>
+            </Alert>
+          )}
+        </>
+      )}
+      
+      <Box mt={2}>
+        <Typography variant="subtitle2" color="text.secondary">
+          Based on industry standards for construction projects, we've analyzed your timeline and budget.
+          {validation.valid 
+            ? ' Your project setup meets all critical requirements.'
+            : ' Please address the critical issues before creating your project.'}
+        </Typography>
+      </Box>
+    </Box>
+  );
+};

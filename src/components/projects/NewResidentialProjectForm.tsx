@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Box,
@@ -21,7 +21,14 @@ import {
   useTheme,
   alpha,
   Alert,
+  AlertTitle,
   Chip,
+  List,
+  ListItem,
+  ListItemText,
+  Paper,
+  Collapse,
+  Tooltip,
 } from '@mui/material';
 import {
   Business as BusinessIcon,
@@ -30,6 +37,12 @@ import {
   AttachMoney as MoneyIcon,
   CalendarMonth as CalendarIcon,
   Construction as ConstructionIcon,
+  Warning as WarningIcon,
+  ErrorOutline as ErrorIcon,
+  InfoOutlined as InfoIcon,
+  CheckCircle as CheckCircleIcon,
+  ExpandMore as ExpandMoreIcon,
+  ExpandLess as ExpandLessIcon,
 } from '@mui/icons-material';
 import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns';
 import { LocalizationProvider, DatePicker } from '@mui/x-date-pickers';
@@ -44,6 +57,37 @@ const RESIDENTIAL_PROJECT_TYPES = [
   'Custom Home',
   'Spec Home',
 ];
+
+// Industry standard minimum phase durations in days
+const MIN_PHASE_DURATIONS: Record<string, number> = {
+  'Pre-Construction': 14,
+  'Site Work & Foundation': 14,
+  'Framing': 14,
+  'Exterior Finishing': 10,
+  'Rough-In Mechanical Systems': 10,
+  'Insulation & Drywall': 7,
+  'Interior Finishing': 14,
+  'Mechanical Trim-Out': 7,
+  'Landscaping & Exterior Work': 5,
+  'Final Inspection & Closeout': 3,
+  // Default for any other phase
+  'default': 7
+};
+
+const MIN_PROJECT_DURATION_DAYS = 90; // ~3 months minimum for a realistic residential project
+const MAX_PHASE_COUNT = 10; // Most residential projects have up to 10 major phases
+
+// Timeline validation interfaces
+interface TimelineValidationIssue {
+  severity: 'warning' | 'error' | 'info';
+  message: string;
+  recommendation?: string;
+}
+
+interface TimelineValidationResult {
+  valid: boolean;
+  issues: TimelineValidationIssue[];
+}
 
 const NewResidentialProjectForm: React.FC = () => {
   const navigate = useNavigate();
@@ -72,6 +116,89 @@ const NewResidentialProjectForm: React.FC = () => {
     bedrooms: '3',
     bathrooms: '2',
   });
+
+  // Add state for timeline validation
+  const [timelineValidation, setTimelineValidation] = useState<TimelineValidationResult>({
+    valid: true,
+    issues: []
+  });
+  
+  // Add state for showing/hiding the validation panel
+  const [showValidation, setShowValidation] = useState(false);
+  
+  // Function to validate timeline
+  const validateTimeline = (): TimelineValidationResult => {
+    const issues: TimelineValidationIssue[] = [];
+    
+    // Check if start and end dates are defined
+    if (!formData.startDate || !formData.endDate) {
+      issues.push({
+        severity: 'warning',
+        message: 'End date is not set',
+        recommendation: 'Setting an end date helps with better project planning'
+      });
+      return { valid: true, issues }; // Not critical at form stage
+    }
+    
+    // Calculate project duration
+    const startDate = new Date(formData.startDate);
+    const endDate = new Date(formData.endDate);
+    const projectDurationDays = Math.ceil((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24));
+    
+    // Check if project duration is negative (end before start)
+    if (projectDurationDays <= 0) {
+      issues.push({
+        severity: 'error',
+        message: 'Project end date is before or same as start date',
+        recommendation: 'Please set an end date that is after the start date'
+      });
+      return { valid: false, issues };
+    }
+    
+    // Check if project is too short
+    if (projectDurationDays < MIN_PROJECT_DURATION_DAYS) {
+      issues.push({
+        severity: 'warning',
+        message: `Project duration (${projectDurationDays} days) is shorter than recommended minimum (${MIN_PROJECT_DURATION_DAYS} days)`,
+        recommendation: 'Consider extending your project timeline for a more realistic schedule'
+      });
+    }
+    
+    // Add building type specific suggestions
+    const squareFeet = parseFloat(formData.squareFeet as string) || 0;
+    if (squareFeet > 3000 && projectDurationDays < 180) {
+      issues.push({
+        severity: 'warning',
+        message: `Large homes (${squareFeet} sq ft) typically need more than ${projectDurationDays} days to complete`,
+        recommendation: 'Consider extending your timeline for this size of home'
+      });
+    }
+    
+    // Analyze based on project type
+    if (formData.residentialType.includes('New Construction') && projectDurationDays < 120) {
+      issues.push({
+        severity: 'info',
+        message: 'New construction typically takes 4+ months to complete',
+        recommendation: 'Your timeline is ambitious for new construction'
+      });
+    }
+    
+    return {
+      valid: !issues.some(issue => issue.severity === 'error'),
+      issues
+    };
+  };
+  
+  // Use effect to validate timeline whenever relevant form data changes
+  useEffect(() => {
+    const validation = validateTimeline();
+    setTimelineValidation(validation);
+    
+    // Auto-show validation panel if there are errors
+    if (validation.issues.some(issue => issue.severity === 'error')) {
+      setShowValidation(true);
+    }
+  }, [formData.startDate, formData.endDate, formData.residentialType, formData.squareFeet]);
   
   const handleTextChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
@@ -123,6 +250,26 @@ const NewResidentialProjectForm: React.FC = () => {
     if (!user?.uid) {
       setError('You must be logged in to create a project');
       return;
+    }
+    
+    // Check for critical timeline issues
+    const validation = validateTimeline();
+    if (!validation.valid) {
+      setError('Please fix the timeline issues before creating the project');
+      setShowValidation(true);
+      return;
+    }
+    
+    // If there are warnings but no errors, ask for confirmation
+    const hasWarnings = validation.issues.some(issue => issue.severity === 'warning');
+    if (hasWarnings) {
+      const proceed = window.confirm(
+        'Your project has some timeline warnings that may affect project management. Proceed anyway?'
+      );
+      
+      if (!proceed) {
+        return;
+      }
     }
     
     try {
@@ -177,6 +324,101 @@ const NewResidentialProjectForm: React.FC = () => {
     } finally {
       setLoading(false);
     }
+  };
+  
+  // Timeline validation component
+  const TimelineValidationPanel = () => {
+    // Group issues by severity
+    const errorIssues = timelineValidation.issues.filter(issue => issue.severity === 'error');
+    const warningIssues = timelineValidation.issues.filter(issue => issue.severity === 'warning');
+    const infoIssues = timelineValidation.issues.filter(issue => issue.severity === 'info');
+    
+    if (timelineValidation.issues.length === 0) {
+      return (
+        <Alert severity="success" sx={{ mt: 2, mb: 2 }}>
+          <AlertTitle>Timeline Looks Good</AlertTitle>
+          Your project timeline meets all best practices for construction projects.
+        </Alert>
+      );
+    }
+    
+    return (
+      <Paper sx={{ mt: 2, mb: 2, p: 2, bgcolor: alpha(theme.palette.background.default, 0.7) }}>
+        <Box 
+          sx={{ 
+            display: 'flex', 
+            justifyContent: 'space-between', 
+            alignItems: 'center',
+            cursor: 'pointer',
+            mb: 1
+          }}
+          onClick={() => setShowValidation(!showValidation)}
+        >
+          <Typography variant="h6" sx={{ display: 'flex', alignItems: 'center' }}>
+            <WarningIcon sx={{ mr: 1, color: errorIssues.length > 0 ? 'error.main' : 'warning.main' }} />
+            Timeline Analysis
+          </Typography>
+          {showValidation ? <ExpandLessIcon /> : <ExpandMoreIcon />}
+        </Box>
+        
+        <Collapse in={showValidation}>
+          {errorIssues.length > 0 && (
+            <Alert severity="error" sx={{ mb: 2 }}>
+              <AlertTitle>Critical Issues</AlertTitle>
+              <List dense>
+                {errorIssues.map((issue, index) => (
+                  <ListItem key={`error-${index}`}>
+                    <ListItemText 
+                      primary={issue.message} 
+                      secondary={issue.recommendation} 
+                    />
+                  </ListItem>
+                ))}
+              </List>
+            </Alert>
+          )}
+          
+          {warningIssues.length > 0 && (
+            <Alert severity="warning" sx={{ mb: 2 }}>
+              <AlertTitle>Warnings</AlertTitle>
+              <List dense>
+                {warningIssues.map((issue, index) => (
+                  <ListItem key={`warning-${index}`}>
+                    <ListItemText 
+                      primary={issue.message} 
+                      secondary={issue.recommendation} 
+                    />
+                  </ListItem>
+                ))}
+              </List>
+            </Alert>
+          )}
+          
+          {infoIssues.length > 0 && (
+            <Alert severity="info" sx={{ mb: 2 }}>
+              <AlertTitle>Recommendations</AlertTitle>
+              <List dense>
+                {infoIssues.map((issue, index) => (
+                  <ListItem key={`info-${index}`}>
+                    <ListItemText 
+                      primary={issue.message} 
+                      secondary={issue.recommendation} 
+                    />
+                  </ListItem>
+                ))}
+              </List>
+            </Alert>
+          )}
+          
+          <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+            Based on industry standards for construction projects, we've analyzed your timeline.
+            {timelineValidation.valid 
+              ? ' You can proceed with project creation.'
+              : ' Please address the critical issues before creating your project.'}
+          </Typography>
+        </Collapse>
+      </Paper>
+    );
   };
   
   return (
@@ -323,12 +565,31 @@ const NewResidentialProjectForm: React.FC = () => {
                               <CalendarIcon fontSize="small" />
                             </InputAdornment>
                           ),
+                          endAdornment: timelineValidation.issues.some(issue => issue.severity === 'error') ? (
+                            <InputAdornment position="end">
+                              <Tooltip title="Timeline issue detected">
+                                <ErrorIcon color="error" fontSize="small" />
+                              </Tooltip>
+                            </InputAdornment>
+                          ) : timelineValidation.issues.some(issue => issue.severity === 'warning') ? (
+                            <InputAdornment position="end">
+                              <Tooltip title="Timeline warning">
+                                <WarningIcon color="warning" fontSize="small" />
+                              </Tooltip>
+                            </InputAdornment>
+                          ) : null,
                         },
+                        error: timelineValidation.issues.some(issue => issue.severity === 'error'),
                       },
                     }}
                   />
                 </Stack>
               </LocalizationProvider>
+              
+              {/* Add timeline validation messages */}
+              {(formData.startDate && formData.endDate) && (
+                <TimelineValidationPanel />
+              )}
             </Grid>
             
             {/* Location */}
@@ -514,12 +775,18 @@ const NewResidentialProjectForm: React.FC = () => {
                 type="submit"
                 variant="contained"
                 size="large"
-                disabled={loading}
+                disabled={loading || !timelineValidation.valid}
                 startIcon={loading ? <CircularProgress size={20} /> : <ConstructionIcon />}
                 fullWidth
               >
                 {loading ? 'Creating Project...' : 'Create Residential Project'}
               </Button>
+              
+              {!timelineValidation.valid && (
+                <FormHelperText error sx={{ textAlign: 'center', mt: 1 }}>
+                  Please fix timeline issues before creating the project
+                </FormHelperText>
+              )}
             </Grid>
           </Grid>
         </form>
