@@ -9,8 +9,6 @@ import {
   Button,
   IconButton,
   Chip,
-  Tabs,
-  Tab,
   CircularProgress,
   LinearProgress,
   Divider,
@@ -111,6 +109,9 @@ import { v4 as uuidv4 } from 'uuid';
 import { openBidDeleteDialog } from '../components/dialogs/BidDeletePortal';
 import BidDeletePortal from '../components/dialogs/BidDeletePortal';
 
+// Import bid operations
+import { submitBid, findExistingExpenseForPaymentStage as findExpense } from '../utils/bidOperations';
+
 // Import extracted tab components
 import ProjectOverviewTab from '../components/projects/detailTabs/ProjectOverviewTab';
 import ProjectPhasesTab from '../components/projects/detailTabs/ProjectPhasesTab';
@@ -127,35 +128,11 @@ import QuickBidDialog from '../components/dialogs/QuickBidDialog';
 import QuickUpdateMode from '../components/projects/QuickUpdateMode';
 import RecentExpenses from '../components/projects/RecentExpenses';
 
-// Import recharts components
-import {
-  ResponsiveContainer,
-  PieChart,
-  Pie,
-  Cell,
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  Tooltip as RechartsTooltip,
-  Legend,
-  LineChart,
-  Line,
-  CartesianGrid,
-  AreaChart,
-  Area,
-} from 'recharts';
-
-import SubcontractorSelector from '../components/common/SubcontractorSelector';
-import ExpenseFormModal from '../components/expenses/ExpenseFormModal';
-import { DatePicker } from '@mui/x-date-pickers/DatePicker';
-import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
-import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns';
-import Autocomplete from '@mui/material/Autocomplete';
-import toast from 'react-hot-toast'; // Add toast import
-
-// Import bid operations
-import { submitBid, findExistingExpenseForPaymentStage as findExpense } from '../utils/bidOperations';
+// Import newly modularized components
+import TabNavigation from '../components/projects/detailTabs/TabNavigation';
+import TabContent from '../components/projects/detailTabs/TabContent';
+import PhaseDetailsDialog from '../components/projects/dialogs/PhaseDetailsDialog';
+import ProjectDialogs from '../components/projects/ProjectDialogs';
 
 // Enhanced status indicators
 const getStatusColor = (status: string): string => {
@@ -1456,14 +1433,14 @@ const ProjectDetailPage: React.FC = () => {
     status: 'draft' | 'submitted' | 'accepted' | 'rejected' | 'expired';
     attachments: string[];
     tags: string[];
-  }) => {
-    if (!user || !project?.id) return;
+  }): Promise<void> => {
+    if (!user || !project?.id) return Promise.resolve();
     
     try {
       setIsSaving(true);
       
       // Use the shared submitBid function
-      const resultBid = await submitBid(
+      const result = await submitBid(
         user.uid, 
         bidFormData, 
         editingBidId, 
@@ -1471,7 +1448,9 @@ const ProjectDetailPage: React.FC = () => {
         project.name
       );
       
-      if (resultBid) {
+      if (result) {
+        const resultBid: Bid = result;
+        
         if (editingBidId) {
           // Update bid in local state
           setBids(prev => prev.map(b => b.id === editingBidId ? resultBid : b));
@@ -1492,7 +1471,7 @@ const ProjectDetailPage: React.FC = () => {
         // Refresh expenses list
         fetchExpenses(project.id || '');
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error saving bid:', error);
       showNotification('Failed to save bid: ' + (error instanceof Error ? error.message : 'Unknown error'), 'error');
     } finally {
@@ -1617,8 +1596,8 @@ const ProjectDetailPage: React.FC = () => {
       phone: string;
       email: string;
     };
-  }) => {
-    if (!user?.uid) return;
+  }): Promise<void> => {
+    if (!user?.uid) return Promise.resolve();
     
     try {
       setIsSaving(true);
@@ -1845,387 +1824,88 @@ const ProjectDetailPage: React.FC = () => {
         />
         
         {/* Project Detail Tabs */}
-        <Box sx={{ borderBottom: 1, borderColor: 'divider', mb: 3 }}>
-          <Tabs
-            value={tabValue}
-            onChange={handleTabChange}
-            variant="scrollable"
-            scrollButtons="auto"
-            allowScrollButtonsMobile
-            sx={{ '& .MuiTab-root': { textTransform: 'none', minHeight: 48, fontSize: '0.9rem' } }}
-          >
-            <Tab label="Overview" icon={<BusinessIcon />} iconPosition="start" />
-            <Tab label="Phases" icon={<TimelineIcon />} iconPosition="start" />
-            <Tab label="Bids" icon={<BidsIcon />} iconPosition="start" />
-            <Tab label="Expenses" icon={<ExpensesIcon />} iconPosition="start" />
-            <Tab label="Tasks" icon={<TasksIcon />} iconPosition="start" />
-            <Tab label="Documents" icon={<DocumentIcon />} iconPosition="start" />
-          </Tabs>
-        </Box>
+        <TabNavigation
+          tabValue={tabValue}
+          onTabChange={handleTabChange}
+        />
         
         {/* Tab Content */}
-        <Box sx={{ mt: 2 }}>
-          {tabValue === 0 && (
-            <ProjectOverviewTab
-              project={project}
-              phases={phases}
-              expenses={expenses} 
-              budgetData={budgetData} 
-              expensesData={expensesData}
-              handleAddPhase={handleAddPhase}
-              combinedExpenses={combinedExpenses} 
-              theme={theme} 
-            />
-          )}
-          {tabValue === 1 && (
-            <ProjectPhasesTab
-              phases={phases}
-              bids={bids}
-              expenses={expenses}
-              phaseProposedCosts={phaseProposedCosts}
-              phaseActualCosts={phaseActualCosts}
-              theme={theme}
-              handleAddPhase={handleAddPhase}
-              handleUpdatePhase={handleUpdatePhase}
-              handleDeletePhase={handleDeletePhase}
-              handleOpenQuickBidDialog={handleOpenQuickBidDialog}
-              handleOpenQuickExpenseDialog={handleOpenQuickExpenseDialog}
-              handleOpenTemplateAdjuster={handleOpenTemplateAdjuster}
-              getStatusColor={getStatusColor}
-              formatCurrency={formatCurrency}
-              handleViewPhaseDetails={handleViewPhaseDetails}
-            />
-          )}
-          {tabValue === 2 && (
-            <ProjectBidsTab
-              bids={bids}
-              recentBids={recentBids}
-              theme={theme}
-              handleAddBid={handleAddBid}
-              handleEditBid={handleEditBid}
-              formatCurrency={formatCurrency}
-              formatDate={formatDate}
-            />
-          )}
-          {tabValue === 3 && (
-            <ProjectExpensesTab
-              expenses={expenses}
-              expensesData={expensesData}
-              phases={phases}
-              theme={theme}
-              handleOpenQuickExpenseDialog={handleOpenQuickExpenseDialog}
-              formatCurrency={formatCurrency}
-            />
-          )}
-          {tabValue === 4 && (
-            <ProjectTaskManager 
-              project={project} 
-              onProjectUpdate={handleProjectUpdate}
-              userId={user?.uid || ''}
-            />
-          )}
-          {tabValue === 5 && (
-            <ProjectDocumentsTab /> 
-          )}
-        </Box>
+        <TabContent
+          tabValue={tabValue}
+          project={project}
+          phases={phases}
+          bids={bids}
+          recentBids={recentBids}
+          expenses={expenses}
+          expensesData={expensesData}
+          combinedExpenses={combinedExpenses}
+          budgetData={budgetData}
+          phaseProposedCosts={phaseProposedCosts}
+          phaseActualCosts={phaseActualCosts}
+          theme={theme}
+          userId={user?.uid || ''}
+          getStatusColor={getStatusColor}
+          handleAddPhase={handleAddPhase}
+          handleUpdatePhase={handleUpdatePhase}
+          handleDeletePhase={handleDeletePhase}
+          handleAddBid={handleAddBid}
+          handleEditBid={handleEditBid}
+          handleOpenQuickBidDialog={handleOpenQuickBidDialog}
+          handleOpenQuickExpenseDialog={handleOpenQuickExpenseDialog}
+          handleOpenTemplateAdjuster={handleOpenTemplateAdjuster}
+          handleProjectUpdate={handleProjectUpdate}
+          handleViewPhaseDetails={handleViewPhaseDetails}
+        />
       </PageLayout>
 
-      {/* Dialogs, Snackbar, Modals outside PageLayout */}
-      <BidFormDialog
-        open={bidFormOpen}
-        onClose={handleCloseBidForm}
-        onSubmit={handleSubmitBid}
+      {/* Dialogs Section */}
+      <ProjectDialogs
+        project={project}
         phases={phases}
-        subcontractors={subcontractors}
-        initialBidData={bidForm}
+        bids={bids}
+        expenses={expenses}
+        theme={theme}
+        getStatusColor={getStatusColor}
+        
+        // Dialog open states
+        bidFormOpen={bidFormOpen}
+        showQuickAddSubcontractor={showQuickAddSubcontractor}
+        newBidDialogOpen={newBidDialogOpen}
+        newExpenseDialogOpen={newExpenseDialogOpen}
+        templateAdjusterOpen={templateAdjusterOpen}
+        phaseDetailsDialogOpen={phaseDetailsDialogOpen}
+        
+        // Form data
+        bidForm={bidForm}
         editingBidId={editingBidId}
+        currentPhaseForBid={currentPhaseForBid}
+        currentPhaseForExpense={currentPhaseForExpense}
+        currentExpenseData={currentExpenseData}
+        selectedPhaseId={selectedPhaseId}
         isSaving={isSaving}
-        onAddSubcontractor={() => setShowQuickAddSubcontractor(true)}
-      />
-
-      <QuickAddSubcontractorDialog
-        open={showQuickAddSubcontractor}
-        onClose={() => setShowQuickAddSubcontractor(false)}
-        onSubmit={handleQuickAddSubcontractor}
-        isSaving={isSaving}
-      />
-
-      <QuickBidDialog
-        open={newBidDialogOpen}
-        onClose={() => setNewBidDialogOpen(false)}
-        onSubmit={handleAddQuickBid}
-        phaseId={currentPhaseForBid}
-        isSaving={isSaving}
-        phases={phases}
+        
+        // Snackbar
+        snackbar={snackbar}
+        
+        // Subcontractors
         subcontractors={subcontractors}
+        
+        // Handlers
+        handleCloseBidForm={handleCloseBidForm}
+        handleSubmitBid={handleSubmitBid}
+        handleQuickAddSubcontractor={handleQuickAddSubcontractor}
+        handleAddQuickBid={handleAddQuickBid}
+        handleAddQuickExpense={handleAddQuickExpense}
+        handleSnackbarClose={handleSnackbarClose}
+        handleCloseTemplateAdjuster={handleCloseTemplateAdjuster}
+        handleProjectUpdate={handleProjectUpdate}
+        handleClosePhaseDetails={handleClosePhaseDetails}
+        handleUpdatePhase={handleUpdatePhase}
+        setShowQuickAddSubcontractor={setShowQuickAddSubcontractor}
+        setNewBidDialogOpen={setNewBidDialogOpen}
+        setCurrentPhaseForExpense={setCurrentPhaseForExpense}
+        setNewExpenseDialogOpen={setNewExpenseDialogOpen}
       />
-
-      <ExpenseFormModal
-        open={newExpenseDialogOpen}
-        onClose={() => { setNewExpenseDialogOpen(false); setCurrentPhaseForExpense(null); }}
-        onSave={handleAddQuickExpense as unknown as (expense: Partial<import('../types').Expense>) => void}
-        projects={[{ id: project?.id || '', name: project?.name || '' }]}
-        expense={currentExpenseData as unknown as import('../types').Expense}
-        projectPhases={phases}
-        // isSaving={isSaving} // Removed prop
-      />
-      
-      <Snackbar open={snackbar.open} autoHideDuration={6000} onClose={handleSnackbarClose} anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}>
-        <Alert onClose={handleSnackbarClose} severity={snackbar.severity} sx={{ width: '100%' }}>{snackbar.message}</Alert>
-      </Snackbar>
-      
-      <TemplateAdjuster 
-        open={templateAdjusterOpen}
-        onClose={handleCloseTemplateAdjuster}
-        project={project} 
-        onUpdateProject={handleProjectUpdate}
-      />
-
-      {/* Phase Details Dialog */}
-      <Dialog
-        open={phaseDetailsDialogOpen}
-        onClose={handleClosePhaseDetails}
-        maxWidth="md"
-        fullWidth
-        aria-labelledby="phase-details-dialog-title"
-        aria-describedby="phase-details-dialog-description"
-      >
-        <DialogTitle id="phase-details-dialog-title">
-          {selectedPhaseId && phases.find(p => p.id === selectedPhaseId)?.name}
-        </DialogTitle>
-        <DialogContent dividers>
-          {selectedPhaseId && (() => {
-            const phase = phases.find(p => p.id === selectedPhaseId);
-            const phaseBids = bids.filter(bid => bid.phaseId === selectedPhaseId);
-            const phaseExpenses = expenses.filter(expense => expense.phaseId === selectedPhaseId);
-            
-            if (!phase) return <Typography>Phase not found</Typography>;
-            
-            return (
-              <Grid container spacing={3}>
-                <Grid item xs={12}>
-                  <Box sx={{ mb: 2, p: 2, bgcolor: alpha(theme.palette.primary.main, 0.05), borderRadius: 1 }}>
-                    <Typography variant="subtitle1" gutterBottom fontWeight={600}>Phase Information</Typography>
-                    <Grid container spacing={2}>
-                      <Grid item xs={12} sm={6}>
-                        <Typography variant="body2" color="text.secondary">Status</Typography>
-                        <Chip
-                          label={phase.status.replace('_', ' ').toUpperCase()}
-                          size="small"
-                          sx={{ 
-                            mt: 0.5,
-                            fontWeight: 600,
-                            bgcolor: alpha(getStatusColor(phase.status), 0.1),
-                            color: getStatusColor(phase.status),
-                            borderRadius: 1
-                          }}
-                        />
-                      </Grid>
-                      <Grid item xs={12} sm={6}>
-                        <Typography variant="body2" color="text.secondary">Progress</Typography>
-                        <Box sx={{ display: 'flex', alignItems: 'center', mt: 0.5 }}>
-                          <LinearProgress 
-                            variant="determinate" 
-                            value={phase.progress} 
-                            sx={{ 
-                              height: 8, 
-                              borderRadius: 4,
-                              flexGrow: 1,
-                              mr: 1,
-                              backgroundColor: alpha(theme.palette.primary.main, 0.1)
-                            }} 
-                          />
-                          <Typography variant="body2" fontWeight="medium">{phase.progress}%</Typography>
-                        </Box>
-                      </Grid>
-                      <Grid item xs={12} sm={6}>
-                        <Typography variant="body2" color="text.secondary">Start Date</Typography>
-                        <Typography variant="body1">{new Date(phase.startDate).toLocaleDateString()}</Typography>
-                      </Grid>
-                      <Grid item xs={12} sm={6}>
-                        <Typography variant="body2" color="text.secondary">End Date</Typography>
-                        <Typography variant="body1">{new Date(phase.endDate).toLocaleDateString()}</Typography>
-                      </Grid>
-                      <Grid item xs={12} sm={6}>
-                        <Typography variant="body2" color="text.secondary">Budget</Typography>
-                        <Typography variant="body1" fontWeight="medium">{formatCurrency(phase.budget)}</Typography>
-                      </Grid>
-                      <Grid item xs={12} sm={6}>
-                        <Typography variant="body2" color="text.secondary">Actual Cost</Typography>
-                        <Typography 
-                          variant="body1" 
-                          fontWeight="medium" 
-                          color={phase.actualCost > phase.budget ? 'error' : 'inherit'}
-                        >
-                          {formatCurrency(phase.actualCost)}
-                        </Typography>
-                      </Grid>
-                      {phase.description && (
-                        <Grid item xs={12}>
-                          <Typography variant="body2" color="text.secondary">Description</Typography>
-                          <Typography variant="body1">{phase.description}</Typography>
-                        </Grid>
-                      )}
-                    </Grid>
-                  </Box>
-                </Grid>
-                
-                <Grid item xs={12} md={6}>
-                  <Typography variant="subtitle1" gutterBottom fontWeight={600}>
-                    Bids ({phaseBids.length})
-                  </Typography>
-                  {phaseBids.length > 0 ? (
-                    <TableContainer component={Paper} variant="outlined" sx={{ maxHeight: 300 }}>
-                      <Table stickyHeader size="small">
-                        <TableHead>
-                          <TableRow>
-                            <TableCell>Contractor</TableCell>
-                            <TableCell align="right">Amount</TableCell>
-                            <TableCell>Status</TableCell>
-                            <TableCell align="right">Actions</TableCell>
-                          </TableRow>
-                        </TableHead>
-                        <TableBody>
-                          {phaseBids.map(bid => (
-                            <TableRow key={bid.id}>
-                              <TableCell>{bid.subcontractorName || bid.contractorName || 'Unnamed'}</TableCell>
-                              <TableCell align="right">{formatCurrency(bid.totalAmount)}</TableCell>
-                              <TableCell>
-                                <Chip 
-                                  label={bid.status.toUpperCase()} 
-                                  size="small"
-                                  sx={{ 
-                                    fontSize: '0.7rem',
-                                    bgcolor: bid.status === 'accepted' 
-                                      ? alpha(theme.palette.success.main, 0.1)
-                                      : bid.status === 'rejected'
-                                        ? alpha(theme.palette.error.main, 0.1)
-                                        : alpha(theme.palette.info.main, 0.1),
-                                    color: bid.status === 'accepted' 
-                                      ? theme.palette.success.main
-                                      : bid.status === 'rejected'
-                                        ? theme.palette.error.main
-                                        : theme.palette.info.main,
-                                  }}
-                                />
-                              </TableCell>
-                              <TableCell align="right">
-                                <IconButton size="small" onClick={() => handleEditBid(bid.id)}>
-                                  <EditIcon fontSize="small" />
-                                </IconButton>
-                              </TableCell>
-                            </TableRow>
-                          ))}
-                        </TableBody>
-                      </Table>
-                    </TableContainer>
-                  ) : (
-                    <Typography variant="body2" color="text.secondary" sx={{ fontStyle: 'italic' }}>
-                      No bids for this phase
-                    </Typography>
-                  )}
-                </Grid>
-                
-                <Grid item xs={12} md={6}>
-                  <Typography variant="subtitle1" gutterBottom fontWeight={600}>
-                    Expenses ({phaseExpenses.length})
-                  </Typography>
-                  {phaseExpenses.length > 0 ? (
-                    <TableContainer component={Paper} variant="outlined" sx={{ maxHeight: 300 }}>
-                      <Table stickyHeader size="small">
-                        <TableHead>
-                          <TableRow>
-                            <TableCell>Description</TableCell>
-                            <TableCell>Category</TableCell>
-                            <TableCell align="right">Amount</TableCell>
-                            <TableCell>Status</TableCell>
-                          </TableRow>
-                        </TableHead>
-                        <TableBody>
-                          {phaseExpenses.map(expense => (
-                            <TableRow key={expense.id}>
-                              <TableCell>{expense.description}</TableCell>
-                              <TableCell>{expense.category}</TableCell>
-                              <TableCell align="right">{formatCurrency(expense.amount)}</TableCell>
-                              <TableCell>
-                                <Chip 
-                                  label={expense.status.toUpperCase()} 
-                                  size="small"
-                                  sx={{ 
-                                    fontSize: '0.7rem',
-                                    bgcolor: expense.status === 'paid' 
-                                      ? alpha(theme.palette.success.main, 0.1)
-                                      : expense.status === 'rejected'
-                                        ? alpha(theme.palette.error.main, 0.1)
-                                        : alpha(theme.palette.info.main, 0.1),
-                                    color: expense.status === 'paid' 
-                                      ? theme.palette.success.main
-                                      : expense.status === 'rejected'
-                                        ? theme.palette.error.main
-                                        : theme.palette.info.main,
-                                  }}
-                                />
-                              </TableCell>
-                            </TableRow>
-                          ))}
-                        </TableBody>
-                      </Table>
-                    </TableContainer>
-                  ) : (
-                    <Typography variant="body2" color="text.secondary" sx={{ fontStyle: 'italic' }}>
-                      No expenses for this phase
-                    </Typography>
-                  )}
-                </Grid>
-                
-                {phase.tasks && phase.tasks.length > 0 && (
-                  <Grid item xs={12}>
-                    <Typography variant="subtitle1" gutterBottom fontWeight={600}>
-                      Tasks ({phase.tasks.length})
-                    </Typography>
-                    <TableContainer component={Paper} variant="outlined" sx={{ maxHeight: 200 }}>
-                      <Table stickyHeader size="small">
-                        <TableHead>
-                          <TableRow>
-                            <TableCell>Task</TableCell>
-                            <TableCell>Assigned To</TableCell>
-                            <TableCell>Status</TableCell>
-                            <TableCell align="right">Due Date</TableCell>
-                          </TableRow>
-                        </TableHead>
-                        <TableBody>
-                          {phase.tasks.map(task => (
-                            <TableRow key={task.id}>
-                              <TableCell>{task.title}</TableCell>
-                              <TableCell>{task.assigneeId || 'Unassigned'}</TableCell>
-                              <TableCell>{task.status}</TableCell>
-                              <TableCell align="right">
-                                {task.dueDate ? new Date(task.dueDate).toLocaleDateString() : 'No date'}
-                              </TableCell>
-                            </TableRow>
-                          ))}
-                        </TableBody>
-                      </Table>
-                    </TableContainer>
-                  </Grid>
-                )}
-              </Grid>
-            );
-          })()}
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={handleClosePhaseDetails}>Close</Button>
-          <Button 
-            variant="contained" 
-            onClick={() => {
-              handleClosePhaseDetails();
-              if (selectedPhaseId) handleUpdatePhase(selectedPhaseId);
-            }}
-          >
-            Edit Phase
-          </Button>
-        </DialogActions>
-      </Dialog>
     </>
   );
 };
