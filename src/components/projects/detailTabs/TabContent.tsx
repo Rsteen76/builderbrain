@@ -92,7 +92,9 @@ const TabContent: React.FC<TabContentProps> = ({
           expensesData={expensesData}
           handleAddPhase={handleAddPhase}
           combinedExpenses={combinedExpenses} 
-          theme={theme} 
+          theme={theme}
+          bids={bids}
+          handleOpenTemplateAdjuster={handleOpenTemplateAdjuster}
         />
       )}
       {tabValue === 1 && (
@@ -108,9 +110,6 @@ const TabContent: React.FC<TabContentProps> = ({
           handleDeletePhase={handleDeletePhase}
           handleOpenQuickBidDialog={handleOpenQuickBidDialog}
           handleOpenQuickExpenseDialog={handleOpenQuickExpenseDialog}
-          handleOpenTemplateAdjuster={handleOpenTemplateAdjuster}
-          getStatusColor={getStatusColor}
-          formatCurrency={formatCurrency}
           handleViewPhaseDetails={handleViewPhaseDetails}
         />
       )}
