@@ -482,7 +482,7 @@ const FilterPanel: React.FC<FilterPanelProps> = ({
   );
 };
 
-const BidList: React.FC = () => {
+const BidList: React.FC<{ projectId?: string }> = ({ projectId }) => {
   const { user, loading: authLoading } = useAuth();
   const navigate = useNavigate();
   const [bids, setBids] = useState<BidSummary[]>([]);
@@ -504,7 +504,14 @@ const BidList: React.FC = () => {
     setLoading(true);
     setError(null);
     try {
-      const fetchedBids = await BidService.getBids(user.uid, filter, sort);
+      // Create a new filter object that includes the projectId if it exists
+      const bidFilter: BidFilter = { ...filter };
+      if (projectId) {
+        bidFilter.projectId = projectId;
+        console.log(`BidList: Filtering bids for project ID: ${projectId}`);
+      }
+
+      const fetchedBids = await BidService.getBids(user.uid, bidFilter, sort);
       const bidSummaries = fetchedBids.map(bid => ({
         id: bid.id,
         userId: bid.userId,
@@ -536,7 +543,7 @@ const BidList: React.FC = () => {
       setError("Please log in to view bids.");
       setLoading(false);
     }
-  }, [user, filter, sort, authLoading]);
+  }, [user, filter, sort, authLoading, projectId]);
 
   // Listen for global bid deletion events
   useEffect(() => {

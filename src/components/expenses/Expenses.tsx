@@ -33,6 +33,7 @@ import {
   TableRow,
   TableCell,
   alpha,
+  Tooltip,
 } from '@mui/material';
 import MuiAlert, { AlertProps } from '@mui/material/Alert';
 import {
@@ -55,6 +56,7 @@ import {
   DeleteOutline as DeleteOutlineIcon,
   Business as BusinessIcon,
   Engineering as EngineeringIcon,
+  Refresh as RefreshIcon,
 } from '@mui/icons-material';
 import { ExpenseService } from '../../services/expense';
 import { ProjectService } from '../../services/project';
@@ -86,7 +88,7 @@ interface Project {
   phases?: ProjectPhase[]; // Add phases here
 }
 
-const Expenses: React.FC = () => {
+const Expenses: React.FC<{ projectId?: string }> = ({ projectId }) => {
   const theme = useTheme();
   const { user } = useAuth();
   const [loading, setLoading] = useState(true);
@@ -122,7 +124,7 @@ const Expenses: React.FC = () => {
       fetchProjects();
       fetchExpenses();
     }
-  }, [user, tabValue, submitting]);
+  }, [user, tabValue, submitting, projectId]);
   
   // Calculate summary data based on expenses
   const totalExpenses = expenses.reduce((sum, expense) => sum + expense.amount, 0);
@@ -240,7 +242,14 @@ const Expenses: React.FC = () => {
       
       // Detailed filters (if set)
       if (categoryFilter) filters.category = categoryFilter;
-      if (projectFilter) filters.projectId = projectFilter;
+      
+      // If we have a projectId prop, use it - this takes precedence over projectFilter
+      if (projectId) {
+        filters.projectId = projectId;
+        console.log(`Expenses: Filtering expenses for project ID: ${projectId}`);
+      } else if (projectFilter) {
+        filters.projectId = projectFilter;
+      }
       
       // First get projects to ensure we have them for the expense lookup
       const fetchedProjects = await ProjectService.getProjects(user.uid);
@@ -259,23 +268,29 @@ const Expenses: React.FC = () => {
         return map;
       }, {} as Record<string, string>);
       
-      // Then get expenses
+      // Now fetch expenses with our filters
       const fetchedExpenses = await ExpenseService.getExpenses(user.uid, filters);
       
-      // Add projectName to each expense
-      const enhancedExpenses = fetchedExpenses.map((expense: Expense) => {
-        // Look up project name from our map
-        const projectName = projectMap[expense.projectId] || 'Unknown Project';
-        
+      // Add projectName to each expense by looking up the project ID
+      const enhancedExpenses = fetchedExpenses.map(expense => {
         return {
           ...expense,
-          projectName,
+          projectName: projectMap[expense.projectId] || 'Unknown Project',
           vendor: expense.vendor || '', // Ensure vendor is always a string
         };
       });
       
       console.log('Enhanced expenses with project names:', enhancedExpenses);
       setExpenses(enhancedExpenses);
+      
+      // If we have a projectId, let's also fetch the project phases for the phase selector
+      if (projectId || projectFilter) {
+        const currentProjectId = projectId || projectFilter;
+        const currentProject = fetchedProjects.find(p => p.id === currentProjectId);
+        if (currentProject?.phases) {
+          setSelectedProjectPhases(currentProject.phases as ProjectPhase[]);
+        }
+      }
     } catch (err) {
       console.error('Error fetching expenses:', err);
       setError('Failed to load expenses. Please try again.');
@@ -286,6 +301,16 @@ const Expenses: React.FC = () => {
   
   const handleTabChange = (_event: React.SyntheticEvent, newValue: number) => {
     setTabValue(newValue);
+  };
+  
+  const handleRefresh = () => {
+    fetchProjects();
+    fetchExpenses();
+    setSnackbar({
+      open: true,
+      message: 'Expenses refreshed',
+      severity: 'info'
+    });
   };
   
   const handleAddExpense = () => {
@@ -828,6 +853,45 @@ const Expenses: React.FC = () => {
               ),
             }}
           />
+          
+          {/* Only show project filter when not viewing project-specific expenses */}
+          {!projectId && (
+            <FormControl variant="outlined" size="small" sx={{ minWidth: { xs: '100%', md: '200px' } }}>
+              <InputLabel id="project-filter-label">Project</InputLabel>
+              <Select
+                labelId="project-filter-label"
+                value={projectFilter || ''}
+                onChange={(e) => setProjectFilter(e.target.value === '' ? null : e.target.value)}
+                label="Project"
+              >
+                <MenuItem value="">All Projects</MenuItem>
+                {projects.map((project) => (
+                  <MenuItem key={project.id} value={project.id}>
+                    {project.name}
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+          )}
+          
+          {/* Category filter */}
+          <FormControl variant="outlined" size="small" sx={{ minWidth: { xs: '100%', md: '150px' } }}>
+            <InputLabel id="category-filter-label">Category</InputLabel>
+            <Select
+              labelId="category-filter-label"
+              value={categoryFilter || ''}
+              onChange={(e) => setCategoryFilter(e.target.value === '' ? null : e.target.value)}
+              label="Category"
+            >
+              <MenuItem value="">All Categories</MenuItem>
+              <MenuItem value="materials">Materials</MenuItem>
+              <MenuItem value="labor">Labor</MenuItem>
+              <MenuItem value="equipment">Equipment</MenuItem>
+              <MenuItem value="permits">Permits</MenuItem>
+              <MenuItem value="other">Other</MenuItem>
+            </Select>
+          </FormControl>
+          
           <FormControl variant="outlined" size="small" sx={{ minWidth: { xs: '100%', md: '150px' } }}>
             <InputLabel id="group-by-label">Group By</InputLabel>
             <Select
@@ -848,6 +912,12 @@ const Expenses: React.FC = () => {
               <MenuItem value="subcontractor">Subcontractor</MenuItem>
             </Select>
           </FormControl>
+          
+          <Tooltip title="Refresh expenses">
+            <IconButton onClick={handleRefresh} size="small" sx={{ border: `1px solid ${theme.palette.divider}`, borderRadius: 1 }}>
+              <RefreshIcon fontSize="small" />
+            </IconButton>
+          </Tooltip>
         </Box>
       </Box>
       

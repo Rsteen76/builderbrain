@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { ReactNode } from 'react';
 import { Box, Theme } from '@mui/material';
 import { Project, ProjectPhase, Bid, Expense } from '../../../types';
 
@@ -43,6 +43,7 @@ interface TabContentProps {
   handleOpenTemplateAdjuster: () => void;
   handleProjectUpdate: (updatedProject: Project) => void;
   handleViewPhaseDetails: (phaseId: string) => void;
+  children?: ReactNode;
 }
 
 const TabContent: React.FC<TabContentProps> = ({
@@ -70,7 +71,16 @@ const TabContent: React.FC<TabContentProps> = ({
   handleOpenTemplateAdjuster,
   handleProjectUpdate,
   handleViewPhaseDetails,
+  children,
 }) => {
+  if (children) {
+    return (
+      <Box sx={{ mt: 2 }}>
+        {children}
+      </Box>
+    );
+  }
+
   return (
     <Box sx={{ mt: 2 }}>
       {tabValue === 0 && (
@@ -106,6 +116,7 @@ const TabContent: React.FC<TabContentProps> = ({
       )}
       {tabValue === 2 && (
         <ProjectBidsTab
+          projectId={project.id}
           bids={bids}
           recentBids={recentBids}
           theme={theme}
@@ -117,6 +128,7 @@ const TabContent: React.FC<TabContentProps> = ({
       )}
       {tabValue === 3 && (
         <ProjectExpensesTab
+          projectId={project.id}
           expenses={expenses}
           expensesData={expensesData}
           phases={phases}

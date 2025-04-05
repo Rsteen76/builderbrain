@@ -29,8 +29,10 @@ import {
   CartesianGrid,
 } from 'recharts';
 import { Expense, ProjectPhase } from '../../../types';
+import ExpensesList from '../../expenses/Expenses';
 
 interface ProjectExpensesTabProps {
+  projectId: string;
   expenses: Expense[];
   expensesData: { name: string; value: number; color: string }[];
   phases: ProjectPhase[];
@@ -40,6 +42,7 @@ interface ProjectExpensesTabProps {
 }
 
 const ProjectExpensesTab: React.FC<ProjectExpensesTabProps> = ({
+  projectId,
   expenses,
   expensesData,
   phases,
@@ -185,127 +188,8 @@ const ProjectExpensesTab: React.FC<ProjectExpensesTabProps> = ({
         </Grid>
       </Grid>
       
-      {/* Expense List */}
-      <Paper 
-        elevation={0} 
-        sx={{ 
-          p: 3, 
-          borderRadius: 2,
-          border: `1px solid ${alpha(theme.palette.divider, 0.1)}`
-        }}
-      >
-        <Typography variant="subtitle1" fontWeight={600} gutterBottom>
-          All Expenses
-        </Typography>
-        <Divider sx={{ mb: 2 }} />
-        
-        {expenses.length > 0 ? (
-          <Box>
-            <Box sx={{ overflowX: 'auto' }}>
-              <Box sx={{ minWidth: 750 }}>
-                <Box sx={{ 
-                  display: 'grid', 
-                  gridTemplateColumns: '100px 1fr 200px 150px 150px',
-                  borderBottom: `1px solid ${theme.palette.divider}`,
-                  py: 1,
-                  fontWeight: 600
-                }}>
-                  <Typography variant="body2">Category</Typography>
-                  <Typography variant="body2">Description</Typography>
-                  <Typography variant="body2">Phase</Typography>
-                  <Typography variant="body2">Date</Typography>
-                  <Typography variant="body2" align="right">Amount</Typography>
-                </Box>
-                
-                {expenses.map((expense) => {
-                  const phaseName = expense.phaseName || 
-                                   phases.find(p => p.id === expense.phaseId)?.name || 
-                                   expense.buildingPhase || 
-                                   'Unknown Phase';
-                  
-                  return (
-                    <Box 
-                      key={expense.id} 
-                      sx={{ 
-                        display: 'grid', 
-                        gridTemplateColumns: '100px 1fr 200px 150px 150px',
-                        py: 1.5,
-                        alignItems: 'center',
-                        borderBottom: `1px solid ${alpha(theme.palette.divider, 0.1)}`,
-                        '&:hover': {
-                          bgcolor: alpha(theme.palette.primary.main, 0.03)
-                        }
-                      }}
-                    >
-                      <Box>
-                        <Chip 
-                          label={expense.category} 
-                          size="small" 
-                          sx={{
-                            fontWeight: 500,
-                            borderRadius: 1,
-                            bgcolor: expense.category === 'materials' ? alpha(theme.palette.primary.main, 0.1) :
-                                     expense.category === 'labor' ? alpha(theme.palette.warning.main, 0.1) :
-                                     expense.category === 'permits' ? alpha(theme.palette.info.main, 0.1) :
-                                     expense.category === 'equipment' ? alpha(theme.palette.secondary.main, 0.1) :
-                                     alpha(theme.palette.grey[500], 0.1),
-                            color: expense.category === 'materials' ? theme.palette.primary.main :
-                                   expense.category === 'labor' ? theme.palette.warning.main :
-                                   expense.category === 'permits' ? theme.palette.info.main :
-                                   expense.category === 'equipment' ? theme.palette.secondary.main :
-                                   theme.palette.grey[700]
-                          }}
-                        />
-                      </Box>
-                      <Typography variant="body2">{expense.description || '-'}</Typography>
-                      <Typography variant="body2">{phaseName}</Typography>
-                      <Typography variant="body2">
-                        {expense.date instanceof Date 
-                          ? expense.date.toLocaleDateString() 
-                          : new Date(expense.date).toLocaleDateString()}
-                      </Typography>
-                      <Typography variant="body2" fontWeight={600} align="right">
-                        {formatCurrency(expense.amount)}
-                      </Typography>
-                    </Box>
-                  );
-                })}
-              </Box>
-            </Box>
-            
-            <Box sx={{ mt: 2, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <Typography variant="body2" color="text.secondary">
-                {expenses.length} expense{expenses.length !== 1 ? 's' : ''} total
-              </Typography>
-              <Typography variant="body1" fontWeight={600}>
-                Total: {formatCurrency(expenses.reduce((sum, expense) => sum + expense.amount, 0))}
-              </Typography>
-            </Box>
-          </Box>
-        ) : (
-          <Box sx={{ 
-            py: 4, 
-            display: 'flex', 
-            flexDirection: 'column', 
-            alignItems: 'center', 
-            justifyContent: 'center'
-          }}>
-            <ExpensesIcon sx={{ fontSize: 40, color: 'text.secondary', opacity: 0.3, mb: 2 }} />
-            <Typography variant="body1" color="text.secondary" align="center">
-              No expenses have been added yet
-            </Typography>
-            <Button 
-              variant="contained" 
-              size="small"
-              startIcon={<AddIcon />}
-              onClick={() => handleOpenQuickExpenseDialog('')}
-              sx={{ mt: 2, borderRadius: 1.5 }}
-            >
-              Add First Expense
-            </Button>
-          </Box>
-        )}
-      </Paper>
+      {/* Display project-specific expenses using the enhanced Expenses component */}
+      <ExpensesList projectId={projectId} />
     </Box>
   );
 };

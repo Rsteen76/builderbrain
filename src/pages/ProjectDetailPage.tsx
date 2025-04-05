@@ -1868,7 +1868,13 @@ const ProjectDetailPage: React.FC = () => {
           recentBids={recentBids}
           expenses={expenses}
           expensesData={expensesData}
-          combinedExpenses={combinedExpenses}
+          combinedExpenses={
+            phases.map(phase => ({
+              name: phase.name,
+              budget: phase.budget || 0,
+              actual: phase.actualCost || 0
+            }))
+          }
           budgetData={budgetData}
           phaseProposedCosts={phaseProposedCosts}
           phaseActualCosts={phaseActualCosts}
