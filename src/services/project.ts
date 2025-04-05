@@ -507,227 +507,69 @@ export class ProjectService {
       // Calculate total project duration in days
       const totalProjectDays = Math.ceil((projectEndDate.getTime() - new Date(projectStartDate).getTime()) / (1000 * 60 * 60 * 24));
       console.log("Total project duration:", totalProjectDays, "days");
-
-      // Define realistic phase allocations with variable durations, dependencies, and potential overlaps
-      // Values are based on industry standards for residential construction
-      const phaseDefinitions = [
-        {
-          name: 'Pre-Construction',
-          budgetPercentage: 0.05, // 5%
-          durationPercentage: 0.10, // 10% of total time
-          dependsOn: null, // No dependencies
-          canOverlapWith: ['Site Work & Foundation'], // Can overlap with next phase
-          overlapPercentage: 0.2, // 20% overlap with next phase
-          description: this.getPhasesDescription('Pre-Construction')
-        },
-        {
-          name: 'Site Work & Foundation',
-          budgetPercentage: 0.15, // 15%
-          durationPercentage: 0.12, // 12% of total time
-          dependsOn: 'Pre-Construction',
-          dependencyOffset: -0.2, // Start when previous phase is 80% complete
-          canOverlapWith: [], // No overlap
-          description: this.getPhasesDescription('Site Work & Foundation')
-        },
-        {
-          name: 'Framing',
-          budgetPercentage: 0.20, // 20%
-          durationPercentage: 0.15, // 15% of total time
-          dependsOn: 'Site Work & Foundation',
-          dependencyOffset: 0, // Start after previous phase
-          canOverlapWith: [], // No overlap
-          description: this.getPhasesDescription('Framing')
-        },
-        {
-          name: 'Exterior Finishing',
-          budgetPercentage: 0.10, // 10%
-          durationPercentage: 0.12, // 12% of total time
-          dependsOn: 'Framing',
-          dependencyOffset: -0.1, // Start when framing is 90% complete
-          canOverlapWith: ['Rough-In Mechanical Systems'], // Can overlap with next phase
-          overlapPercentage: 0.4, // 40% overlap with next phase
-          description: this.getPhasesDescription('Exterior Finishing')
-        },
-        {
-          name: 'Rough-In Mechanical Systems',
-          budgetPercentage: 0.10, // 10%
-          durationPercentage: 0.12, // 12% of total time
-          dependsOn: 'Framing',
-          dependencyOffset: -0.1, // Start when framing is 90% complete
-          canOverlapWith: ['Exterior Finishing', 'Insulation & Drywall'], // Can overlap with prev and next phase
-          overlapPercentage: 0.3, // 30% overlap with next phase
-          description: this.getPhasesDescription('Rough-In Mechanical Systems')
-        },
-        {
-          name: 'Insulation & Drywall',
-          budgetPercentage: 0.08, // 8%
-          durationPercentage: 0.10, // 10% of total time
-          dependsOn: 'Rough-In Mechanical Systems',
-          dependencyOffset: -0.3, // Start when rough-in is 70% complete
-          canOverlapWith: [], // No overlap
-          description: this.getPhasesDescription('Insulation & Drywall')
-        },
-        {
-          name: 'Interior Finishing',
-          budgetPercentage: 0.15, // 15%
-          durationPercentage: 0.15, // 15% of total time
-          dependsOn: 'Insulation & Drywall',
-          dependencyOffset: 0, // Start after previous phase
-          canOverlapWith: ['Mechanical Trim-Out'], // Can overlap with next phase
-          overlapPercentage: 0.5, // 50% overlap with next phase
-          description: this.getPhasesDescription('Interior Finishing')
-        },
-        {
-          name: 'Mechanical Trim-Out',
-          budgetPercentage: 0.07, // 7%
-          durationPercentage: 0.08, // 8% of total time
-          dependsOn: 'Interior Finishing',
-          dependencyOffset: -0.5, // Start when interior finishing is 50% complete
-          canOverlapWith: ['Landscaping & Exterior Work'], // Can overlap with next phase
-          overlapPercentage: 0.3, // 30% overlap with next phase
-          description: this.getPhasesDescription('Mechanical Trim-Out')
-        },
-        {
-          name: 'Landscaping & Exterior Work',
-          budgetPercentage: 0.05, // 5%
-          durationPercentage: 0.06, // 6% of total time
-          dependsOn: 'Mechanical Trim-Out',
-          dependencyOffset: -0.3, // Start when mechanical trim-out is 70% complete
-          canOverlapWith: [], // No overlap
-          description: this.getPhasesDescription('Landscaping & Exterior Work')
-        },
-        {
-          name: 'Final Inspection & Closeout',
-          budgetPercentage: 0.05, // 5%
-          durationPercentage: 0.05, // 5% of total time
-          dependsOn: 'Landscaping & Exterior Work',
-          dependencyOffset: -0.2, // Start when landscaping is 80% complete
-          canOverlapWith: [], // No overlap
-          description: this.getPhasesDescription('Final Inspection & Closeout')
-        },
+      
+      // Adjust phase duration based on total project days
+      const phaseDuration = Math.floor(totalProjectDays / 10); // Divide by number of phases for even distribution
+      
+      // Define standard residential construction phases with percentage allocations
+      const phaseAllocations = [
+        { name: 'Pre-Construction', percentage: 0.05 }, // 5%
+        { name: 'Site Work & Foundation', percentage: 0.15 }, // 15%
+        { name: 'Framing', percentage: 0.2 }, // 20%
+        { name: 'Exterior Finishing', percentage: 0.1 }, // 10%
+        { name: 'Rough-In Mechanical Systems', percentage: 0.1 }, // 10%
+        { name: 'Insulation & Drywall', percentage: 0.08 }, // 8%
+        { name: 'Interior Finishing', percentage: 0.15 }, // 15%
+        { name: 'Mechanical Trim-Out', percentage: 0.07 }, // 7%
+        { name: 'Landscaping & Exterior Work', percentage: 0.05 }, // 5%
+        { name: 'Final Inspection & Closeout', percentage: 0.05 }, // 5%
       ];
       
-      // Map of phase name to phase object for dependency lookups
-      const phaseMap: Record<string, {startDate: Date, endDate: Date, phase: Phase}> = {};
+      // Validate that percentages add up to 100%
+      const totalPercentage = phaseAllocations.reduce((sum, phase) => sum + phase.percentage, 0);
+      if (Math.abs(totalPercentage - 1) > 0.001) { // Allow for small floating point errors
+        console.warn(`Phase budget allocations don't add up to 100% (actual: ${totalPercentage * 100}%). Normalizing values.`);
+        // Normalize percentages to ensure they sum to exactly 1 (100%)
+        phaseAllocations.forEach(phase => {
+          phase.percentage = phase.percentage / totalPercentage;
+        });
+      }
       
-      // Create phases with proper timing based on dependencies
+      // Create phases with normalized budget allocations
       const residentialPhases: Phase[] = [];
+      let remainingDays = 0;
       
-      // First pass: calculate durations and create phases
-      phaseDefinitions.forEach((phaseDef, index) => {
+      phaseAllocations.forEach((allocation, index) => {
         // Calculate exact budget based on percentage
-        const phaseBudget = Math.round(totalBudget * phaseDef.budgetPercentage);
+        const phaseBudget = Math.round(totalBudget * allocation.percentage);
         
-        // Calculate phase duration in days
-        const phaseDuration = Math.max(7, Math.round(totalProjectDays * phaseDef.durationPercentage));
+        // Calculate phase duration and dates based on project start date and total duration
+        const phaseStartDate = index === 0 
+          ? new Date(projectStartDate) 
+          : this.addDays(new Date(projectStartDate), remainingDays);
         
-        // Default start date is project start date (will be adjusted in second pass)
-        const phaseStartDate = new Date(projectStartDate);
-        const phaseEndDate = this.addDays(new Date(phaseStartDate), phaseDuration);
+        // Use calculated phaseDuration (minimum 7 days per phase)
+        const actualPhaseDuration = Math.max(7, phaseDuration);
+        remainingDays += actualPhaseDuration;
+        
+        const phaseEndDate = this.addDays(phaseStartDate, actualPhaseDuration);
         
         // Create the phase
         const phase: Phase = {
           id: uuidv4(),
           projectId: project.id,
-          name: phaseDef.name,
+          name: allocation.name,
           startDate: phaseStartDate,
           endDate: phaseEndDate,
           status: 'not_started',
           progress: 0,
           budget: phaseBudget,
           actualCost: 0,
-          description: phaseDef.description,
-          tasks: this.createPhaseTasks(userId, project.id, phaseDef.name),
-        };
-        
-        // Store in map (we'll adjust dates in the second pass)
-        phaseMap[phaseDef.name] = {
-          startDate: phaseStartDate,
-          endDate: phaseEndDate,
-          phase
+          description: this.getPhasesDescription(allocation.name),
+          tasks: this.createPhaseTasks(userId, project.id, allocation.name),
         };
         
         residentialPhases.push(phase);
-      });
-      
-      // Simpler, more direct approach: distribute phases across project timeline
-      let currentDate = new Date(projectStartDate);
-      
-      // Calculate cumulative duration percentages for positioning
-      let cumulativeDuration = 0;
-      const phasePositions = phaseDefinitions.map(phase => {
-        const startPosition = cumulativeDuration;
-        cumulativeDuration += phase.durationPercentage;
-        return {
-          name: phase.name,
-          startPosition,
-          endPosition: cumulativeDuration,
-          duration: phase.durationPercentage
-        };
-      });
-      
-      // Normalize to ensure we use exactly 100% of time
-      const totalDurationPercentage = phasePositions[phasePositions.length - 1].endPosition;
-      phasePositions.forEach(position => {
-        position.startPosition = position.startPosition / totalDurationPercentage;
-        position.endPosition = position.endPosition / totalDurationPercentage;
-      });
-      
-      // Position phases across the timeline based on normalized positions
-      const timelineStart = projectStartDate.getTime();
-      const timelineEnd = projectEndDate.getTime();
-      const timelineDuration = timelineEnd - timelineStart;
-      
-      console.log("Phase positions across timeline:");
-      phasePositions.forEach((position, index) => {
-        const phaseName = position.name;
-        const phaseData = phaseMap[phaseName];
-        
-        if (phaseData) {
-          // Calculate dates based on position in timeline
-          const phaseStartTime = timelineStart + (timelineDuration * position.startPosition);
-          const phaseEndTime = timelineStart + (timelineDuration * position.endPosition);
-          
-          // Set new dates
-          phaseData.startDate = new Date(phaseStartTime);
-          phaseData.endDate = new Date(phaseEndTime);
-          
-          // Update phase object
-          phaseData.phase.startDate = phaseData.startDate;
-          phaseData.phase.endDate = phaseData.endDate;
-          
-          console.log(`${index + 1}. ${phaseName}: ${phaseData.startDate.toLocaleDateString()} - ${phaseData.endDate.toLocaleDateString()}`);
-        }
-      });
-      
-      // Verify all phase dates are within project timeline
-      residentialPhases.forEach(phase => {
-        const phaseStart = phase.startDate instanceof Date ? phase.startDate : new Date(phase.startDate);
-        const phaseEnd = phase.endDate instanceof Date ? phase.endDate : new Date(phase.endDate);
-        
-        // Adjust if phase start is before project start
-        if (phaseStart < projectStartDate) {
-          phase.startDate = new Date(projectStartDate);
-        }
-        
-        // Adjust if phase end is after project end
-        if (phaseEnd > projectEndDate) {
-          phase.endDate = new Date(projectEndDate);
-        }
-        
-        // Ensure phase duration is at least 3 days
-        const minPhaseDays = 3;
-        const phaseDuration = Math.ceil((new Date(phase.endDate).getTime() - new Date(phase.startDate).getTime()) / (1000 * 60 * 60 * 24));
-        if (phaseDuration < minPhaseDays) {
-          phase.endDate = this.addDays(new Date(phase.startDate), minPhaseDays);
-        }
-        
-        // Sort the phases by start date to ensure proper ordering
-        residentialPhases.sort((a, b) => {
-          const aStart = a.startDate instanceof Date ? a.startDate.getTime() : new Date(a.startDate).getTime();
-          const bStart = b.startDate instanceof Date ? b.startDate.getTime() : new Date(b.startDate).getTime();
-          return aStart - bStart;
-        });
       });
       
       // Verify total budget matches sum of phase budgets
