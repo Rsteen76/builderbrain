@@ -493,35 +493,6 @@ interface RecentActivity {
 
 // Helper function to convert Project to DashboardProject
 const convertToDashboardProject = (project: Project): DashboardProject => {
-  // Create placeholder data for materials and payments for demo purposes
-  // In a real app, this would come from the backend
-  const mockMaterials = [
-    { id: `material-${project.id}-1`, name: 'Lumber', status: 'in_stock', quantity: 200 },
-    { id: `material-${project.id}-2`, name: 'Concrete', status: 'to_order', quantity: 50 },
-    { id: `material-${project.id}-3`, name: 'Steel Beams', status: 'backorder', quantity: 30 }
-  ];
-
-  const mockPayments = [
-    {
-      id: `payment-${project.id}-1`,
-      amount: 5000,
-      dueDate: new Date(new Date().setDate(new Date().getDate() - 5)).toISOString(),
-      description: 'Initial deposit',
-      status: 'paid',
-      projectId: project.id,
-      projectName: project.name
-    },
-    {
-      id: `payment-${project.id}-2`,
-      amount: 7500,
-      dueDate: new Date(new Date().setDate(new Date().getDate() - 2)).toISOString(),
-      description: 'Phase 1 completion',
-      status: 'pending',
-      projectId: project.id,
-      projectName: project.name
-    }
-  ];
-
   return {
     id: project.id,
     name: project.name,
@@ -548,9 +519,9 @@ const convertToDashboardProject = (project: Project): DashboardProject => {
             typeof milestone.date === 'string' ? milestone.date : '',
       completed: false // Default to false since it doesn't exist in the original type
     })),
-    // Adding mock data for dashboard demonstration
-    materials: mockMaterials,
-    payments: mockPayments
+    // Initialize with empty arrays since these don't exist in the Project type
+    materials: [],
+    payments: []
   };
 };
 
@@ -724,38 +695,12 @@ const Dashboard: React.FC = () => {
             totalBudgetVariance += (actual - planned);
           }
           
-          // Materials to order
-          const materials = p.materials || [];
-          if (materials && Array.isArray(materials)) {
-            materialsToOrder += materials.filter(m => 
-              m.status === 'to_order' || m.status === 'backorder'
-            ).length;
-          }
+          // Materials to order - since we don't have real materials data, set to 0
+          materialsToOrder = 0;
         });
         
-        // Check for overdue payments
+        // Check for overdue payments - since we don't have real payments data, set to empty array
         const overduePaymentsList: Payment[] = [];
-        dashboardProjects.forEach(p => {
-          const payments = p.payments || [];
-          if (payments && Array.isArray(payments)) {
-            payments.forEach(payment => {
-              if (payment.dueDate && payment.status !== 'paid') {
-                const paymentDueDate = new Date(payment.dueDate);
-                if (paymentDueDate < today) {
-                  overduePaymentsList.push({
-                    id: payment.id,
-                    amount: payment.amount,
-                    dueDate: payment.dueDate,
-                    description: payment.description,
-                    status: payment.status,
-                    projectId: p.id,
-                    projectName: p.name
-                  });
-                }
-              }
-            });
-          }
-        });
         
         setOverduePayments(overduePaymentsList);
         
@@ -930,38 +875,12 @@ const Dashboard: React.FC = () => {
               totalBudgetVariance += (actual - planned);
             }
             
-            // Materials to order
-            const materials = p.materials || [];
-            if (materials && Array.isArray(materials)) {
-              materialsToOrder += materials.filter(m => 
-                m.status === 'to_order' || m.status === 'backorder'
-              ).length;
-            }
+            // Materials to order - since we don't have real materials data, set to 0
+            materialsToOrder = 0;
           });
           
-          // Check for overdue payments
+          // Check for overdue payments - since we don't have real payments data, set to empty array
           const overduePaymentsList: Payment[] = [];
-          dashboardProjects.forEach(p => {
-            const payments = p.payments || [];
-            if (payments && Array.isArray(payments)) {
-              payments.forEach(payment => {
-                if (payment.dueDate && payment.status !== 'paid') {
-                  const paymentDueDate = new Date(payment.dueDate);
-                  if (paymentDueDate < today) {
-                    overduePaymentsList.push({
-                      id: payment.id,
-                      amount: payment.amount,
-                      dueDate: payment.dueDate,
-                      description: payment.description,
-                      status: payment.status,
-                      projectId: p.id,
-                      projectName: p.name
-                    });
-                  }
-                }
-              });
-            }
-          });
           
           setOverduePayments(overduePaymentsList);
           

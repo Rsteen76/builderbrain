@@ -1,173 +1,383 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
-  Paper,
-  Stack,
-  Typography,
+  Box,
   Grid,
-  IconButton,
-  Tooltip,
+  Typography,
+  Card,
   useTheme,
   alpha,
-  Box,
+  Tooltip,
+  IconButton,
+  Stack,
+  Zoom,
+  Fade,
+  Chip,
+  Paper,
+  LinearProgress,
+  Divider
 } from '@mui/material';
 import {
-  InsertChart as InsertChartIcon,
-  Refresh as RefreshIcon,
-  Home as HomeIcon,
-  Warning as WarningIcon,
-  TrendingDown as TrendingDownIcon,
   TrendingUp as TrendingUpIcon,
-  Build as BuildIcon,
+  Assessment as AssessmentIcon,
+  Group as GroupIcon,
+  AttachMoney as MoneyIcon,
+  Assignment as AssignmentIcon,
+  Warning as WarningIcon,
+  Schedule as ScheduleIcon,
+  Refresh as RefreshIcon,
+  ArrowUpward as ArrowUpwardIcon,
+  ArrowDownward as ArrowDownwardIcon,
+  LocalShipping as ShippingIcon,
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
-
-interface StatCardProps {
-  title: string;
-  value: string | number;
-  icon: React.ReactNode;
-  color: string;
-  onClick: () => void;
-}
-
-const StatCard: React.FC<StatCardProps> = ({ title, value, icon, color, onClick }) => {
-  const theme = useTheme();
-  
-  return (
-    <Paper
-      elevation={0}
-      onClick={onClick}
-      sx={{
-        p: 2,
-        cursor: 'pointer',
-        height: '100%',
-        border: `1px solid ${alpha(theme.palette.divider, 0.1)}`,
-        borderRadius: 2,
-        transition: 'all 0.2s',
-        '&:hover': {
-          transform: 'translateY(-4px)',
-          boxShadow: '0 6px 12px rgba(0,0,0,0.08)',
-        },
-      }}
-    >
-      <Stack spacing={1}>
-        <Stack direction="row" spacing={1} alignItems="center">
-          <Box
-            sx={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              width: 36,
-              height: 36,
-              borderRadius: 1,
-              bgcolor: alpha(color, 0.1),
-              color: color,
-            }}
-          >
-            {icon}
-          </Box>
-          <Typography variant="subtitle2" color="text.secondary">
-            {title}
-          </Typography>
-        </Stack>
-        <Typography variant="h5" fontWeight={600}>
-          {value}
-        </Typography>
-      </Stack>
-    </Paper>
-  );
-};
+import { formatCurrency } from '../../utils/formatters';
 
 interface ProjectInsightsProps {
   stats: {
     activeProjects: number;
+    totalBudget: number;
+    teamMembers: number;
+    tasksDue: number;
     projectsAtRisk: number;
+    nextMilestone: { name: string; date: string; projectId: string };
     budgetVariance: number;
     materialsToOrder: number;
   };
-  onRefresh: () => void;
+  onRefresh?: () => void;
 }
+
+interface InsightCardProps {
+  title: string;
+  value: string | number;
+  change?: number;
+  icon: React.ReactNode;
+  color: string;
+  onClick?: () => void;
+  positiveChangeIsGood?: boolean;
+  suffix?: string;
+  index: number;
+}
+
+const InsightCard: React.FC<InsightCardProps> = ({
+  title,
+  value,
+  change,
+  icon,
+  color,
+  onClick,
+  positiveChangeIsGood = true,
+  suffix,
+  index
+}) => {
+  const theme = useTheme();
+  const [isHovered, setIsHovered] = useState(false);
+  const navigate = useNavigate();
+  
+  const isPositiveChange = change && change > 0;
+  const isChangeGood = isPositiveChange ? positiveChangeIsGood : !positiveChangeIsGood;
+  const changeColor = isChangeGood ? theme.palette.success.main : theme.palette.error.main;
+  
+  const formattedChange = change 
+    ? `${isPositiveChange ? '+' : ''}${change}${suffix || '%'}`
+    : undefined;
+    
+  return (
+    <Zoom in={true} style={{ transformOrigin: '0 0 0' }} timeout={500 + index * 100}>
+      <Card
+        elevation={isHovered ? 2 : 0}
+        sx={{
+          p: 2.5,
+          height: '100%',
+          cursor: onClick ? 'pointer' : 'default',
+          transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+          borderRadius: 3,
+          border: '1px solid',
+          borderColor: isHovered 
+            ? alpha(color, 0.5) 
+            : alpha(theme.palette.divider, 0.08),
+          background: isHovered
+            ? `linear-gradient(135deg, ${alpha(color, 0.04)} 0%, ${alpha(theme.palette.background.paper, 1)} 100%)`
+            : theme.palette.background.paper,
+          position: 'relative',
+          overflow: 'hidden',
+          transform: isHovered ? 'translateY(-4px)' : 'none',
+          '&::before': {
+            content: '""',
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            right: 0,
+            height: isHovered ? '3px' : '0',
+            background: color,
+            transition: 'height 0.2s ease',
+          },
+        }}
+        onClick={onClick}
+        onMouseEnter={() => setIsHovered(true)}
+        onMouseLeave={() => setIsHovered(false)}
+      >
+        <Box sx={{ position: 'relative' }}>
+          <Box sx={{ 
+            display: 'flex', 
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            mb: 2
+          }}>
+            <Box
+              sx={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                width: 42,
+                height: 42,
+                borderRadius: 2,
+                background: alpha(color, 0.12),
+                color: color,
+                transition: 'all 0.3s ease',
+                transform: isHovered ? 'scale(1.05)' : 'scale(1)',
+              }}
+            >
+              {icon}
+            </Box>
+            
+            {formattedChange && (
+              <Chip
+                icon={isPositiveChange 
+                  ? <ArrowUpwardIcon fontSize="small" /> 
+                  : <ArrowDownwardIcon fontSize="small" />
+                }
+                label={formattedChange}
+                size="small"
+                sx={{
+                  backgroundColor: alpha(changeColor, 0.15),
+                  color: changeColor,
+                  fontWeight: 600,
+                  fontSize: '0.7rem',
+                  height: 24,
+                  '.MuiChip-icon': {
+                    fontSize: '0.75rem',
+                    color: 'inherit',
+                  }
+                }}
+              />
+            )}
+          </Box>
+          
+          <Typography 
+            variant="h4" 
+            component="div" 
+            sx={{
+              fontSize: '1.75rem',
+              fontWeight: 700,
+              mb: 0.5,
+              color: isHovered ? color : theme.palette.text.primary,
+              transition: 'color 0.2s ease',
+            }}
+          >
+            {value}
+          </Typography>
+          
+          <Typography 
+            variant="body2" 
+            sx={{ 
+              color: theme.palette.text.secondary,
+              fontSize: '0.8125rem',
+            }}
+          >
+            {title}
+          </Typography>
+          
+          {isHovered && onClick && (
+            <Fade in timeout={200}>
+              <Box 
+                sx={{ 
+                  position: 'absolute',
+                  right: -8,
+                  bottom: -8,
+                  opacity: 0.15,
+                  transform: 'rotate(-15deg)',
+                }}
+              >
+                {icon && React.cloneElement(icon as React.ReactElement, { 
+                  sx: { fontSize: 70 } 
+                })}
+              </Box>
+            </Fade>
+          )}
+        </Box>
+      </Card>
+    </Zoom>
+  );
+};
 
 const ProjectInsights: React.FC<ProjectInsightsProps> = ({ stats, onRefresh }) => {
   const theme = useTheme();
   const navigate = useNavigate();
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  
+  const handleRefresh = () => {
+    if (onRefresh) {
+      setIsRefreshing(true);
+      
+      // Add slight delay to simulate loading
+      setTimeout(() => {
+        onRefresh();
+        setIsRefreshing(false);
+      }, 800);
+    }
+  };
+  
+  const insights = [
+    {
+      title: 'Active Projects',
+      value: stats.activeProjects,
+      icon: <AssessmentIcon />,
+      color: theme.palette.primary.main,
+      onClick: () => navigate('/projects?status=active'),
+      change: 8, // Example data - in real app get from API
+      positiveChangeIsGood: true,
+    },
+    {
+      title: 'Total Budget',
+      value: formatCurrency(stats.totalBudget),
+      icon: <MoneyIcon />,
+      color: theme.palette.success.main,
+      onClick: () => navigate('/finance'),
+      change: 12, // Example data - in real app get from API
+      positiveChangeIsGood: true,
+      suffix: '%',
+    },
+    {
+      title: 'Team Members',
+      value: stats.teamMembers,
+      icon: <GroupIcon />,
+      color: theme.palette.info.main,
+      onClick: () => navigate('/team'),
+      change: 2, // Example data - in real app get from API
+      positiveChangeIsGood: true,
+    },
+    {
+      title: 'Tasks Due Soon',
+      value: stats.tasksDue,
+      icon: <AssignmentIcon />,
+      color: stats.tasksDue > 10 ? theme.palette.warning.main : theme.palette.secondary.main,
+      onClick: () => navigate('/tasks?filter=upcoming'),
+      change: stats.tasksDue > 10 ? 15 : -5, // Example data - in real app get from API
+      positiveChangeIsGood: false,
+    },
+    {
+      title: 'Projects at Risk',
+      value: stats.projectsAtRisk,
+      icon: <WarningIcon />,
+      color: stats.projectsAtRisk > 0 ? theme.palette.error.main : theme.palette.success.main,
+      onClick: () => navigate('/projects?status=at-risk'),
+      change: stats.projectsAtRisk > 0 ? 23 : -15, // Example data - in real app get from API
+      positiveChangeIsGood: false,
+    },
+    {
+      title: 'Next Milestone',
+      value: stats.nextMilestone?.date 
+        ? new Date(stats.nextMilestone.date).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
+        : 'None',
+      icon: <ScheduleIcon />,
+      color: theme.palette.secondary.main,
+      onClick: stats.nextMilestone?.projectId 
+        ? () => navigate(`/projects/${stats.nextMilestone.projectId}/milestones`)
+        : undefined,
+    },
+    {
+      title: 'Budget Variance',
+      value: formatCurrency(Math.abs(stats.budgetVariance)),
+      icon: stats.budgetVariance >= 0 ? <TrendingUpIcon /> : <ArrowDownwardIcon />,
+      color: stats.budgetVariance >= 0 ? theme.palette.success.main : theme.palette.error.main,
+      onClick: () => navigate('/finance/budget-analysis'),
+      change: stats.budgetVariance !== 0 ? Math.round((stats.budgetVariance / 1000) * 10) / 10 : undefined,
+      positiveChangeIsGood: false,
+      suffix: 'K',
+    },
+    {
+      title: 'Materials to Order',
+      value: stats.materialsToOrder || 0,
+      icon: <ShippingIcon />,
+      color: stats.materialsToOrder > 10 ? theme.palette.warning.main : theme.palette.info.main,
+      onClick: () => navigate('/materials?status=to-order'),
+    },
+  ];
 
   return (
-    <Paper
-      elevation={0}
-      sx={{
-        p: { xs: 2, sm: 2.5 },
-        mb: 3,
-        borderRadius: 2,
-        border: `1px solid ${alpha(theme.palette.divider, 0.1)}`,
-        background: theme.palette.background.paper,
-        boxShadow: '0 2px 10px rgba(0,0,0,0.03)'
-      }}
-    >
-      <Stack
-        direction="row"
-        justifyContent="space-between"
-        alignItems="center"
-        sx={{ mb: 2 }}
-      >
-        <Stack direction="row" spacing={1} alignItems="center">
-          <InsertChartIcon color="primary" />
-          <Typography variant="h6" sx={{ fontWeight: 600 }}>
+    <Box sx={{ mb: 4 }}>
+      <Box sx={{
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        mb: 2.5,
+        px: 0.5,
+      }}>
+        <Stack direction="row" alignItems="center" spacing={1.5}>
+          <Box 
+            sx={{ 
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              width: 34,
+              height: 34,
+              borderRadius: '12px',
+              bgcolor: alpha(theme.palette.secondary.main, 0.08),
+            }}
+          >
+            <AssessmentIcon 
+              color="secondary" 
+              sx={{ fontSize: 20 }} 
+            />
+          </Box>
+          
+          <Typography
+            variant="h6"
+            fontWeight={600}
+            sx={{ fontSize: '1.125rem' }}
+          >
             Project Insights
           </Typography>
         </Stack>
         
-        <Tooltip title="Refresh Data">
-          <IconButton size="small" onClick={onRefresh} color="primary">
-            <RefreshIcon />
+        <Tooltip title="Refresh data" arrow>
+          <IconButton 
+            onClick={handleRefresh}
+            disabled={isRefreshing}
+            sx={{
+              transition: 'transform 0.3s ease',
+              '&:hover': { transform: 'rotate(30deg)' },
+            }}
+          >
+            <RefreshIcon 
+              fontSize="small" 
+              sx={{ 
+                animation: isRefreshing ? 'spin 1s linear infinite' : 'none',
+                '@keyframes spin': {
+                  '0%': { transform: 'rotate(0deg)' },
+                  '100%': { transform: 'rotate(360deg)' },
+                }
+              }} 
+            />
           </IconButton>
         </Tooltip>
-      </Stack>
-      
-      <Grid container spacing={2}>
-        <Grid item xs={12} sm={6} md={3}>
-          <StatCard
-            title="Active Projects"
-            value={stats.activeProjects}
-            icon={<HomeIcon />}
-            color={theme.palette.primary.main}
-            onClick={() => navigate('/projects?status=active')}
-          />
-        </Grid>
-        
-        <Grid item xs={12} sm={6} md={3}>
-          <StatCard
-            title="Projects at Risk"
-            value={stats.projectsAtRisk}
-            icon={<WarningIcon />}
-            color={theme.palette.error.main}
-            onClick={() => navigate('/projects?status=at-risk')}
-          />
-        </Grid>
-        
-        <Grid item xs={12} sm={6} md={3}>
-          <StatCard
-            title="Budget Variance"
-            value={stats.budgetVariance > 0 
-              ? `$${stats.budgetVariance.toLocaleString()}` 
-              : `($${Math.abs(stats.budgetVariance).toLocaleString()})`}
-            icon={stats.budgetVariance > 0 ? <TrendingDownIcon /> : <TrendingUpIcon />}
-            color={stats.budgetVariance > 0 ? theme.palette.error.main : theme.palette.success.main}
-            onClick={() => navigate('/expenses')}
-          />
-        </Grid>
-        
-        <Grid item xs={12} sm={6} md={3}>
-          <StatCard
-            title="Materials to Order"
-            value={stats.materialsToOrder}
-            icon={<BuildIcon />}
-            color={theme.palette.warning.main}
-            onClick={() => navigate('/materials')}
-          />
-        </Grid>
+      </Box>
+
+      {isRefreshing && (
+        <Box sx={{ width: '100%', mb: 2 }}>
+          <LinearProgress sx={{ height: 4, borderRadius: 2 }} />
+        </Box>
+      )}
+
+      <Grid container spacing={2.5}>
+        {insights.map((insight, index) => (
+          <Grid item xs={12} sm={6} md={3} key={index}>
+            <InsightCard {...insight} index={index} />
+          </Grid>
+        ))}
       </Grid>
-    </Paper>
+    </Box>
   );
 };
 
-export default ProjectInsights; 
+export default ProjectInsights;

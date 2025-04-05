@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   Paper,
   Stack,
@@ -7,6 +7,12 @@ import {
   useTheme,
   alpha,
   Grid,
+  Box,
+  Tooltip,
+  Grow,
+  useMediaQuery,
+  IconButton,
+  Zoom,
 } from '@mui/material';
 import {
   Construction as ConstructionIcon,
@@ -14,118 +20,279 @@ import {
   Assignment as AssignmentIcon,
   Group as GroupIcon,
   Receipt as ReceiptIcon,
+  ArrowForward as ArrowForwardIcon,
+  BusinessCenter as ProjectIcon,
+  TaskAlt as TaskIcon,
+  People as TeamIcon,
+  ReceiptLong as ExpenseIcon,
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
+
+interface ActionCardProps {
+  title: string;
+  description: string;
+  icon: React.ReactNode;
+  primaryIcon: React.ReactNode;
+  path: string;
+  color: string;
+  delay: number;
+}
+
+// Individual Action Card component
+const ActionCard: React.FC<ActionCardProps> = ({ 
+  title, 
+  description, 
+  icon,
+  primaryIcon, 
+  path, 
+  color,
+  delay
+}) => {
+  const theme = useTheme();
+  const navigate = useNavigate();
+  const [isHovered, setIsHovered] = useState(false);
+  const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
+  
+  return (
+    <Grow in={true} style={{ transformOrigin: '0 0 0' }} timeout={300 + delay * 100}>
+      <Paper
+        elevation={isHovered ? 4 : 0}
+        sx={{
+          p: 2.5,
+          height: '100%',
+          position: 'relative',
+          borderRadius: 3,
+          transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+          border: `1px solid ${isHovered ? 'transparent' : alpha(theme.palette.divider, 0.08)}`,
+          background: isHovered 
+            ? `linear-gradient(135deg, ${alpha(color, 0.12)} 0%, ${alpha(color, 0.05)} 100%)`
+            : alpha(theme.palette.background.paper, 0.8),
+          overflow: 'hidden',
+          transform: isHovered ? 'translateY(-4px)' : 'none',
+          '&:before': isHovered ? {
+            content: '""',
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            right: 0,
+            height: '4px',
+            background: color,
+            borderRadius: '4px 4px 0 0',
+          } : {},
+          '&:after': {
+            content: '""',
+            position: 'absolute',
+            width: '200px',
+            height: '200px',
+            background: `radial-gradient(circle, ${alpha(color, 0.1)} 0%, transparent 70%)`,
+            borderRadius: '50%',
+            bottom: '-100px',
+            right: '-100px',
+            opacity: isHovered ? 1 : 0,
+            transition: 'opacity 0.3s ease',
+            zIndex: 0,
+          },
+          cursor: 'pointer',
+        }}
+        onClick={() => navigate(path)}
+        onMouseEnter={() => setIsHovered(true)}
+        onMouseLeave={() => setIsHovered(false)}
+      >
+        <Box sx={{ position: 'relative', zIndex: 1 }}>
+          <Box 
+            sx={{ 
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              mb: 1,
+            }}
+          >
+            <Box
+              sx={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                width: 46,
+                height: 46,
+                borderRadius: 2,
+                backgroundColor: alpha(color, isHovered ? 0.15 : 0.08),
+                color: color,
+                transition: 'all 0.3s ease',
+                transform: isHovered ? 'scale(1.05)' : 'scale(1)',
+              }}
+            >
+              <Zoom in={isHovered} timeout={200}>
+                <Box sx={{ position: 'absolute' }}>
+                  {primaryIcon}
+                </Box>
+              </Zoom>
+              
+              <Box sx={{ 
+                opacity: isHovered ? 0 : 1, 
+                transition: 'opacity 0.2s ease',
+              }}>
+                {icon}
+              </Box>
+            </Box>
+
+            <IconButton
+              size="small"
+              sx={{
+                color: isHovered ? color : alpha(theme.palette.text.secondary, 0.4),
+                transform: isHovered ? 'translateX(0)' : 'translateX(-5px)',
+                opacity: isHovered ? 1 : 0,
+                transition: 'all 0.3s ease',
+              }}
+            >
+              <ArrowForwardIcon fontSize="small" />
+            </IconButton>
+          </Box>
+
+          <Typography
+            variant="subtitle1"
+            fontWeight={600}
+            sx={{ 
+              color: isHovered ? color : theme.palette.text.primary,
+              transition: 'color 0.2s ease',
+              mb: 0.5,
+            }}
+          >
+            {title}
+          </Typography>
+
+          <Typography
+            variant="body2"
+            sx={{ 
+              color: alpha(theme.palette.text.secondary, 0.8),
+              fontSize: '0.75rem',
+              pr: 1,
+            }}
+          >
+            {description}
+          </Typography>
+        </Box>
+      </Paper>
+    </Grow>
+  );
+};
 
 const QuickActions: React.FC = () => {
   const theme = useTheme();
   const navigate = useNavigate();
+  const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
+
+  const actions = [
+    {
+      title: 'New Project',
+      description: 'Start planning a new construction project',
+      icon: <AddIcon sx={{ fontSize: 24 }} />,
+      primaryIcon: <ProjectIcon sx={{ fontSize: 24 }} />,
+      path: '/projects/new',
+      color: theme.palette.primary.main,
+      delay: 0,
+    },
+    {
+      title: 'Create Task',
+      description: 'Add new tasks for your team',
+      icon: <AssignmentIcon sx={{ fontSize: 24 }} />,
+      primaryIcon: <TaskIcon sx={{ fontSize: 24 }} />,
+      path: '/tasks',
+      color: theme.palette.success.main,
+      delay: 1,
+    },
+    {
+      title: 'Add Team Member',
+      description: 'Invite contractors or employees',
+      icon: <GroupIcon sx={{ fontSize: 24 }} />,
+      primaryIcon: <TeamIcon sx={{ fontSize: 24 }} />,
+      path: '/team',
+      color: theme.palette.warning.main,
+      delay: 2,
+    },
+    {
+      title: 'Add Expense',
+      description: 'Track costs and manage budget',
+      icon: <ReceiptIcon sx={{ fontSize: 24 }} />,
+      primaryIcon: <ExpenseIcon sx={{ fontSize: 24 }} />,
+      path: '/expenses/new',
+      color: theme.palette.info.main,
+      delay: 3,
+    },
+  ];
 
   return (
-    <Paper
-      elevation={0}
-      sx={{
-        mb: 3,
-        p: { xs: 2, sm: 2.5 },
-        borderRadius: 2,
-        border: `1px solid ${alpha(theme.palette.divider, 0.1)}`,
+    <Box 
+      sx={{ 
+        position: 'relative',
+        mb: 4,
+        pt: 1,
+        pb: 0.5,
       }}
     >
-      <Stack
-        direction="row"
-        alignItems="center"
-        spacing={2}
-        sx={{ mb: 2 }}
-      >
-        <ConstructionIcon 
-          color="primary" 
-          sx={{ fontSize: { xs: 24, sm: 28 } }} 
-        />
-        <Typography
-          variant="h6"
-          fontWeight={600}
-          sx={{ fontSize: { xs: '1rem', sm: '1.1rem' } }}
-        >
-          Quick Actions
-        </Typography>
-      </Stack>
+      <Box sx={{ 
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        mb: 2.5,
+        px: 0.5,
+      }}>
+        <Stack direction="row" alignItems="center" spacing={1.5}>
+          <Box 
+            sx={{ 
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              width: 34,
+              height: 34,
+              borderRadius: '12px',
+              bgcolor: alpha(theme.palette.primary.main, 0.08),
+            }}
+          >
+            <ConstructionIcon 
+              color="primary" 
+              sx={{ fontSize: 20 }} 
+            />
+          </Box>
+          
+          <Typography
+            variant="h6"
+            fontWeight={600}
+            sx={{ fontSize: '1.125rem' }}
+          >
+            Quick Actions
+          </Typography>
+        </Stack>
+        
+        <Tooltip title="View all actions" arrow>
+          <Button
+            variant="text"
+            size="small"
+            endIcon={<ArrowForwardIcon fontSize="small" />}
+            onClick={() => navigate('/actions')}
+            sx={{
+              fontSize: '0.75rem',
+              fontWeight: 500,
+              color: theme.palette.text.secondary,
+              '&:hover': {
+                bgcolor: 'transparent',
+                color: theme.palette.primary.main,
+              }
+            }}
+          >
+            View All
+          </Button>
+        </Tooltip>
+      </Box>
 
-      <Grid container spacing={2}>
-        <Grid item xs={12} sm={6} md={3}>
-          <Button
-            fullWidth
-            variant="outlined"
-            startIcon={<AddIcon />}
-            onClick={() => navigate('/projects/new')}
-            sx={{
-              height: 48,
-              borderColor: alpha(theme.palette.primary.main, 0.2),
-              '&:hover': {
-                borderColor: theme.palette.primary.main,
-                bgcolor: alpha(theme.palette.primary.main, 0.04),
-              },
-            }}
-          >
-            New Project
-          </Button>
-        </Grid>
-        <Grid item xs={12} sm={6} md={3}>
-          <Button
-            fullWidth
-            variant="outlined"
-            startIcon={<AssignmentIcon />}
-            onClick={() => navigate('/tasks')}
-            sx={{
-              height: 48,
-              borderColor: alpha(theme.palette.primary.main, 0.2),
-              '&:hover': {
-                borderColor: theme.palette.primary.main,
-                bgcolor: alpha(theme.palette.primary.main, 0.04),
-              },
-            }}
-          >
-            Create Task
-          </Button>
-        </Grid>
-        <Grid item xs={12} sm={6} md={3}>
-          <Button
-            fullWidth
-            variant="outlined"
-            startIcon={<GroupIcon />}
-            onClick={() => navigate('/team')}
-            sx={{
-              height: 48,
-              borderColor: alpha(theme.palette.primary.main, 0.2),
-              '&:hover': {
-                borderColor: theme.palette.primary.main,
-                bgcolor: alpha(theme.palette.primary.main, 0.04),
-              },
-            }}
-          >
-            Add Team Member
-          </Button>
-        </Grid>
-        <Grid item xs={12} sm={6} md={3}>
-          <Button
-            fullWidth
-            variant="outlined"
-            startIcon={<ReceiptIcon />}
-            onClick={() => navigate('/expenses/new')}
-            sx={{
-              height: 48,
-              borderColor: alpha(theme.palette.primary.main, 0.2),
-              '&:hover': {
-                borderColor: theme.palette.primary.main,
-                bgcolor: alpha(theme.palette.primary.main, 0.04),
-              },
-            }}
-          >
-            Add Expense
-          </Button>
-        </Grid>
+      <Grid container spacing={2.5}>
+        {actions.map((action, index) => (
+          <Grid item xs={12} sm={6} md={3} key={index}>
+            <ActionCard {...action} />
+          </Grid>
+        ))}
       </Grid>
-    </Paper>
+    </Box>
   );
 };
 
-export default QuickActions; 
+export default QuickActions;
