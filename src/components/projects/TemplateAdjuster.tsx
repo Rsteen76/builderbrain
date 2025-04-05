@@ -79,10 +79,66 @@ const TemplateAdjuster: React.FC<TemplateAdjusterProps> = ({
 
   // Add a new phase
   const handleAddPhase = () => {
-    const today = new Date();
-    // Set end date to be 30 days from today
-    const endDate = new Date(today);
-    endDate.setDate(today.getDate() + 30);
+    // Use project start date as reference point
+    const projectStartDate = project.startDate ? new Date(project.startDate) : new Date();
+    const projectEndDate = project.endDate ? new Date(project.endDate) : new Date(projectStartDate);
+    
+    // If project has no end date or invalid end date, default to 60 days from start
+    if (!project.endDate || isNaN(projectEndDate.getTime())) {
+      projectEndDate.setDate(projectStartDate.getDate() + 60);
+    }
+    
+    // Calculate time slots based on existing phases
+    const totalProjectDays = Math.max(30, Math.ceil((projectEndDate.getTime() - projectStartDate.getTime()) / (1000 * 60 * 60 * 24)));
+    
+    // If there are existing phases, position the new phase after the last one
+    let phaseStartDate = new Date(projectStartDate);
+    let phaseEndDate = new Date(projectEndDate);
+    
+    if (phases.length > 0) {
+      // Find the latest end date from existing phases
+      const existingPhasesEndDates = phases
+        .map(phase => phase.endDate instanceof Date ? phase.endDate : new Date(phase.endDate || ''))
+        .filter(date => !isNaN(date.getTime()));
+      
+      if (existingPhasesEndDates.length > 0) {
+        // Get the latest end date and add 1 day
+        const latestEndDate = new Date(Math.max(...existingPhasesEndDates.map(date => date.getTime())));
+        phaseStartDate = new Date(latestEndDate);
+        phaseStartDate.setDate(phaseStartDate.getDate() + 1);
+        
+        // Set phase end date to be either 1/4 of the project duration or 30 days, whichever is less
+        const phaseDuration = Math.min(Math.ceil(totalProjectDays / 4), 30);
+        phaseEndDate = new Date(phaseStartDate);
+        phaseEndDate.setDate(phaseStartDate.getDate() + phaseDuration);
+        
+        // Ensure phase end date doesn't exceed project end date
+        if (phaseEndDate > projectEndDate) {
+          phaseEndDate = new Date(projectEndDate);
+        }
+      } else {
+        // If no valid end dates found, default to position at 25% of project duration
+        const phaseStartOffset = Math.ceil(totalProjectDays * 0.25);
+        phaseStartDate = new Date(projectStartDate);
+        phaseStartDate.setDate(projectStartDate.getDate() + phaseStartOffset);
+        
+        const phaseEndOffset = Math.ceil(totalProjectDays * 0.5);
+        phaseEndDate = new Date(projectStartDate);
+        phaseEndDate.setDate(projectStartDate.getDate() + phaseEndOffset);
+      }
+    } else {
+      // If this is the first phase, start at project start and use 1/3 of the project duration
+      phaseStartDate = new Date(projectStartDate);
+      phaseEndDate = new Date(projectStartDate);
+      phaseEndDate.setDate(projectStartDate.getDate() + Math.ceil(totalProjectDays / 3));
+    }
+    
+    // Ensure dates are valid
+    if (isNaN(phaseStartDate.getTime())) phaseStartDate = new Date();
+    if (isNaN(phaseEndDate.getTime())) {
+      phaseEndDate = new Date(phaseStartDate);
+      phaseEndDate.setDate(phaseStartDate.getDate() + 30);
+    }
     
     const newPhase: PhaseWithPercentage = {
       name: `New Phase ${phases.length + 1}`,
@@ -92,8 +148,8 @@ const TemplateAdjuster: React.FC<TemplateAdjusterProps> = ({
       budget: 0,
       actualCost: 0,
       tasks: [],
-      startDate: today,
-      endDate: endDate
+      startDate: phaseStartDate,
+      endDate: phaseEndDate
     };
     
     setPhases([...phases, newPhase]);

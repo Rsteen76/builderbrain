@@ -145,7 +145,36 @@ const ProjectSetupWizard: React.FC = () => {
   };
 
   const handleBasicInfoChange = (field: keyof Project, value: any) => {
+    // Update the field directly
     setProjectData(prev => ({ ...prev, [field]: value }));
+    
+    // If estimatedDuration or startDate changed, also update the endDate
+    if (field === 'estimatedDuration' || field === 'startDate') {
+      setProjectData(prev => {
+        // Get the current values
+        const duration = field === 'estimatedDuration' ? value : prev.estimatedDuration;
+        const start = field === 'startDate' ? value : prev.startDate;
+        
+        // Only proceed if we have both values
+        if (!duration || !start) return prev;
+        
+        // Parse the duration to a number
+        const durationMonths = parseFloat(duration);
+        if (isNaN(durationMonths)) return prev;
+        
+        // Calculate the end date
+        const endDate = new Date(start);
+        endDate.setMonth(endDate.getMonth() + durationMonths);
+        
+        console.log('Auto-calculated end date:', {
+          startDate: start,
+          durationMonths,
+          calculatedEndDate: endDate
+        });
+        
+        return { ...prev, endDate };
+      });
+    }
   };
 
   const handleBudgetChange = (field: keyof EnhancedBudget, value: number) => {
@@ -185,14 +214,93 @@ const ProjectSetupWizard: React.FC = () => {
 
   // Fix the addPhase function to include all required fields
   const addPhase = (phaseData?: Partial<Phase>) => {
-    const startDate = new Date();
-    const endDate = new Date(startDate);
-    endDate.setDate(startDate.getDate() + 30);  // End date is 30 days after start date
+    console.log('Adding phase with project data:', {
+      projectStartDate: projectData.startDate,
+      projectEndDate: projectData.endDate,
+      estimatedDuration: projectData.estimatedDuration,
+      existingPhases: projectData.phases?.length
+    });
+
+    // Calculate project duration in days based on estimatedDuration field
+    let projectDurationDays = 30; // Default to 30 days
+    
+    // If we have both start and end dates, use those to calculate duration
+    if (projectData.startDate && projectData.endDate) {
+      const startTime = new Date(projectData.startDate).getTime();
+      const endTime = new Date(projectData.endDate).getTime();
+      if (!isNaN(startTime) && !isNaN(endTime) && endTime > startTime) {
+        projectDurationDays = Math.ceil((endTime - startTime) / (1000 * 60 * 60 * 24));
+        console.log(`Using project start/end dates to calculate duration: ${projectDurationDays} days`);
+      }
+    } 
+    // Otherwise fall back to estimatedDuration field
+    else if (projectData.estimatedDuration) {
+      // Convert months to days (approximately)
+      const durationMonths = parseFloat(projectData.estimatedDuration);
+      if (!isNaN(durationMonths)) {
+        projectDurationDays = Math.ceil(durationMonths * 30); // Approximate days in a month
+        console.log(`Using estimatedDuration to calculate: ${projectDurationDays} days`);
+      }
+    }
+    
+    // Get project start date
+    const projectStartDate = projectData.startDate || new Date();
+    console.log(`Using project start date: ${projectStartDate.toISOString()}`);
+    
+    // Determine phase position based on existing phases
+    const existingPhases = projectData.phases || [];
+    let phaseStartDate, phaseEndDate;
+    
+    if (existingPhases.length === 0) {
+      // First phase starts at project start date
+      phaseStartDate = new Date(projectStartDate);
+      phaseEndDate = new Date(projectStartDate);
+      // First phase takes up to 1/4 of the project time
+      phaseEndDate.setDate(phaseStartDate.getDate() + Math.ceil(projectDurationDays / 4));
+      console.log(`First phase: start=${phaseStartDate.toISOString()}, end=${phaseEndDate.toISOString()}`);
+    } else {
+      // Find the latest end date of existing phases
+      const existingPhasesEndDates = existingPhases
+        .map(phase => phase.endDate instanceof Date ? phase.endDate : new Date(phase.endDate || ''))
+        .filter(date => !isNaN(date.getTime()));
+      
+      if (existingPhasesEndDates.length > 0) {
+        // Find the latest end date
+        const latestEndDate = new Date(Math.max(...existingPhasesEndDates.map(date => date.getTime())));
+        
+        // New phase starts after the last phase ends
+        phaseStartDate = new Date(latestEndDate);
+        phaseStartDate.setDate(phaseStartDate.getDate() + 1);
+        
+        // Calculate phase duration - try to distribute remaining time
+        const remainingPhases = 5 - existingPhases.length; // Assuming approx 5 phases in a project
+        const phaseDuration = Math.max(14, Math.ceil(projectDurationDays / Math.max(remainingPhases, 1)));
+        
+        phaseEndDate = new Date(phaseStartDate);
+        phaseEndDate.setDate(phaseStartDate.getDate() + phaseDuration);
+        console.log(`Subsequent phase: start=${phaseStartDate.toISOString()}, end=${phaseEndDate.toISOString()}`);
+      } else {
+        // Fallback if no valid end dates
+        phaseStartDate = new Date(projectStartDate);
+        phaseStartDate.setDate(projectStartDate.getDate() + existingPhases.length * 14);
+        
+        phaseEndDate = new Date(phaseStartDate);
+        phaseEndDate.setDate(phaseStartDate.getDate() + 14); // Two weeks default
+        console.log(`Fallback phase: start=${phaseStartDate.toISOString()}, end=${phaseEndDate.toISOString()}`);
+      }
+    }
+    
+    // Ensure the dates are valid
+    if (isNaN(phaseStartDate.getTime())) phaseStartDate = new Date();
+    if (isNaN(phaseEndDate.getTime())) {
+      phaseEndDate = new Date(phaseStartDate);
+      phaseEndDate.setDate(phaseStartDate.getDate() + 14);
+    }
     
     const defaultPhase: Phase = {
       name: '',
-      startDate: startDate,
-      endDate: endDate,
+      startDate: phaseStartDate,
+      endDate: phaseEndDate,
       status: 'not_started',
       progress: 0,
       budget: 0,
@@ -252,6 +360,60 @@ const ProjectSetupWizard: React.FC = () => {
     setError(null);
 
     try {
+      // Debug log for project dates before any adjustments
+      console.log('Project dates before adjustment:', {
+        startDate: projectData.startDate,
+        endDate: projectData.endDate
+      });
+      
+      // Ensure phase dates align with project start date
+      const projectStartDate = projectData.startDate || new Date();
+      let adjustedPhases = [...(projectData.phases || [])];
+      
+      if (adjustedPhases.length > 0) {
+        // Find the earliest phase start date in the current phases
+        const earliestPhaseDate = adjustedPhases.reduce((earliest, phase) => {
+          const phaseStart = phase.startDate instanceof Date ? 
+            phase.startDate : new Date(phase.startDate || new Date());
+          return phaseStart < earliest ? phaseStart : earliest;
+        }, new Date(8640000000000000)); // Max date value
+        
+        // Calculate the offset between project start date and earliest phase date
+        const timeOffset = projectStartDate.getTime() - earliestPhaseDate.getTime();
+        
+        // Only adjust if the offset is significant (more than a day)
+        if (Math.abs(timeOffset) > 86400000) {
+          // Adjust all phase dates by this offset
+          adjustedPhases = adjustedPhases.map(phase => {
+            const phaseStartDate = phase.startDate instanceof Date ? 
+              phase.startDate : new Date(phase.startDate || new Date());
+            const phaseEndDate = phase.endDate instanceof Date ? 
+              phase.endDate : new Date(phase.endDate || new Date());
+            
+            // Apply offset to both start and end dates
+            const adjustedStartDate = new Date(phaseStartDate.getTime() + timeOffset);
+            const adjustedEndDate = new Date(phaseEndDate.getTime() + timeOffset);
+            
+            return {
+              ...phase,
+              startDate: adjustedStartDate,
+              endDate: adjustedEndDate
+            };
+          });
+          
+          console.log('Adjusted phase dates to align with project start date:', {
+            projectStartDate,
+            earliestPhaseDate,
+            timeOffset: `${timeOffset / (1000 * 60 * 60 * 24)} days`,
+            adjustedPhases: adjustedPhases.map(p => ({
+              name: p.name,
+              startDate: p.startDate,
+              endDate: p.endDate
+            }))
+          });
+        }
+      }
+
       const payload: Omit<Project, 'id' | 'userId' | 'createdAt' | 'updatedAt'> = {
         name: projectData.name || '',
         description: projectData.description || '',
@@ -267,7 +429,7 @@ const ProjectSetupWizard: React.FC = () => {
         clientId: projectData.clientId || '',
         projectType: projectData.projectType || '',
         estimatedDuration: projectData.estimatedDuration || '',
-        phases: projectData.phases || [],
+        phases: adjustedPhases,
         keyMilestones: (projectData.keyMilestones || []).map(milestone => ({
           ...milestone,
           // Ensure date is a Date object or null
@@ -280,6 +442,17 @@ const ProjectSetupWizard: React.FC = () => {
         bids: projectData.bids || [],
         tasks: projectData.tasks || [],
       };
+
+      // Debug log final project payload including dates
+      console.log('Final project payload:', {
+        startDate: payload.startDate,
+        endDate: payload.endDate,
+        phases: payload.phases?.map(p => ({
+          name: p.name,
+          startDate: p.startDate instanceof Date ? p.startDate.toISOString() : p.startDate,
+          endDate: p.endDate instanceof Date ? p.endDate.toISOString() : p.endDate
+        })) || []
+      });
 
       const savedProject = await ProjectService.createProject(user.uid, payload);
       navigate(`/projects/${savedProject.id}`);
@@ -357,6 +530,17 @@ const ProjectSetupWizard: React.FC = () => {
                   value={projectData.startDate ? projectData.startDate.toISOString().split('T')[0] : ''}
                   onChange={(e) => handleBasicInfoChange('startDate', new Date(e.target.value))}
                   InputLabelProps={{ shrink: true }}
+                />
+              </Grid>
+              <Grid item xs={12} md={6}>
+                <TextField
+                  fullWidth
+                  type="date"
+                  label="End Date"
+                  value={projectData.endDate ? projectData.endDate.toISOString().split('T')[0] : ''}
+                  onChange={(e) => handleBasicInfoChange('endDate', new Date(e.target.value))}
+                  InputLabelProps={{ shrink: true }}
+                  helperText="Expected project completion date"
                 />
               </Grid>
               <Grid item xs={12} md={6}>
@@ -445,8 +629,6 @@ const ProjectSetupWizard: React.FC = () => {
                       onClick={() => addPhase({
                         name: phase.name,
                         description: phase.description,
-                        startDate: new Date(),
-                        endDate: new Date(),
                         status: 'not_started',
                         progress: 0,
                         budget: 0,

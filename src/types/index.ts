@@ -282,19 +282,16 @@ export interface BidPaymentStage {
 // Add or enhance the Phase interface
 export interface Phase {
   id?: string;
+  projectId?: string;
   name: string;
-  startDate: Date | string;
-  endDate: Date | string;
-  status: 'not_started' | 'in_progress' | 'completed' | 'delayed';
+  startDate: any; // Changed from 'string | Date' to 'any' to accommodate Firestore Timestamp
+  endDate: any; // Changed from 'string | Date' to 'any'
+  status: 'not_started' | 'in_progress' | 'completed' | 'delayed' | 'on_hold';
   progress: number;
   budget: number;
   actualCost: number;
-  tasks?: Task[];
   description?: string;
-  projectId?: string;
-  createdBy?: string;
-  createdAt?: Date | string;
-  updatedAt?: Date | string;
+  tasks?: Task[];
 }
 
 // Add the ProjectPhase interface (or enhance existing Phase if preferred)

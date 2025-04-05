@@ -552,7 +552,8 @@ const ProjectDetailPage: React.FC = () => {
   };
   
   const handleAddPhase = () => {
-    // Navigate to phase creation or open modal
+    // Open the template adjuster for phase management
+    setTemplateAdjusterOpen(true);
     handleMenuClose();
   };
   

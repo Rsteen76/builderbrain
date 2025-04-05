@@ -27,10 +27,48 @@ interface FirestoreProject extends Omit<Project, 'id' | 'startDate' | 'endDate' 
   lineItems?: LineItem[];
   bids?: Bid[];
   tasks?: Task[];
+  phases?: Array<Omit<Phase, 'startDate' | 'endDate'> & {
+    startDate: Timestamp | string | Date;
+    endDate: Timestamp | string | Date;
+  }>;
 }
 
 export class ProjectService {
   private static collection = collection(db, 'projects');
+
+  // Utility function to safely convert dates to Firestore Timestamps
+  private static dateToTimestamp(date: any): Timestamp | null {
+    if (!date) return null;
+    
+    if (date instanceof Timestamp) {
+      return date;
+    } else if (date instanceof Date) {
+      return Timestamp.fromDate(date);
+    } else if (typeof date === 'string') {
+      try {
+        return Timestamp.fromDate(new Date(date));
+      } catch (e) {
+        console.error('Failed to convert string date to Timestamp:', e);
+        return null;
+      }
+    }
+    
+    return null;
+  }
+
+  // Process phases to ensure dates are Firestore Timestamps
+  private static processPhasesDates(phases: Phase[] = []): any[] {
+    return phases.map(phase => {
+      const processedPhase = { ...phase };
+      
+      // Convert dates to Timestamps
+      processedPhase.startDate = this.dateToTimestamp(phase.startDate) || Timestamp.fromDate(new Date());
+      processedPhase.endDate = this.dateToTimestamp(phase.endDate) || 
+        this.dateToTimestamp(new Date(new Date().setDate(new Date().getDate() + 30)));
+      
+      return processedPhase;
+    });
+  }
 
   static async createProject(userId: string, projectData: Omit<Project, 'id' | 'userId' | 'createdAt' | 'updatedAt'>): Promise<Project> {
     const now = new Date();
@@ -43,11 +81,15 @@ export class ProjectService {
                           ? `${projectData.location.address}, ${projectData.location.city}`
                           : typeof projectData.location === 'string' ? projectData.location : '';
 
+    // Process phases to ensure dates are Firestore Timestamps
+    const processedPhases = this.processPhasesDates(projectData.phases || []);
+
     const projectToSave: Omit<FirestoreProject, 'lineItems' | 'bids' | 'tasks'> = {
       ...projectData,
       userId: userId,
       budget: budgetValue,
       location: locationValue,
+      phases: processedPhases,
       startDate: Timestamp.fromDate(projectData.startDate || new Date()),
       endDate: projectData.endDate ? Timestamp.fromDate(projectData.endDate) : null,
       createdAt: Timestamp.fromDate(now),
@@ -92,9 +134,15 @@ export class ProjectService {
       
       // Special handling for array fields and complex objects
       if (data.phases) {
-        // Use direct field assignment for phases array - this is the fix
-        firestoreUpdateData.phases = data.phases;
-        console.log("Phases data being saved:", JSON.stringify(firestoreUpdateData.phases));
+        // Convert dates in phases to Firestore Timestamps
+        firestoreUpdateData.phases = this.processPhasesDates(data.phases);
+        
+        console.log("Phases data being saved with proper date conversion:", 
+          JSON.stringify(firestoreUpdateData.phases.map((p: any) => ({
+            name: p.name,
+            startDate: p.startDate instanceof Timestamp ? p.startDate.toDate().toISOString() : p.startDate,
+            endDate: p.endDate instanceof Timestamp ? p.endDate.toDate().toISOString() : p.endDate
+          }))));
       }
       
       // Process other fields
@@ -219,6 +267,40 @@ export class ProjectService {
   }
 
   private static convertFirestoreData(data: FirestoreProject, id: string): Project {
+    // Convert phase dates from Firestore Timestamps to Date objects
+    const convertedPhases = data.phases?.map(phase => {
+      const convertedPhase = { ...phase };
+      
+      // Convert phase start date
+      if (convertedPhase.startDate instanceof Timestamp) {
+        convertedPhase.startDate = convertedPhase.startDate.toDate();
+      } else if (typeof convertedPhase.startDate === 'string') {
+        convertedPhase.startDate = new Date(convertedPhase.startDate);
+      } else if (!convertedPhase.startDate) {
+        convertedPhase.startDate = new Date();
+      }
+      
+      // Convert phase end date
+      if (convertedPhase.endDate instanceof Timestamp) {
+        convertedPhase.endDate = convertedPhase.endDate.toDate();
+      } else if (typeof convertedPhase.endDate === 'string') {
+        convertedPhase.endDate = new Date(convertedPhase.endDate);
+      } else if (!convertedPhase.endDate) {
+        // If no end date, set it to 30 days after start date
+        const endDate = new Date(convertedPhase.startDate);
+        endDate.setDate(endDate.getDate() + 30);
+        convertedPhase.endDate = endDate;
+      }
+      
+      return convertedPhase;
+    }) || [];
+    
+    console.log('Converting Firestore data with phases:', convertedPhases.map(p => ({
+      name: p.name,
+      startDate: p.startDate instanceof Date ? p.startDate.toISOString() : p.startDate,
+      endDate: p.endDate instanceof Date ? p.endDate.toISOString() : p.endDate
+    })));
+
     const project: Project = {
       ...data,
       id: id,
@@ -242,7 +324,7 @@ export class ProjectService {
       bids: data.bids || [],
       tasks: data.tasks || [],
       team: data.team || [],
-      phases: data.phases || [],
+      phases: convertedPhases,
       keyMilestones: data.keyMilestones || [],
       requirements: data.requirements || { permits: [], inspections: [], documents: [] },
     };
