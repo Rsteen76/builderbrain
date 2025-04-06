@@ -14,6 +14,11 @@ import {
   Tooltip,
   CardActions,
   Button,
+  CardHeader,
+  Avatar,
+  Divider,
+  Grid,
+  Paper,
 } from '@mui/material';
 import {
   AccessTime as AccessTimeIcon,
@@ -26,6 +31,10 @@ import {
   Star as StarIcon,
   MoreVert as MoreVertIcon,
   Visibility as VisibilityIcon,
+  DateRange as DateRangeIcon,
+  DonutLarge as DonutLargeIcon,
+  AccountBalance as AccountBalanceIcon,
+  ChevronRight as ChevronRightIcon,
 } from '@mui/icons-material';
 
 // Project object interface that matches how it's used in Projects.tsx
@@ -112,6 +121,17 @@ const ProjectCard: React.FC<ProjectCardProps> = (props) => {
     : props.onClick;
   const onMenuClick = hasProjectObject ? props.onMenuClick : undefined;
 
+  // Get project initials for avatar
+  const getProjectInitials = () => {
+    if (!title) return '?';
+    return title
+      .split(' ')
+      .map(word => word[0])
+      .join('')
+      .substring(0, 2)
+      .toUpperCase();
+  };
+
   const getStatusColor = () => {
     switch (status) {
       case 'on-track':
@@ -133,19 +153,6 @@ const ProjectCard: React.FC<ProjectCardProps> = (props) => {
 
   const statusColor = getStatusColor();
   const progressColor = getProgressColor();
-
-  // Generate a themed gradient background
-  const generateBackground = () => {
-    const colors = [
-      [theme.palette.primary.main, theme.palette.secondary.main],
-      [theme.palette.success.main, theme.palette.info.main],
-      [theme.palette.warning.main, theme.palette.error.main],
-      [theme.palette.secondary.main, theme.palette.info.main],
-      [theme.palette.info.main, theme.palette.success.main],
-    ];
-    const colorSet = colors[index % colors.length];
-    return `linear-gradient(135deg, ${alpha(colorSet[0], 0.8)} 0%, ${alpha(colorSet[1], 0.8)} 100%)`;
-  };
 
   const getStatusIcon = () => {
     switch (status) {
@@ -196,7 +203,7 @@ const ProjectCard: React.FC<ProjectCardProps> = (props) => {
 
   function formatLocation(location: string | { address: string; city: string; state: string; zipCode?: string }): string {
     if (typeof location === 'string') return location;
-    return `${location.address}, ${location.city}`;
+    return `${location.city}, ${location.state}`;
   }
 
   function calculateProgress(project: Project): number {
@@ -211,224 +218,324 @@ const ProjectCard: React.FC<ProjectCardProps> = (props) => {
   return (
     <Zoom in={true} style={{ transitionDelay: `${index * 50}ms` }}>
       <Card
-        elevation={isHovered ? 4 : 1}
-        sx={{
-          height: '100%',
-          cursor: 'pointer',
-          transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
-          borderRadius: 3,
+        elevation={2}
+        sx={{ 
+          height: '100%', 
+          display: 'flex', 
+          flexDirection: 'column',
+          transition: 'all 0.2s ease-in-out',
+          '&:hover': {
+            transform: 'translateY(-3px)',
+            boxShadow: 5
+          },
+          borderRadius: 2,
           overflow: 'hidden',
-          transform: isHovered ? 'translateY(-4px)' : 'none',
-          boxShadow: isHovered 
-            ? `0 8px 24px ${alpha(theme.palette.common.black, 0.12)}`
-            : `0 2px 8px ${alpha(theme.palette.common.black, 0.05)}`,
+          cursor: 'pointer',
         }}
         onClick={onClick}
         onMouseEnter={() => setIsHovered(true)}
         onMouseLeave={() => setIsHovered(false)}
       >
-        {/* Project header/banner */}
-        <Box
-          sx={{
-            height: 90,
-            position: 'relative',
-            background: generateBackground(),
-            overflow: 'hidden',
+        <CardHeader
+          avatar={
+            <Avatar 
+              sx={{ 
+                width: 38, 
+                height: 38, 
+                bgcolor: getStatusColor() 
+              }}
+            >
+              {getProjectInitials()}
+            </Avatar>
+          }
+          action={
+            <Box>
+              <Chip 
+                label={status.replace('-', ' ')} 
+                size="small"
+                icon={getStatusIcon()}
+                sx={{ 
+                  backgroundColor: alpha(getStatusColor(), 0.1),
+                  color: getStatusColor(),
+                  fontWeight: 600,
+                  fontSize: '0.7rem',
+                  height: 24,
+                  mr: 1,
+                  textTransform: 'capitalize'
+                }} 
+              />
+              {onMenuClick && (
+                <IconButton 
+                  aria-label="more options" 
+                  size="small"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onMenuClick(e);
+                  }}
+                >
+                  <MoreVertIcon fontSize="small" />
+                </IconButton>
+              )}
+            </Box>
+          }
+          title={
+            <Typography 
+              variant="subtitle1" 
+              sx={{ 
+                fontWeight: 700, 
+                fontSize: '1.1rem',
+                mb: 0,
+                lineHeight: 1.3,
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                whiteSpace: 'nowrap'
+              }}
+            >
+              {title}
+            </Typography>
+          }
+          subheader={
+            <Box sx={{ display: 'flex', alignItems: 'center', mt: 0 }}>
+              <Tooltip title="Location">
+                <PlaceIcon 
+                  fontSize="small" 
+                  sx={{ 
+                    color: theme.palette.text.secondary,
+                    fontSize: '0.9rem',
+                    mr: 0.5
+                  }} 
+                />
+              </Tooltip>
+              <Typography 
+                variant="body2" 
+                color="text.secondary"
+                sx={{ 
+                  fontSize: '0.8rem',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  whiteSpace: 'nowrap'
+                }}
+              >
+                {location}
+              </Typography>
+            </Box>
+          }
+          sx={{ 
+            p: 1.5,
+            pb: 0.5,
+            '.MuiCardHeader-content': { minWidth: 0 } 
+          }}
+        />
+        
+        <CardContent 
+          sx={{ 
+            p: 1.5, 
+            pt: 0.5,
+            pb: '8px !important',
+            flexGrow: 1,
+            display: 'flex',
+            flexDirection: 'column'
           }}
         >
-          <Box
-            sx={{
-              position: 'absolute',
-              top: 12,
-              right: 12,
-              zIndex: 2,
-              display: 'flex',
-              gap: 1,
-              alignItems: 'center',
-            }}
-          >
-            <Chip
-              label={status.replace('-', ' ')}
-              size="small"
-              icon={getStatusIcon()}
-              sx={{
-                backgroundColor: alpha(statusColor, 0.9),
-                color: '#fff',
-                fontWeight: 600,
-                fontSize: '0.6875rem',
-                textTransform: 'capitalize',
-                backdropFilter: 'blur(4px)',
-                '& .MuiChip-icon': {
-                  color: 'inherit',
-                  fontSize: '0.75rem',
-                },
-              }}
-            />
-            
-            {onMenuClick && (
-              <IconButton 
-                size="small" 
-                sx={{ 
-                  color: '#fff',
-                  bgcolor: alpha('#000', 0.2),
-                  backdropFilter: 'blur(4px)',
-                  '&:hover': {
-                    bgcolor: alpha('#000', 0.3),
-                  }
-                }}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onMenuClick(e);
-                }}
-              >
-                <MoreVertIcon fontSize="small" />
-              </IconButton>
-            )}
-          </Box>
-          
-          <Typography
-            variant="h6"
-            sx={{
-              position: 'absolute',
-              left: 16,
-              bottom: 16,
-              color: '#fff',
-              fontWeight: 700,
-              zIndex: 2,
-              textShadow: '0px 1px 2px rgba(0,0,0,0.3)',
-              width: '80%',
-              overflow: 'hidden',
-              textOverflow: 'ellipsis',
-              whiteSpace: 'nowrap',
-            }}
-          >
-            {title}
-          </Typography>
-        </Box>
-
-        <CardContent sx={{ pt: 2 }}>
-          {/* Location */}
-          <Typography 
-            variant="body2" 
-            color="text.secondary"
+          {/* Project Stats - Compact row of key metrics */}
+          <Grid 
+            container 
+            spacing={1} 
             sx={{ 
-              mb: 2,
-              display: 'flex',
-              alignItems: 'center',
-              gap: 0.5,
-              fontSize: '0.75rem',
+              mb: 1.5,
+              mt: 0.5
             }}
           >
-            <PlaceIcon sx={{ fontSize: '1rem' }} />
-            {location}
-          </Typography>
-          
-          {/* Progress section */}
-          <Box sx={{ mb: 2 }}>
-            <Box sx={{ 
-              display: 'flex', 
-              justifyContent: 'space-between', 
-              alignItems: 'center', 
-              mb: 0.5 
-            }}>
-              <Typography 
-                variant="body2" 
-                fontWeight={600}
-                sx={{ fontSize: '0.75rem' }}
-              >
-                Progress
-              </Typography>
-              
-              <Typography 
-                variant="body2"
-                fontWeight={600}
+            {/* Due Date */}
+            <Grid item xs={6}>
+              <Paper 
+                elevation={0} 
                 sx={{ 
-                  fontSize: '0.75rem',
-                  color: progressColor,
+                  p: 0.75, 
+                  textAlign: 'center',
+                  borderRadius: 2,
+                  bgcolor: alpha(theme.palette.info.main, 0.1),
+                  height: '100%',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  justifyContent: 'center',
                 }}
               >
-                {progress}%
-              </Typography>
-            </Box>
+                <DateRangeIcon 
+                  sx={{ 
+                    color: theme.palette.info.main,
+                    fontSize: '1.2rem',
+                    mb: 0.3
+                  }} 
+                />
+                <Typography 
+                  variant="h6" 
+                  color="text.primary" 
+                  sx={{ fontSize: '0.9rem', fontWeight: 700, lineHeight: 1.2 }}
+                >
+                  {dueDate.split(',')[0]}
+                </Typography>
+                <Typography variant="body2" color="text.secondary" sx={{ fontSize: '0.7rem' }}>Due Date</Typography>
+              </Paper>
+            </Grid>
             
-            <LinearProgress
-              variant="determinate"
-              value={progress}
-              sx={{
-                height: 6,
-                borderRadius: 3,
-                bgcolor: alpha(progressColor, 0.15),
-                '& .MuiLinearProgress-bar': {
+            {/* Budget */}
+            <Grid item xs={6}>
+              <Paper 
+                elevation={0} 
+                sx={{ 
+                  p: 0.75, 
+                  textAlign: 'center',
+                  borderRadius: 2,
+                  bgcolor: alpha(theme.palette.primary.main, 0.1),
+                  height: '100%',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  justifyContent: 'center',
+                }}
+              >
+                <AccountBalanceIcon 
+                  sx={{ 
+                    color: theme.palette.primary.main,
+                    fontSize: '1.2rem',
+                    mb: 0.3
+                  }} 
+                />
+                <Typography 
+                  variant="h6" 
+                  color="text.primary" 
+                  sx={{ fontSize: '0.9rem', fontWeight: 700, lineHeight: 1.2 }}
+                >
+                  {budget}
+                </Typography>
+                <Typography variant="body2" color="text.secondary" sx={{ fontSize: '0.7rem' }}>Budget</Typography>
+              </Paper>
+            </Grid>
+          </Grid>
+
+          {/* Progress indicator */}
+          <Box 
+            sx={{ 
+              width: '100%', 
+              mt: 1,
+              mb: 1.5,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between'
+            }}
+          >
+            <Box sx={{ flexGrow: 1, mr: 1 }}>
+              <LinearProgress
+                variant="determinate"
+                value={Math.min(progress, 100)}
+                sx={{
+                  height: 6,
                   borderRadius: 3,
-                  backgroundColor: progressColor,
-                },
-              }}
-            />
+                  backgroundColor: alpha(progressColor, 0.1),
+                  '& .MuiLinearProgress-bar': {
+                    borderRadius: 3,
+                    backgroundColor: progressColor,
+                  },
+                }}
+              />
+            </Box>
+            <Typography
+              variant="body2"
+              fontWeight="bold"
+              color={progressColor}
+              sx={{ lineHeight: 1.2, whiteSpace: 'nowrap' }}
+            >
+              {progress}%
+            </Typography>
           </Box>
 
-          {/* Project Details */}
-          <Stack spacing={1.5}>
+          {/* Project metrics visualization */}
+          <Stack spacing={1.5} sx={{ mt: 1, mb: 1.5 }}>
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-              <AccessTimeIcon 
+              <DonutLargeIcon 
                 fontSize="small" 
-                sx={{ color: theme.palette.text.secondary, opacity: 0.7 }} 
+                sx={{ 
+                  color: alpha(theme.palette.primary.main, 0.7), 
+                  fontSize: '1rem' 
+                }} 
               />
               <Typography 
                 variant="body2" 
-                color="text.secondary"
-                sx={{ fontSize: '0.8125rem' }}
+                sx={{ 
+                  fontSize: '0.8rem',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  width: '100%'
+                }}
               >
-                Due: {dueDate}
-              </Typography>
-            </Box>
-            
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-              <MoneyIcon 
-                fontSize="small" 
-                sx={{ color: theme.palette.text.secondary, opacity: 0.7 }} 
-              />
-              <Typography 
-                variant="body2" 
-                color="text.secondary"
-                sx={{ fontSize: '0.8125rem' }}
-              >
-                Budget: {budget}
+                <span>Project Status</span>
+                <span style={{ 
+                  color: getStatusColor(), 
+                  fontWeight: 600,
+                  textTransform: 'capitalize'
+                }}>
+                  {status.replace('-', ' ')}
+                </span>
               </Typography>
             </Box>
             
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
               <GroupIcon 
                 fontSize="small" 
-                sx={{ color: theme.palette.text.secondary, opacity: 0.7 }} 
+                sx={{ 
+                  color: alpha(theme.palette.secondary.main, 0.7),
+                  fontSize: '1rem'
+                }} 
               />
               <Typography 
                 variant="body2" 
-                color="text.secondary"
-                sx={{ fontSize: '0.8125rem' }}
+                sx={{ 
+                  fontSize: '0.8rem',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  width: '100%'
+                }}
               >
-                Team: {team} members
+                <span>Team Members</span>
+                <span style={{ fontWeight: 600 }}>{team}</span>
               </Typography>
             </Box>
           </Stack>
-        </CardContent>
 
-        <CardActions sx={{ p: 2, pt: 0, justifyContent: 'flex-end' }}>
-          <Tooltip title="View Project">
-            <IconButton 
+          {/* Footer actions */}
+          <Box 
+            sx={{ 
+              display: 'flex', 
+              justifyContent: 'flex-end',
+              alignItems: 'center',
+              mt: 'auto',
+              pt: 1,
+              borderTop: `1px solid ${alpha(theme.palette.divider, 0.08)}`
+            }}
+          >
+            <Button
               size="small"
-              color="primary"
+              endIcon={<ChevronRightIcon />}
+              onClick={(e) => {
+                e.stopPropagation();
+                onClick();
+              }}
               sx={{ 
-                opacity: isHovered ? 1 : 0.5,
-                transition: 'opacity 0.2s ease',
+                textTransform: 'none',
+                fontSize: '0.75rem',
+                py: 0.3,
+                px: 0.8
               }}
             >
-              <VisibilityIcon fontSize="small" />
-            </IconButton>
-          </Tooltip>
-        </CardActions>
+              View Details
+            </Button>
+          </Box>
+        </CardContent>
       </Card>
     </Zoom>
   );
 };
 
-export default ProjectCard; 
+export default ProjectCard;
