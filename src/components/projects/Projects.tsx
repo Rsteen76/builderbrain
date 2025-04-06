@@ -596,6 +596,15 @@ const Projects: React.FC = () => {
       color: '#ff9800', // Orange
     },
     {
+      id: 'kitchen-remodel',
+      name: 'Kitchen Remodel',
+      icon: <HomeIcon fontSize="small" />,
+      description: 'Specialized kitchen renovation with industry-standard phases and timelines.',
+      route: '/projects/new-custom',
+      params: { template: 'kitchen-remodel' },
+      color: '#e91e63', // Pink
+    },
+    {
       id: 'landscaping',
       name: 'Landscaping Project',
       icon: <LandscapeIcon fontSize="small" />,

@@ -42,7 +42,7 @@ import PhaseSetupStepper from '../components/projects/PhaseSetupStepper';
 import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns';
 import { DatePicker } from '@mui/x-date-pickers/DatePicker';
 import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
-import { ProjectStatus, Phase } from '../types';
+import { ProjectStatus, Phase, Project } from '../types';
 
 // Define the project data interface
 interface ProjectData {
@@ -123,6 +123,30 @@ const PROJECT_TEMPLATES = [
       'Fixture & Equipment Installation',
       'Final Finishes & Detailing',
       'Final Inspections & Closeout',
+    ]
+  },
+  {
+    id: 'kitchen-remodel',
+    name: 'Kitchen Remodel',
+    icon: <HouseIcon fontSize="large" />,
+    description: 'Comprehensive kitchen renovation with industry-standard phases and timelines.',
+    phases: [
+      'Initial Assessment & Design',
+      'Permits & Planning',
+      'Demolition & Removal',
+      'Structural Changes',
+      'Plumbing Rough-In',
+      'Electrical Rough-In',
+      'HVAC Modifications',
+      'Insulation & Drywall',
+      'Cabinetry Installation',
+      'Countertop Installation',
+      'Backsplash Installation',
+      'Flooring Installation',
+      'Appliance Installation',
+      'Fixtures & Lighting',
+      'Final Painting & Trim',
+      'Final Inspection & Cleanup',
     ]
   },
   {
@@ -254,54 +278,34 @@ const NewCustomProjectPage: React.FC = () => {
   
   // Handle project creation
   const handleCreateProject = async () => {
-    if (!user?.uid) return;
-    
-    setLoading(true);
-    setError(null);
-    
     try {
-      // Ensure status is one of the allowed values
-      const status = projectBasicData.status as ProjectStatus;
+      setLoading(true);
+      setError(null);
       
-      // Convert phases to the format expected by the API
-      const formattedPhases = customPhases.map(phase => {
-        // Ensure phase status is one of the valid Phase status types
-        const validStatus: 'not_started' | 'in_progress' | 'completed' | 'on_hold' | 'delayed' = 
-          (phase.status === 'not_started' || 
-           phase.status === 'in_progress' || 
-           phase.status === 'completed' || 
-           phase.status === 'on_hold' || 
-           phase.status === 'delayed') 
-            ? phase.status 
-            : 'not_started';
-        
-        // Create a proper Phase object with all required fields
-        return {
-          id: phase.id || `phase-${Math.random().toString(36).substring(2, 9)}`,
-          name: phase.name,
-          description: phase.description || '',
-          budget: phase.budget || 0,
-          actualCost: phase.actualCost || 0,
-          progress: phase.progress || 0,
-          status: validStatus,
-          startDate: phase.startDate instanceof Date ? phase.startDate : new Date(phase.startDate),
-          endDate: phase.endDate instanceof Date ? phase.endDate : new Date(phase.endDate),
-        } as Phase;
-      });
+      if (!user) {
+        setError('User authentication required.');
+        setLoading(false);
+        return;
+      }
       
-      // Combine project data with phases
-      const projectData = {
-        ...projectBasicData,
-        phases: formattedPhases,
-        projectTemplate: selectedTemplate || 'custom',
-        status
+      // Format the data for project creation
+      const projectData: Partial<Project> = {
+        name: projectBasicData.name,
+        description: projectBasicData.description,
+        status: projectBasicData.status,
+        startDate: projectBasicData.startDate,
+        endDate: projectBasicData.endDate,
+        budget: projectBasicData.budget,
+        location: projectBasicData.location,
+        projectType: selectedTemplate || 'custom', // Set project type based on selected template
+        phases: customPhases,
       };
       
-      // Create project
-      const createdProject = await ProjectService.createProject(user.uid, projectData);
+      // Use the standard project creation method
+      const newProject = await ProjectService.createProject(user.uid, projectData);
       
-      // Navigate to the project detail page
-      navigate(`/projects/${createdProject.id}`);
+      console.log('Created new project:', newProject);
+      navigate(`/projects/${newProject.id}`);
     } catch (err) {
       console.error('Error creating project:', err);
       setError('Failed to create project. Please try again.');

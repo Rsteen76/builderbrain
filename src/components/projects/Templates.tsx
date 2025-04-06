@@ -106,6 +106,33 @@ const INITIAL_TEMPLATES = [
     createdBy: 'system',
     createdAt: new Date('2023-01-01'),
     isSystem: true
+  },
+  {
+    id: 'kitchen-remodel-template',
+    name: 'Kitchen Remodel',
+    description: 'Comprehensive kitchen renovation with industry-standard phases and timelines',
+    icon: 'home',
+    phases: [
+      { name: 'Initial Assessment & Design', percentage: 0.05 },
+      { name: 'Permits & Planning', percentage: 0.05 },
+      { name: 'Demolition & Removal', percentage: 0.05 },
+      { name: 'Structural Changes', percentage: 0.07 },
+      { name: 'Plumbing Rough-In', percentage: 0.07 },
+      { name: 'Electrical Rough-In', percentage: 0.07 },
+      { name: 'HVAC Modifications', percentage: 0.04 },
+      { name: 'Insulation & Drywall', percentage: 0.07 },
+      { name: 'Cabinetry Installation', percentage: 0.12 },
+      { name: 'Countertop Installation', percentage: 0.08 },
+      { name: 'Backsplash Installation', percentage: 0.05 },
+      { name: 'Flooring Installation', percentage: 0.08 },
+      { name: 'Appliance Installation', percentage: 0.08 },
+      { name: 'Fixtures & Lighting', percentage: 0.05 },
+      { name: 'Final Painting & Trim', percentage: 0.04 },
+      { name: 'Final Inspection & Cleanup', percentage: 0.03 },
+    ],
+    createdBy: 'system',
+    createdAt: new Date('2023-01-01'),
+    isSystem: true
   }
 ];
 

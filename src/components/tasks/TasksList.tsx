@@ -411,7 +411,7 @@ const TasksList: React.FC = () => {
           setProject(projectData);
           if (projectData.tasks) {
             // Add name property for compatibility
-            const tasksWithNames = projectData.tasks.map(task => ({
+            const tasksWithNames = projectData.tasks.map((task: Task) => ({
               ...task,
               name: task.title
             }));

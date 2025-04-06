@@ -141,7 +141,7 @@ const ProjectDetails: React.FC = () => {
             endDate: projectData.endDate ? new Date(projectData.endDate) : null,
             createdAt: projectData.createdAt ? new Date(projectData.createdAt) : new Date(),
             updatedAt: projectData.updatedAt ? new Date(projectData.updatedAt) : new Date(),
-            tasks: (projectData.tasks || []).map(task => ({
+            tasks: (projectData.tasks || []).map((task: Task) => ({
               ...task,
               createdAt: task.createdAt ? new Date(task.createdAt) : new Date(), // Provide default
               updatedAt: task.updatedAt ? new Date(task.updatedAt) : new Date(),
@@ -149,7 +149,7 @@ const ProjectDetails: React.FC = () => {
               completedAt: task.completedAt ? new Date(task.completedAt) : null,
             })),
              // Ensure milestone dates are Date objects or null
-            keyMilestones: (projectData.keyMilestones || []).map(ms => {
+            keyMilestones: (projectData.keyMilestones || []).map((ms: any) => {
               let dateObj: Date | null = null;
               if (ms.date) {
                   try {

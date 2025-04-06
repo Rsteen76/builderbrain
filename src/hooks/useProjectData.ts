@@ -44,7 +44,7 @@ export const useProjectData = (projectId: string | undefined): UseProjectDataRet
       const projectData = await ProjectService.getProject(currentProjectId, user.uid);
       if (projectData && projectData.phases && projectData.phases.length > 0) {
         // Ensure phases have IDs, potentially adding them if missing (though ideally they should come from DB)
-        const phasesWithIds = projectData.phases.map((phase, index) => ({ 
+        const phasesWithIds = projectData.phases.map((phase: Phase, index: number) => ({ 
           ...phase, 
           id: phase.id || `temp-phase-${index}` // Example temporary ID
         })) as ProjectPhase[];

@@ -51,7 +51,7 @@ export interface Phase {
   endDate?: Date | null;
   status?: 'not_started' | 'in_progress' | 'completed' | 'on_hold';
   progress?: number;
-  order: number;
+  order?: number;
   tasks?: string[]; // Array of task IDs
   budget?: number;
   actualCost?: number;

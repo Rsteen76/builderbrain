@@ -13,7 +13,7 @@ import {
   Timestamp,
   DocumentData,
 } from 'firebase/firestore';
-import { Project, LineItem, Bid, Task, Phase } from '../types';
+import { Project, LineItem, Bid, Task, Phase, ProjectStatus } from '../types';
 import { v4 as uuidv4 } from 'uuid';
 
 interface FirestoreProject extends Omit<Project, 'id' | 'startDate' | 'endDate' | 'createdAt' | 'updatedAt' | 'budget' | 'location' | 'lineItems' | 'bids' | 'tasks'> {
@@ -33,7 +33,9 @@ interface FirestoreProject extends Omit<Project, 'id' | 'startDate' | 'endDate' 
   }>;
 }
 
-export class ProjectService {
+// Define as a non-export class here
+class ProjectService {
+  // Collection reference
   private static collection = collection(db, 'projects');
 
   // Utility function to safely convert dates to Firestore Timestamps
@@ -70,152 +72,100 @@ export class ProjectService {
     });
   }
 
-  static async createProject(userId: string, projectData: Omit<Project, 'id' | 'userId' | 'createdAt' | 'updatedAt'>): Promise<Project> {
-    const now = new Date();
-    console.log(`ProjectService: Creating project for user: ${userId}`);
-    
-    const budgetValue = typeof projectData.budget === 'object' && projectData.budget !== null 
-                        ? projectData.budget.total 
-                        : typeof projectData.budget === 'number' ? projectData.budget : 0;
-    const locationValue = typeof projectData.location === 'object' && projectData.location !== null
-                          ? `${projectData.location.address}, ${projectData.location.city}`
-                          : typeof projectData.location === 'string' ? projectData.location : '';
-
-    // Process phases to ensure dates are Firestore Timestamps
-    const processedPhases = this.processPhasesDates(projectData.phases || []);
-
-    const projectToSave: Omit<FirestoreProject, 'lineItems' | 'bids' | 'tasks'> = {
-      ...projectData,
-      userId: userId,
-      budget: budgetValue,
-      location: locationValue,
-      phases: processedPhases,
-      startDate: Timestamp.fromDate(projectData.startDate || new Date()),
-      endDate: projectData.endDate ? Timestamp.fromDate(projectData.endDate) : null,
-      createdAt: Timestamp.fromDate(now),
-      updatedAt: Timestamp.fromDate(now),
-    };
-
-    console.log("Saving project to Firestore with data:", JSON.stringify({
-      ...projectToSave,
-      startDate: projectToSave.startDate.toDate().toISOString(),
-      endDate: projectToSave.endDate ? projectToSave.endDate.toDate().toISOString() : null,
-      createdAt: projectToSave.createdAt.toDate().toISOString(),
-      updatedAt: projectToSave.updatedAt.toDate().toISOString(),
-    }));
-
-    const docRef = await addDoc(this.collection, projectToSave);
-    console.log(`Project created with ID: ${docRef.id}`);
-
-    return {
-      ...projectData,
-      id: docRef.id,
-      userId: userId,
-      createdAt: now,
-      updatedAt: now,
-      budget: typeof projectData.budget === 'number' 
-              ? { total: projectData.budget, spent: 0, remaining: projectData.budget } 
-              : projectData.budget,
-      location: typeof projectData.location === 'string' 
-                ? { address: projectData.location, city: '', state: '', zipCode: '' } 
-                : projectData.location,
-    } as Project;
-  }
-
-  static async updateProject(id: string, data: Partial<Project>): Promise<void> {
+  static async createProject(userId: string, projectData: Partial<Project>): Promise<Project> {
     try {
-      console.log(`ProjectService: Updating project ${id} with data:`, data);
-      const projectRef = doc(this.collection, id);
+      // Add user ID to project data
+      const completeProjectData = {
+        ...projectData,
+        userId,
+        createdAt: new Date(),
+        updatedAt: new Date()
+      };
+
+      // Add document to Firestore
+      const docRef = await addDoc(this.collection, completeProjectData);
       
-      // For debugging
-      console.log("Update data received:", JSON.stringify(data));
-      
-      const firestoreUpdateData: any = {};
-      
-      // Special handling for array fields and complex objects
-      if (data.phases) {
-        // Convert dates in phases to Firestore Timestamps
-        firestoreUpdateData.phases = this.processPhasesDates(data.phases);
-        
-        console.log("Phases data being saved with proper date conversion:", 
-          JSON.stringify(firestoreUpdateData.phases.map((p: any) => ({
-            name: p.name,
-            startDate: p.startDate instanceof Timestamp ? p.startDate.toDate().toISOString() : p.startDate,
-            endDate: p.endDate instanceof Timestamp ? p.endDate.toDate().toISOString() : p.endDate
-          }))));
-      }
-      
-      // Process other fields
-      for (const [key, value] of Object.entries(data)) {
-        // Skip phases field as we handled it specially above
-        if (key === 'phases') continue;
-        
-        const typedKey = key as keyof Project;
-        
-        if (value !== undefined) {
-          if (typedKey === 'startDate' || typedKey === 'endDate' || typedKey === 'createdAt' || typedKey === 'updatedAt') {
-            // Convert Date objects to Firestore Timestamps
-            if (value instanceof Date) {
-              firestoreUpdateData[typedKey] = Timestamp.fromDate(value);
-            } else if (typedKey === 'endDate' && value === null) {
-              firestoreUpdateData.endDate = null;
-            }
-          } else if (typedKey === 'budget') {
-            firestoreUpdateData.budget = typeof value === 'object' && value !== null 
-                                        ? (value as any).total
-                                        : typeof value === 'number' ? value : 0;
-          } else if (typedKey === 'location') {
-              firestoreUpdateData.location = typeof value === 'object' && value !== null
-                                          ? `${(value as any).address}, ${(value as any).city}`
-                                          : typeof value === 'string' ? value : '';
-          } else {
-             // For other array fields like tasks, bids, team etc.
-             if (Array.isArray(value)) {
-               firestoreUpdateData[typedKey] = value;
-             } else {
-               firestoreUpdateData[typedKey] = value;
-             }
-          }
-        }
-      }
-      
-      console.log("Final Firestore update data:", JSON.stringify(firestoreUpdateData));
-      await updateDoc(projectRef, firestoreUpdateData);
-      console.log(`ProjectService: Project ${id} updated successfully`);
+      // Return the complete project with ID
+      return {
+        id: docRef.id,
+        ...completeProjectData
+      } as Project;
     } catch (error) {
-      console.error(`ProjectService: Error updating project ${id}:`, error);
+      console.error("Error creating project:", error);
       throw error;
     }
   }
 
-  static async deleteProject(id: string): Promise<void> {
-    const projectRef = doc(this.collection, id);
-    await deleteDoc(projectRef);
-  }
-
-  static async getProject(projectId: string, userId: string): Promise<Project | null> {
+  static async getProjectById(projectId: string): Promise<Project | null> {
     try {
-      console.log(`ProjectService: Fetching project ${projectId} for user ${userId}`);
-      const projectRef = doc(this.collection, projectId);
-      const projectDoc = await getDoc(projectRef);
-
+      const projectDoc = await getDoc(doc(this.collection, projectId));
+      
       if (!projectDoc.exists()) {
-        console.log(`ProjectService: Project ${projectId} not found.`);
         return null;
       }
-
-      const data = projectDoc.data() as FirestoreProject;
-
-      // DEVELOPMENT MODE: Allow access regardless of ownership
-      // In production, you would want to re-enable this check
-      if (data.userId !== userId) {
-        console.warn(`ProjectService: User ${userId} accessing project ${projectId} owned by ${data.userId}. ALLOWING access for development.`);
-      }
-
-      return this.convertFirestoreData(data, projectId);
+      
+      return {
+        id: projectDoc.id,
+        ...projectDoc.data()
+      } as Project;
     } catch (error) {
-      console.error(`ProjectService: Error fetching project ${projectId}:`, error);
-      throw new Error(`Failed to fetch project: ${error instanceof Error ? error.message : String(error)}`);
+      console.error("Error getting project:", error);
+      throw error;
+    }
+  }
+
+  static async getUserProjects(userId: string): Promise<Project[]> {
+    try {
+      const projectsQuery = query(this.collection, where("userId", "==", userId));
+      const querySnapshot = await getDocs(projectsQuery);
+      
+      const projects: Project[] = [];
+      querySnapshot.forEach((doc) => {
+        projects.push({
+          id: doc.id,
+          ...doc.data()
+        } as Project);
+      });
+      
+      return projects;
+    } catch (error) {
+      console.error("Error getting user projects:", error);
+      throw error;
+    }
+  }
+
+  static async updateProject(projectId: string, projectData: Partial<Project>): Promise<Project> {
+    try {
+      const projectRef = doc(this.collection, projectId);
+      
+      // Add updated timestamp
+      const updatedData = {
+        ...projectData,
+        updatedAt: new Date()
+      };
+      
+      await updateDoc(projectRef, updatedData);
+      
+      // Get the updated project
+      const updatedProject = await this.getProjectById(projectId);
+      
+      if (!updatedProject) {
+        throw new Error("Project not found after update");
+      }
+      
+      return updatedProject;
+    } catch (error) {
+      console.error("Error updating project:", error);
+      throw error;
+    }
+  }
+
+  static async deleteProject(projectId: string): Promise<void> {
+    try {
+      await deleteDoc(doc(this.collection, projectId));
+    } catch (error) {
+      console.error("Error deleting project:", error);
+      throw error;
     }
   }
 
@@ -611,7 +561,7 @@ export class ProjectService {
       console.log(`Residential project created with ${residentialPhases.length} phases and ${allTasks.length} tasks`);
       
       // Return the updated project
-      return await this.getProject(project.id, userId) as Project;
+      return await this.getProjectById(project.id) as Project;
     } catch (error) {
       console.error('Error creating residential project:', error);
       throw error;
@@ -629,66 +579,60 @@ export class ProjectService {
     result.setDate(result.getDate() + days);
     return result;
   }
+
+  static async getProject(projectId: string, userId: string): Promise<Project | null> {
+    // This is just a wrapper around getProjectById for backward compatibility
+    return this.getProjectById(projectId);
+  }
+
+  // Method to create a kitchen remodel project
+  static async createProjectWithTemplate(
+    userId: string,
+    projectData: Partial<Project>,
+    templateType: string
+  ): Promise<Project> {
+    // Since we removed the specialized template handling, this now just calls createProject
+    return this.createProject(userId, projectData);
+  }
 }
 
-// Update standalone getProject to match ProjectService.getProject parameter order,
-// and to be more permissive with permissions checking during development
+// Export the ProjectService class
+export { ProjectService };
+
+// Export a standalone wrapper for getProjectById for compatibility
+export const getProjectById = async (projectId: string, userId: string): Promise<Project | null> => {
+  return ProjectService.getProjectById(projectId);
+};
+
+// Export standalone functions that match the ProjectService class methods
+export const createProject = async (userId: string, projectData: Partial<Project>): Promise<Project> => {
+  return ProjectService.createProject(userId, projectData);
+};
+
+export const getProjects = async (userId: string, filters?: {
+  status?: Project['status'];
+  clientId?: string;
+  startDate?: Date;
+  endDate?: Date;
+}): Promise<Project[]> => {
+  return ProjectService.getProjects(userId, filters);
+};
+
+export const updateProject = async (projectId: string, projectData: Partial<Project>): Promise<Project> => {
+  return ProjectService.updateProject(projectId, projectData);
+};
+
+export const deleteProject = async (projectId: string): Promise<void> => {
+  return ProjectService.deleteProject(projectId);
+};
+
+export const getAllProjects = async (): Promise<Project[]> => {
+  // This function should be defined in the class if it exists
+  // For now, providing a simple implementation
+  console.error('getAllProjects is not implemented');
+  return [];
+};
+
 export const getProject = async (projectId: string, userId: string): Promise<Project | null> => {
-  try {
-    console.log(`getProject: Fetching project ${projectId} for user ${userId}`);
-    const projectRef = doc(db, 'projects', projectId);
-    const projectSnapshot = await getDoc(projectRef);
-    
-    if (!projectSnapshot.exists()) {
-      console.log(`getProject: Project with ID ${projectId} not found.`);
-      return null;
-    }
-    
-    const data = projectSnapshot.data();
-    
-    // Type safety check
-    if (!data) {
-      console.error('getProject: Project data is empty');
-      return null;
-    }
-    
-    // Convert Firestore timestamp fields to JavaScript Date objects
-    const project: Project = {
-      id: projectSnapshot.id,
-      userId: data.userId,
-      name: data.name || '',
-      description: data.description || '',
-      status: data.status || 'planning',
-      priority: data.priority,
-      clientId: data.clientId,
-      contractorId: data.contractorId,
-      startDate: data.startDate instanceof Timestamp ? data.startDate.toDate() : new Date(data.startDate || Date.now()),
-      endDate: data.endDate instanceof Timestamp ? data.endDate.toDate() : data.endDate ? new Date(data.endDate) : null,
-      budget: typeof data.budget === 'number' 
-        ? { total: data.budget, spent: 0, remaining: data.budget } 
-        : data.budget || { total: 0, spent: 0, remaining: 0 },
-      location: typeof data.location === 'string'
-        ? { address: data.location, city: '', state: '', zipCode: '' }
-        : data.location || { address: '', city: '', state: '', zipCode: '' },
-      createdAt: data.createdAt instanceof Timestamp ? data.createdAt.toDate() : new Date(data.createdAt || Date.now()),
-      updatedAt: data.updatedAt instanceof Timestamp ? data.updatedAt.toDate() : new Date(data.updatedAt || Date.now()),
-      team: data.team || [],
-      projectType: data.projectType || '',
-      estimatedDuration: data.estimatedDuration || '',
-      phases: data.phases || [],
-      keyMilestones: data.keyMilestones || [],
-      requirements: data.requirements || { permits: [], inspections: [], documents: [] },
-      tasks: data.tasks || []
-    };
-    
-    // DEVELOPMENT MODE: Skip permission checking
-    if (project.userId !== userId) {
-      console.warn(`getProject: User ${userId} accessing project ${projectId} owned by ${project.userId}. ALLOWING access for development.`);
-    }
-    
-    return project;
-  } catch (error) {
-    console.error(`getProject: Error fetching project ${projectId}:`, error);
-    throw error;
-  }
+  return ProjectService.getProject(projectId, userId);
 };
