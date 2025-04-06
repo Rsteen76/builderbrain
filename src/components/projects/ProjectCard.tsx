@@ -43,6 +43,7 @@ interface Project {
   name: string;
   status: string;
   dueDate?: string | Date;
+  endDate?: Date | null;  // Add endDate as an alternative to dueDate
   budget?: number | { total: number; spent: number; remaining: number };
   teamMembers?: any[];
   location?: string | { address: string; city: string; state: string; zipCode?: string };
@@ -101,7 +102,9 @@ const ProjectCard: React.FC<ProjectCardProps> = (props) => {
     ? getProjectStatusFromRaw(props.project.status) 
     : props.status;
   const dueDate = hasProjectObject 
-    ? (props.project.dueDate ? formatDate(props.project.dueDate) : 'No due date') 
+    ? (props.project.dueDate ? formatDate(props.project.dueDate) 
+      : props.project.endDate ? formatDate(props.project.endDate) 
+      : 'No due date') 
     : props.dueDate;
   const budget = hasProjectObject 
     ? (props.project.budget ? formatCurrency(props.project.budget) : 'Not set') 

@@ -29,6 +29,8 @@ import {
   Fade,
   Badge,
   CardActions,
+  ListItemIcon,
+  ListItemText,
 } from '@mui/material';
 import {
   Search as SearchIcon,
@@ -398,6 +400,7 @@ const Projects: React.FC = () => {
   
   const [contextMenuAnchor, setContextMenuAnchor] = useState<null | HTMLElement>(null);
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
+  const [newProjectMenuAnchor, setNewProjectMenuAnchor] = useState<null | HTMLElement>(null);
 
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
   const isTablet = useMediaQuery(theme.breakpoints.down('md'));
@@ -564,105 +567,75 @@ const Projects: React.FC = () => {
     handleCloseContextMenu();
   };
 
-  // Project templates section
-  const renderTemplatesSection = () => {
-    const templates = [
-      {
-        id: 'residential',
-        name: 'Residential Construction',
-        icon: <HouseIcon fontSize="large" />,
-        description: 'Single-family homes, multi-family units, renovations, and additions.',
-        route: '/projects/new-residential',
-        color: theme.palette.primary.main,
-      },
-      {
-        id: 'commercial',
-        name: 'Commercial Building',
-        icon: <BusinessIcon fontSize="large" />,
-        description: 'Office buildings, retail spaces, warehouses, and industrial facilities.',
-        route: '/projects/new-custom',
-        params: { template: 'commercial' },
-        color: theme.palette.secondary.main,
-      },
-      {
-        id: 'renovation',
-        name: 'Renovation Project',
-        icon: <ConstructionIcon fontSize="large" />,
-        description: 'Remodeling existing structures, tenant improvements, and historic renovations.',
-        route: '/projects/new-custom',
-        params: { template: 'renovation' },
-        color: '#ff9800', // Orange
-      },
-      {
-        id: 'landscaping',
-        name: 'Landscaping Project',
-        icon: <LandscapeIcon fontSize="large" />,
-        description: 'Outdoor spaces, hardscaping, softscaping, and landscape construction.',
-        route: '/projects/new-custom',
-        params: { template: 'landscaping' },
-        color: '#4caf50', // Green
-      },
-      {
-        id: 'custom',
-        name: 'Custom Project',
-        icon: <AddCircleOutlineIcon fontSize="large" />,
-        description: 'Create your own project structure with custom phases tailored to your specific needs.',
-        route: '/projects/new-custom',
-        color: '#9c27b0', // Purple
-      },
-    ];
+  // Project templates data
+  const templates = [
+    {
+      id: 'residential',
+      name: 'Residential Construction',
+      icon: <HouseIcon fontSize="small" />,
+      description: 'Single-family homes, multi-family units, renovations, and additions.',
+      route: '/projects/new-residential',
+      color: theme.palette.primary.main,
+    },
+    {
+      id: 'commercial',
+      name: 'Commercial Building',
+      icon: <BusinessIcon fontSize="small" />,
+      description: 'Office buildings, retail spaces, warehouses, and industrial facilities.',
+      route: '/projects/new-custom',
+      params: { template: 'commercial' },
+      color: theme.palette.secondary.main,
+    },
+    {
+      id: 'renovation',
+      name: 'Renovation Project',
+      icon: <ConstructionIcon fontSize="small" />,
+      description: 'Remodeling existing structures, tenant improvements, and historic renovations.',
+      route: '/projects/new-custom',
+      params: { template: 'renovation' },
+      color: '#ff9800', // Orange
+    },
+    {
+      id: 'landscaping',
+      name: 'Landscaping Project',
+      icon: <LandscapeIcon fontSize="small" />,
+      description: 'Outdoor spaces, hardscaping, softscaping, and landscape construction.',
+      route: '/projects/new-custom',
+      params: { template: 'landscaping' },
+      color: '#4caf50', // Green
+    },
+    {
+      id: 'custom',
+      name: 'Custom Project',
+      icon: <AddCircleOutlineIcon fontSize="small" />,
+      description: 'Create your own project structure with custom phases tailored to your specific needs.',
+      route: '/projects/new-custom',
+      color: '#9c27b0', // Purple
+    },
+  ];
 
-    return (
-      <Box sx={{ mb: 4, mt: 2 }}>
-        <Typography variant="h6" fontWeight={600} gutterBottom>
-          Start a New Project
-        </Typography>
-        <Grid container spacing={2}>
-          {templates.map((template) => (
-            <Grid item xs={6} sm={4} md={2.4} key={template.id}>
-              <Card 
-                sx={{ 
-                  height: '100%',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  transition: 'transform 0.2s',
-                  '&:hover': {
-                    transform: 'translateY(-4px)',
-                    boxShadow: 4,
-                  },
-                  cursor: 'pointer',
-                }}
-                onClick={() => {
-                  if (template.params) {
-                    navigate(template.route, { state: template.params });
-                  } else {
-                    navigate(template.route);
-                  }
-                }}
-              >
-                <Box 
-                  sx={{ 
-                    p: 2, 
-                    display: 'flex', 
-                    justifyContent: 'center', 
-                    alignItems: 'center',
-                    color: 'white',
-                    bgcolor: template.color,
-                  }}
-                >
-                  {template.icon}
-                </Box>
-                <CardContent sx={{ flexGrow: 1, p: 1.5 }}>
-                  <Typography variant="subtitle1" component="h3" gutterBottom sx={{ fontWeight: 600 }}>
-                    {template.name}
-                  </Typography>
-                </CardContent>
-              </Card>
-            </Grid>
-          ))}
-        </Grid>
-      </Box>
-    );
+  // New project dropdown handlers
+  const handleNewProjectClick = (event: React.MouseEvent<HTMLElement>) => {
+    setNewProjectMenuAnchor(event.currentTarget);
+  };
+
+  const handleNewProjectMenuClose = () => {
+    setNewProjectMenuAnchor(null);
+  };
+
+  const handleTemplateSelect = (template: typeof templates[0]) => {
+    if (template.params) {
+      navigate(template.route, { state: template.params });
+    } else {
+      navigate(template.route);
+    }
+    handleNewProjectMenuClose();
+  };
+
+  // Project templates section - we're going to replace this with the dropdown menu
+  const renderTemplatesSection = () => {
+    // We're not rendering this section anymore, but keeping the function for backward compatibility
+    return null;
   };
 
   return (
@@ -719,7 +692,8 @@ const Projects: React.FC = () => {
           <Button
             variant="contained"
             startIcon={!isMobile ? <AddIcon /> : undefined}
-            onClick={() => navigate('/projects/new')}
+            endIcon={!isMobile ? <ArrowForwardIcon fontSize="small" /> : undefined}
+            onClick={handleNewProjectClick}
             sx={{ 
               borderRadius: 1.5,
               minWidth: { xs: 40, sm: 'auto' },
@@ -732,6 +706,65 @@ const Projects: React.FC = () => {
           >
             {isMobile ? <AddIcon fontSize="small" /> : "New Project"}
           </Button>
+
+          {/* New Project Templates Menu */}
+          <Menu
+            anchorEl={newProjectMenuAnchor}
+            open={Boolean(newProjectMenuAnchor)}
+            onClose={handleNewProjectMenuClose}
+            anchorOrigin={{
+              vertical: 'bottom',
+              horizontal: 'right',
+            }}
+            transformOrigin={{
+              vertical: 'top',
+              horizontal: 'right',
+            }}
+            PaperProps={{
+              elevation: 2,
+              sx: {
+                minWidth: 220,
+                maxWidth: 280,
+                borderRadius: 1.5,
+                boxShadow: '0 4px 20px rgba(0,0,0,0.1)',
+                pb: 1,
+              }
+            }}
+          >
+            <Typography
+              variant="subtitle2"
+              sx={{ px: 2, py: 1.5, fontWeight: 600, color: 'text.primary' }}
+            >
+              Choose Project Type
+            </Typography>
+            
+            {templates.map((template) => (
+              <MenuItem 
+                key={template.id}
+                onClick={() => handleTemplateSelect(template)}
+                sx={{
+                  py: 1.25,
+                  px: 2,
+                  '&:hover': {
+                    backgroundColor: alpha(template.color, 0.08),
+                  }
+                }}
+              >
+                <ListItemIcon sx={{ color: template.color, minWidth: 36 }}>
+                  {template.icon}
+                </ListItemIcon>
+                <ListItemText 
+                  primary={template.name}
+                  sx={{ 
+                    '& .MuiTypography-root': { 
+                      fontWeight: 600,
+                      fontSize: '0.9rem',
+                    }
+                  }}
+                />
+              </MenuItem>
+            ))}
+          </Menu>
         </Stack>
       }
       sx={{ 
@@ -742,8 +775,7 @@ const Projects: React.FC = () => {
       }}
     >
       <Container maxWidth="xl" sx={{ mt: 2 }}>
-        {/* Project Templates Section */}
-        {renderTemplatesSection()}
+        {/* Project Templates Section - removed */}
         
         {/* Search Box */}
         <Paper 
@@ -935,7 +967,7 @@ const Projects: React.FC = () => {
               <Button
                 variant="contained"
                 startIcon={<AddIcon />}
-                onClick={() => navigate('/projects/new')}
+                onClick={handleNewProjectClick}
                 sx={{ mt: 1, borderRadius: 1.5 }}
               >
                 Create New Project
