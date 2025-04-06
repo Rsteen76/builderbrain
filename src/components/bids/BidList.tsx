@@ -482,7 +482,12 @@ const FilterPanel: React.FC<FilterPanelProps> = ({
   );
 };
 
-const BidList: React.FC<{ projectId?: string }> = ({ projectId }) => {
+interface BidListProps {
+  projectId?: string;
+  hideHeader?: boolean;
+}
+
+const BidList: React.FC<BidListProps> = ({ projectId, hideHeader = false }) => {
   const { user, loading: authLoading } = useAuth();
   const navigate = useNavigate();
   const [bids, setBids] = useState<BidSummary[]>([]);
@@ -621,17 +626,19 @@ const BidList: React.FC<{ projectId?: string }> = ({ projectId }) => {
 
   return (
     <Box sx={{ py: 3 }}>
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
-        <Typography variant="h4" component="h1">Bids</Typography>
-        <Button 
-          variant="contained" 
-          color="primary" 
-          startIcon={<AddIcon />}
-          onClick={() => navigate('/bids/new')}
-        >
-          New Bid
-        </Button>
-      </Box>
+      {!hideHeader && (
+        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
+          <Typography variant="h4" component="h1">Bids</Typography>
+          <Button 
+            variant="contained" 
+            color="primary" 
+            startIcon={<AddIcon />}
+            onClick={() => navigate('/bids/new')}
+          >
+            New Bid
+          </Button>
+        </Box>
+      )}
 
       {error && (
         <Alert severity="error" sx={{ mb: 3 }}>

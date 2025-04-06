@@ -1,7 +1,12 @@
 import React from 'react';
 import {
   Box,
+  Typography,
+  Button,
 } from '@mui/material';
+import {
+  Add as AddIcon,
+} from '@mui/icons-material';
 import { Bid } from '../../../types';
 import { useAuth } from '../../../hooks/useAuth';
 import BidList from '../../bids/BidList';
@@ -30,9 +35,21 @@ const ProjectBidsTab: React.FC<ProjectBidsTabProps> = ({
   const { user } = useAuth();
 
   return (
-    <Box>      
+    <Box>
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
+        <Typography variant="h5" fontWeight={600}>Project Bids</Typography>
+        <Button 
+          variant="contained" 
+          startIcon={<AddIcon />}
+          onClick={handleAddBid}
+          sx={{ borderRadius: 1.5 }}
+        >
+          Add New Bid
+        </Button>
+      </Box>
+      
       {/* Display current project bids using the enhanced BidList component */}
-      <BidList projectId={projectId} />
+      <BidList projectId={projectId} hideHeader={true} />
     </Box>
   );
 };
