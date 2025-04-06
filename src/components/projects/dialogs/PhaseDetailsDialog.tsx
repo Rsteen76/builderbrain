@@ -23,7 +23,7 @@ import {
 } from '@mui/material';
 import { Edit as EditIcon } from '@mui/icons-material';
 import { ProjectPhase, Bid, Expense } from '../../../types';
-import { formatCurrency } from '../../../utils/formatters';
+import { formatCurrency, safelyParseDate } from '../../../utils/formatters';
 
 interface PhaseDetailsDialogProps {
   open: boolean;
@@ -107,11 +107,11 @@ const PhaseDetailsDialog: React.FC<PhaseDetailsDialogProps> = ({
                     </Grid>
                     <Grid item xs={12} sm={6}>
                       <Typography variant="body2" color="text.secondary">Start Date</Typography>
-                      <Typography variant="body1">{new Date(phase.startDate).toLocaleDateString()}</Typography>
+                      <Typography variant="body1">{safelyParseDate(phase.startDate).toLocaleDateString()}</Typography>
                     </Grid>
                     <Grid item xs={12} sm={6}>
                       <Typography variant="body2" color="text.secondary">End Date</Typography>
-                      <Typography variant="body1">{new Date(phase.endDate).toLocaleDateString()}</Typography>
+                      <Typography variant="body1">{safelyParseDate(phase.endDate).toLocaleDateString()}</Typography>
                     </Grid>
                     <Grid item xs={12} sm={6}>
                       <Typography variant="body2" color="text.secondary">Budget</Typography>

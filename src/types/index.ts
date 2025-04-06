@@ -284,8 +284,9 @@ export interface Phase {
   id?: string;
   projectId?: string;
   name: string;
-  startDate: any; // Changed from 'string | Date' to 'any' to accommodate Firestore Timestamp
-  endDate: any; // Changed from 'string | Date' to 'any'
+  // Change from 'any' to a more explicit union type that includes Timestamp
+  startDate: Date | string | { toDate(): Date } | null;
+  endDate: Date | string | { toDate(): Date } | null;
   status: 'not_started' | 'in_progress' | 'completed' | 'delayed' | 'on_hold';
   progress: number;
   budget: number;

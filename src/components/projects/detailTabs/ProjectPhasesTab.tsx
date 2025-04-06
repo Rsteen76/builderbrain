@@ -67,6 +67,7 @@ import {
   CartesianGrid,
   Legend
 } from 'recharts';
+import { formatCurrency, formatDate, truncateText, safelyParseDate } from '../../../utils/formatters';
 
 import { ProjectPhase, Bid, Expense } from '../../../types';
 
@@ -81,17 +82,12 @@ const getPhaseInitials = (phaseName: string): string => {
     .toUpperCase();
 };
 
-const formatPhaseDate = (date: Date | string | number | undefined): string => {
-  if (!date) return 'TBD';
+// Helper function to format dates consistently
+const formatPhaseDate = (date: Date | string | { toDate(): Date } | null): string => {
   try {
-    const dateObj = new Date(date);
-    // Check if the date is valid
-    if (isNaN(dateObj.getTime())) {
-      return 'Invalid date';
-    }
-    return dateObj.toLocaleDateString();
+    return safelyParseDate(date).toLocaleDateString();
   } catch (error) {
-    console.error('Error formatting date:', error);
+    console.error('Error formatting phase date:', error);
     return 'Invalid date';
   }
 };

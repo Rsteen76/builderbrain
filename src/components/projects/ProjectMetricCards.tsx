@@ -85,22 +85,45 @@ const ProjectMetricCards: React.FC<ProjectMetricCardsProps> = ({
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
   const isSmall = useMediaQuery(theme.breakpoints.down('sm'));
   
+  // Ensure timeline data is valid and has proper defaults
+  const safeTimeline = {
+    startDate: timeline?.startDate instanceof Date ? timeline.startDate : new Date(),
+    endDate: timeline?.endDate instanceof Date ? timeline.endDate : new Date(),
+    elapsedDays: timeline?.elapsedDays ?? 0,
+    totalDays: timeline?.totalDays ?? 0,
+    percentComplete: timeline?.percentComplete ?? 0
+  };
+  
+  // Ensure progress and budget data are valid
+  const safeProgress = typeof projectProgress === 'number' && !isNaN(projectProgress) ? projectProgress : 0;
+  const safeBudgetData = {
+    totalBudget: typeof budgetData?.totalBudget === 'number' ? budgetData.totalBudget : 0,
+    totalActual: typeof budgetData?.totalActual === 'number' ? budgetData.totalActual : 0,
+    difference: typeof budgetData?.difference === 'number' ? budgetData.difference : 0,
+    percentUsed: typeof budgetData?.percentUsed === 'number' ? budgetData.percentUsed : 0
+  };
+  
   // Determine budget status indicator
-  const budgetStatus = budgetData.difference >= 0 
+  const budgetStatus = safeBudgetData.difference >= 0 
     ? { icon: <TrendingUpIcon sx={{ color: 'success.main' }} />, label: 'Under Budget', color: 'success.main' }
     : { icon: <TrendingDownIcon sx={{ color: 'error.main' }} />, label: 'Over Budget', color: 'error.main' };
     
   // Project health calculation based on budget and timeline
   const calculateProjectHealth = () => {
-    const budgetRatio = budgetData.totalActual / budgetData.totalBudget;
-    const timeRatio = timeline.elapsedDays / timeline.totalDays;
+    const budgetRatio = safeBudgetData.totalActual / safeBudgetData.totalBudget;
+    const timeRatio = safeTimeline.elapsedDays / safeTimeline.totalDays;
+    
+    // If data is missing, default to Fair status
+    if (isNaN(budgetRatio) || isNaN(timeRatio) || !isFinite(budgetRatio) || !isFinite(timeRatio)) {
+      return { status: 'Fair', color: theme.palette.warning.main, icon: <FlagIcon /> };
+    }
     
     // Over budget and behind schedule
-    if (budgetRatio > 1 && timeRatio > timeline.percentComplete / 100) {
+    if (budgetRatio > 1 && timeRatio > safeTimeline.percentComplete / 100) {
       return { status: 'At Risk', color: theme.palette.error.main, icon: <PriorityHighIcon /> };
     }
     // Under budget and ahead of schedule
-    else if (budgetRatio < 0.9 && timeRatio < timeline.percentComplete / 100) {
+    else if (budgetRatio < 0.9 && timeRatio < safeTimeline.percentComplete / 100) {
       return { status: 'Excellent', color: theme.palette.success.dark, icon: <CheckCircleIcon /> };
     }
     // Slightly over budget or slightly behind schedule
@@ -154,7 +177,7 @@ const ProjectMetricCards: React.FC<ProjectMetricCardsProps> = ({
           <Box>
             <Typography variant="h6" sx={{ fontWeight: 600 }}>Project Health: <span style={{ color: projectHealth.color }}>{projectHealth.status}</span></Typography>
             <Typography variant="body2" sx={{ color: 'text.secondary', mt: 0.5 }}>
-              {projectProgress}% complete • {formatCurrency(budgetData.totalActual)} spent • {timeline.elapsedDays} days elapsed
+              {safeProgress}% complete • {formatCurrency(safeBudgetData.totalActual)} spent • {safeTimeline.elapsedDays} days elapsed
             </Typography>
           </Box>
         </Box>
@@ -201,13 +224,13 @@ const ProjectMetricCards: React.FC<ProjectMetricCardsProps> = ({
               </Box>
               
               <Typography variant="h4" sx={{ mb: 1, fontWeight: 700 }}>
-                {projectProgress}%
+                {safeProgress}%
               </Typography>
               
               <Box sx={{ mt: 2, mb: 1 }}>
                 <LinearProgress 
                   variant="determinate" 
-                  value={projectProgress} 
+                  value={safeProgress} 
                   sx={{ 
                     height: 10, 
                     borderRadius: 5,
@@ -221,7 +244,7 @@ const ProjectMetricCards: React.FC<ProjectMetricCardsProps> = ({
               </Box>
               
               <Typography variant="body2" sx={{ color: 'text.secondary', mt: 1 }}>
-                {timeline.elapsedDays} of {timeline.totalDays} days elapsed
+                {safeTimeline.elapsedDays} of {safeTimeline.totalDays} days elapsed
               </Typography>
             </CardContent>
           </Card>
@@ -250,13 +273,13 @@ const ProjectMetricCards: React.FC<ProjectMetricCardsProps> = ({
               </Box>
               
               <Typography variant="h4" sx={{ mb: 1, fontWeight: 700 }}>
-                {formatCurrency(budgetData.totalBudget)}
+                {formatCurrency(safeBudgetData.totalBudget)}
               </Typography>
               
               <Box sx={{ mt: 0.5 }}>
                 <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
                   <Typography variant="body2" sx={{ color: 'text.secondary' }}>Spent:</Typography>
-                  <Typography variant="body2" sx={{ fontWeight: 600 }}>{formatCurrency(budgetData.totalActual)}</Typography>
+                  <Typography variant="body2" sx={{ fontWeight: 600 }}>{formatCurrency(safeBudgetData.totalActual)}</Typography>
                 </Box>
                 <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
                   <Typography variant="body2" sx={{ color: 'text.secondary' }}>Remaining:</Typography>
@@ -264,10 +287,10 @@ const ProjectMetricCards: React.FC<ProjectMetricCardsProps> = ({
                     variant="body2" 
                     sx={{ 
                       fontWeight: 600,
-                      color: budgetData.difference >= 0 ? 'success.main' : 'error.main'
+                      color: safeBudgetData.difference >= 0 ? 'success.main' : 'error.main'
                     }}
                   >
-                    {formatCurrency(budgetData.difference)}
+                    {formatCurrency(safeBudgetData.difference)}
                   </Typography>
                 </Box>
               </Box>
@@ -275,16 +298,16 @@ const ProjectMetricCards: React.FC<ProjectMetricCardsProps> = ({
               <Box sx={{ mt: 2, mb: 1 }}>
                 <LinearProgress 
                   variant="determinate" 
-                  value={Math.min(budgetData.percentUsed, 100)} 
+                  value={Math.min(safeBudgetData.percentUsed, 100)} 
                   sx={{ 
                     height: 10, 
                     borderRadius: 5,
                     backgroundColor: alpha(theme.palette.primary.main, 0.1),
                     '& .MuiLinearProgress-bar': {
                       borderRadius: 5,
-                      background: budgetData.percentUsed > 100 
+                      background: safeBudgetData.percentUsed > 100 
                         ? `linear-gradient(90deg, ${theme.palette.error.main} 0%, ${theme.palette.error.dark} 100%)`
-                        : budgetData.percentUsed > 85
+                        : safeBudgetData.percentUsed > 85
                           ? `linear-gradient(90deg, ${theme.palette.warning.main} 0%, ${theme.palette.warning.dark} 100%)`
                           : `linear-gradient(90deg, ${theme.palette.success.main} 0%, ${theme.palette.success.dark} 100%)`
                     }
@@ -293,7 +316,7 @@ const ProjectMetricCards: React.FC<ProjectMetricCardsProps> = ({
               </Box>
               
               <Typography variant="body2" sx={{ color: 'text.secondary', mt: 1 }}>
-                {formatPercentage(budgetData.percentUsed)} of budget used
+                {formatPercentage(safeBudgetData.percentUsed)} of budget used
               </Typography>
             </CardContent>
           </Card>
@@ -326,7 +349,7 @@ const ProjectMetricCards: React.FC<ProjectMetricCardsProps> = ({
               </Box>
               
               <Typography variant="h4" sx={{ mb: 1, fontWeight: 700 }}>
-                {timeline.totalDays} days
+                {safeTimeline.totalDays} days
               </Typography>
               
               <Box sx={{ mt: 1.5, display: 'flex', gap: 1, flexDirection: 'column' }}>
@@ -336,7 +359,7 @@ const ProjectMetricCards: React.FC<ProjectMetricCardsProps> = ({
                     <Typography variant="body2" sx={{ color: 'text.secondary' }}>Start:</Typography>
                   </Box>
                   <Typography variant="body2" sx={{ fontWeight: 600 }}>
-                    {timeline.startDate.toLocaleDateString()}
+                    {safeTimeline.startDate.toLocaleDateString()}
                   </Typography>
                 </Box>
                 
@@ -346,7 +369,7 @@ const ProjectMetricCards: React.FC<ProjectMetricCardsProps> = ({
                     <Typography variant="body2" sx={{ color: 'text.secondary' }}>End:</Typography>
                   </Box>
                   <Typography variant="body2" sx={{ fontWeight: 600 }}>
-                    {timeline.endDate.toLocaleDateString()}
+                    {safeTimeline.endDate.toLocaleDateString()}
                   </Typography>
                 </Box>
               </Box>
@@ -354,7 +377,7 @@ const ProjectMetricCards: React.FC<ProjectMetricCardsProps> = ({
               <Box sx={{ mt: 2, mb: 1 }}>
                 <LinearProgress 
                   variant="determinate" 
-                  value={timeline.percentComplete} 
+                  value={safeTimeline.percentComplete} 
                   sx={{ 
                     height: 10, 
                     borderRadius: 5,
@@ -368,7 +391,7 @@ const ProjectMetricCards: React.FC<ProjectMetricCardsProps> = ({
               </Box>
               
               <Typography variant="body2" sx={{ color: 'text.secondary', mt: 1 }}>
-                {timeline.elapsedDays} days elapsed ({formatPercentage(timeline.percentComplete)})
+                {safeTimeline.elapsedDays} days elapsed ({formatPercentage(safeTimeline.percentComplete)})
               </Typography>
             </CardContent>
           </Card>

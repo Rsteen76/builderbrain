@@ -32,6 +32,7 @@ import {
 } from '@mui/icons-material';
 import { Project, Phase } from '../../types';
 import { ProjectService } from '../../services/project';
+import { safelyParseDate } from '../../utils/formatters';
 
 // Extend Phase to include percentage for template editing
 interface PhaseWithPercentage extends Phase {
@@ -98,7 +99,7 @@ const TemplateAdjuster: React.FC<TemplateAdjusterProps> = ({
     if (phases.length > 0) {
       // Find the latest end date from existing phases
       const existingPhasesEndDates = phases
-        .map(phase => phase.endDate instanceof Date ? phase.endDate : new Date(phase.endDate || ''))
+        .map(phase => phase.endDate instanceof Date ? phase.endDate : safelyParseDate(phase.endDate))
         .filter(date => !isNaN(date.getTime()));
       
       if (existingPhasesEndDates.length > 0) {

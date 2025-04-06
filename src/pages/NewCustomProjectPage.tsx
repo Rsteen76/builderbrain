@@ -43,6 +43,7 @@ import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns';
 import { DatePicker } from '@mui/x-date-pickers/DatePicker';
 import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
 import { ProjectStatus, Phase, Project } from '../types';
+import { formatCurrency, formatDate, safelyParseDate } from '../utils/formatters';
 
 // Define the project data interface
 interface ProjectData {
@@ -579,12 +580,12 @@ const NewCustomProjectPage: React.FC = () => {
               
               <Typography variant="subtitle2">Start Date:</Typography>
               <Typography variant="body1" gutterBottom>
-                {projectBasicData?.startDate?.toLocaleDateString() || 'Not set'}
+                {safelyParseDate(projectBasicData?.startDate).toLocaleDateString()}
               </Typography>
               
               <Typography variant="subtitle2">End Date:</Typography>
               <Typography variant="body1" gutterBottom>
-                {projectBasicData?.endDate?.toLocaleDateString() || 'Not set'}
+                {safelyParseDate(projectBasicData?.endDate).toLocaleDateString()}
               </Typography>
             </Box>
           </Paper>
@@ -601,7 +602,7 @@ const NewCustomProjectPage: React.FC = () => {
                 <Box key={index} sx={{ mb: 2, pb: 2, borderBottom: index < customPhases.length - 1 ? `1px solid ${alpha(theme.palette.divider, 0.1)}` : 'none' }}>
                   <Typography variant="subtitle2">{phase.name}</Typography>
                   <Typography variant="body2" color="text.secondary">
-                    {new Date(phase.startDate).toLocaleDateString()} - {new Date(phase.endDate).toLocaleDateString()}
+                    {safelyParseDate(phase.startDate).toLocaleDateString()} - {safelyParseDate(phase.endDate).toLocaleDateString()}
                   </Typography>
                   <Typography variant="body2" color="text.secondary">
                     Budget: ${phase.budget?.toLocaleString() || '0'}

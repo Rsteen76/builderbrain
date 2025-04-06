@@ -32,6 +32,7 @@ import { useNavigate } from 'react-router-dom';
 import { ProjectService } from '../../services/project';
 import { useAuth } from '../../contexts/AuthContext';
 import { Project, Phase } from '../../types';
+import { safelyParseDate } from '../../utils/formatters';
 
 // Predefined options for various fields
 const projectTypes = [
@@ -261,7 +262,7 @@ const ProjectSetupWizard: React.FC = () => {
     } else {
       // Find the latest end date of existing phases
       const existingPhasesEndDates = existingPhases
-        .map(phase => phase.endDate instanceof Date ? phase.endDate : new Date(phase.endDate || ''))
+        .map(phase => phase.endDate instanceof Date ? phase.endDate : safelyParseDate(phase.endDate))
         .filter(date => !isNaN(date.getTime()));
       
       if (existingPhasesEndDates.length > 0) {
@@ -374,7 +375,7 @@ const ProjectSetupWizard: React.FC = () => {
         // Find the earliest phase start date in the current phases
         const earliestPhaseDate = adjustedPhases.reduce((earliest, phase) => {
           const phaseStart = phase.startDate instanceof Date ? 
-            phase.startDate : new Date(phase.startDate || new Date());
+            phase.startDate : safelyParseDate(phase.startDate);
           return phaseStart < earliest ? phaseStart : earliest;
         }, new Date(8640000000000000)); // Max date value
         
@@ -385,14 +386,14 @@ const ProjectSetupWizard: React.FC = () => {
         if (Math.abs(timeOffset) > 86400000) {
           // Adjust all phase dates by this offset
           adjustedPhases = adjustedPhases.map(phase => {
-            const phaseStartDate = phase.startDate instanceof Date ? 
-              phase.startDate : new Date(phase.startDate || new Date());
-            const phaseEndDate = phase.endDate instanceof Date ? 
-              phase.endDate : new Date(phase.endDate || new Date());
+            const phaseStart = phase.startDate instanceof Date ? 
+              phase.startDate : safelyParseDate(phase.startDate);
+            const phaseEnd = phase.endDate instanceof Date ? 
+              phase.endDate : safelyParseDate(phase.endDate);
             
             // Apply offset to both start and end dates
-            const adjustedStartDate = new Date(phaseStartDate.getTime() + timeOffset);
-            const adjustedEndDate = new Date(phaseEndDate.getTime() + timeOffset);
+            const adjustedStartDate = new Date(phaseStart.getTime() + timeOffset);
+            const adjustedEndDate = new Date(phaseEnd.getTime() + timeOffset);
             
             return {
               ...phase,

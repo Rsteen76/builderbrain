@@ -31,6 +31,7 @@ import { DatePicker } from '@mui/x-date-pickers/DatePicker';
 import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
 import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns';
 import { Phase } from '../../types';
+import { safelyParseDate } from '../../utils/formatters';
 
 interface PhaseSetupStepperProps {
   phases: Phase[];
@@ -64,7 +65,7 @@ const PhaseSetupStepper: React.FC<PhaseSetupStepperProps> = ({
       // If we have existing phases, set the start date after the last phase
       const lastPhase = phases[phases.length - 1];
       if (lastPhase.endDate) {
-        startDate = new Date(lastPhase.endDate);
+        startDate = safelyParseDate(lastPhase.endDate);
         // Add one day to avoid overlap
         startDate.setDate(startDate.getDate() + 1);
       }

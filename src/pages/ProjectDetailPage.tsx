@@ -99,7 +99,7 @@ import { ProjectService } from '../services/project';
 import { ExpenseService } from '../services/expense';
 import { BidService } from '../services/bid';
 import { SubcontractorService } from '../services/subcontractor';
-import { formatCurrency, formatDate, formatPercentage } from '../utils/formatters';
+import { formatCurrency, formatDate, formatPercentage, safelyParseDate } from '../utils/formatters';
 import PageLayout from '../components/layout/PageLayout';
 import ProjectTaskManager from '../components/projects/ProjectTaskManager';
 import TemplateAdjuster from '../components/projects/TemplateAdjuster';
@@ -366,15 +366,15 @@ const ProjectDetailPage: React.FC = () => {
       let endDate = phase.endDate;
       
       // Check if startDate is valid
-      if (!startDate || isNaN(new Date(startDate).getTime())) {
+      if (!startDate || isNaN(safelyParseDate(startDate).getTime())) {
         startDate = new Date();
       }
       
       // Check if endDate is valid
-      if (!endDate || isNaN(new Date(endDate).getTime())) {
+      if (!endDate || isNaN(safelyParseDate(endDate).getTime())) {
         // Set endDate to 30 days after startDate
-        const newEndDate = new Date(startDate);
-        newEndDate.setDate(new Date(startDate).getDate() + 30);
+        const newEndDate = new Date(safelyParseDate(startDate).getTime());
+        newEndDate.setDate(safelyParseDate(startDate).getDate() + 30);
         endDate = newEndDate;
       }
       
@@ -1043,14 +1043,49 @@ const ProjectDetailPage: React.FC = () => {
   const projectProgress = useMemo(() => {
     if (!phases.length) return 0;
     
-    const totalWeight = phases.reduce((sum, phase) => sum + phase.budget, 0);
-    if (totalWeight === 0) return 0;
+    console.log('Calculating project progress with phases:', 
+      phases.map(p => ({
+        id: p.id,
+        name: p.name,
+        budget: p.budget,
+        progress: p.progress
+      }))
+    );
     
-    const weightedProgress = phases.reduce((sum, phase) => {
+    // Filter out phases with invalid budget
+    const validPhases = phases.filter(phase => typeof phase.budget === 'number' && !isNaN(phase.budget));
+    
+    if (validPhases.length === 0) {
+      // If no phases have valid budgets, use simple average
+      const averageProgress = phases.reduce((sum, phase) => 
+        sum + (typeof phase.progress === 'number' && !isNaN(phase.progress) ? phase.progress : 0), 
+        0
+      ) / phases.length;
+      
+      console.log('Using simple average progress:', averageProgress);
+      return Math.round(averageProgress);
+    }
+    
+    const totalWeight = validPhases.reduce((sum, phase) => sum + (phase.budget || 0), 0);
+    
+    if (totalWeight === 0) {
+      // Fallback to simple average if total weight is still zero
+      const averageProgress = phases.reduce((sum, phase) => sum + (phase.progress || 0), 0) / phases.length;
+      console.log('Total weight is zero, using simple average:', averageProgress);
+      return Math.round(averageProgress);
+    }
+    
+    const weightedProgress = validPhases.reduce((sum, phase) => {
       const weight = phase.budget / totalWeight;
-      return sum + (phase.progress * weight);
+      const phaseProgress = typeof phase.progress === 'number' && !isNaN(phase.progress) ? phase.progress : 0;
+      const weighted = phaseProgress * weight;
+      
+      console.log(`Phase ${phase.name}: budget=${phase.budget}, weight=${weight.toFixed(2)}, progress=${phaseProgress}, weighted=${weighted.toFixed(2)}`);
+      
+      return sum + weighted;
     }, 0);
     
+    console.log('Final weighted progress:', weightedProgress);
     return Math.round(weightedProgress);
   }, [phases]);
   
@@ -1121,21 +1156,64 @@ const ProjectDetailPage: React.FC = () => {
 
   // Calculate timeline and progress
   const timeline = useMemo(() => {
-    // If we have a project with dates, use those directly
-    if (project?.startDate && project?.endDate) {
-      // Ensure dates are actual Date objects
-      const projectStartDate = project.startDate instanceof Date 
-        ? project.startDate 
-        : new Date(project.startDate);
+    // Debug logging to help diagnose issues
+    console.log('Project dates:', {
+      startDate: project?.startDate,
+      endDate: project?.endDate,
+      startDateType: project?.startDate ? typeof project.startDate : 'undefined',
+      startDateIsDate: project?.startDate instanceof Date,
+      endDateType: project?.endDate ? typeof project.endDate : 'undefined',
+      endDateIsDate: project?.endDate instanceof Date,
+    });
+    
+    // Helper function to safely parse dates of any type
+    const safelyParseDate = (dateInput: any): Date | null => {
+      if (!dateInput) return null;
       
-      const projectEndDate = project.endDate instanceof Date 
-        ? project.endDate 
-        : new Date(project.endDate);
+      try {
+        // If it's already a Date object
+        if (dateInput instanceof Date) {
+          return isNaN(dateInput.getTime()) ? null : dateInput;
+        }
+        
+        // If it's a Firestore Timestamp
+        if (dateInput && typeof dateInput.toDate === 'function') {
+          return dateInput.toDate();
+        }
+        
+        // If it's a string, try to parse it
+        if (typeof dateInput === 'string') {
+          const parsed = new Date(dateInput);
+          return isNaN(parsed.getTime()) ? null : parsed;
+        }
+        
+        // If it's a number (timestamp)
+        if (typeof dateInput === 'number') {
+          const parsed = new Date(dateInput);
+          return isNaN(parsed.getTime()) ? null : parsed;
+        }
+        
+        return null;
+      } catch (error) {
+        console.error('Error parsing date:', error, dateInput);
+        return null;
+      }
+    };
+    
+    // If we have a project with dates, use those directly
+    if (project?.startDate || project?.endDate) {
+      const projectStartDate = safelyParseDate(project.startDate) || new Date();
+      const projectEndDate = safelyParseDate(project.endDate) || new Date(projectStartDate.getTime() + 30 * 24 * 60 * 60 * 1000); // Default to 30 days
+      
+      console.log('Parsed project dates:', {
+        startDate: projectStartDate,
+        endDate: projectEndDate
+      });
       
       const today = new Date();
       
       const totalDuration = projectEndDate.getTime() - projectStartDate.getTime();
-      const elapsedDuration = today.getTime() - projectStartDate.getTime();
+      const elapsedDuration = Math.max(0, today.getTime() - projectStartDate.getTime());
       
       let percentComplete = 0;
       if (totalDuration > 0) {
@@ -1154,34 +1232,65 @@ const ProjectDetailPage: React.FC = () => {
     // Fallback to phase-based calculation if project dates aren't available or valid
     if (!phases.length) return { 
       startDate: new Date(), 
-      endDate: new Date(), 
+      endDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000), // Default to 30 days
       elapsedDays: 0, 
-      totalDays: 0, 
+      totalDays: 30, 
       percentComplete: 0 
     };
     
-    // Safely parse dates and filter out invalid ones
-    const parseDates = (dateString: string | Date): number => {
-      if (!dateString) return Date.now();
-      try {
-        const date = typeof dateString === 'string' ? new Date(dateString) : dateString;
-        const timestamp = date.getTime();
-        return isNaN(timestamp) ? Date.now() : timestamp;
-      } catch (e) {
-        console.warn('Invalid date found:', dateString);
-        return Date.now();
-      }
-    };
+    console.log('Phase dates for timeline calculation:', 
+      phases.map(p => ({
+        id: p.id,
+        name: p.name,
+        startDate: p.startDate,
+        startDateType: p.startDate ? typeof p.startDate : 'undefined',
+        endDate: p.endDate,
+        endDateType: p.endDate ? typeof p.endDate : 'undefined',
+      }))
+    );
     
-    const startDates = phases.map(p => parseDates(p.startDate));
-    const endDates = phases.map(p => parseDates(p.endDate));
+    // Get valid dates from phases
+    const validStartDates: Date[] = [];
+    const validEndDates: Date[] = [];
     
-    const phaseBasedStartDate = new Date(Math.min(...startDates));
-    const phaseBasedEndDate = new Date(Math.max(...endDates));
+    phases.forEach(phase => {
+      const startDate = safelyParseDate(phase.startDate);
+      const endDate = safelyParseDate(phase.endDate);
+      
+      if (startDate) validStartDates.push(startDate);
+      if (endDate) validEndDates.push(endDate);
+    });
+    
+    console.log('Valid parsed phase dates:', {
+      validStartDates,
+      validEndDates
+    });
+    
+    // Handle case where no valid dates are found
+    if (validStartDates.length === 0 && validEndDates.length === 0) {
+      const today = new Date();
+      return {
+        startDate: today,
+        endDate: new Date(today.getTime() + 30 * 24 * 60 * 60 * 1000), // Default to 30 days
+        elapsedDays: 0,
+        totalDays: 30,
+        percentComplete: 0
+      };
+    }
+    
+    // Use the earliest start date and latest end date
+    const phaseBasedStartDate = validStartDates.length > 0 
+      ? new Date(Math.min(...validStartDates.map(d => d.getTime()))) 
+      : new Date();
+    
+    const phaseBasedEndDate = validEndDates.length > 0
+      ? new Date(Math.max(...validEndDates.map(d => d.getTime())))
+      : new Date(phaseBasedStartDate.getTime() + 30 * 24 * 60 * 60 * 1000); // Default to 30 days
+    
     const today = new Date();
     
     const totalDuration = phaseBasedEndDate.getTime() - phaseBasedStartDate.getTime();
-    const elapsedDuration = today.getTime() - phaseBasedStartDate.getTime();
+    const elapsedDuration = Math.max(0, today.getTime() - phaseBasedStartDate.getTime());
     
     let percentComplete = 0;
     if (totalDuration > 0) {

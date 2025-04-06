@@ -150,4 +150,35 @@ export const truncateText = (text: string, maxLength: number): string => {
   }
   
   return `${text.slice(0, maxLength)}...`;
+};
+
+/**
+ * Safely parse a date value from any of the possible Phase date types
+ * Handles Date objects, strings, Firestore Timestamps, and nulls
+ */
+export const safelyParseDate = (dateInput: Date | string | { toDate(): Date } | null): Date => {
+  if (!dateInput) return new Date(); // Default to current date if null
+  
+  try {
+    // If it's already a Date object
+    if (dateInput instanceof Date) {
+      return isNaN(dateInput.getTime()) ? new Date() : dateInput;
+    }
+    
+    // If it's a Firestore Timestamp
+    if (typeof dateInput === 'object' && 'toDate' in dateInput && typeof dateInput.toDate === 'function') {
+      return dateInput.toDate();
+    }
+    
+    // If it's a string, try to parse it
+    if (typeof dateInput === 'string') {
+      const parsed = new Date(dateInput);
+      return isNaN(parsed.getTime()) ? new Date() : parsed;
+    }
+    
+    return new Date(); // Fallback
+  } catch (error) {
+    console.error('Error parsing date:', error, dateInput);
+    return new Date(); // Fallback to current date on error
+  }
 }; 

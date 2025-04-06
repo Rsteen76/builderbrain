@@ -37,8 +37,10 @@ import {
   Timeline as TimelineIcon,
   Flag as MilestoneIcon,
   Refresh as RefreshIcon,
+  ArrowUpward as ArrowUpwardIcon,
+  ArrowDownward as ArrowDownwardIcon,
 } from '@mui/icons-material';
-import { formatCurrency, formatDate } from '../../../utils/formatters';
+import { formatCurrency, formatDate, safelyParseDate } from '../../../utils/formatters';
 import { 
   Project, 
   Phase as ProjectPhase,
@@ -77,33 +79,51 @@ const ProjectOverviewTab: React.FC<ProjectOverviewTabProps> = ({
   budgetData,
   expensesData,
 }) => {
+  const totalBudget = budgetData.totalBudget;
+  const totalSpent = budgetData.totalActual;
+  
   const getBudgetStatus = () => {
-    const totalBudget = typeof project.budget === 'number' 
-      ? project.budget 
-      : (project.budget?.total || 0);
+    if (totalBudget <= 0) return { label: 'No Budget', color: theme.palette.warning.main };
     
-    const totalActual = expenses.reduce((sum, exp) => 
-      exp.status === 'paid' ? sum + exp.amount : sum, 0);
+    const percentUsed = (totalSpent / totalBudget) * 100;
     
-    const percentUsed = totalBudget > 0 ? (totalActual / totalBudget) * 100 : 0;
-    
-    if (percentUsed > 100) return { label: 'Over Budget', color: theme.palette.error.main };
-    if (percentUsed > 90) return { label: 'Near Budget', color: theme.palette.warning.main };
-    return { label: 'Under Budget', color: theme.palette.success.main };
+    if (percentUsed > 100) {
+      return { 
+        label: 'Over Budget', 
+        color: theme.palette.error.main,
+        icon: <ArrowDownwardIcon fontSize="small" />,
+      };
+    } else if (percentUsed > 85) {
+      return { 
+        label: 'Near Budget', 
+        color: theme.palette.warning.main,
+        icon: <MilestoneIcon fontSize="small" />,
+      };
+    } else {
+      return { 
+        label: 'Under Budget', 
+        color: theme.palette.success.main,
+        icon: <ArrowUpwardIcon fontSize="small" />,
+      };
+    }
   };
   
   const getProjectStatus = () => {
-    // Custom status messages based on phase completion
-    if (!phases.length) return { label: 'Not Started', color: theme.palette.grey[500] };
+    const statusMap: Record<string, {label: string, color: string}> = {
+      'draft': { label: 'Draft', color: theme.palette.info.main },
+      'estimate': { label: 'Estimate', color: theme.palette.info.main },
+      'planning': { label: 'Planning', color: theme.palette.primary.main },
+      'in_progress': { label: 'In Progress', color: theme.palette.warning.main },
+      'on_hold': { label: 'On Hold', color: theme.palette.error.main },
+      'completed': { label: 'Completed', color: theme.palette.success.main },
+      'cancelled': { label: 'Cancelled', color: theme.palette.error.main },
+      'active': { label: 'Active', color: theme.palette.warning.main },
+    };
     
-    const completedPhases = phases.filter(p => p.progress === 100);
-    const percentComplete = (completedPhases.length / phases.length) * 100;
-    
-    if (percentComplete === 100) return { label: 'Completed', color: theme.palette.success.main };
-    if (percentComplete > 0) return { label: 'In Progress', color: theme.palette.info.main };
-    return { label: 'Planning', color: theme.palette.primary.main };
+    const status = project.status.toLowerCase();
+    return statusMap[status] || { label: 'Unknown', color: theme.palette.grey[500] };
   };
-  
+
   const budgetStatus = getBudgetStatus();
   const projectStatus = getProjectStatus();
   
@@ -152,10 +172,6 @@ const ProjectOverviewTab: React.FC<ProjectOverviewTabProps> = ({
   });
   
   // Calculate total budget and expenses
-  const totalBudget = typeof project.budget === 'number' 
-    ? project.budget 
-    : (project.budget?.total || 0);
-  
   const totalExpenses = expenses.reduce((sum, exp) => sum + exp.amount, 0);
   const pendingExpenses = expenses.filter(e => e.status === 'pending').reduce((sum, exp) => sum + exp.amount, 0);
   const approvedExpenses = expenses.filter(e => e.status === 'approved').reduce((sum, exp) => sum + exp.amount, 0);
@@ -166,8 +182,8 @@ const ProjectOverviewTab: React.FC<ProjectOverviewTabProps> = ({
     .filter(phase => phase.progress < 100) // Only include incomplete phases
     .sort((a, b) => {
       // Sort by start date (closest first)
-      const dateA = new Date(a.startDate).getTime();
-      const dateB = new Date(b.startDate).getTime();
+      const dateA = safelyParseDate(a.startDate).getTime();
+      const dateB = safelyParseDate(b.startDate).getTime();
       return dateA - dateB;
     })
     .slice(0, 3); // Get only the next 3 upcoming phases
