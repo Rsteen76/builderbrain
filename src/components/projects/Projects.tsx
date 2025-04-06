@@ -61,6 +61,7 @@ import { ProjectService } from '../../services/project';
 import { useAuth } from '../../contexts/AuthContext';
 import PageLayout from '../layout/PageLayout';
 import { formatCurrency, formatDate } from '../../utils/formatters';
+import ProjectCard from './ProjectCard';
 
 // Enhanced utility functions with better typing
 type ProjectStatus = 'planning' | 'active' | 'in_progress' | 'completed' | 'on_hold' | 'cancelled' | 'estimate' | 'draft';
@@ -155,316 +156,6 @@ const useProjectUtils = () => {
     getPriorityIcon,
     formatLocation
   };
-};
-
-// Enhanced ProjectCard with modern UI
-const ProjectCard: React.FC<{
-  project: Project;
-  onClick?: () => void;
-  onMenuClick?: (event: React.MouseEvent<HTMLElement>) => void;
-}> = ({ project, onClick, onMenuClick }) => {
-  const theme = useTheme();
-  const { 
-    getStatusType, 
-    getStatusColor, 
-    getPriorityColor, 
-    calculateProgress, 
-    getPriorityIcon,
-    formatLocation
-  } = useProjectUtils();
-  
-  const progress = calculateProgress(project);
-  const statusColor = getStatusColor(project.status);
-  const statusText = getStatusType(project.status);
-  
-  return (
-    <Card 
-      elevation={0}
-      sx={{ 
-        position: 'relative',
-        cursor: 'pointer',
-        borderRadius: 2,
-        border: '1px solid',
-        borderColor: alpha(theme.palette.divider, 0.1),
-        transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
-        height: '100%',
-        backgroundColor: '#ffffff',
-        overflow: 'hidden',
-        display: 'flex',
-        flexDirection: 'column',
-        '&:hover': {
-          borderColor: alpha(statusColor, 0.5),
-          transform: 'translateY(-4px)',
-          boxShadow: `0 8px 20px ${alpha(theme.palette.common.black, 0.08)}`,
-        }
-      }}
-      onClick={onClick}
-    >
-      {/* Top status bar with gradient */}
-      <Box 
-        sx={{ 
-          height: 4, 
-          width: '100%', 
-          background: `linear-gradient(90deg, ${statusColor} 0%, ${alpha(statusColor, 0.7)} 100%)` 
-        }}
-      />
-      
-      <CardContent sx={{ 
-        p: { xs: 2, sm: 2.5 },
-        flexGrow: 1,
-        display: 'flex',
-        flexDirection: 'column',
-        '&:last-child': { pb: { xs: 2, sm: 2.5 } }
-      }}>
-        {/* Header with status and menu */}
-        <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1.5 }}>
-          <Chip 
-            size="small" 
-            label={statusText}
-            sx={{ 
-              fontSize: '0.7rem',
-              fontWeight: 600,
-              height: 24,
-              backgroundColor: alpha(statusColor, 0.12),
-              color: statusColor,
-              borderRadius: 1,
-            }} 
-          />
-          
-          {onMenuClick && (
-            <IconButton 
-              size="small" 
-              sx={{ 
-                color: 'text.secondary',
-                ml: 1
-              }}
-              onClick={(e) => {
-                e.stopPropagation();
-                onMenuClick(e);
-              }}
-            >
-              <MoreVertIcon fontSize="small" />
-            </IconButton>
-          )}
-        </Box>
-        
-        {/* Title with priority indicator */}
-        <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1.5, mb: 2 }}>
-          <Avatar
-            sx={{
-              width: 32,
-              height: 32,
-              bgcolor: alpha(project.priority ? getPriorityColor(project.priority) : theme.palette.primary.main, 0.12),
-              color: project.priority ? getPriorityColor(project.priority) : theme.palette.primary.main,
-              flexShrink: 0
-            }}
-          >
-            {getPriorityIcon(project.priority)}
-          </Avatar>
-          
-          <Typography 
-            variant="subtitle1" 
-            fontWeight={600} 
-            sx={{ 
-              lineHeight: 1.3,
-              overflow: 'hidden',
-              textOverflow: 'ellipsis',
-              display: '-webkit-box',
-              WebkitLineClamp: 2,
-              WebkitBoxOrient: 'vertical'
-            }}
-          >
-            {project.name}
-          </Typography>
-        </Box>
-        
-        {/* Location */}
-        {project.location && (
-          <Box sx={{ 
-            display: 'flex', 
-            alignItems: 'center', 
-            gap: 0.5,
-            mb: 2,
-            overflow: 'hidden'
-          }}>
-            <LocationIcon sx={{ 
-              fontSize: '0.9rem', 
-              color: theme.palette.text.secondary, 
-              opacity: 0.7, 
-              flexShrink: 0 
-            }} />
-            <Typography 
-              variant="body2" 
-              color="text.secondary" 
-              sx={{ 
-                fontSize: '0.8rem',
-                overflow: 'hidden',
-                textOverflow: 'ellipsis',
-                whiteSpace: 'nowrap'
-              }}
-            >
-              {formatLocation(project.location)}
-            </Typography>
-          </Box>
-        )}
-        
-        {/* Progress section */}
-        <Box sx={{ mt: 'auto', mb: 2 }}>
-          <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
-            <Typography variant="body2" color="text.secondary" fontWeight={500}>
-              Completion
-            </Typography>
-            <Typography 
-              variant="body2" 
-              fontWeight={600} 
-              sx={{ 
-                color: progress >= 80 ? theme.palette.success.main : 
-                       progress >= 40 ? theme.palette.primary.main : 
-                       theme.palette.text.secondary
-              }}
-            >
-              {progress}%
-            </Typography>
-          </Box>
-          
-          <Box sx={{ position: 'relative', height: 6, borderRadius: 3, bgcolor: alpha(theme.palette.common.black, 0.05) }}>
-            <Box 
-              sx={{ 
-                position: 'absolute', 
-                top: 0, 
-                left: 0, 
-                height: '100%', 
-                width: `${progress}%`,
-                borderRadius: 3,
-                background: progress >= 80 
-                  ? `linear-gradient(90deg, ${theme.palette.success.main}, ${alpha(theme.palette.success.light, 0.8)})`
-                  : `linear-gradient(90deg, ${theme.palette.primary.main}, ${alpha(theme.palette.primary.light, 0.8)})`,
-                transition: 'width 0.8s ease-in-out'
-              }} 
-            />
-          </Box>
-        </Box>
-        
-        <Divider sx={{ mb: 2 }} />
-        
-        {/* Info grid */}
-        <Grid container spacing={2}>
-          <Grid item xs={4}>
-            <Tooltip title="Due Date" arrow placement="top">
-              <Box sx={{ textAlign: 'center' }}>
-                <Avatar 
-                  sx={{ 
-                    width: { xs: 32, sm: 36 }, 
-                    height: { xs: 32, sm: 36 }, 
-                    bgcolor: alpha(theme.palette.primary.main, 0.1),
-                    color: theme.palette.primary.main,
-                    mx: 'auto',
-                    mb: 0.5
-                  }}
-                >
-                  <CalendarIcon sx={{ fontSize: { xs: '0.9rem', sm: '1.1rem' } }} />
-                </Avatar>
-                <Typography 
-                  variant="caption" 
-                  component="div" 
-                  sx={{ 
-                    fontWeight: 600,
-                    fontSize: '0.65rem',
-                    color: theme.palette.text.secondary,
-                    whiteSpace: 'nowrap',
-                    overflow: 'hidden',
-                    textOverflow: 'ellipsis',
-                  }}
-                >
-                  {project.endDate ? formatDate(project.endDate) : 'No date'}
-                </Typography>
-              </Box>
-            </Tooltip>
-          </Grid>
-          
-          <Grid item xs={4}>
-            <Tooltip title="Budget" arrow placement="top">
-              <Box sx={{ textAlign: 'center' }}>
-                <Avatar 
-                  sx={{ 
-                    width: { xs: 32, sm: 36 }, 
-                    height: { xs: 32, sm: 36 }, 
-                    bgcolor: alpha(theme.palette.success.main, 0.1),
-                    color: theme.palette.success.main,
-                    mx: 'auto',
-                    mb: 0.5
-                  }}
-                >
-                  <MoneyIcon sx={{ fontSize: { xs: '0.9rem', sm: '1.1rem' } }} />
-                </Avatar>
-                <Typography 
-                  variant="caption" 
-                  component="div" 
-                  sx={{ 
-                    fontWeight: 600,
-                    fontSize: '0.65rem',
-                    color: theme.palette.text.secondary,
-                    whiteSpace: 'nowrap',
-                    overflow: 'hidden',
-                    textOverflow: 'ellipsis',
-                  }}
-                >
-                  ${typeof project.budget === 'number' 
-                    ? project.budget.toLocaleString() 
-                    : (project.budget?.total || 0).toLocaleString()}
-                </Typography>
-              </Box>
-            </Tooltip>
-          </Grid>
-          
-          <Grid item xs={4}>
-            <Tooltip title="Team Members" arrow placement="top">
-              <Box sx={{ textAlign: 'center' }}>
-                <Badge 
-                  badgeContent={project.team?.length || 0} 
-                  color="primary"
-                  sx={{
-                    '& .MuiBadge-badge': {
-                      right: { xs: 9, sm: 7 },
-                      top: { xs: 9, sm: 7 },
-                      fontSize: '0.65rem',
-                      height: 14,
-                      minWidth: 14,
-                      padding: '0 4px'
-                    }
-                  }}
-                >
-                  <Avatar 
-                    sx={{ 
-                      width: { xs: 32, sm: 36 }, 
-                      height: { xs: 32, sm: 36 }, 
-                      bgcolor: alpha(theme.palette.info.main, 0.1),
-                      color: theme.palette.info.main,
-                      mx: 'auto',
-                      mb: 0.5
-                    }}
-                  >
-                    <GroupIcon sx={{ fontSize: { xs: '0.9rem', sm: '1.1rem' } }} />
-                  </Avatar>
-                </Badge>
-                <Typography 
-                  variant="caption" 
-                  component="div"
-                  sx={{ 
-                    fontWeight: 600,
-                    fontSize: '0.65rem',
-                    color: theme.palette.text.secondary
-                  }}
-                >
-                  Team
-                </Typography>
-              </Box>
-            </Tooltip>
-          </Grid>
-        </Grid>
-      </CardContent>
-    </Card>
-  );
 };
 
 // Project ListView component - elegant alternative to grid display
@@ -688,7 +379,7 @@ const Projects: React.FC = () => {
   const theme = useTheme();
   const navigate = useNavigate();
   const { user } = useAuth();
-  const { calculateProgress } = useProjectUtils();
+  const { calculateProgress, formatLocation } = useProjectUtils();
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedTab, setSelectedTab] = useState(0);
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
@@ -1254,19 +945,20 @@ const Projects: React.FC = () => {
           ) : (
             viewMode === 'grid' ? (
               <Grid container spacing={{ xs: 1.5, sm: 2, md: 2.5 }}>
-                {filteredProjects.map((project) => (
-                  <Grid item xs={12} sm={6} md={4} key={project.id} sx={{ width: '100%' }}>
+                {filteredProjects.map((project, index) => (
+                  <Grid item xs={12} sm={6} md={4} key={project.id}>
                     <ProjectCard 
                       project={project} 
                       onClick={() => navigate(`/projects/${project.id}`)} 
                       onMenuClick={(e) => handleOpenContextMenu(e, project.id!)}
+                      index={index}
                     />
                   </Grid>
                 ))}
               </Grid>
             ) : (
               <Stack spacing={{ xs: 1.5, sm: 2 }} sx={{ width: '100%' }}>
-                {filteredProjects.map((project) => (
+                {filteredProjects.map((project, index) => (
                   <ProjectListItem 
                     key={project.id} 
                     project={project} 
