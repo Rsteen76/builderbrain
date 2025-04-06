@@ -1,7 +1,6 @@
 import React from 'react';
 import {
   Box,
-  Typography,
 } from '@mui/material';
 import { Bid } from '../../../types';
 import { useAuth } from '../../../hooks/useAuth';
@@ -31,14 +30,9 @@ const ProjectBidsTab: React.FC<ProjectBidsTabProps> = ({
   const { user } = useAuth();
 
   return (
-    <Box>
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
-        <Typography variant="h5" fontWeight={600}>Project Bids</Typography>
-      </Box>
-      
+    <Box>      
       {/* Display current project bids using the enhanced BidList component */}
       <BidList projectId={projectId} />
-      
     </Box>
   );
 };
