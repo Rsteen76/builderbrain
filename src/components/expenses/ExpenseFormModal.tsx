@@ -896,7 +896,7 @@ const ExpenseFormModal: React.FC<ExpenseFormModalProps> = ({
                   <BuildingPhaseIcon fontSize="small" color="action" />
                 </InputAdornment>
               }
-              disabled={!formData.projectId || currentProjectPhases.length === 0 || !!expense?.phaseId}
+              disabled={!formData.projectId || currentProjectPhases.length === 0}
             >
               <MenuItem value="">
                 <em>{formData.projectId ? (currentProjectPhases.length > 0 ? 'Select Phase' : 'No Phases Available') : 'Select Project First'}</em>
