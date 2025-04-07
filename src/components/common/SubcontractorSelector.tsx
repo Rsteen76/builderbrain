@@ -109,6 +109,10 @@ const SubcontractorSelector: React.FC<SubcontractorSelectorProps> = ({
           loading={isLoading}
           value={selectedSubcontractor || null}
           disabled={disabled}
+          selectOnFocus
+          clearOnBlur={false}
+          handleHomeEndKeys
+          autoHighlight
           getOptionLabel={(option) => option.name || ''}
           isOptionEqualToValue={(option, value) => option.id === value.id}
           onChange={(event, newValue) => {

@@ -71,13 +71,20 @@ const QuickBidDialog: React.FC<QuickBidDialogProps> = ({
 
   const handleSubmit = async (bidForm: any) => {
     try {
+      // Check for required projectId
+      if (!projectId) {
+        console.error('ProjectId is required to create a bid');
+        toast.error('Cannot create bid: Project ID is missing');
+        return;
+      }
+
       // Add phase information to the bid
       const bidWithPhase = {
         ...bidForm,
         phaseId: phaseId,
         phaseName: phases.find(p => p.id === phaseId)?.name || '',
-        projectId: projectId,
-        projectName: projectName,
+        projectId: projectId, // This is now guaranteed to exist
+        projectName: projectName || 'Unnamed Project',
         status: 'submitted'
       };
 
@@ -85,12 +92,10 @@ const QuickBidDialog: React.FC<QuickBidDialogProps> = ({
       const newBid = await BidService.createBid(user?.uid || '', bidWithPhase);
       
       // Add the new bid to the project's bids
-      if (projectId) {
-        // Update the project to include the new bid
-        await ProjectService.updateProject(projectId, {
-          bids: [newBid]
-        });
-      }
+      // Update the project to include the new bid
+      await ProjectService.updateProject(projectId, {
+        bids: [newBid]
+      });
       
       // Close the dialog after successful submission
       onClose();

@@ -33,10 +33,13 @@ import {
   Add as AddIcon,
   Delete as DeleteIcon,
   CloudUpload as UploadIcon,
+  Business as BusinessIcon,
 } from '@mui/icons-material';
 import { v4 as uuidv4 } from 'uuid';
 import { formatCurrency } from '../../utils/formatters';
 import { Bid, BidPaymentStage, Project, Subcontractor, Phase } from '../../types';
+import { ProjectService } from '../../services/project';
+import { useAuth } from '../../contexts/AuthContext';
 
 // Define common bid categories (Copied from BidFormShared.tsx for now)
 const COMMON_BID_CATEGORIES: string[] = [
@@ -120,6 +123,122 @@ const COMMON_BID_CATEGORIES: string[] = [
   'Other',
 ];
 
+// Add a mapping of standard bid titles by phase after COMMON_BID_CATEGORIES
+const PHASE_BID_TITLES: Record<string, string[]> = {
+  // Common titles that apply to all phases
+  "common": [
+    "General Contracting Services",
+    "Project Management",
+    "Construction Services",
+    "General Labor",
+    "Site Supervision",
+    "Equipment Rental",
+    "Materials Supply",
+  ],
+  // Site work phase
+  "site_work": [
+    "Excavation and Grading",
+    "Site Preparation",
+    "Land Clearing",
+    "Demolition",
+    "Erosion Control",
+    "Sitework Package",
+    "Utilities Installation",
+    "Drainage Systems",
+    "Septic System Installation",
+    "Underground Utility Work",
+  ],
+  // Foundation phase
+  "foundation": [
+    "Concrete Foundation",
+    "Foundation Package",
+    "Concrete Footings and Foundation",
+    "Basement Waterproofing",
+    "Foundation Insulation",
+    "Concrete Flatwork",
+    "Slab Preparation",
+    "Rebar Installation",
+    "Pier and Beam Foundation",
+    "Foundation Drainage",
+  ],
+  // Framing phase
+  "framing": [
+    "Rough Framing",
+    "Framing Package",
+    "Structural Framing",
+    "Roof Framing",
+    "Floor Framing",
+    "Wall Framing",
+    "Stair Framing",
+    "Deck Framing",
+    "Structural Steel",
+    "Timber Frame",
+  ],
+  // Rough-ins phase
+  "rough_ins": [
+    "Electrical Rough-in",
+    "Plumbing Rough-in",
+    "HVAC Rough-in",
+    "Mechanical Rough-in",
+    "Low Voltage Wiring",
+    "Security System Rough-in",
+    "Data/Communication Wiring",
+    "Sprinkler System Rough-in",
+  ],
+  // Exterior phase
+  "exterior": [
+    "Roofing Installation",
+    "Siding Installation",
+    "Windows and Doors",
+    "Exterior Trim",
+    "Exterior Painting",
+    "Stucco Application",
+    "Brick/Stone Masonry",
+    "Gutters and Downspouts",
+    "Deck Construction",
+    "Porch Construction",
+  ],
+  // Interior phase
+  "interior": [
+    "Drywall Installation",
+    "Interior Trim",
+    "Interior Painting",
+    "Flooring Installation",
+    "Tile Installation",
+    "Cabinet Installation",
+    "Countertop Installation",
+    "Interior Doors",
+    "Stairs and Railings",
+    "Closet Systems",
+  ],
+  // Finishes phase
+  "finishes": [
+    "Finish Carpentry",
+    "Millwork Installation",
+    "Appliance Installation",
+    "Fixture Installation",
+    "Finish Plumbing",
+    "Finish Electrical",
+    "Window Treatments",
+    "Hardware Installation",
+    "Finish HVAC",
+    "Final Painting",
+  ],
+  // Specialty items
+  "specialty": [
+    "Pool Installation",
+    "Outdoor Kitchen",
+    "Home Theater",
+    "Smart Home Systems",
+    "Specialty Lighting",
+    "Custom Cabinetry",
+    "Fireplace Installation",
+    "Elevator Installation",
+    "Wine Cellar",
+    "Custom Shower/Bathroom",
+  ],
+};
+
 // Interface for bid form data
 interface BidFormData {
   title: string;
@@ -146,6 +265,7 @@ interface BidFormData {
   status: 'draft' | 'submitted' | 'accepted' | 'rejected' | 'expired';
   attachments: string[];
   tags: string[];
+  projectId?: string;
 }
 
 interface ReusableBidFormProps {
@@ -177,6 +297,7 @@ const ReusableBidForm: React.FC<ReusableBidFormProps> = ({
   projectId,
   projectName,
 }) => {
+  const { user } = useAuth();
   // Default bid form state
   const defaultBidForm: BidFormData = {
     title: '',
@@ -195,13 +316,21 @@ const ReusableBidForm: React.FC<ReusableBidFormProps> = ({
     notes: '',
     status: 'submitted',
     attachments: [],
-    tags: []
+    tags: [],
+    projectId: projectId,
   };
 
   // State for form
   const [bidForm, setBidForm] = useState<BidFormData>(initialBidData ? { ...defaultBidForm, ...initialBidData } : defaultBidForm);
   const [paymentTemplate, setPaymentTemplate] = useState('standard');
   const [tagInput, setTagInput] = useState('');
+  const [bidFormErrors, setBidFormErrors] = useState<Record<string, string>>({});
+  const [apiError, setApiError] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
+  const [selectedSubcontractor, setSelectedSubcontractor] = useState<Subcontractor | null>(null);
+  // Add projects state
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [isLoadingProjects, setIsLoadingProjects] = useState(false);
 
   // Log initial mounting for debugging
   console.log('ReusableBidForm mounted/updated with props:', {
@@ -286,6 +415,39 @@ const ReusableBidForm: React.FC<ReusableBidFormProps> = ({
       initialized.current = true;
     }
   }, [initialBidData, editingBidId]);
+
+  // Add effect to update selectedSubcontractor based on bidForm.subcontractorId
+  useEffect(() => {
+    if (bidForm.subcontractorId && subcontractors.length > 0) {
+      const subcontractor = subcontractors.find(s => s.id === bidForm.subcontractorId);
+      if (subcontractor) {
+        setSelectedSubcontractor(subcontractor);
+      }
+    } else {
+      setSelectedSubcontractor(null);
+    }
+  }, [bidForm.subcontractorId, subcontractors]);
+
+  // Fetch user projects if projectId is not provided
+  useEffect(() => {
+    const fetchProjects = async () => {
+      if (!projectId && user?.uid) {
+        try {
+          setIsLoadingProjects(true);
+          const userProjects = await ProjectService.getProjects(user.uid);
+          console.log('ReusableBidForm - Fetched projects:', userProjects.length);
+          setProjects(userProjects);
+        } catch (error) {
+          console.error('Error fetching projects:', error);
+          setApiError('Failed to load projects. Please try again.');
+        } finally {
+          setIsLoadingProjects(false);
+        }
+      }
+    };
+
+    fetchProjects();
+  }, [user?.uid, projectId]);
 
   // Form change handlers
   const handleChangeBidForm = (field: string, value: any) => {
@@ -443,61 +605,88 @@ const ReusableBidForm: React.FC<ReusableBidFormProps> = ({
 
   // Submit handler
   const handleSubmit = async () => {
-    console.log('Submitting bid form data:', JSON.stringify(bidForm, null, 2));
+    // Validate required fields
+    const errors: Record<string, string> = {};
+    if (!bidForm.title) errors.title = 'Title is required';
+    if (!bidForm.subcontractorName) errors.subcontractorName = 'Subcontractor is required';
+    if (!bidForm.totalAmount || bidForm.totalAmount <= 0) errors.totalAmount = 'A valid amount is required';
     
-    // Validate form data
-    if (!bidForm.title) {
-      console.warn('Bid title is required');
-      // You could add more validation handling here
+    // Ensure projectId is present
+    if (!projectId && !bidForm.projectId) {
+      errors.projectId = 'Project ID is required';
+      console.error('Cannot create bid: Missing project ID');
     }
-    
-    if (!bidForm.subcontractorName) {
-      console.warn('Subcontractor name is required');
-      // You could add more validation handling here
+
+    if (Object.keys(errors).length > 0) {
+      // There are validation errors
+      console.log('Form validation errors:', errors);
+      // Update form errors state
+      setBidFormErrors(errors);
+      return;
     }
-    
-    // Ensure payment terms percentages add up to 100%
-    const totalPercent = bidForm.paymentTerms.downPaymentPercent +
-      bidForm.paymentTerms.installments.reduce((sum, item) => sum + item.percent, 0);
-      
-    if (Math.abs(totalPercent - 100) > 0.1) {
-      console.warn(`Payment terms percentages don't add up to 100%: ${totalPercent}%`);
-      // You could add more validation handling here
-    }
-    
-    // Ensure all installments have valid data
-    let installmentsValid = true;
-    bidForm.paymentTerms.installments.forEach((item, index) => {
-      if (!item.name) {
-        console.warn(`Installment ${index + 1} is missing a name`);
-        installmentsValid = false;
-      }
-      if (item.percent <= 0) {
-        console.warn(`Installment ${index + 1} has an invalid percentage: ${item.percent}`);
-        installmentsValid = false;
-      }
-    });
-    
-    // Create a clean copy of the form data
-    const cleanFormData = {
-      ...bidForm,
-      totalAmount: Number(bidForm.totalAmount) || 0,
-      timeline: Number(bidForm.timeline) || 30,
-      paymentTerms: {
-        ...bidForm.paymentTerms,
-        downPaymentPercent: Number(bidForm.paymentTerms.downPaymentPercent) || 0,
-        installments: bidForm.paymentTerms.installments.map(item => ({
-          ...item,
-          percent: Number(item.percent) || 0
-        }))
-      }
-    };
-    
+
+    // Clear any previous errors
+    setBidFormErrors({});
+    setApiError(null);
+
     try {
-      await onSubmit(cleanFormData);
+      // Ensure projectId is included in the submitted data
+      const finalBidData = {
+        ...bidForm,
+        projectId: projectId || bidForm.projectId
+      };
+
+      // Log data being submitted
+      console.log('Submitting bid data:', finalBidData);
+      
+      // Call the onSubmit handler
+      await onSubmit(finalBidData);
+      
+      // If we're in a dialog, close it
+      if (isDialog && onClose) {
+        onClose();
+      }
     } catch (error) {
-      console.error('Error submitting bid form:', error);
+      console.error('Error submitting bid:', error);
+      setApiError('Failed to save bid. Please try again.');
     }
+  };
+
+  // Add this helper function for getting bid title options based on phase
+  const getBidTitleOptions = (phaseId: string | undefined, phases: Phase[]): string[] => {
+    if (!phaseId) {
+      return PHASE_BID_TITLES.common || [];
+    }
+
+    const phase = phases.find(p => p.id === phaseId);
+    if (!phase) {
+      return PHASE_BID_TITLES.common || [];
+    }
+
+    // Try to match phase name to a category
+    const phaseName = phase.name.toLowerCase();
+    let phaseKey = "common";
+
+    if (phaseName.includes("site") || phaseName.includes("excav") || phaseName.includes("demo")) {
+      phaseKey = "site_work";
+    } else if (phaseName.includes("foundation") || phaseName.includes("concrete") || phaseName.includes("footings")) {
+      phaseKey = "foundation";
+    } else if (phaseName.includes("frame") || phaseName.includes("struct")) {
+      phaseKey = "framing";
+    } else if (phaseName.includes("rough") || phaseName.includes("plumb") || phaseName.includes("electr") || phaseName.includes("hvac")) {
+      phaseKey = "rough_ins";
+    } else if (phaseName.includes("exterior") || phaseName.includes("roof") || phaseName.includes("siding")) {
+      phaseKey = "exterior";
+    } else if (phaseName.includes("interior") || phaseName.includes("drywall") || phaseName.includes("paint")) {
+      phaseKey = "interior";
+    } else if (phaseName.includes("finish") || phaseName.includes("cabinet") || phaseName.includes("counter")) {
+      phaseKey = "finishes";
+    } else if (phaseName.includes("pool") || phaseName.includes("special") || phaseName.includes("custom")) {
+      phaseKey = "specialty";
+    }
+
+    // Combine common options with phase-specific options
+    return [...(PHASE_BID_TITLES[phaseKey] || []), ...(PHASE_BID_TITLES.common || [])];
   };
 
   const formContent = (
@@ -518,6 +707,20 @@ const ReusableBidForm: React.FC<ReusableBidFormProps> = ({
         '& .MuiAutocomplete-root': { size: 'small' },
         '& .MuiButton-root': { textTransform: 'none' }, // Consistent button text
       }}>
+        {/* Ensure apiError and validation errors are displayed at the top of the form */}
+        {apiError && (
+          <Alert severity="error" sx={{ mb: 2 }}>
+            {apiError}
+          </Alert>
+        )}
+
+        {/* Display projectId error if present */}
+        {bidFormErrors.projectId && (
+          <Alert severity="error" sx={{ mb: 2 }}>
+            {bidFormErrors.projectId}
+          </Alert>
+        )}
+
         {/* Bid Details Section */}
         <Box className="form-section">
           <Typography variant="subtitle1" sx={{ fontWeight: 600, mb: 1.5, color: 'text.primary' }}> {/* Adjusted Typography & reduced margin */}
@@ -525,56 +728,53 @@ const ReusableBidForm: React.FC<ReusableBidFormProps> = ({
           </Typography>
           
           <Grid container spacing={2}> {/* Reduced spacing */} 
-            <Grid item xs={12} md={8}> {/* Wider title field */}
-              <Autocomplete
-                freeSolo // Allow custom input
-                fullWidth
-                options={COMMON_BID_CATEGORIES} // Use predefined categories
-                value={bidForm.title}
-                onChange={(event, newValue) => {
-                  // Handles selection or custom input blur
-                  handleChangeBidForm('title', newValue || '');
-                }}
-                onInputChange={(event, newInputValue) => {
-                  // Handles typing custom input directly
-                  // We might not need this if onChange handles freeSolo correctly,
-                  // but kept for potential finer control if needed.
-                  // Be careful not to overwrite selection with input change.
-                  // Let's rely on onChange for simplicity for now.
-                }}
-                size="small"
-                renderInput={(params) => (
-                  <TextField
-                    {...params}
+            {/* Project selector - only show if projectId is not provided as prop */}
+            {!projectId && (
+              <Grid item xs={12}>
+                <FormControl fullWidth variant="outlined" size="small" error={!!bidFormErrors.projectId}>
+                  <InputLabel id="bid-project-select-label">Project</InputLabel>
+                  <Select
+                    labelId="bid-project-select-label"
+                    value={bidForm.projectId || ''}
+                    label="Project"
                     required
-                    label="Bid Title (Select or Type)" // Updated label
-                    variant="outlined"
-                    InputProps={{ 
-                      ...params.InputProps,
-                      sx: { borderRadius: 1 } 
+                    onChange={(e) => {
+                      const projectId = e.target.value;
+                      const project = projects.find(p => p.id === projectId);
+                      handleChangeBidForm('projectId', projectId);
+                      // Also update project name if available
+                      if (project) {
+                        handleChangeBidForm('projectName', project.name);
+                      }
                     }}
-                  />
-                )}
-              />
-            </Grid>
-
-            <Grid item xs={12} md={4}>
-              <DatePicker
-                label="Submission Deadline"
-                value={bidForm.submissionDeadline || null}
-                onChange={(date) => handleChangeBidForm('submissionDeadline', date)}
-                slotProps={{
-                  textField: {
-                    fullWidth: true,
-                    variant: "outlined",
-                    size: "small",
-                    InputProps: { sx: { borderRadius: 1 } }
-                  }
-                }}
-              />
-            </Grid>
-
-            <Grid item xs={12} md={8}> {/* Wider Phase field */}
+                    startAdornment={
+                      <InputAdornment position="start">
+                        <BusinessIcon fontSize="small" color="primary" />
+                      </InputAdornment>
+                    }
+                    endAdornment={
+                      isLoadingProjects ? (
+                        <InputAdornment position="end">
+                          <CircularProgress size={20} />
+                        </InputAdornment>
+                      ) : null
+                    }
+                  >
+                    {projects.map((project) => (
+                      <MenuItem key={project.id} value={project.id}>
+                        {project.name || 'Unnamed Project'}
+                      </MenuItem>
+                    ))}
+                  </Select>
+                  {bidFormErrors.projectId && (
+                    <FormHelperText>{bidFormErrors.projectId}</FormHelperText>
+                  )}
+                </FormControl>
+              </Grid>
+            )}
+            
+            {/* Project Phase field - moved up to be before bid title */}
+            <Grid item xs={12} md={6}> 
               <FormControl fullWidth variant="outlined" size="small">
                 <InputLabel id="bid-phase-select-label">Project Phase</InputLabel>
                 <Select
@@ -596,7 +796,8 @@ const ReusableBidForm: React.FC<ReusableBidFormProps> = ({
               </FormControl>
             </Grid>
 
-            <Grid item xs={12} md={4}>
+            {/* Status field */}
+            <Grid item xs={12} md={6}>
               <FormControl fullWidth variant="outlined" size="small">
                 <InputLabel>Status</InputLabel>
                 <Select
@@ -634,6 +835,47 @@ const ReusableBidForm: React.FC<ReusableBidFormProps> = ({
                 </Select>
               </FormControl>
             </Grid>
+
+            {/* Bid Title Autocomplete - now with phase-specific options */}
+            <Grid item xs={12} md={8}> 
+              <Autocomplete
+                fullWidth
+                freeSolo
+                id="bid-title"
+                options={getBidTitleOptions(bidForm.phaseId, phases)}
+                value={bidForm.title}
+                onChange={(event, newValue) => {
+                  handleChangeBidForm('title', newValue || '');
+                }}
+                renderInput={(params) => (
+                  <TextField
+                    {...params}
+                    label="Bid Title"
+                    placeholder="Select or type a custom title"
+                    required
+                    error={!!bidFormErrors.title}
+                    helperText={bidFormErrors.title}
+                    size="small"
+                  />
+                )}
+              />
+            </Grid>
+
+            <Grid item xs={12} md={4}>
+              <DatePicker
+                label="Submission Deadline"
+                value={bidForm.submissionDeadline || null}
+                onChange={(date) => handleChangeBidForm('submissionDeadline', date)}
+                slotProps={{
+                  textField: {
+                    fullWidth: true,
+                    variant: "outlined",
+                    size: "small",
+                    InputProps: { sx: { borderRadius: 1 } }
+                  }
+                }}
+              />
+            </Grid>
           </Grid>
         </Box>
 
@@ -647,41 +889,40 @@ const ReusableBidForm: React.FC<ReusableBidFormProps> = ({
             <Grid item xs={12} md={6}> 
               <Autocomplete
                 fullWidth
+                id="subcontractor-selector"
                 options={subcontractors || []}
-                getOptionLabel={(option) => option?.name || ''}
-                isOptionEqualToValue={(option, value) => option?.id === value?.id}
-                value={subcontractors.find(s => s.id === bidForm.subcontractorId) || null}
-                onChange={(_, newValue) => {
-                  console.log('Subcontractor selected:', newValue);
-                  handleChangeBidForm('subcontractorName', newValue?.name || '');
-                  handleChangeBidForm('subcontractorId', newValue?.id || '');
+                loading={isLoading}
+                value={selectedSubcontractor || null}
+                getOptionLabel={(option) => option.name || ''}
+                isOptionEqualToValue={(option, value) => option.id === value.id}
+                onChange={(event, newValue) => {
+                  if (newValue) {
+                    handleChangeBidForm('subcontractorId', newValue.id);
+                    handleChangeBidForm('subcontractorName', newValue.name);
+                  } else {
+                    handleChangeBidForm('subcontractorId', '');
+                    handleChangeBidForm('subcontractorName', '');
+                  }
                 }}
-                size="small"
                 renderInput={(params) => (
-                  <TextField 
-                    {...params} 
-                    label="Subcontractor" 
-                    required 
-                    variant="outlined"
-                    InputProps={{
-                      ...params.InputProps,
-                      sx: { borderRadius: 1 }
-                    }} 
-                    helperText={subcontractors.length === 0 ? "No subcontractors available. Add a new one." : ""}
+                  <TextField
+                    {...params}
+                    label="Subcontractor"
+                    required
+                    error={!!bidFormErrors.subcontractorName}
+                    helperText={bidFormErrors.subcontractorName}
                   />
                 )}
-                noOptionsText="No subcontractors found"
-                loadingText="Loading subcontractors..."
               />
               {onAddSubcontractor && (
-                <Button
-                  size="small"
-                  color="primary"
+                <Button 
+                  variant="outlined" 
+                  size="small" 
+                  startIcon={<AddIcon />} 
                   onClick={onAddSubcontractor}
-                  sx={{ mt: 0.5, alignSelf: 'flex-start', borderRadius: 1, fontSize: '0.8rem' }} // Smaller button
-                  startIcon={<AddIcon fontSize="small"/>}
+                  sx={{ mt: 1 }}
                 >
-                  Add New Sub
+                  Add New Subcontractor
                 </Button>
               )}
             </Grid>
@@ -690,16 +931,17 @@ const ReusableBidForm: React.FC<ReusableBidFormProps> = ({
               <TextField
                 fullWidth
                 required
+                id="total-amount"
                 label="Total Amount"
                 type="number"
-                value={bidForm.totalAmount}
-                onChange={(e) => handleChangeBidForm('totalAmount', parseFloat(e.target.value) || 0)}
                 InputProps={{
                   startAdornment: <InputAdornment position="start">$</InputAdornment>,
-                  sx: { borderRadius: 1 }
                 }}
-                variant="outlined"
+                value={bidForm.totalAmount}
+                onChange={(e) => handleChangeBidForm('totalAmount', Number(e.target.value))}
                 size="small"
+                error={!!bidFormErrors.totalAmount}
+                helperText={bidFormErrors.totalAmount}
               />
             </Grid>
 

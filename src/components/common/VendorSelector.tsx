@@ -154,6 +154,10 @@ const VendorSelector: React.FC<VendorSelectorProps> = ({
         freeSolo
         autoComplete
         includeInputInList
+        selectOnFocus
+        clearOnBlur={false}
+        handleHomeEndKeys
+        autoHighlight
         getOptionLabel={(option) => option || ''}
         isOptionEqualToValue={(option, value) => option === value}
         onChange={(event, newValue) => {
