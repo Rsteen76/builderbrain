@@ -496,4 +496,40 @@ export class ExpenseService {
       paymentStageId
     } as unknown as Expense;
   }
+
+  /**
+   * Get unique vendors from user's expenses
+   */
+  static async getUniqueVendors(userId: string): Promise<string[]> {
+    if (!userId) return [];
+    
+    try {
+      console.log(`ExpenseService: Fetching unique vendors for user: ${userId}`);
+      
+      // Query all expenses for this user
+      const q = query(
+        this.collection,
+        where('userId', '==', userId)
+      );
+      
+      const querySnapshot = await getDocs(q);
+      
+      // Extract unique vendor names
+      const vendors = new Set<string>();
+      querySnapshot.forEach(doc => {
+        const data = doc.data();
+        if (data.vendor && typeof data.vendor === 'string' && data.vendor.trim() !== '') {
+          vendors.add(data.vendor.trim());
+        }
+      });
+      
+      const uniqueVendors = Array.from(vendors);
+      console.log(`ExpenseService: Found ${uniqueVendors.length} unique vendors`);
+      
+      return uniqueVendors;
+    } catch (error) {
+      console.error("ExpenseService: Error fetching unique vendors:", error);
+      return [];
+    }
+  }
 }
