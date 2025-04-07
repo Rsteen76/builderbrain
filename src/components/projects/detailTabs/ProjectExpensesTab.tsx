@@ -52,18 +52,6 @@ const ProjectExpensesTab: React.FC<ProjectExpensesTabProps> = ({
 }) => {
   return (
     <Box>
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 2, flexWrap: 'wrap', gap: 1 }}>
-        <Typography variant="h6">Project Expenses</Typography>
-        <Button
-          variant="outlined"
-          startIcon={<AddIcon />}
-          size="small"
-          onClick={() => handleOpenQuickExpenseDialog('')}
-          sx={{ borderRadius: 1.5 }}
-        >
-          Add Expense
-        </Button>
-      </Box>
       
       {/* Expense Charts */}
       <Grid container spacing={3} sx={{ mb: 3 }}>

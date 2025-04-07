@@ -214,6 +214,34 @@ const ExpenseFormModal: React.FC<ExpenseFormModalProps> = ({
       } else {
         // Creating new expense - reset form data
         console.log('Create Mode - Resetting form data');
+        
+        // Auto-select project if there's only one project (opened from project context)
+        if (projects.length === 1) {
+          initialFormData.projectId = projects[0].id;
+          // Get phases from the project or from projectPhases prop
+          initialPhases = projectPhases && projectPhases.length > 0 
+              ? projectPhases 
+              : projects[0].phases || [];
+          console.log('Auto-selected project:', projects[0].name, 'with phases:', initialPhases);
+          
+          // Auto-select phase if there's only one phase
+          if (initialPhases.length === 1) {
+            initialFormData.phaseId = initialPhases[0].id;
+            initialFormData.phaseName = initialPhases[0].name;
+            console.log('Auto-selected phase:', initialPhases[0].name);
+          }
+        }
+        
+        // Check if a specific phase was passed (from phase card)
+        if (expense?.phaseId) {
+          // Find the phase in the projectPhases array
+          const selectedPhase = projectPhases.find(p => p.id === expense.phaseId);
+          if (selectedPhase) {
+            initialFormData.phaseId = selectedPhase.id;
+            initialFormData.phaseName = selectedPhase.name;
+            console.log('Auto-selected specific phase from phase card:', selectedPhase.name);
+          }
+        }
       }
       
       setFormData(initialFormData);
@@ -723,6 +751,7 @@ const ExpenseFormModal: React.FC<ExpenseFormModalProps> = ({
               onChange={handleSelectChange}
                 label="Project"
                 displayEmpty
+                disabled={projects.length === 1}
               startAdornment={
                 <InputAdornment position="start">
                     <ProjectIcon fontSize="small" color="primary" />
@@ -808,7 +837,7 @@ const ExpenseFormModal: React.FC<ExpenseFormModalProps> = ({
                   <BuildingPhaseIcon fontSize="small" color="action" />
                 </InputAdornment>
               }
-              disabled={!formData.projectId || currentProjectPhases.length === 0}
+              disabled={!formData.projectId || currentProjectPhases.length === 0 || !!expense?.phaseId}
             >
               <MenuItem value="">
                 <em>{formData.projectId ? (currentProjectPhases.length > 0 ? 'Select Phase' : 'No Phases Available') : 'Select Project First'}</em>
