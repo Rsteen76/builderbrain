@@ -12,42 +12,56 @@ export class ExpenseService extends BaseService<Expense> {
   constructor() {
     super('expenses', {
       toFirestore: (expense: Expense): DocumentData => {
+        // Deep clean object to remove all undefined values before sending to Firestore
+        const cleanedExpense = this.deepCleanObject(expense);
+        
+        console.log('[ExpenseService API] Original expense:', expense);
+        console.log('[ExpenseService API] Cleaned expense:', cleanedExpense);
+        
+        // Ensure paymentDetails is never undefined
+        if (cleanedExpense.paymentDetails === undefined) {
+          console.log('[ExpenseService API] Setting undefined paymentDetails to null in toFirestore');
+          cleanedExpense.paymentDetails = null;
+        }
+        
         const firestoreExpense: DocumentData = {
-          userId: expense.userId,
-          projectId: expense.projectId,
-          phaseId: expense.phaseId,
-          phaseName: expense.phaseName,
-          category: expense.category,
-          description: expense.description,
-          amount: expense.amount,
-          vendor: expense.vendor,
-          subcontractorId: expense.subcontractorId,
-          subcontractorName: expense.subcontractorName,
-          status: expense.status,
-          receiptUrl: expense.receiptUrl,
-          createdBy: expense.createdBy,
-          approvedBy: expense.approvedBy,
-          notes: expense.notes,
-          lineItems: expense.lineItems,
-          paymentDetails: expense.paymentDetails,
-          tags: expense.tags,
-          projectName: expense.projectName,
+          userId: cleanedExpense.userId,
+          projectId: cleanedExpense.projectId,
+          phaseId: cleanedExpense.phaseId,
+          phaseName: cleanedExpense.phaseName,
+          category: cleanedExpense.category,
+          description: cleanedExpense.description,
+          amount: cleanedExpense.amount,
+          vendor: cleanedExpense.vendor,
+          subcontractorId: cleanedExpense.subcontractorId,
+          subcontractorName: cleanedExpense.subcontractorName,
+          status: cleanedExpense.status,
+          receiptUrl: cleanedExpense.receiptUrl,
+          createdBy: cleanedExpense.createdBy,
+          approvedBy: cleanedExpense.approvedBy,
+          notes: cleanedExpense.notes,
+          lineItems: cleanedExpense.lineItems,
+          paymentDetails: cleanedExpense.paymentDetails,
+          tags: cleanedExpense.tags || [],
+          projectName: cleanedExpense.projectName,
+          bidId: cleanedExpense.bidId || null,
           
           // Convert dates to Timestamps
-          date: expense.date instanceof Date 
-            ? this.dateToTimestamp(expense.date) 
-            : typeof expense.date === 'string' 
-              ? this.dateToTimestamp(new Date(expense.date)) 
+          date: cleanedExpense.date instanceof Date 
+            ? this.dateToTimestamp(cleanedExpense.date) 
+            : typeof cleanedExpense.date === 'string' 
+              ? this.dateToTimestamp(new Date(cleanedExpense.date)) 
               : Timestamp.now(),
-          createdAt: expense.createdAt instanceof Date 
-            ? this.dateToTimestamp(expense.createdAt) 
-            : typeof expense.createdAt === 'string' 
-              ? this.dateToTimestamp(new Date(expense.createdAt)) 
+          createdAt: cleanedExpense.createdAt instanceof Date 
+            ? this.dateToTimestamp(cleanedExpense.createdAt) 
+            : typeof cleanedExpense.createdAt === 'string' 
+              ? this.dateToTimestamp(new Date(cleanedExpense.createdAt)) 
               : Timestamp.now(),
           updatedAt: Timestamp.now(),
         };
         
-        return firestoreExpense;
+        // Final check for any undefined values that might have been introduced
+        return this.deepCleanObject(firestoreExpense);
       },
       
       fromFirestore: (data: DocumentData): Expense => {
@@ -265,5 +279,39 @@ export class ExpenseService extends BaseService<Expense> {
     } catch (error) {
       return this.handleError<Expense>(error, 'approveExpense');
     }
+  }
+  
+  /**
+   * Recursively removes undefined values from an object and replaces them with null
+   * to ensure Firestore compatibility
+   */
+  private deepCleanObject(obj: any): any {
+    // Handle null, undefined and primitives
+    if (obj === undefined) return null;
+    if (obj === null || typeof obj !== 'object') return obj;
+    
+    // Handle arrays
+    if (Array.isArray(obj)) {
+      return obj.map(item => this.deepCleanObject(item));
+    }
+    
+    // Handle objects
+    const result: any = {};
+    for (const [key, value] of Object.entries(obj)) {
+      // Skip the id field for Firestore docs
+      if (key === 'id') continue;
+      
+      // Clean nested value
+      const cleanedValue = this.deepCleanObject(value);
+      // Only add non-undefined values
+      if (cleanedValue !== undefined) {
+        result[key] = cleanedValue;
+      } else {
+        // If somehow we still have undefined, use null instead (Firestore accepts null)
+        result[key] = null;
+      }
+    }
+    
+    return result;
   }
 } 

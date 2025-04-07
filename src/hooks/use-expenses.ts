@@ -5,6 +5,26 @@ import { expenseService } from '../api';
 // Query key for expenses
 const EXPENSES_QUERY_KEY = 'expenses';
 
+// Debug function to check for undefined values in expense data
+function logExpenseData(method: string, expense: any) {
+  console.log(`[useExpenses] ${method} - Checking expense data structure:`);
+  console.log('  - Has paymentDetails?', Object.prototype.hasOwnProperty.call(expense, 'paymentDetails'));
+  console.log('  - paymentDetails value:', expense.paymentDetails);
+  console.log('  - paymentDetails type:', expense.paymentDetails !== undefined ? typeof expense.paymentDetails : 'undefined');
+  
+  // Check for undefined values in top-level fields
+  const undefinedFields = [];
+  for (const [key, value] of Object.entries(expense)) {
+    if (value === undefined) {
+      undefinedFields.push(key);
+    }
+  }
+  
+  if (undefinedFields.length > 0) {
+    console.warn('[useExpenses] Found undefined values in fields:', undefinedFields);
+  }
+}
+
 /**
  * Hook to fetch expenses by project ID
  */
@@ -125,6 +145,15 @@ export const useCreateExpense = () => {
 
   return useMutation(
     async (expense: Omit<Expense, 'id' | 'createdAt' | 'updatedAt'>) => {
+      // Add debugging before sending to API
+      logExpenseData('createExpense - before API call', expense);
+      
+      // Explicitly ensure paymentDetails is never undefined
+      if (expense.paymentDetails === undefined) {
+        console.log('[useExpenses] Setting undefined paymentDetails to null before API call');
+        (expense as any).paymentDetails = null;
+      }
+      
       const response = await expenseService.create(expense as any);
       if (response.status === 'error') {
         throw new Error(response.error);
@@ -135,7 +164,6 @@ export const useCreateExpense = () => {
       onSuccess: (newExpense) => {
         if (!newExpense) return;
 
-        // Invalidate relevant expense queries
         queryClient.invalidateQueries([EXPENSES_QUERY_KEY, 'project', newExpense.projectId]);
         
         if (newExpense.phaseId) {
@@ -165,6 +193,15 @@ export const useUpdateExpense = () => {
 
   return useMutation(
     async ({ id, expense }: { id: string; expense: Partial<Expense> }) => {
+      // Add debugging before sending to API
+      logExpenseData('updateExpense - before API call', expense);
+      
+      // Explicitly ensure paymentDetails is never undefined
+      if (expense.paymentDetails === undefined) {
+        console.log('[useExpenses] Setting undefined paymentDetails to null before API call');
+        (expense as any).paymentDetails = null;
+      }
+      
       const response = await expenseService.update(id, expense);
       if (response.status === 'error') {
         throw new Error(response.error);

@@ -772,14 +772,14 @@ const ProjectDetailPage: React.FC = () => {
         receiptUrl: expense.receiptUrl || '',
         lineItems: expense.lineItems || [],
         paymentDetails: expense.status === 'paid' ? expense.paymentDetails : undefined,
-        // Add the bidId and paymentStageId if they exist
-        bidId: expense.bidId,
-        paymentStageId: expense.paymentStageId
+        // Add the bidId and paymentStageId if they exist, converting null to undefined
+        bidId: expense.bidId ?? undefined,
+        paymentStageId: expense.paymentStageId ?? undefined
       };
       
       console.log('Adding new expense:', newExpense);
       
-      const savedExpense = await ExpenseService.createExpense(user.uid, newExpense);
+      const savedExpense = await ExpenseService.createExpense(user.uid, newExpense as any);
       
       // Update the expenses state with type assertion to fix the conflict
       setExpenses(prevExpenses => [...prevExpenses, savedExpense as unknown as Expense]);
@@ -1679,7 +1679,7 @@ const ProjectDetailPage: React.FC = () => {
 
   // Helper function to render Recent Expenses section (extracted for clarity)
   const renderRecentExpenses = () => (
-    <RecentExpenses expenses={expenses} phases={phases} />
+    <RecentExpenses expenses={expenses as any} phases={phases} />
   );
 
   // Add state for phase details dialog and selected phase
@@ -1975,7 +1975,7 @@ const ProjectDetailPage: React.FC = () => {
           phases={phases}
           bids={bids}
           recentBids={recentBids}
-          expenses={expenses}
+          expenses={expenses as any}
           expensesData={expensesData}
           combinedExpenses={
             phases.map(phase => ({

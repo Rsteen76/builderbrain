@@ -124,6 +124,38 @@ const PAYMENT_METHODS = [
   { value: 'other', label: 'Other' },
 ];
 
+// Add this utility function at the top of the file, outside of component
+const cleanForFirestore = (data: any): any => {
+  // If null or primitive, return as is
+  if (data === null || typeof data !== 'object') {
+    return data;
+  }
+  
+  // Handle arrays
+  if (Array.isArray(data)) {
+    return data.map(item => cleanForFirestore(item));
+  }
+  
+  // Handle objects
+  const result: any = {};
+  
+  Object.entries(data).forEach(([key, value]) => {
+    // Skip undefined values
+    if (value === undefined) {
+      return;
+    }
+    
+    // Handle nested objects (including arrays)
+    if (value !== null && typeof value === 'object') {
+      result[key] = cleanForFirestore(value);
+    } else {
+      result[key] = value;
+    }
+  });
+  
+  return result;
+};
+
 const ExpenseFormModal: React.FC<ExpenseFormModalProps> = ({
   open,
   onClose,
@@ -568,9 +600,20 @@ const ExpenseFormModal: React.FC<ExpenseFormModalProps> = ({
         totalCost: item.totalPrice,
       })) : [];
 
-      // Add payment details if status is paid
+      // Format expense data for saving
+      const expenseData = {
+        ...updatedFormData,
+        userId: user?.uid || '',
+        lineItems: showLineItems ? formattedLineItems : [],
+        bidId: null, // Always set to null first to ensure a value exists
+      };
+
+      // Add payment details field but initialize with null 
+      (expenseData as any).paymentDetails = null;
+
+      // Set payment details if status is paid
       if (formData.status === 'paid') {
-        updatedFormData.paymentDetails = {
+        (expenseData as any).paymentDetails = {
           method: paymentMethod || '',
           date: paymentDate || new Date().toISOString().split('T')[0],
           referenceNumber: referenceNumber || '',
@@ -578,26 +621,24 @@ const ExpenseFormModal: React.FC<ExpenseFormModalProps> = ({
         };
       }
 
-      // Format expense data for saving
-      const expenseToSave: Partial<Expense> = {
-        ...updatedFormData,
-        userId: user?.uid || '',
-        lineItems: showLineItems ? formattedLineItems : undefined,
-      };
+      // Add bidId from original expense if it exists
+      if (expense && 'bidId' in expense && (expense as any).bidId !== undefined) {
+        expenseData.bidId = (expense as any).bidId;
+      }
 
       // If it's a new expense
       if (!isEditMode) {
-        expenseToSave.createdAt = new Date();
-        expenseToSave.createdBy = user?.uid || '';
+        expenseData.createdAt = new Date();
+        expenseData.createdBy = user?.uid || '';
       }
       
       // Add updatedAt timestamp
-      expenseToSave.updatedAt = new Date();
+      expenseData.updatedAt = new Date();
       
       // Handle receipt upload if there's a file
       if (receiptFile) {
         // Upload logic would go here
-        // expenseToSave.receiptUrl = uploadedUrl;
+        // expenseData.receiptUrl = uploadedUrl;
       }
       
       // Check for duplicates before saving
@@ -609,10 +650,25 @@ const ExpenseFormModal: React.FC<ExpenseFormModalProps> = ({
         return;
       }
       
-      console.log('Saving expense:', expenseToSave);
+      console.log('Saving expense:', expenseData);
       
-      // Call the onSave callback with the updated expense data
-      onSave(expenseToSave);
+      // Final check to ensure no undefined values are sent to Firestore
+      const cleanExpenseData = cleanForFirestore(expenseData);
+      
+      // Ensure payment details is null and not undefined
+      if (cleanExpenseData.paymentDetails === undefined) {
+        cleanExpenseData.paymentDetails = null;
+      }
+      
+      // Ensure bidId is null and not undefined
+      if (cleanExpenseData.bidId === undefined) {
+        cleanExpenseData.bidId = null;
+      }
+      
+      console.log('Clean expense data for Firestore:', cleanExpenseData);
+      
+      // Call the onSave callback with the cleaned expense data
+      onSave(cleanExpenseData);
       
       // Close the modal after saving
       onClose();
@@ -629,7 +685,7 @@ const ExpenseFormModal: React.FC<ExpenseFormModalProps> = ({
     
     if (!user) return;
     
-    // Format expense data for saving (repeat the same logic as in handleSave)
+    // Format expense data for saving
     let updatedFormData = { ...formData };
     
     if (showLineItems) {
@@ -646,8 +702,20 @@ const ExpenseFormModal: React.FC<ExpenseFormModalProps> = ({
       totalCost: item.totalPrice,
     })) : [];
 
+    // Format expense data for saving
+    const expenseData = {
+      ...updatedFormData,
+      userId: user.uid,
+      lineItems: showLineItems ? formattedLineItems : [],
+      bidId: null, // Always set to null first to ensure a value exists
+    };
+
+    // Add payment details field but initialize with null
+    (expenseData as any).paymentDetails = null;
+
+    // Set payment details if status is paid
     if (formData.status === 'paid') {
-      updatedFormData.paymentDetails = {
+      (expenseData as any).paymentDetails = {
         method: paymentMethod || '',
         date: paymentDate || new Date().toISOString().split('T')[0],
         referenceNumber: referenceNumber || '',
@@ -655,21 +723,28 @@ const ExpenseFormModal: React.FC<ExpenseFormModalProps> = ({
       };
     }
 
-    const expenseToSave: Partial<Expense> = {
-      ...updatedFormData,
-      userId: user.uid,
-      lineItems: showLineItems ? formattedLineItems : undefined,
-    };
-
     if (!isEditMode) {
-      expenseToSave.createdAt = new Date();
-      expenseToSave.createdBy = user.uid;
+      expenseData.createdAt = new Date();
+      expenseData.createdBy = user.uid;
     }
     
-    expenseToSave.updatedAt = new Date();
+    expenseData.updatedAt = new Date();
     
-    // Call the onSave callback with the updated expense data
-    onSave(expenseToSave);
+    // Final check to ensure no undefined values are sent to Firestore
+    const cleanExpenseData = cleanForFirestore(expenseData);
+    
+    // Ensure payment details is null and not undefined
+    if (cleanExpenseData.paymentDetails === undefined) {
+      cleanExpenseData.paymentDetails = null;
+    }
+    
+    // Ensure bidId is null and not undefined
+    if (cleanExpenseData.bidId === undefined) {
+      cleanExpenseData.bidId = null;
+    }
+    
+    // Call the onSave callback with the cleaned expense data
+    onSave(cleanExpenseData);
     
     // Close the modal after saving
     onClose();

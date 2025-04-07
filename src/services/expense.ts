@@ -27,10 +27,13 @@ interface FirestoreExpense extends Omit<Expense, 'id' | 'date' | 'createdAt' | '
 export class ExpenseService {
   private static collection = collection(db, 'expenses');
 
-  static async createExpense(userId: string, expenseData: Omit<Expense, 'id' | 'userId' | 'createdBy' | 'createdAt' | 'updatedAt'> & { bidId?: string; paymentStageId?: string }): Promise<Expense> {
+  static async createExpense(userId: string, expenseData: Omit<Expense, 'id' | 'userId' | 'createdBy' | 'createdAt' | 'updatedAt'> & { bidId?: string | null; paymentStageId?: string | null }): Promise<Expense> {
     if (!userId) throw new Error('User ID is required');
     
     try {
+      console.log('Expense data received by service:', JSON.stringify(expenseData));
+      console.log('PaymentDetails before processing:', expenseData.paymentDetails);
+      
       const expense = {
         ...expenseData,
         userId,
@@ -40,12 +43,20 @@ export class ExpenseService {
         // Make sure tags exists
         tags: expenseData.tags || [],
         // Ensure bidId and paymentStageId are properly passed through
-        bidId: expenseData.bidId || undefined,
-        paymentStageId: expenseData.paymentStageId || undefined,
+        bidId: expenseData.bidId ?? null,
+        paymentStageId: expenseData.paymentStageId ?? null,
+        // Explicitly handle paymentDetails
+        paymentDetails: expenseData.paymentDetails ?? null,
       };
+      
+      console.log('Expense object after initial prep:', JSON.stringify(expense));
+      console.log('PaymentDetails after prep:', expense.paymentDetails);
       
       // Convert dates to Firestore timestamps
       const firestoreExpense = this.convertToFirestore(expense);
+      
+      console.log('Final Firestore expense object (stringified):', JSON.stringify(firestoreExpense));
+      console.log('Final paymentDetails (direct):', firestoreExpense.paymentDetails);
       
       const docRef = await addDoc(this.collection, firestoreExpense);
       
@@ -394,25 +405,63 @@ export class ExpenseService {
    * Convert a JavaScript Expense object to a Firestore-friendly format
    */
   private static convertToFirestore(expense: Partial<Expense>): any {
-    const firestoreExpense: any = { ...expense };
+    console.log('CONVERT TO FIRESTORE - Initial expense object:', expense);
+    console.log('CONVERT TO FIRESTORE - Initial paymentDetails:', expense.paymentDetails);
     
-    // Convert Date objects to Firestore Timestamps
-    if (expense.createdAt instanceof Date) {
-      firestoreExpense.createdAt = Timestamp.fromDate(expense.createdAt);
+    // Helper function to recursively clean the object
+    const cleanForFirestore = (data: any): any => {
+      // Handle null, primitive values, and unsupported types
+      if (data === null || data === undefined || typeof data !== 'object') {
+        return data === undefined ? null : data;
+      }
+      
+      // Handle Date objects (convert to Timestamp)
+      if (data instanceof Date) {
+        return Timestamp.fromDate(data);
+      }
+      
+      // Handle arrays
+      if (Array.isArray(data)) {
+        return data.map(item => cleanForFirestore(item));
+      }
+      
+      // Handle objects
+      const cleanObject: any = {};
+      
+      for (const [key, value] of Object.entries(data)) {
+        const cleanedValue = cleanForFirestore(value);
+        // Only include the key if the value is not undefined
+        // If value is undefined, replace with null (Firestore accepts null)
+        cleanObject[key] = cleanedValue;
+      }
+      
+      return cleanObject;
+    };
+    
+    // Start by removing all undefined values and replacing with null
+    const cleanedExpense = cleanForFirestore(expense);
+    console.log('CONVERT TO FIRESTORE - After cleanForFirestore:', cleanedExpense);
+    console.log('CONVERT TO FIRESTORE - paymentDetails after cleaning:', cleanedExpense.paymentDetails);
+    
+    // Ensure these specific fields are never undefined
+    const firestoreExpense = {
+      ...cleanedExpense,
+      // Ensure mandatory fields
+      tags: cleanedExpense.tags || [],
+      bidId: cleanedExpense.bidId ?? null,
+      paymentStageId: cleanedExpense.paymentStageId ?? null,
+      paymentDetails: cleanedExpense.paymentDetails ?? null,
+    };
+    
+    // Double-check problematic fields before returning
+    if (firestoreExpense.paymentDetails === undefined) {
+      console.error('ERROR: paymentDetails is still undefined after all processing! Setting to null as last resort');
+      firestoreExpense.paymentDetails = null;
     }
     
-    if (expense.updatedAt instanceof Date) {
-      firestoreExpense.updatedAt = Timestamp.fromDate(expense.updatedAt);
-    }
-    
-    if (expense.date instanceof Date) {
-      firestoreExpense.date = Timestamp.fromDate(expense.date);
-    }
-    
-    // Ensure tags is an array
-    if (!firestoreExpense.tags) {
-      firestoreExpense.tags = [];
-    }
+    // Log the cleaned object for debugging
+    console.log('CONVERT TO FIRESTORE - Final expense object:', firestoreExpense);
+    console.log('CONVERT TO FIRESTORE - Final paymentDetails:', firestoreExpense.paymentDetails);
     
     return firestoreExpense;
   }

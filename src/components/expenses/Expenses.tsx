@@ -418,6 +418,23 @@ const Expenses: React.FC<{ projectId?: string }> = ({ projectId }) => {
   const handleSaveExpense = async (expenseData: Partial<Expense>) => {
     if (!user?.uid) return;
     
+    // DEBUGGING: Add detailed logging for paymentDetails
+    console.log('======= EXPENSE SAVE DEBUGGING =======');
+    console.log('Raw expense data received by Expenses component:', expenseData);
+    console.log('PaymentDetails value:', expenseData.paymentDetails);
+    console.log('PaymentDetails type:', expenseData.paymentDetails !== undefined ? 
+      typeof expenseData.paymentDetails : 'undefined');
+    console.log('PaymentDetails stringified:', 
+      expenseData.paymentDetails !== undefined ? 
+      JSON.stringify(expenseData.paymentDetails) : 'undefined');
+    console.log('Full expense data JSON stringified:', JSON.stringify(expenseData));
+    
+    // Fix paymentDetails if it exists but might cause issues
+    if (expenseData.paymentDetails === undefined) {
+      console.log('Setting undefined paymentDetails to null before save');
+      (expenseData as any).paymentDetails = null;
+    }
+    
     setSubmitting(true);
     let savedExpense: Expense;
     

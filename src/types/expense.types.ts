@@ -33,11 +33,11 @@ export interface Expense {
   /** @deprecated Use phaseName instead */
   buildingPhase?: string;
   lineItems?: LineItem[];
-  paymentDetails?: PaymentDetails;
+  paymentDetails?: PaymentDetails | null;
   tags?: string[];
   projectName?: string;
   /** Reference to the bid this expense was created from */
-  bidId?: string;
+  bidId?: string | null;
   /** Reference to the payment stage this expense corresponds to */
-  paymentStageId?: string;
+  paymentStageId?: string | null;
 } 

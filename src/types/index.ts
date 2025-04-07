@@ -1,4 +1,5 @@
 import { Timestamp } from 'firebase/firestore';
+import { Expense, ExpenseCategory, ExpenseStatus, PaymentDetails } from './expense.types';
 
 export interface User {
   id: string;
@@ -60,39 +61,6 @@ export interface Project {
   bids?: Bid[];
   tasks?: Task[];
   expenses?: Expense[];
-}
-
-export interface Expense {
-  id?: string;
-  userId: string;
-  projectId: string;
-  phaseId?: string; // Optional link to a specific phase
-  phaseName?: string; // Name of the phase
-  category: 'labor' | 'materials' | 'equipment' | 'permits' | 'subcontractor' | 'other';
-  description: string;
-  amount: number;
-  date: Date | string;
-  receiptUrl?: string;
-  vendor?: string | null;
-  subcontractorId?: string | null; // Link to a subcontractor
-  subcontractorName?: string | null; // Name of the subcontractor
-  status: 'pending' | 'approved' | 'rejected' | 'paid';
-  createdBy: string;
-  approvedBy?: string;
-  createdAt: Date | string;
-  updatedAt: Date | string;
-  notes?: string;
-  /** @deprecated Use phaseName instead */
-  buildingPhase?: string; // Current construction phase of the project
-  lineItems?: LineItem[]; // Add support for itemized expenses
-  paymentDetails?: {
-    method: string;
-    date: string;
-    referenceNumber?: string;
-    notes?: string;
-  };
-  tags?: string[]; // Array of tags for flexible categorization
-  projectName?: string; // Name of the project this expense belongs to
 }
 
 export interface Bid {
