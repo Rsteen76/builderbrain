@@ -184,6 +184,7 @@ const ExpenseFormModal: React.FC<ExpenseFormModalProps> = ({
     if (open) {
       let initialPhases: ProjectPhase[] = [];
       let initialFormData: Partial<Expense> = {
+        // Default empty state
         description: '',
         amount: 0,
         category: 'other',
@@ -197,49 +198,38 @@ const ExpenseFormModal: React.FC<ExpenseFormModalProps> = ({
         subcontractorId: '',
         subcontractorName: '',
         tags: [],
+        lineItems: [],
       };
 
-      if (expense && isEditMode) {
-        // Editing existing expense
+      if (expense) {
+        // If expense prop exists (editing OR creating with pre-filled data)
+        console.log('Modal opened with expense prop:', expense);
         initialFormData = {
           ...initialFormData, // Start with defaults
-          ...expense,
+          ...expense,          // Apply passed expense data
           date: expense.date ? new Date(expense.date) : new Date(),
         };
-        // Try getting phases from prop first, then lookup in projects list
-        initialPhases = projectPhases && projectPhases.length > 0 
+        
+        // Determine phases based on passed expense or project context
+        if (expense.projectId) {
+          initialPhases = projectPhases && projectPhases.length > 0 
             ? projectPhases 
             : projects.find(p => p.id === expense.projectId)?.phases || [];
-        console.log(`Edit Mode - Initializing with expense:`, expense, `Initial phases:`, initialPhases);
-      } else {
-        // Creating new expense - reset form data
-        console.log('Create Mode - Resetting form data');
+          console.log(`Initializing from expense prop - Project: ${expense.projectId}, Initial phases:`, initialPhases);
+        }
         
-        // Auto-select project if there's only one project (opened from project context)
+      } else {
+        // Creating a completely new expense (no pre-filled data)
+        console.log('Modal opened for new generic expense');
+        // Auto-select project if only one is available (general expenses page)
         if (projects.length === 1) {
           initialFormData.projectId = projects[0].id;
-          // Get phases from the project or from projectPhases prop
-          initialPhases = projectPhases && projectPhases.length > 0 
-              ? projectPhases 
-              : projects[0].phases || [];
-          console.log('Auto-selected project:', projects[0].name, 'with phases:', initialPhases);
-          
-          // Auto-select phase if there's only one phase
+          initialPhases = projects[0].phases || [];
+          console.log('Auto-selected project (general): ', projects[0].name, 'Phases:', initialPhases);
+          // Auto-select phase if only one
           if (initialPhases.length === 1) {
             initialFormData.phaseId = initialPhases[0].id;
             initialFormData.phaseName = initialPhases[0].name;
-            console.log('Auto-selected phase:', initialPhases[0].name);
-          }
-        }
-        
-        // Check if a specific phase was passed (from phase card)
-        if (expense?.phaseId) {
-          // Find the phase in the projectPhases array
-          const selectedPhase = projectPhases.find(p => p.id === expense.phaseId);
-          if (selectedPhase) {
-            initialFormData.phaseId = selectedPhase.id;
-            initialFormData.phaseName = selectedPhase.name;
-            console.log('Auto-selected specific phase from phase card:', selectedPhase.name);
           }
         }
       }
@@ -736,22 +726,16 @@ const ExpenseFormModal: React.FC<ExpenseFormModalProps> = ({
         <Grid container spacing={2}>
           {/* Project + Date Row */}
           <Grid item xs={12} md={6}>
-            <FormControl 
-            fullWidth
-              error={!!errors.projectId}
-              variant="outlined"
-              size="small"
-            >
-              <InputLabel id="project-label">Project</InputLabel>
+            <FormControl fullWidth error={!!errors.projectId} variant="outlined" size="small">
+            <InputLabel id="project-label">Project</InputLabel>
             <Select
-                labelId="project-label"
-                id="projectId"
-                name="projectId"
-                value={formData.projectId || ''}
+              labelId="project-label"
+              id="projectId"
+              name="projectId"
+              value={formData.projectId || ''}
               onChange={handleSelectChange}
-                label="Project"
-                displayEmpty
-                disabled={projects.length === 1}
+              label="Project"
+              disabled={!!expense?.projectId && !isEditMode}
               startAdornment={
                 <InputAdornment position="start">
                     <ProjectIcon fontSize="small" color="primary" />

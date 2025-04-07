@@ -314,8 +314,35 @@ const Expenses: React.FC<{ projectId?: string }> = ({ projectId }) => {
   };
   
   const handleAddExpense = () => {
-    setSelectedExpense(null); // Ensure we're creating a new expense
-    setSelectedProjectPhases([]); // Reset phases for a new expense (or set based on default/context)
+    // Check if we are in a specific project context (projectId prop is set)
+    if (projectId) {
+      // Find the current project from the fetched projects list
+      const currentProject = projects.find(p => p.id === projectId);
+      const projectPhases = currentProject?.phases || [];
+      
+      // Set the phases for the modal's phase dropdown
+      setSelectedProjectPhases(projectPhases);
+      
+      // Initialize the expense data with the current project ID
+      const initialExpenseData = {
+        projectId: projectId,
+        // Auto-select the phase if there's only one
+        ...(projectPhases.length === 1 ? { 
+            phaseId: projectPhases[0].id, 
+            phaseName: projectPhases[0].name 
+        } : {})
+      };
+      
+      console.log('handleAddExpense (Project Context): Initializing with:', initialExpenseData, 'Phases:', projectPhases);
+      setSelectedExpense(initialExpenseData); 
+
+    } else {
+      // Not in project context, reset everything for a generic new expense
+      console.log('handleAddExpense (General Context): Resetting');
+      setSelectedExpense(null); 
+      setSelectedProjectPhases([]); 
+    }
+    
     setExpenseModalOpen(true);
   };
   
