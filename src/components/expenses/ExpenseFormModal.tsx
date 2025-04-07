@@ -67,6 +67,7 @@ import { DatePicker } from '@mui/x-date-pickers/DatePicker';
 import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
 import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns';
 import SubcontractorSelector from '../common/SubcontractorSelector';
+import VendorSelector from '../common/VendorSelector';
 
 import { Expense, LineItem, Subcontractor } from '../../types';
 import { ExpenseService } from '../../services/expense';
@@ -200,7 +201,6 @@ const ExpenseFormModal: React.FC<ExpenseFormModalProps> = ({
     'rough-in', 'top-out', 'fixtures', 'inspection', 'permit'
   ]);
   const [currentProjectPhases, setCurrentProjectPhases] = useState<ProjectPhase[]>([]);
-  const [suggestedVendors, setSuggestedVendors] = useState<string[]>([]);
 
   const isEditMode = !!expense?.id;
 
@@ -211,40 +211,6 @@ const ExpenseFormModal: React.FC<ExpenseFormModalProps> = ({
       label: phase.name || 'Unnamed Phase'
     }));
   }, [currentProjectPhases]);
-
-  // Update the useEffect to use localStorage for user-specific vendors
-  useEffect(() => {
-    if (open && user?.uid) {
-      // Try to get user-specific vendors from localStorage
-      try {
-        const storageKey = `vendors_${user.uid}`;
-        const storedVendors = localStorage.getItem(storageKey);
-        const parsedVendors = storedVendors ? JSON.parse(storedVendors) : [];
-        
-        if (Array.isArray(parsedVendors) && parsedVendors.length > 0) {
-          setSuggestedVendors(parsedVendors);
-        } else {
-          // Fallback to common vendors if user has no vendors yet
-          const commonVendors = [
-            'Home Depot', 
-            'Lowe\'s', 
-            'Menards', 
-            'Ace Hardware',
-            'Ferguson',
-            'Grainger',
-            'McMaster-Carr',
-            'Uline',
-            'Capitol Building Supply',
-            'Superior Walls'
-          ];
-          setSuggestedVendors(commonVendors);
-        }
-      } catch (error) {
-        console.error("Error loading vendors from localStorage:", error);
-        setSuggestedVendors([]);
-      }
-    }
-  }, [open, user?.uid]);
 
   // Effect to initialize form and phases when opening/editing
   useEffect(() => {
@@ -604,44 +570,12 @@ const ExpenseFormModal: React.FC<ExpenseFormModalProps> = ({
     }
   };
 
-  // Update the onSave handler to save the vendor to localStorage if it's new
-  const saveVendorToLocalStorage = (vendor: string | null | undefined) => {
-    if (!user?.uid || !vendor) return;
-    
-    try {
-      const storageKey = `vendors_${user.uid}`;
-      const storedVendors = localStorage.getItem(storageKey);
-      let vendorsList = storedVendors ? JSON.parse(storedVendors) : [];
-      
-      // Make sure it's an array
-      if (!Array.isArray(vendorsList)) vendorsList = [];
-      
-      // Check if vendor already exists (case insensitive)
-      const vendorExists = vendorsList.some((v: string) => 
-        v.toLowerCase() === vendor.toLowerCase()
-      );
-      
-      // Add vendor if it doesn't exist yet
-      if (!vendorExists && vendor.trim() !== '') {
-        vendorsList.push(vendor.trim());
-        localStorage.setItem(storageKey, JSON.stringify(vendorsList));
-        
-        // Update the current list
-        setSuggestedVendors(vendorsList);
-      }
-    } catch (error) {
-      console.error("Error saving vendor to localStorage:", error);
-    }
-  };
-
-  // Modify the handleSave function to save vendor to localStorage
   const handleSave = async () => {
     if (!validateForm()) {
       return;
     }
 
-    // Save vendor to localStorage if it's new
-    saveVendorToLocalStorage(formData.vendor);
+    // Note: VendorSelector now handles saving vendors automatically
 
     setIsLoading(true);
     setBackendError(null);
@@ -749,14 +683,12 @@ const ExpenseFormModal: React.FC<ExpenseFormModalProps> = ({
     }
   };
 
-  // Also modify handleContinueSaveWithDuplicates to save vendor
   const handleContinueSaveWithDuplicates = () => {
     setShowDuplicateWarning(false);
     
     if (!user) return;
     
-    // Save vendor to localStorage if it's new
-    saveVendorToLocalStorage(formData.vendor);
+    // Note: VendorSelector now handles saving vendors automatically
     
     // Format expense data for saving
     let updatedFormData = { ...formData };
@@ -1023,44 +955,16 @@ const ExpenseFormModal: React.FC<ExpenseFormModalProps> = ({
           </Grid>
           
           <Grid item xs={12} sm={6}>
-            <Autocomplete
-              id="vendor"
-              freeSolo
-              options={suggestedVendors}
+            <VendorSelector
               value={formData.vendor || ''}
-              onChange={(_event, newValue) => {
+              onChange={(vendor) => {
                 setFormData({
                   ...formData,
-                  vendor: newValue || '',
+                  vendor: vendor,
                 });
               }}
-              onInputChange={(_event, newValue) => {
-                setFormData({
-                  ...formData,
-                  vendor: newValue || '',
-                });
-              }}
-              renderInput={(params) => (
-                <TextField
-                  {...params}
-                  fullWidth
-                  label="Vendor / Supplier"
-                  name="vendor"
-                  placeholder="Who provided the goods/services?"
-                  size="small"
-                  InputProps={{
-                    ...params.InputProps,
-                    startAdornment: (
-                      <>
-                        <InputAdornment position="start">
-                          <VendorIcon fontSize="small" color="primary" />
-                        </InputAdornment>
-                        {params.InputProps.startAdornment}
-                      </>
-                    ),
-                  }}
-                />
-              )}
+              error={!!errors.vendor}
+              helperText={errors.vendor}
             />
           </Grid>
           

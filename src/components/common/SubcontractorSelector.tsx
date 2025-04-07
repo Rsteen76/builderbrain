@@ -11,6 +11,7 @@ import {
   InputAdornment,
   FormHelperText,
   SelectChangeEvent,
+  Autocomplete,
 } from '@mui/material';
 import {
   Add as AddIcon,
@@ -61,26 +62,6 @@ const SubcontractorSelector: React.FC<SubcontractorSelectorProps> = ({
     fetchSubcontractors();
   }, [user]);
 
-  const handleSelectChange = (event: SelectChangeEvent<string>) => {
-    const selectedValue = event.target.value;
-    
-    if (selectedValue === 'new') {
-      setShowNewField(true);
-      onChange('', '');
-    } else if (selectedValue === '') {
-      onChange('', '');
-      setShowNewField(false);
-    } else {
-      const selectedSubcontractor = subcontractors.find(s => s.id === selectedValue);
-      onChange(selectedValue, selectedSubcontractor?.name || '');
-      setShowNewField(false);
-    }
-  };
-
-  const handleNewSubcontractorChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-    setNewSubcontractor(event.target.value);
-  };
-
   const handleCreateSubcontractor = async () => {
     if (!user?.uid || !newSubcontractor.trim()) return;
     
@@ -116,42 +97,64 @@ const SubcontractorSelector: React.FC<SubcontractorSelectorProps> = ({
     }
   };
 
+  // Find selected subcontractor
+  const selectedSubcontractor = subcontractors.find(sub => sub.id === value);
+
   return (
     <Box>
       <FormControl fullWidth error={error}>
-        <InputLabel id="subcontractor-label">Subcontractor</InputLabel>
-        <Select
-          labelId="subcontractor-label"
-          value={value}
-          onChange={handleSelectChange}
-          label="Subcontractor"
-          startAdornment={
-            <InputAdornment position="start">
-              <SubcontractorIcon />
-            </InputAdornment>
-          }
-          disabled={isLoading || disabled}
-        >
-          <MenuItem value="">
-            <em>None</em>
-          </MenuItem>
-          {isLoading ? (
-            <MenuItem disabled>
-              <CircularProgress size={20} /> Loading...
-            </MenuItem>
-          ) : (
-            subcontractors.map((sub) => (
-              <MenuItem key={sub.id} value={sub.id}>
-                {sub.name}
-              </MenuItem>
-            ))
+        <Autocomplete
+          id="subcontractor-select"
+          options={subcontractors}
+          loading={isLoading}
+          value={selectedSubcontractor || null}
+          disabled={disabled}
+          getOptionLabel={(option) => option.name || ''}
+          isOptionEqualToValue={(option, value) => option.id === value.id}
+          onChange={(event, newValue) => {
+            if (newValue) {
+              onChange(newValue.id, newValue.name);
+            } else {
+              onChange('', '');
+            }
+          }}
+          renderInput={(params) => (
+            <TextField
+              {...params}
+              label="Subcontractor"
+              InputProps={{
+                ...params.InputProps,
+                startAdornment: (
+                  <>
+                    <InputAdornment position="start">
+                      <SubcontractorIcon />
+                    </InputAdornment>
+                    {params.InputProps.startAdornment}
+                  </>
+                ),
+                endAdornment: (
+                  <>
+                    {isLoading ? <CircularProgress color="inherit" size={20} /> : null}
+                    {params.InputProps.endAdornment}
+                  </>
+                ),
+              }}
+              error={error}
+              helperText={helperText}
+            />
           )}
-          <MenuItem value="new" sx={{ color: 'primary.main' }}>
-            <AddIcon fontSize="small" sx={{ mr: 1 }} /> Add New Subcontractor
-          </MenuItem>
-        </Select>
-        {helperText && <FormHelperText>{helperText}</FormHelperText>}
+        />
       </FormControl>
+
+      <Button
+        variant="outlined"
+        size="small"
+        startIcon={<AddIcon />}
+        onClick={() => setShowNewField(true)}
+        sx={{ mt: 1, display: showNewField ? 'none' : 'flex' }}
+      >
+        Add New Subcontractor
+      </Button>
 
       {showNewField && (
         <Box sx={{ display: 'flex', gap: 1, mt: 1 }}>
@@ -159,7 +162,7 @@ const SubcontractorSelector: React.FC<SubcontractorSelectorProps> = ({
             name="newSubcontractor"
             label="New Subcontractor Name"
             value={newSubcontractor}
-            onChange={handleNewSubcontractorChange}
+            onChange={(e) => setNewSubcontractor(e.target.value)}
             fullWidth
             error={error}
             helperText={helperText}
@@ -172,6 +175,13 @@ const SubcontractorSelector: React.FC<SubcontractorSelectorProps> = ({
             sx={{ whiteSpace: 'nowrap' }}
           >
             {isCreating ? <CircularProgress size={24} /> : 'Add'}
+          </Button>
+          <Button
+            variant="outlined"
+            color="inherit"
+            onClick={() => setShowNewField(false)}
+          >
+            Cancel
           </Button>
         </Box>
       )}
