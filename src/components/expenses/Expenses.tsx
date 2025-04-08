@@ -389,7 +389,7 @@ const Expenses: React.FC<{ projectId?: string }> = ({ projectId }) => {
     setPaymentModalOpen(false);
   };
   
-  const handleMarkAsPaid = async (expenseId: string, actualAmountPaid: number) => {
+  const handleMarkAsPaid = async (expenseId: string, actualAmountPaid: number, paymentDetails?: any) => {
     if (!user?.uid) return;
     
     setSubmitting(true);
@@ -405,7 +405,7 @@ const Expenses: React.FC<{ projectId?: string }> = ({ projectId }) => {
       console.log(`[handleMarkAsPaid] Expense ${expenseId} - Actual Amount Paid: ${actualAmountPaid}`);
 
       // Update expense status to paid in Firestore
-      await ExpenseService.markAsPaid(expenseId);
+      await ExpenseService.markAsPaid(expenseId, actualAmountPaid, paymentDetails);
       console.log(`[handleMarkAsPaid] Expense ${expenseId} marked as paid in Firestore.`);
 
       // --- Start Bid Payment Schedule Adjustment Logic ---
@@ -425,7 +425,7 @@ const Expenses: React.FC<{ projectId?: string }> = ({ projectId }) => {
             // Update local state for the expense list (since Firestore update succeeded)
             setExpenses(prev => prev.map(e => 
               e.id === expenseId 
-                ? { ...e, status: 'paid', amount: actualAmountPaid } // Also update amount locally?
+                ? { ...e, status: 'paid', amount: actualAmountPaid, paymentDetails: paymentDetails }
                 : e
             ));
             return; // Exit if no bid found
@@ -637,10 +637,10 @@ const Expenses: React.FC<{ projectId?: string }> = ({ projectId }) => {
       // Update local state for the expense list - ENSURE AMOUNT IS UPDATED HERE TOO
       setExpenses(prev => prev.map(e => 
         e.id === expenseId 
-          ? { ...e, status: 'paid', amount: actualAmountPaid } // *** Update amount in local state ***
+          ? { ...e, status: 'paid', amount: actualAmountPaid, paymentDetails: paymentDetails } // *** Update amount and payment details in local state ***
           : e
       ));
-      console.log(`[handleMarkAsPaid] Updated local expense state for ${expenseId} to 'paid' with amount ${actualAmountPaid}`);
+      console.log(`[handleMarkAsPaid] Updated local expense state for ${expenseId} to 'paid' with amount ${actualAmountPaid} and payment details`, paymentDetails);
 
       // If we have project-related expense, trigger a refresh using a custom event
       if (expenseToUpdate?.projectId) {
@@ -1698,11 +1698,11 @@ const Expenses: React.FC<{ projectId?: string }> = ({ projectId }) => {
         open={paymentModalOpen}
         onClose={handleClosePaymentModal}
         expense={fullExpenseForPayment} // Pass the full object or null
-        onSave={(actualAmountPaid) => { 
-          console.log(`[Expenses] PaymentFormModal onSave callback triggered. Actual Amount Received: ${actualAmountPaid}`); // LOG A
+        onSave={(actualAmountPaid, paymentDetails) => { 
+          console.log(`[Expenses] PaymentFormModal onSave callback triggered. Actual Amount Received: ${actualAmountPaid}`, paymentDetails); // LOG A
           if (fullExpenseForPayment?.id) { 
             console.log(`[Expenses] fullExpenseForPayment ID is valid (${fullExpenseForPayment.id}). Calling handleMarkAsPaid...`); // LOG B
-            handleMarkAsPaid(fullExpenseForPayment.id, actualAmountPaid);
+            handleMarkAsPaid(fullExpenseForPayment.id, actualAmountPaid, paymentDetails);
           } else {
             console.error('[Expenses] PaymentFormModal onSave called, BUT fullExpenseForPayment or its ID is missing! Cannot call handleMarkAsPaid.', { 
               fullExpenseForPayment: fullExpenseForPayment,

@@ -378,7 +378,8 @@ const BidManager: React.FC<BidManagerProps> = ({ project, userId, onProjectUpdat
             amount: firstStage.amount,
             date: new Date(),
             status: 'pending',
-            vendor: savedBid.subcontractorName || '',
+            subcontractorId: savedBid.subcontractorId || '',
+            subcontractorName: savedBid.subcontractorName || '',
             notes: `This expense is for payment stage: ${firstStage.name} (${firstStage.percentage}%) for accepted bid (ID: ${savedBid.id}).\n\nRequirements: ${firstStage.completionRequirements || 'None'}\n\nOriginal bid notes: ${savedBid.notes || 'None'}`,
           };
           

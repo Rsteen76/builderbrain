@@ -220,7 +220,8 @@ const BidPaymentSchedule: React.FC<BidPaymentScheduleProps> = ({ bid, userId, pr
         amount: expenseData.amount || selectedStage.amount,
         date: expenseData.date || new Date(),
         status: 'pending',
-        vendor: bid.subcontractorName || '',
+        subcontractorId: bid.subcontractorId || '',
+        subcontractorName: bid.subcontractorName || '',
         notes: expenseData.notes || `This expense is for payment stage: ${selectedStage.name} of bid: ${bid.title || bid.scope || 'Unnamed bid'}`
       });
       

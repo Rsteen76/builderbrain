@@ -35,7 +35,12 @@ interface PaymentFormModalProps {
   open: boolean;
   onClose: () => void;
   expense: Expense | null;
-  onSave: (actualAmountPaid: number) => void;
+  onSave: (actualAmountPaid: number, paymentDetails: {
+    method: string;
+    referenceNumber: string;
+    date: string;
+    notes: string;
+  }) => void;
 }
 
 const PAYMENT_METHODS = [
@@ -114,6 +119,14 @@ const PaymentFormModal: React.FC<PaymentFormModalProps> = ({
     const finalAmount = Number(actualAmount);
     console.log(`[PaymentFormModal] Processing payment - Amount: ${finalAmount}`);
     
+    // Create the payment details object
+    const paymentDetailsObj = {
+      method: paymentMethod,
+      referenceNumber: referenceNumber,
+      date: paymentDate,
+      notes: notes
+    };
+    
     if (expense?.projectId) {
       const event = new CustomEvent('expense-status-changed', {
         detail: {
@@ -129,7 +142,7 @@ const PaymentFormModal: React.FC<PaymentFormModalProps> = ({
     
     setTimeout(() => {
       try {
-        onSave(finalAmount);
+        onSave(finalAmount, paymentDetailsObj);
       } catch (error) {
         console.error('[PaymentFormModal] Error processing payment:', error);
       }

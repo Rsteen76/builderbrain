@@ -310,8 +310,27 @@ export class ExpenseService {
   }
 
   // Mark an expense as paid
-  static async markAsPaid(id: string): Promise<void> {
-    return this.updateExpense(id, { status: 'paid' });
+  static async markAsPaid(id: string, actualAmount?: number, paymentDetails?: {
+    method: string;
+    referenceNumber?: string;
+    date: string;
+    notes?: string;
+  }): Promise<void> {
+    const updateData: Partial<Expense> = { 
+      status: 'paid',
+    };
+
+    // If an actual amount is provided, update the expense amount
+    if (actualAmount !== undefined) {
+      updateData.amount = actualAmount;
+    }
+
+    // If payment details are provided, include them in the update
+    if (paymentDetails) {
+      updateData.paymentDetails = paymentDetails;
+    }
+
+    return this.updateExpense(id, updateData);
   }
 
   // Check for potential duplicate expenses
