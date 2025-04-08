@@ -702,41 +702,71 @@ const ReusableBidForm: React.FC<ReusableBidFormProps> = ({
     }
   };
 
-  // Add this helper function for getting bid title options based on phase
+  // Modify the helper function to handle multiple keyword matches
   const getBidTitleOptions = (phaseId: string | undefined, phases: Phase[]): string[] => {
-    if (!phaseId) {
-      return PHASE_BID_TITLES.common || [];
+    const applicableKeys: string[] = ["common"]; // Start with common
+    let phaseNameForLog = "(No Phase Selected)";
+
+    if (phaseId && phases.length > 0) {
+      const phase = phases.find(p => p.id === phaseId);
+      if (phase) {
+        phaseNameForLog = phase.name;
+        const phaseNameLower = phase.name.toLowerCase();
+        
+        // Use separate `if` statements to find all applicable keys
+        if (phaseNameLower.includes("site") || phaseNameLower.includes("excav") || phaseNameLower.includes("demo")) {
+          applicableKeys.push("site_work");
+        }
+        if (phaseNameLower.includes("foundation") || phaseNameLower.includes("concrete") || phaseNameLower.includes("footings") || phaseNameLower.includes("footing")) {
+          applicableKeys.push("foundation");
+        }
+        if (phaseNameLower.includes("frame") || phaseNameLower.includes("struct")) {
+          applicableKeys.push("framing");
+        }
+        if (phaseNameLower.includes("rough") || phaseNameLower.includes("plumb") || phaseNameLower.includes("electr") || phaseNameLower.includes("hvac")) {
+          applicableKeys.push("rough_ins");
+        }
+        if (phaseNameLower.includes("exterior") || phaseNameLower.includes("roof") || phaseNameLower.includes("siding")) {
+          applicableKeys.push("exterior");
+        }
+        if (phaseNameLower.includes("interior") || phaseNameLower.includes("drywall") || phaseNameLower.includes("paint")) {
+          applicableKeys.push("interior");
+        }
+        if (phaseNameLower.includes("finish") || phaseNameLower.includes("cabinet") || phaseNameLower.includes("counter")) {
+          applicableKeys.push("finishes");
+        }
+        if (phaseNameLower.includes("pool") || phaseNameLower.includes("special") || phaseNameLower.includes("custom")) {
+          applicableKeys.push("specialty");
+        }
+        // Add more checks if needed
+
+      } else {
+        console.log(`[getBidTitleOptions] Phase ID ${phaseId} provided but not found in phases list.`);
+      }
+    } else if (!phaseId) {
+        console.log('[getBidTitleOptions] No phase selected.');
+    } else { // phases.length === 0
+        console.log('[getBidTitleOptions] Phase ID provided but phases list is empty.');
     }
 
-    const phase = phases.find(p => p.id === phaseId);
-    if (!phase) {
-      return PHASE_BID_TITLES.common || [];
-    }
+    // Remove duplicates from applicableKeys (e.g., if common is added implicitly elsewhere)
+    const uniqueKeys = Array.from(new Set(applicableKeys));
+    console.log(`[getBidTitleOptions] For Phase: "${phaseNameForLog}", Applicable Category Keys:`, uniqueKeys);
 
-    // Try to match phase name to a category
-    const phaseName = phase.name.toLowerCase();
-    let phaseKey = "common";
+    // Collect titles from all applicable keys using a Set for automatic deduplication
+    const combinedTitles = new Set<string>();
+    uniqueKeys.forEach(key => {
+      const titles = PHASE_BID_TITLES[key] || [];
+      console.log(`[getBidTitleOptions] Titles for Key "${key}":`, titles);
+      titles.forEach(title => combinedTitles.add(title));
+    });
 
-    if (phaseName.includes("site") || phaseName.includes("excav") || phaseName.includes("demo")) {
-      phaseKey = "site_work";
-    } else if (phaseName.includes("foundation") || phaseName.includes("concrete") || phaseName.includes("footings")) {
-      phaseKey = "foundation";
-    } else if (phaseName.includes("frame") || phaseName.includes("struct")) {
-      phaseKey = "framing";
-    } else if (phaseName.includes("rough") || phaseName.includes("plumb") || phaseName.includes("electr") || phaseName.includes("hvac")) {
-      phaseKey = "rough_ins";
-    } else if (phaseName.includes("exterior") || phaseName.includes("roof") || phaseName.includes("siding")) {
-      phaseKey = "exterior";
-    } else if (phaseName.includes("interior") || phaseName.includes("drywall") || phaseName.includes("paint")) {
-      phaseKey = "interior";
-    } else if (phaseName.includes("finish") || phaseName.includes("cabinet") || phaseName.includes("counter")) {
-      phaseKey = "finishes";
-    } else if (phaseName.includes("pool") || phaseName.includes("special") || phaseName.includes("custom")) {
-      phaseKey = "specialty";
-    }
-
-    // Combine common options with phase-specific options
-    return [...(PHASE_BID_TITLES[phaseKey] || []), ...(PHASE_BID_TITLES.common || [])];
+    // Convert Set to sorted array
+    const finalOptions = Array.from(combinedTitles).sort();
+    
+    console.log(`[getBidTitleOptions] Final Combined & Sorted Options (${finalOptions.length}):`, finalOptions);
+    
+    return finalOptions;
   };
 
   // Log render values just before defining formContent
