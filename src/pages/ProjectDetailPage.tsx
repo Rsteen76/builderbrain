@@ -1915,6 +1915,29 @@ const ProjectDetailPage: React.FC = () => {
     }
   };
 
+  // Define the onSubmitSuccess handler for the bid dialog
+  const handleBidSubmitSuccess = (savedBid: Bid) => {
+    console.log('Bid saved/updated:', savedBid);
+    // Refresh bids and expenses lists after successful save
+    if (project?.id) {
+      fetchBids(project.id);
+      fetchExpenses(project.id);
+    }
+    // Optionally update recent bids state
+    setRecentBids(prev => {
+      const index = prev.findIndex(b => b.id === savedBid.id);
+      if (index > -1) {
+        // Update existing
+        const updated = [...prev];
+        updated[index] = savedBid;
+        return updated;
+      } else {
+        // Add new and keep list short
+        return [savedBid, ...prev].slice(0, 5);
+      }
+    });
+  };
+
   // Main component return statement (Corrected Structure)
   return (
     <>
@@ -2051,6 +2074,23 @@ const ProjectDetailPage: React.FC = () => {
         setCurrentPhaseForExpense={setCurrentPhaseForExpense}
         setNewExpenseDialogOpen={setNewExpenseDialogOpen}
       />
+      {
+        project && (
+          <BidFormDialog
+            open={bidFormOpen}
+            onClose={handleCloseBidForm}
+            onSubmitSuccess={handleBidSubmitSuccess} // Pass the success handler
+            // Pass project-specific context
+            projectId={project.id}
+            phases={phases} // Pass only the phases for *this* project
+            // Pass editing state
+            initialBidData={bidForm} // Assuming bidForm holds the data for editing
+            editingBidId={editingBidId}
+            // Callback for adding subs remains (optional)
+            onAddSubcontractor={() => setShowQuickAddSubcontractor(true)}
+          />
+        )
+      }
     </>
   );
 };

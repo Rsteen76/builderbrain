@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Box,
@@ -60,11 +60,43 @@ import {
   SortDirection,
   BidSummary
 } from '../../services/bid';
-import { formatCurrency } from '../../utils/formatters';
-import { Bid } from '../../types';
+import { formatCurrency, safelyParseDate } from '../../utils/formatters';
+import { Bid, Subcontractor } from '../../types';
 import { useAuth } from '../../contexts/AuthContext';
 import { openBidDeleteDialog } from '../dialogs/BidDeletePortal';
 import BidDeletePortal from '../dialogs/BidDeletePortal';
+import BidFormDialog from '../dialogs/BidFormDialog';
+import { v4 as uuidv4 } from 'uuid';
+
+// Add the BidFormData interface definition near the top
+interface BidFormData {
+  title: string;
+  subcontractorName: string;
+  subcontractorId?: string;
+  totalAmount: number;
+  phaseId?: string;
+  phaseName?: string;
+  scope: string;
+  timeline: number;
+  submissionDeadline?: Date;
+  paymentTerms: {
+    downPaymentPercent: number;
+    installments: {
+      id: string;
+      name: string;
+      percent: number;
+      milestoneDescription: string;
+      phaseId?: string;
+      phaseName?: string;
+    }[];
+  };
+  notes: string;
+  status: 'draft' | 'submitted' | 'accepted' | 'rejected' | 'expired';
+  attachments: string[];
+  tags: string[];
+  projectId?: string;
+  projectName?: string;
+}
 
 // Status colors
 const bidStatusColors: Record<Bid['status'], string> = {
@@ -487,6 +519,50 @@ interface BidListProps {
   hideHeader?: boolean;
 }
 
+// Helper function to format bid for the dialog
+// Similar to the one in ProjectDetailPage, adjust as needed
+const formatBidForDialog = (bid: Bid): Partial<any> => {
+  let downPaymentPercent = 20;
+  let installments: any[] = [];
+  if (bid.paymentSchedule && bid.paymentSchedule.length > 0) {
+    const downPayment = bid.paymentSchedule.find(p => p.name === 'Down Payment');
+    downPaymentPercent = downPayment?.percentage || 20;
+    installments = bid.paymentSchedule
+      .filter(p => p.name !== 'Down Payment')
+      .map(p => ({
+        id: p.id || uuidv4(),
+        name: p.name || 'Installment',
+        percent: p.percentage || 0,
+        milestoneDescription: p.description || '',
+        phaseId: p.phaseId,
+        phaseName: p.phaseName,
+      }));
+  }
+
+  return {
+    title: bid.title || '',
+    subcontractorName: bid.subcontractorName || '',
+    subcontractorId: bid.subcontractorId || '',
+    totalAmount: bid.totalAmount || 0,
+    phaseId: bid.phaseId || '',
+    phaseName: bid.phaseName || '',
+    projectId: bid.projectId, 
+    scope: bid.scope || '',
+    timeline: bid.timeline || 30,
+    submissionDeadline: bid.submissionDeadline ? safelyParseDate(bid.submissionDeadline) : undefined,
+    paymentTerms: {
+      downPaymentPercent: downPaymentPercent,
+      installments: installments,
+    },
+    notes: bid.notes || '',
+    status: bid.status || 'draft',
+    attachments: Array.isArray(bid.attachments)
+      ? bid.attachments.map(att => (typeof att === 'string' ? att : att?.url)).filter(Boolean) as string[]
+      : [],
+    tags: Array.isArray(bid.tags) ? [...bid.tags] : [],
+  };
+};
+
 const BidList: React.FC<BidListProps> = ({ projectId, hideHeader = false }) => {
   const { user, loading: authLoading } = useAuth();
   const navigate = useNavigate();
@@ -495,10 +571,18 @@ const BidList: React.FC<BidListProps> = ({ projectId, hideHeader = false }) => {
   const [error, setError] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [filter, setFilter] = useState<BidFilter>({});
-  const [sort, setSort] = useState<BidSort>({ field: 'submissionDeadline', direction: 'asc' });
+  const [sort, setSort] = useState<BidSort>({ field: 'createdAt', direction: 'desc' });
   const [showFilters, setShowFilters] = useState(false);
-  const [activeTab, setActiveTab] = useState(0);
+  const [tabValue, setTabValue] = useState(0);
   const theme = useTheme();
+
+  const [selectedBidId, setSelectedBidId] = useState<string | null>(null);
+  const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
+  
+  // State for the Bid Form Modal
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [editingBidId, setEditingBidId] = useState<string | null>(null);
+  const [initialBidData, setInitialBidData] = useState<Partial<BidFormData> | null>(null);
 
   const fetchBids = async () => {
     if (!user?.uid) {
@@ -514,6 +598,20 @@ const BidList: React.FC<BidListProps> = ({ projectId, hideHeader = false }) => {
       if (projectId) {
         bidFilter.projectId = projectId;
         console.log(`BidList: Filtering bids for project ID: ${projectId}`);
+      }
+
+      // Apply tab-based status filter
+      let statusFilter: string | string[] | undefined;
+      switch(tabValue) {
+        case 1: statusFilter = 'draft'; break;
+        case 2: statusFilter = 'submitted'; break;
+        case 3: statusFilter = 'accepted'; break;
+        case 4: statusFilter = ['rejected', 'expired', 'withdrawn']; break;
+        // case 5: statusFilter = ??? // Need logic for 'Converted' if applicable
+        default: statusFilter = undefined; // All bids
+      }
+      if (statusFilter) {
+        bidFilter.status = statusFilter;
       }
 
       const fetchedBids = await BidService.getBids(user.uid, bidFilter, sort);
@@ -548,7 +646,7 @@ const BidList: React.FC<BidListProps> = ({ projectId, hideHeader = false }) => {
       setError("Please log in to view bids.");
       setLoading(false);
     }
-  }, [user, filter, sort, authLoading, projectId]);
+  }, [user, filter, sort, authLoading, projectId, tabValue]);
 
   // Listen for global bid deletion events
   useEffect(() => {
@@ -583,33 +681,106 @@ const BidList: React.FC<BidListProps> = ({ projectId, hideHeader = false }) => {
     fetchBids();
   };
 
+  const handleMenuOpen = (event: React.MouseEvent<HTMLElement>, bidId: string) => {
+    event.stopPropagation(); // Prevent card click
+    setSelectedBidId(bidId);
+    setAnchorEl(event.currentTarget);
+  };
+
+  const handleMenuClose = () => {
+    setAnchorEl(null);
+    setSelectedBidId(null);
+  };
+
+  const handleTabChange = (event: React.SyntheticEvent, newValue: number) => {
+    setTabValue(newValue);
+  };
+
+  // --- Modal Handlers ---
+  const handleOpenNewBidModal = () => {
+    setEditingBidId(null);
+    setInitialBidData(null);
+    setIsModalOpen(true);
+  };
+
+  const handleOpenEditBidModal = async (bid: BidSummary) => {
+    if (!user?.uid) return;
+    try {
+      setLoading(true);
+      // Fetch full bid using the ID from the summary
+      const fullBid = await BidService.getBid(user.uid, bid.id); 
+      if (fullBid) {
+        setInitialBidData(formatBidForDialog(fullBid));
+        setEditingBidId(bid.id);
+        setIsModalOpen(true);
+      } else {
+        setError('Could not load bid data for editing.');
+      }
+    } catch (err) {
+      setError('Error loading bid data.');
+      console.error(err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleCloseModal = () => {
+    setIsModalOpen(false);
+    setEditingBidId(null);
+    setInitialBidData(null);
+    setError(null); // Clear any errors from the dialog fetch
+  };
+
+  const handleBidSubmitSuccess = (savedBid: Bid) => {
+    console.log('BidList - Bid saved/updated:', savedBid);
+    fetchBids(); // Refetch the list after saving
+  };
+  // --- End Modal Handlers ---
+
   const handleView = (bid: BidSummary) => {
     navigate(`/bids/${bid.id}`);
+    handleMenuClose();
   };
 
   const handleEdit = (bid: BidSummary) => {
-    navigate(`/bids/${bid.id}/edit`);
-  };
-
-  const handleDuplicate = (bid: BidSummary) => {
-    navigate(`/bids/new?duplicate=${bid.id}`);
+    handleOpenEditBidModal(bid); 
+    handleMenuClose();
   };
 
   const handleDeleteRequest = (bid: BidSummary) => {
     console.log('BidList: handleDeleteRequest called for bid ID:', bid.id);
-    openBidDeleteDialog(bid);
+    // Pass only the bid object. The callback is handled globally.
+    openBidDeleteDialog(bid); 
+    handleMenuClose();
   };
 
-  const handleTabChange = (_: React.SyntheticEvent, newValue: number) => {
-    setActiveTab(newValue);
-    let statusFilter: BidFilter = {};
-    switch(newValue) {
-      case 1: statusFilter = { status: 'draft' }; break;
-      case 2: statusFilter = { status: 'submitted' }; break;
-      case 3: statusFilter = { status: 'accepted' }; break;
-      case 4: statusFilter = { status: ['rejected', 'expired'] }; break;
+  const handleDuplicate = async (bid: BidSummary) => {
+    if (!user?.uid) return;
+    console.log('Attempting to duplicate bid:', bid.id);
+    handleMenuClose();
+    try {
+      setLoading(true);
+      const originalBid = await BidService.getBid(user.uid, bid.id);
+      if (!originalBid) {
+        throw new Error("Original bid not found");
+      }
+      const { id, createdAt, updatedAt, status, submissionDeadline, ...duplicateData } = originalBid;
+      const newBidData = {
+        ...duplicateData,
+        title: `${originalBid.title || 'Bid'} (Copy)`,
+        status: 'draft' as const,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      };
+      const newBid = await BidService.createBid(user.uid, newBidData as any);
+      console.log('Duplicated bid:', newBid);
+      fetchBids();
+    } catch (err) {
+      console.error("Error duplicating bid:", err);
+      setError("Failed to duplicate bid.");
+    } finally {
+      setLoading(false);
     }
-    setFilter(statusFilter);
   };
 
   const filteredBids = bids.filter(bid => {
@@ -633,7 +804,7 @@ const BidList: React.FC<BidListProps> = ({ projectId, hideHeader = false }) => {
             variant="contained" 
             color="primary" 
             startIcon={<AddIcon />}
-            onClick={() => navigate('/bids/new')}
+            onClick={handleOpenNewBidModal}
           >
             New Bid
           </Button>
@@ -706,7 +877,7 @@ const BidList: React.FC<BidListProps> = ({ projectId, hideHeader = false }) => {
         </Collapse>
 
         <Tabs 
-          value={activeTab} 
+          value={tabValue} 
           onChange={handleTabChange}
           variant="scrollable"
           scrollButtons="auto"
@@ -737,7 +908,7 @@ const BidList: React.FC<BidListProps> = ({ projectId, hideHeader = false }) => {
           <Button 
             variant="contained" 
             startIcon={<AddIcon />}
-            onClick={() => navigate('/bids/new')}
+            onClick={handleOpenNewBidModal}
           >
             Create New Bid
           </Button>
@@ -748,15 +919,24 @@ const BidList: React.FC<BidListProps> = ({ projectId, hideHeader = false }) => {
             <BidRow
               key={bid.id}
               bid={bid}
-              onView={handleView}
-              onEdit={handleEdit}
-              onDeleteRequest={handleDeleteRequest}
-              onDuplicate={handleDuplicate}
+              onView={() => handleView(bid)}
+              onEdit={() => handleEdit(bid)}
+              onDeleteRequest={() => handleDeleteRequest(bid)}
+              onDuplicate={() => handleDuplicate(bid)}
               theme={theme}
             />
           ))}
         </Box>
       )}
+
+      {/* Render the Bid Form Dialog */}
+      <BidFormDialog
+        open={isModalOpen}
+        onClose={handleCloseModal}
+        onSubmitSuccess={handleBidSubmitSuccess}
+        initialBidData={initialBidData || undefined}
+        editingBidId={editingBidId}
+      />
     </Box>
   );
 };

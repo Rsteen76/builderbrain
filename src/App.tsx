@@ -26,7 +26,6 @@ const Expenses = lazy(() => import('./components/expenses/Expenses'));
 const Documents = lazy(() => import('./components/documents/Documents'));
 const Bids = lazy(() => import('./components/bids/Bids'));
 const BidDetails = lazy(() => import('./components/bids/BidDetails'));
-const BidForm = lazy(() => import('./components/bids/BidForm'));
 const Subcontractors = lazy(() => import('./components/subcontractors/Subcontractors'));
 const SubcontractorForm = lazy(() => import('./components/subcontractors/SubcontractorForm'));
 const SubcontractorDetails = lazy(() => import('./components/subcontractors/SubcontractorDetails'));
@@ -172,9 +171,7 @@ const App: React.FC = () => {
                     <Route path="expenses" element={<ProtectedRoute><Expenses /></ProtectedRoute>} />
                     <Route path="documents" element={<ProtectedRoute><Documents /></ProtectedRoute>} />
                     <Route path="bids" element={<ProtectedRoute><Bids /></ProtectedRoute>} />
-                    <Route path="bids/new" element={<ProtectedRoute><BidForm /></ProtectedRoute>} />
                     <Route path="bids/:id" element={<ProtectedRoute><BidDetails /></ProtectedRoute>} />
-                    <Route path="bids/:id/edit" element={<ProtectedRoute><BidForm /></ProtectedRoute>} />
                     <Route path="payments" element={<ProtectedRoute><Payments /></ProtectedRoute>} />
                     <Route path="subcontractors" element={<ProtectedRoute><Subcontractors /></ProtectedRoute>} />
                     <Route path="subcontractors/new" element={<ProtectedRoute><SubcontractorForm /></ProtectedRoute>} />

@@ -272,15 +272,17 @@ interface ReusableBidFormProps {
   open?: boolean;
   onClose?: () => void;
   onSubmit: (bidForm: BidFormData) => Promise<void>;
-  phases: Phase[];
+  phases?: Phase[]; // Optional: If projectId is provided
   subcontractors: Subcontractor[];
   initialBidData?: Partial<BidFormData>;
   editingBidId?: string | null;
   isSaving?: boolean;
   onAddSubcontractor?: () => void;
   isDialog?: boolean;
-  projectId?: string;
-  projectName?: string;
+  projectId?: string; // Optional: Context project ID
+  projectName?: string; // Optional: Context project name
+  availableProjects?: Project[]; // Optional: Full list for standalone mode
+  error?: string | null; // Optional: To display API errors from parent
 }
 
 const ReusableBidForm: React.FC<ReusableBidFormProps> = ({
@@ -296,6 +298,8 @@ const ReusableBidForm: React.FC<ReusableBidFormProps> = ({
   isDialog = false,
   projectId,
   projectName,
+  availableProjects,
+  error,
 }) => {
   const { user } = useAuth();
   // Default bid form state
@@ -303,8 +307,8 @@ const ReusableBidForm: React.FC<ReusableBidFormProps> = ({
     title: '',
     subcontractorName: '',
     totalAmount: 0,
-    phaseId: phases.length > 0 ? phases[0].id : '',
-    phaseName: phases.length > 0 ? phases[0].name : '',
+    phaseId: (phases && phases.length > 0) ? phases[0].id : '',
+    phaseName: (phases && phases.length > 0) ? phases[0].name : '',
     scope: '',
     timeline: 30,
     paymentTerms: {
@@ -331,6 +335,7 @@ const ReusableBidForm: React.FC<ReusableBidFormProps> = ({
   // Add projects state
   const [projects, setProjects] = useState<Project[]>([]);
   const [isLoadingProjects, setIsLoadingProjects] = useState(false);
+  const [currentProjectPhases, setCurrentProjectPhases] = useState<Phase[]>([]);
 
   // Log initial mounting for debugging
   console.log('ReusableBidForm mounted/updated with props:', {
@@ -449,6 +454,51 @@ const ReusableBidForm: React.FC<ReusableBidFormProps> = ({
     fetchProjects();
   }, [user?.uid, projectId]);
 
+  // Add Effect to update currentProjectPhases based on selected project
+  useEffect(() => {
+    console.log("[Effect Update Phases] Running...");
+    console.log("[Effect Update Phases] Props -> projectId:", projectId);
+    console.log("[Effect Update Phases] Props -> phases:", phases);
+    console.log("[Effect Update Phases] Props -> availableProjects:", availableProjects?.map(p => p.name)); // Log names for readability
+    console.log("[Effect Update Phases] State -> bidForm.projectId:", bidForm.projectId);
+
+    // If projectId prop is provided, use the directly passed phases
+    if (projectId && phases) {
+      console.log("[Effect Update Phases] Mode: Using phases passed via props for projectId:", projectId);
+      setCurrentProjectPhases(phases);
+      console.log("[Effect Update Phases] Set currentProjectPhases to (from props):", phases);
+    } 
+    // Else if we are in standalone mode (no projectId prop) and have availableProjects
+    else if (!projectId && availableProjects && bidForm.projectId) {
+      console.log("[Effect Update Phases] Mode: Standalone form, project selected.");
+      const selectedProject = availableProjects.find(p => p.id === bidForm.projectId);
+      console.log("[Effect Update Phases] Found selected project:", selectedProject?.name);
+      const newPhases = selectedProject?.phases || [];
+      setCurrentProjectPhases(newPhases);
+      console.log("[Effect Update Phases] Set currentProjectPhases to (from selected project):", newPhases);
+      
+      // Reset phase selection if selected project doesn't contain the current phaseId
+      if (selectedProject && !newPhases.some(p => p.id === bidForm.phaseId)) {
+        console.log("[Effect Update Phases] Resetting phaseId because it's not in the new project phases");
+        // Use functional update to avoid stale state issues if needed
+        setBidForm(prev => ({
+          ...prev,
+          phaseId: '',
+          phaseName: ''
+        }));
+      }
+    } 
+    // Otherwise, clear phases (e.g., no project selected yet in standalone mode or projectId passed but no phases)
+    else {
+      console.log("[Effect Update Phases] Mode: Clearing phases (no project selected or missing phases prop).");
+      setCurrentProjectPhases([]);
+      console.log("[Effect Update Phases] Set currentProjectPhases to: []");
+      // Optionally reset phaseId if it shouldn't persist when phases are cleared
+      // setBidForm(prev => ({ ...prev, phaseId: '', phaseName: '' }));
+    }
+  // Make sure all dependencies that influence the logic are included
+  }, [bidForm.projectId, bidForm.phaseId, projectId, phases, availableProjects]); 
+
   // Form change handlers
   const handleChangeBidForm = (field: string, value: any) => {
     console.log(`ReusableBidForm - Changing field "${field}" to:`, value);
@@ -522,8 +572,8 @@ const ReusableBidForm: React.FC<ReusableBidFormProps> = ({
     const template = e.target.value;
     setPaymentTemplate(template);
     
-    // Get default phase for new payments
-    const defaultPhase = phases.length > 0 ? phases[0] : null;
+    // Safely access phases
+    const defaultPhase = (phases && phases.length > 0) ? phases[0] : null;
     
     // Update payment terms based on template
     switch(template) {
@@ -689,6 +739,11 @@ const ReusableBidForm: React.FC<ReusableBidFormProps> = ({
     return [...(PHASE_BID_TITLES[phaseKey] || []), ...(PHASE_BID_TITLES.common || [])];
   };
 
+  // Log render values just before defining formContent
+  console.log("[Render Phase Select] value:", bidForm.phaseId || '');
+  console.log("[Render Phase Select] disabled:", !bidForm.projectId || currentProjectPhases.length === 0);
+  console.log("[Render Phase Select] options (currentProjectPhases):", currentProjectPhases);
+
   const formContent = (
     <LocalizationProvider dateAdapter={AdapterDateFns}>
       <Box sx={{ 
@@ -707,14 +762,17 @@ const ReusableBidForm: React.FC<ReusableBidFormProps> = ({
         '& .MuiAutocomplete-root': { size: 'small' },
         '& .MuiButton-root': { textTransform: 'none' }, // Consistent button text
       }}>
-        {/* Ensure apiError and validation errors are displayed at the top of the form */}
+        {/* Ensure apiError and validation errors are displayed */}
         {apiError && (
           <Alert severity="error" sx={{ mb: 2 }}>
             {apiError}
           </Alert>
         )}
-
-        {/* Display projectId error if present */}
+        {error && !apiError && ( // Display error prop if passed and not already covered by apiError
+          <Alert severity="error" sx={{ mb: 2 }}>
+            {error}
+          </Alert>
+        )}
         {bidFormErrors.projectId && (
           <Alert severity="error" sx={{ mb: 2 }}>
             {bidFormErrors.projectId}
@@ -723,11 +781,11 @@ const ReusableBidForm: React.FC<ReusableBidFormProps> = ({
 
         {/* Bid Details Section */}
         <Box className="form-section">
-          <Typography variant="subtitle1" sx={{ fontWeight: 600, mb: 1.5, color: 'text.primary' }}> {/* Adjusted Typography & reduced margin */}
+          <Typography variant="subtitle1" sx={{ fontWeight: 600, mb: 1.5, color: 'text.primary' }}>
             Bid Details
           </Typography>
           
-          <Grid container spacing={2}> {/* Reduced spacing */} 
+          <Grid container spacing={2}> 
             {/* Project selector - only show if projectId is not provided as prop */}
             {!projectId && (
               <Grid item xs={12}>
@@ -783,15 +841,28 @@ const ReusableBidForm: React.FC<ReusableBidFormProps> = ({
                   label="Project Phase"
                   onChange={(e) => {
                     const phaseId = e.target.value;
-                    const phase = phases.find(p => p.id === phaseId);
+                    console.log("Project Phase Changed. New phaseId:", phaseId);
+                    console.log("Available phases (currentProjectPhases):", currentProjectPhases);
+                    // Safely find phase within the CURRENTLY displayed phases state
+                    const phase = currentProjectPhases.find(p => p.id === phaseId);
+                    console.log("Found phase object:", phase);
                     handleChangeBidForm('phaseId', phaseId);
                     handleChangeBidForm('phaseName', phase?.name || '');
                   }}
                   sx={{ borderRadius: 1 }}
+                  disabled={!bidForm.projectId || currentProjectPhases.length === 0}
                 >
-                  {phases.map((phase) => (
-                    <MenuItem key={phase.id} value={phase.id}>{phase.name}</MenuItem>
-                  ))}
+                  {currentProjectPhases.length === 0 && (
+                    <MenuItem value="" disabled>
+                      {bidForm.projectId ? 'No phases for selected project' : 'Select a project first'}
+                    </MenuItem>
+                  )}
+                  {currentProjectPhases.map((phase) => {
+                    console.log("Rendering phase option:", phase.name, phase.id);
+                    return (
+                      <MenuItem key={phase.id} value={phase.id}>{phase.name}</MenuItem>
+                    );
+                  })}
                 </Select>
               </FormControl>
             </Grid>
@@ -842,7 +913,7 @@ const ReusableBidForm: React.FC<ReusableBidFormProps> = ({
                 fullWidth
                 freeSolo
                 id="bid-title"
-                options={getBidTitleOptions(bidForm.phaseId, phases)}
+                options={getBidTitleOptions(bidForm.phaseId, currentProjectPhases)}
                 value={bidForm.title}
                 onChange={(event, newValue) => {
                   handleChangeBidForm('title', newValue || '');
@@ -1123,14 +1194,14 @@ const ReusableBidForm: React.FC<ReusableBidFormProps> = ({
                       label="Related Phase"
                       onChange={(e) => {
                         const pId = e.target.value;
-                        const pName = phases.find(p => p.id === pId)?.name || '';
+                        const pName = currentProjectPhases.find(p => p.id === pId)?.name || '';
                         handleChangeInstallment(installment.id, 'phaseId', pId);
                         handleChangeInstallment(installment.id, 'phaseName', pName);
                       }}
                       sx={{ borderRadius: 1 }}
                     >
                       <MenuItem value=""><em>None</em></MenuItem> 
-                      {phases.map((p) => (
+                      {currentProjectPhases.map((p) => (
                         <MenuItem key={p.id} value={p.id}>{p.name}</MenuItem>
                       ))}
                     </Select>

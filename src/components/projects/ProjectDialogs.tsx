@@ -115,12 +115,11 @@ const ProjectDialogs: React.FC<ProjectDialogsProps> = ({
       <BidFormDialog
         open={bidFormOpen}
         onClose={handleCloseBidForm}
-        onSubmit={handleSubmitBid}
+        onSubmitSuccess={handleSubmitBid}
+        projectId={project.id}
         phases={phases}
-        subcontractors={subcontractors}
         initialBidData={bidForm}
         editingBidId={editingBidId}
-        isSaving={isSaving}
         onAddSubcontractor={() => setShowQuickAddSubcontractor(true)}
       />
 
