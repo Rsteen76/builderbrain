@@ -727,6 +727,23 @@ const ExpenseFormModal: React.FC<ExpenseFormModalProps> = ({
           console.log(`Initializing from expense prop - Project: ${expense.projectId}, Initial phases (filtered):`, initialPhases);
         }
         
+        // Extract payment details if they exist
+        if (expense.paymentDetails) {
+          console.log('Found payment details:', expense.paymentDetails);
+          setPaymentMethod(expense.paymentDetails.method || '');
+          setReferenceNumber(expense.paymentDetails.referenceNumber || '');
+          setPaymentDate(expense.paymentDetails.date || new Date().toISOString().split('T')[0]);
+          setPaymentNotes(expense.paymentDetails.notes || '');
+        }
+        
+        // Handle subcontractor information for converted bids
+        if (expense.category === 'subcontractor' && expense.subcontractorId && expense.subcontractorName) {
+          console.log('Setting subcontractor information:', expense.subcontractorId, expense.subcontractorName);
+          // Ensure subcontractor info is properly set
+          initialFormData.subcontractorId = expense.subcontractorId;
+          initialFormData.subcontractorName = expense.subcontractorName;
+        }
+        
       } else {
         // Creating a completely new expense (no pre-filled data)
         console.log('Modal opened for new generic expense');
@@ -843,17 +860,44 @@ const ExpenseFormModal: React.FC<ExpenseFormModalProps> = ({
     }
   };
 
-  const handleCategoryChange = (event: SelectChangeEvent<Expense['category']>) => {
-    const category = event.target.value as Expense['category'];
-    setFormData(prev => ({
-      ...prev,
-      category,
-      // Reset subcontractor fields when category changes
-      ...(category !== 'subcontractor' && {
-        subcontractorId: '',
-        subcontractorName: '',
-      }),
-    }));
+  const handleCategoryChange = (e: SelectChangeEvent) => {
+    const newCategory = e.target.value as Expense['category'];
+    
+    // Store current values before changing category
+    const currentVendor = formData.vendor;
+    const currentSubcontractorId = formData.subcontractorId;
+    const currentSubcontractorName = formData.subcontractorName;
+    
+    // Update the category
+    setFormData({
+      ...formData,
+      category: newCategory,
+    });
+    
+    // Handle special case for subcontractor category
+    if (newCategory === 'subcontractor') {
+      // If we have a vendor but no subcontractor, use the vendor as the subcontractor
+      if (currentVendor && !currentSubcontractorId) {
+        console.log('Converting vendor to subcontractor:', currentVendor);
+        setFormData(prev => ({
+          ...prev,
+          subcontractorName: currentVendor,
+          // We'll need to look up the ID if possible
+        }));
+      }
+    } else if ((formData.category as string) === 'subcontractor') {
+      // If we're switching away from subcontractor, preserve the subcontractor info
+      // but don't automatically set it as the vendor
+      console.log('Switching away from subcontractor category, preserving data');
+    }
+    
+    // Clear any category-related errors
+    if (errors.category) {
+      setErrors({
+        ...errors,
+        category: undefined,
+      });
+    }
   };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
