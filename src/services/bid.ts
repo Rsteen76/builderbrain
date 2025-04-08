@@ -15,6 +15,7 @@ import {
   collectionGroup,
   limit,
   startAfter,
+  QueryConstraint,
 } from 'firebase/firestore';
 import { v4 as uuidv4 } from 'uuid';
 // Import necessary types from central types file
@@ -534,70 +535,102 @@ export class BidService {
     pageSize: number = 50,
     startAfterId?: string // Changed from startAfterDoc for simplicity
   ): Promise<Bid[]> {
-    let q = query(this.collection, where('userId', '==', userId));
+    console.log('[BidService.getBids] Fetching bids for user:', userId, 'Filters:', filters, 'Sort:', sort, 'PageSize:', pageSize, 'StartAfter:', startAfterId);
+    let queryConstraints: QueryConstraint[] = [where('userId', '==', userId)];
 
-    // Apply filters (using the local BidFilter type)
+    // Apply filters
     if (filters) {
       if (filters.projectId) {
-        q = query(q, where('projectId', '==', filters.projectId));
+        console.log('[BidService.getBids] Applying projectId filter:', filters.projectId);
+        queryConstraints.push(where('projectId', '==', filters.projectId));
       }
       if (filters.subcontractorId) {
-        q = query(q, where('subcontractorId', '==', filters.subcontractorId));
+        queryConstraints.push(where('subcontractorId', '==', filters.subcontractorId));
       }
       if (filters.status) {
-        const statuses = Array.isArray(filters.status) ? filters.status : [filters.status];
-        // Firestore 'in' query supports up to 10 items
-        if (statuses.length > 0 && statuses.length <= 10) {
-           q = query(q, where('status', 'in', statuses));
-         } else if (statuses.length === 1) {
-            q = query(q, where('status', '==', statuses[0]));
-         }
+        if (Array.isArray(filters.status)) {
+          // Ensure the array is not empty before applying 'in' filter
+          if (filters.status.length > 0) {
+            console.log('[BidService.getBids] Applying status (in) filter:', filters.status);
+            queryConstraints.push(where('status', 'in', filters.status));
+          } else {
+            console.log('[BidService.getBids] Status filter array is empty, skipping.');
+          }
+        } else {
+          console.log('[BidService.getBids] Applying status (==) filter:', filters.status);
+          queryConstraints.push(where('status', '==', filters.status));
+        }
       }
       if (filters.priority) {
-        q = query(q, where('priority', '==', filters.priority));
+        queryConstraints.push(where('priority', '==', filters.priority));
       }
       if (filters.minAmount !== undefined) {
-        q = query(q, where('totalAmount', '>=', filters.minAmount));
+        queryConstraints.push(where('totalAmount', '>=', filters.minAmount));
       }
       if (filters.maxAmount !== undefined) {
-        q = query(q, where('totalAmount', '<=', filters.maxAmount));
+        queryConstraints.push(where('totalAmount', '<=', filters.maxAmount));
       }
       if (filters.submissionDeadlineFrom) {
-        q = query(q, where('submissionDeadline', '>=', Timestamp.fromDate(filters.submissionDeadlineFrom)));
+        queryConstraints.push(where('submissionDeadline', '>=', Timestamp.fromDate(filters.submissionDeadlineFrom)));
       }
       if (filters.submissionDeadlineTo) {
-        q = query(q, where('submissionDeadline', '<=', Timestamp.fromDate(filters.submissionDeadlineTo)));
+        queryConstraints.push(where('submissionDeadline', '<=', Timestamp.fromDate(filters.submissionDeadlineTo)));
       }
       if (filters.createdFrom) {
-        q = query(q, where('createdAt', '>=', Timestamp.fromDate(filters.createdFrom)));
+        queryConstraints.push(where('createdAt', '>=', Timestamp.fromDate(filters.createdFrom)));
       }
       if (filters.createdTo) {
-        q = query(q, where('createdAt', '<=', Timestamp.fromDate(filters.createdTo)));
+        queryConstraints.push(where('createdAt', '<=', Timestamp.fromDate(filters.createdTo)));
       }
-      if (filters.tags && filters.tags.length > 0 && filters.tags.length <= 10) {
-        q = query(q, where('tags', 'array-contains-any', filters.tags));
+      if (filters.tags && filters.tags.length > 0) {
+        queryConstraints.push(where('tags', 'array-contains-any', filters.tags));
       }
     }
 
-    // Apply sorting (using the local BidSort type)
-    const sortField = sort?.field || 'submissionDeadline'; // Default sort
-    const sortDirection = sort?.direction || 'asc';
-    q = query(q, orderBy(sortField, sortDirection));
-    
+    // Apply sorting
+    if (sort) {
+      console.log('[BidService.getBids] Applying sort:', sort);
+      queryConstraints.push(orderBy(sort.field, sort.direction));
+    }
 
-    // Apply pagination
+    // Apply pagination (if startAfterId is provided)
     if (startAfterId) {
-      const startAfterDoc = await getDoc(doc(this.collection, startAfterId));
-      if (startAfterDoc.exists()) {
-        q = query(q, startAfter(startAfterDoc));
+      try {
+        const startAfterDoc = await getDoc(doc(this.collection, startAfterId));
+        if (startAfterDoc.exists()) {
+          queryConstraints.push(startAfter(startAfterDoc));
+        } else {
+          console.warn(`[BidService.getBids] Document with startAfterId ${startAfterId} not found. Fetching from beginning.`);
+        }
+      } catch (err) {
+        console.error(`[BidService.getBids] Error fetching startAfter document ${startAfterId}:`, err);
+        // Proceed without pagination if startAfter doc fails
       }
     }
     
-    q = query(q, limit(pageSize));
+    queryConstraints.push(limit(pageSize));
 
-    const querySnapshot = await getDocs(q);
-    // Use convertFromFirestoreFormat instead of convertToSummary to get full bid data
-    return querySnapshot.docs.map(doc => this.convertFromFirestoreFormat(doc.data() as FirestoreBid, doc.id));
+    try {
+      const q = query(this.collection, ...queryConstraints);
+      console.log('[BidService.getBids] Executing query...');
+      const querySnapshot = await getDocs(q);
+      console.log(`[BidService.getBids] Query successful. Found ${querySnapshot.docs.length} bids.`);
+      const bids: Bid[] = [];
+      querySnapshot.forEach((doc) => {
+        try {
+          bids.push(this.convertFromFirestoreFormat(doc.data() as FirestoreBid, doc.id));
+        } catch (conversionError) {
+          console.error(`[BidService.getBids] Error converting bid document ${doc.id}:`, conversionError, 'Document data:', doc.data());
+          // Optionally skip this bid or handle the error differently
+        }
+      });
+      return bids;
+    } catch (error) {
+      // Log the specific Firestore error
+      console.error('[BidService.getBids] Firestore query failed:', error);
+      // Re-throw the error so the calling component knows it failed
+      throw error; 
+    }
   }
 
   // Get recent bids (Returns BidSummary[])

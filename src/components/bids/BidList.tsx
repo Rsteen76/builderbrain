@@ -632,19 +632,28 @@ const BidList: React.FC<BidListProps> = ({ projectId, hideHeader = false }) => {
       }));
       setBids(bidSummaries);
     } catch (err) {
-      console.error("Error fetching bids:", err);
+      console.error("[BidList] Error fetching bids:", err);
+      // Log the specific error before setting the generic message
+      const specificError = err instanceof Error ? err.message : String(err);
+      console.error("[BidList] Specific error detail:", specificError);
       setError('Failed to load bids. Please try again.');
     } finally {
+      console.log('[BidList] fetchBids finished.');
       setLoading(false);
     }
   };
 
   useEffect(() => {
+    console.log('[BidList useEffect] Running effect - authLoading:', authLoading, 'user:', !!user, 'projectId:', projectId, 'tabValue:', tabValue);
     if (!authLoading && user) {
+      console.log('[BidList useEffect] Conditions met, calling fetchBids...');
       fetchBids();
     } else if (!authLoading && !user) {
+      console.error('[BidList useEffect] User not authenticated, setting error.');
       setError("Please log in to view bids.");
       setLoading(false);
+    } else {
+      console.log('[BidList useEffect] Conditions not met (still loading auth or no user).');
     }
   }, [user, filter, sort, authLoading, projectId, tabValue]);
 
@@ -734,6 +743,12 @@ const BidList: React.FC<BidListProps> = ({ projectId, hideHeader = false }) => {
   const handleBidSubmitSuccess = (savedBid: Bid) => {
     console.log('BidList - Bid saved/updated:', savedBid);
     fetchBids(); // Refetch the list after saving
+    // Reset form state after successful submission
+    setEditingBidId(null);
+    setInitialBidData(null); 
+    // We typically close the modal in the dialog itself after calling onSubmitSuccess
+    // but ensure isModalOpen is set to false if not already handled.
+    // setIsModalOpen(false); // Uncomment if the dialog doesn't close automatically
   };
   // --- End Modal Handlers ---
 
@@ -929,14 +944,16 @@ const BidList: React.FC<BidListProps> = ({ projectId, hideHeader = false }) => {
         </Box>
       )}
 
-      {/* Render the Bid Form Dialog */}
-      <BidFormDialog
-        open={isModalOpen}
-        onClose={handleCloseModal}
-        onSubmitSuccess={handleBidSubmitSuccess}
-        initialBidData={initialBidData || undefined}
-        editingBidId={editingBidId}
-      />
+      {/* Conditionally render the Bid Form Dialog only when open */}
+      {isModalOpen && (
+        <BidFormDialog
+          open={isModalOpen}
+          onClose={handleCloseModal}
+          onSubmitSuccess={handleBidSubmitSuccess}
+          initialBidData={initialBidData || undefined}
+          editingBidId={editingBidId}
+        />
+      )}
     </Box>
   );
 };

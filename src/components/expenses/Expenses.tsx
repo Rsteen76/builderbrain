@@ -57,6 +57,8 @@ import {
   Business as BusinessIcon,
   Engineering as EngineeringIcon,
   Refresh as RefreshIcon,
+  ArrowDropDown as ArrowDropDownIcon,
+  ArrowDropUp as ArrowDropUpIcon,
 } from '@mui/icons-material';
 import { ExpenseService } from '../../services/expense';
 import { ProjectService } from '../../services/project';
@@ -102,6 +104,10 @@ const Expenses: React.FC<{ projectId?: string }> = ({ projectId }) => {
     message: '',
     severity: 'success'
   });
+  
+  // NEW: Add sort state
+  const [sortField, setSortField] = useState<'amount' | 'date' | null>(null);
+  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
   
   // NEW: Grouping functionality
   const [groupBy, setGroupBy] = useState<'none' | 'project' | 'category' | 'vendor' | 'subcontractor'>('none');
@@ -627,16 +633,49 @@ const Expenses: React.FC<{ projectId?: string }> = ({ projectId }) => {
       expense.subcontractorName?.toLowerCase().includes(searchTerm.toLowerCase())
     );
   });
+  
+  // NEW: Add sorting function
+  const sortedExpenses = React.useMemo(() => {
+    if (!sortField) return filteredExpenses;
+    
+    return [...filteredExpenses].sort((a, b) => {
+      if (sortField === 'amount') {
+        return sortDirection === 'asc' ? a.amount - b.amount : b.amount - a.amount;
+      } else if (sortField === 'date') {
+        const dateA = new Date(a.date);
+        const dateB = new Date(b.date);
+        return sortDirection === 'asc' ? dateA.getTime() - dateB.getTime() : dateB.getTime() - dateA.getTime();
+      }
+      return 0;
+    });
+  }, [filteredExpenses, sortField, sortDirection]);
+
+  // NEW: Handle sort click
+  const handleSortClick = (field: 'amount' | 'date') => {
+    if (sortField === field) {
+      // Toggle direction if same field
+      setSortDirection(prev => prev === 'asc' ? 'desc' : 'asc');
+    } else {
+      // Set new field and default to descending (newest/highest first)
+      setSortField(field);
+      setSortDirection('desc');
+    }
+    // Clear any grouping when sorting
+    if (groupBy !== 'none') {
+      setGroupBy('none');
+    }
+  };
 
   // Group expenses based on selected grouping
   const groupedExpenses = React.useMemo(() => {
+    // Use the sorted expenses list instead of filtered
     if (groupBy === 'none') {
-      return { 'All Expenses': filteredExpenses };
+      return { 'All Expenses': sortedExpenses };
     }
     
     const groups: Record<string, any[]> = {};
     
-    filteredExpenses.forEach(expense => {
+    sortedExpenses.forEach(expense => {
       let groupKey = '';
       
       switch (groupBy) {
@@ -666,7 +705,7 @@ const Expenses: React.FC<{ projectId?: string }> = ({ projectId }) => {
     });
     
     return groups;
-  }, [filteredExpenses, groupBy, expenses]);
+  }, [sortedExpenses, groupBy, expenses]);
 
   // Calculate group totals
   const groupTotals = React.useMemo(() => {
@@ -732,12 +771,51 @@ const Expenses: React.FC<{ projectId?: string }> = ({ projectId }) => {
             />
           )}
         </TableCell>
-        <TableCell align="right">
-          <Typography fontWeight="medium">
-            {formatCurrency(expense.amount)}
-          </Typography>
+        <TableCell 
+          align="right" 
+          onClick={(e) => {
+            e.stopPropagation();
+            handleSortClick('amount');
+          }}
+          sx={{ 
+            cursor: 'pointer', 
+            '&:hover': { color: theme.palette.primary.main }
+          }}
+        >
+          <Tooltip title={`Sort by amount (${sortField === 'amount' && sortDirection === 'asc' ? 'lowest first' : 'highest first'})`}>
+            <span>
+              {formatCurrency(expense.amount)}
+              {sortField === 'amount' && (
+                <span style={{ marginLeft: '4px', verticalAlign: 'middle' }}>
+                  {sortDirection === 'asc' ? <ArrowDropUpIcon fontSize="small" /> : <ArrowDropDownIcon fontSize="small" />}
+                </span>
+              )}
+            </span>
+          </Tooltip>
         </TableCell>
-        <TableCell>{formatDate(expense.date)}</TableCell>
+        <TableCell 
+          onClick={(e) => {
+            e.stopPropagation();
+            handleSortClick('date');
+          }}
+          sx={{ 
+            cursor: 'pointer', 
+            '&:hover': { color: theme.palette.primary.main }
+          }}
+        >
+          {/* Don't wrap the date text in a tooltip - only the sort indicator */}
+          {(() => {
+            console.log(`Rendering date for expense ${expense.id}:`, expense.date);
+            return formatDate(expense.date);
+          })()}
+          {sortField === 'date' && (
+            <Tooltip title={`Sort by date (${sortDirection === 'asc' ? 'oldest first' : 'newest first'})`}>
+              <span style={{ marginLeft: '4px', display: 'inline-block', verticalAlign: 'middle' }}>
+                {sortDirection === 'asc' ? <ArrowDropUpIcon fontSize="small" /> : <ArrowDropDownIcon fontSize="small" />}
+              </span>
+            </Tooltip>
+          )}
+        </TableCell>
         <TableCell>
           <Chip 
             label={expense.status === 'paid' ? 'Paid' : 'Needs Payment'} 
@@ -995,7 +1073,7 @@ const Expenses: React.FC<{ projectId?: string }> = ({ projectId }) => {
         <Box sx={{ display: 'flex', justifyContent: 'center', py: 5 }}>
           <CircularProgress />
         </Box>
-      ) : filteredExpenses.length === 0 ? (
+      ) : sortedExpenses.length === 0 ? (
         <Box sx={{ p: 4, textAlign: 'center', mt: 4, bgcolor: 'background.paper', borderRadius: 2 }}>
           <DescriptionIcon sx={{ fontSize: 60, color: 'text.secondary', mb: 2, opacity: 0.5 }} />
           <Typography variant="h6" color="text.secondary" gutterBottom>
@@ -1047,8 +1125,41 @@ const Expenses: React.FC<{ projectId?: string }> = ({ projectId }) => {
                   <TableHead>
                     <TableRow sx={{ '& th': { fontWeight: 'bold' } }}>
                       <TableCell>Description</TableCell>
-                      <TableCell align="right">Amount</TableCell>
-                      <TableCell>Date</TableCell>
+                      <TableCell 
+                        align="right" 
+                        onClick={() => handleSortClick('amount')}
+                        sx={{ 
+                          cursor: 'pointer', 
+                          '&:hover': { color: theme.palette.primary.main }
+                        }}
+                      >
+                        <Tooltip title={`Sort by amount (${sortField === 'amount' && sortDirection === 'asc' ? 'lowest first' : 'highest first'})`}>
+                          <span>
+                            Amount
+                            {sortField === 'amount' && (
+                              <span style={{ marginLeft: '4px', verticalAlign: 'middle' }}>
+                                {sortDirection === 'asc' ? <ArrowDropUpIcon fontSize="small" /> : <ArrowDropDownIcon fontSize="small" />}
+                              </span>
+                            )}
+                          </span>
+                        </Tooltip>
+                      </TableCell>
+                      <TableCell 
+                        onClick={() => handleSortClick('date')}
+                        sx={{ 
+                          cursor: 'pointer', 
+                          '&:hover': { color: theme.palette.primary.main }
+                        }}
+                      >
+                        Date
+                        {sortField === 'date' && (
+                          <Tooltip title={`Sort by date (${sortDirection === 'asc' ? 'oldest first' : 'newest first'})`}>
+                            <span style={{ marginLeft: '4px', display: 'inline-block', verticalAlign: 'middle' }}>
+                              {sortDirection === 'asc' ? <ArrowDropUpIcon fontSize="small" /> : <ArrowDropDownIcon fontSize="small" />}
+                            </span>
+                          </Tooltip>
+                        )}
+                      </TableCell>
                       <TableCell>Status</TableCell>
                       {groupBy !== 'project' && <TableCell>Project</TableCell>}
                       {groupBy !== 'category' && <TableCell>Category</TableCell>}
