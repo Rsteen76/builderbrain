@@ -67,6 +67,8 @@ import { useAuth } from '../../contexts/AuthContext';
 import { formatCurrency, formatDate } from '../../utils/formatters';
 import ExpenseFormModal from './ExpenseFormModal';
 import PaymentFormModal from './PaymentFormModal';
+import { BidService } from '../../services/bid';
+import { BidPaymentStage } from '../../types';
 
 // Category icons mapping
 const CATEGORY_ICONS = {
@@ -387,7 +389,7 @@ const Expenses: React.FC<{ projectId?: string }> = ({ projectId }) => {
     setPaymentModalOpen(false);
   };
   
-  const handleMarkAsPaid = async (expenseId: string) => {
+  const handleMarkAsPaid = async (expenseId: string, actualAmountPaid: number) => {
     if (!user?.uid) return;
     
     setSubmitting(true);
@@ -395,16 +397,250 @@ const Expenses: React.FC<{ projectId?: string }> = ({ projectId }) => {
     try {
       // Get the expense data before updating
       const expenseToUpdate = expenses.find(e => e.id === expenseId);
+      if (!expenseToUpdate) {
+        throw new Error('Expense not found locally');
+      }
       
-      // Update status to paid
+      // Use the passed actualAmountPaid instead of expenseToUpdate.amount
+      console.log(`[handleMarkAsPaid] Expense ${expenseId} - Actual Amount Paid: ${actualAmountPaid}`);
+
+      // Update expense status to paid in Firestore
       await ExpenseService.markAsPaid(expenseId);
-      
-      // Update local state
+      console.log(`[handleMarkAsPaid] Expense ${expenseId} marked as paid in Firestore.`);
+
+      // --- Start Bid Payment Schedule Adjustment Logic ---
+      const paymentStageId = expenseToUpdate.paymentStageId; // Assuming this field exists
+      const projectId = expenseToUpdate.projectId;
+      const bidId = expenseToUpdate.bidId; // Get the specific bid ID from the expense
+
+      if (paymentStageId && projectId) {
+        console.log(`[handleMarkAsPaid][BidAdjust] Starting adjustment for stage ${paymentStageId} in project ${projectId}.`);
+        try {
+          // Fetch the full Bid associated with the project using getBids with a filter
+          console.log(`[handleMarkAsPaid][BidAdjust] Fetching bids for project ${projectId}...`);
+          const bids = await BidService.getBids(user.uid, { projectId: projectId });
+          
+          if (!bids || bids.length === 0) {
+            console.warn(`[handleMarkAsPaid][BidAdjust] No Bid found for project ${projectId}. Skipping adjustment.`);
+            // Update local state for the expense list (since Firestore update succeeded)
+            setExpenses(prev => prev.map(e => 
+              e.id === expenseId 
+                ? { ...e, status: 'paid', amount: actualAmountPaid } // Also update amount locally?
+                : e
+            ));
+            return; // Exit if no bid found
+          }
+          
+          // If we have a specific bidId from the expense, use that to find the correct bid
+          let bid;
+          if (bidId) {
+            bid = bids.find(b => b.id === bidId);
+            if (bid) {
+              console.log(`[handleMarkAsPaid][BidAdjust] Found specific Bid ID: ${bid.id} from expense`);
+            } else {
+              console.warn(`[handleMarkAsPaid][BidAdjust] Bid ID ${bidId} from expense not found. Using first bid.`);
+              bid = bids[0];
+            }
+          } else {
+            // If no bidId in expense, use the first bid (with warning)
+            if (bids.length > 1) {
+              console.warn(`[handleMarkAsPaid][BidAdjust] Multiple bids found for project ${projectId}. Using the first one. Consider implications.`);
+            }
+            bid = bids[0];
+          }
+          
+          console.log(`[handleMarkAsPaid][BidAdjust] Using Bid ID: ${bid.id}`);
+
+          if (!bid.paymentSchedule || !bid.paymentProgress) {
+            console.warn(`[handleMarkAsPaid][BidAdjust] Bid ${bid.id} is missing paymentSchedule or paymentProgress. Skipping adjustment.`);
+          } else {
+            console.log(`[handleMarkAsPaid][BidAdjust] Bid has schedule and progress. Processing stage ${paymentStageId}.`);
+            const schedule = [...bid.paymentSchedule]; // Work with a copy
+            const progress = { ...bid.paymentProgress }; // Work with a copy
+            
+            const stageIndex = schedule.findIndex(stage => stage.id === paymentStageId);
+            
+            if (stageIndex === -1) {
+              console.warn(`[handleMarkAsPaid][BidAdjust] Payment Stage ${paymentStageId} not found in Bid's schedule. Skipping adjustment.`);
+            } else {
+              const paidStage = schedule[stageIndex];
+              const originalStageAmount = paidStage.amount;
+              
+              console.log(`[handleMarkAsPaid][BidAdjust] Found Stage ${paidStage.id} ('${paidStage.name}') with original amount ${originalStageAmount}.`);
+
+              // Update the paid stage status & details
+              paidStage.status = 'paid';
+              paidStage.paymentDate = new Date(); // Set payment date
+              paidStage.expenseId = expenseId; // Ensure link
+              // **CRITICAL:** Update the stage amount to the actual amount paid
+              paidStage.amount = actualAmountPaid;
+              console.log(`[handleMarkAsPaid][BidAdjust] Updated paid stage ${paidStage.id} status to 'paid' and amount to actual: ${paidStage.amount}`);
+
+              // Recalculate overall payment progress based on ACTUAL amounts of ALL paid stages
+              let calculatedTotalPaid = 0;
+              schedule.forEach(stage => {
+                if (stage.status === 'paid') {
+                  calculatedTotalPaid += stage.amount; // Use the updated actual amount for the current stage
+                }
+              });
+
+              const newTotalPaid = calculatedTotalPaid; // Use the recalculated total
+              const newRemaining = bid.totalAmount - newTotalPaid;
+              
+              progress.paid = newTotalPaid;
+              progress.remaining = newRemaining;
+              // Recalculate pending amount
+              progress.pending = bid.totalAmount - newTotalPaid; 
+              console.log(`[handleMarkAsPaid][BidAdjust] Recalculated Bid Progress: Paid=${progress.paid}, Remaining=${progress.remaining}, Pending=${progress.pending}`);
+              
+              // Check if adjustment is needed for subsequent stages based on the difference *for this stage*
+              const difference = actualAmountPaid - originalStageAmount; 
+              console.log(`[handleMarkAsPaid][BidAdjust] Payment difference for this stage: ${difference} (Actual: ${actualAmountPaid}, Scheduled Original: ${originalStageAmount})`);
+
+              if (Math.abs(difference) > 0.001) { // Use a small tolerance for float comparison
+                 console.log(`[handleMarkAsPaid][BidAdjust] Adjustment needed due to difference.`);
+                 // Find the *last* pending stage
+                 let lastPendingStageIndex = -1;
+                 for (let i = schedule.length - 1; i >= 0; i--) {
+                   if (schedule[i].status !== 'paid') {
+                     lastPendingStageIndex = i;
+                     break;
+                   }
+                 }
+                 console.log(`[handleMarkAsPaid][BidAdjust] Found last pending stage index: ${lastPendingStageIndex}`);
+
+                 if (lastPendingStageIndex !== -1 && lastPendingStageIndex !== stageIndex) {
+                   const lastPendingStage = schedule[lastPendingStageIndex];
+                   console.log(`[handleMarkAsPaid][BidAdjust] Adjusting last pending stage: ${lastPendingStage.id} ('${lastPendingStage.name}')`);
+                   // Adjust the amount of the last pending stage
+                   // The difference needs to be SUBTRACTED from the last stage 
+                   lastPendingStage.amount -= difference; 
+                   console.log(`[handleMarkAsPaid][BidAdjust] Adjusted last pending stage amount to: ${lastPendingStage.amount}`);
+                   
+                   // Update the final payment expense if it exists
+                   if (lastPendingStage.expenseId) {
+                     console.log(`[handleMarkAsPaid][BidAdjust] Updating final payment expense: ${lastPendingStage.expenseId}`);
+                     try {
+                       // Update the expense amount to match the new stage amount
+                       await ExpenseService.updateExpense(lastPendingStage.expenseId, {
+                         amount: lastPendingStage.amount,
+                         updatedAt: new Date()
+                       });
+                       console.log(`[handleMarkAsPaid][BidAdjust] Final payment expense updated successfully`);
+                     } catch (expenseUpdateError) {
+                       console.error(`[handleMarkAsPaid][BidAdjust] Error updating final payment expense:`, expenseUpdateError);
+                     }
+                   } else {
+                     console.log(`[handleMarkAsPaid][BidAdjust] No expense ID found for final payment stage`);
+                   }
+                 } else if (lastPendingStageIndex === stageIndex) {
+                    // The stage being paid IS the last pending stage. Its amount is already updated above.
+                    console.log(`[handleMarkAsPaid][BidAdjust] The paid stage was the last pending stage. Amount already updated to actual paid.`);
+                 } else {
+                    console.warn('[handleMarkAsPaid][BidAdjust] No pending stages left to adjust. Difference recorded in overall progress.');
+                 }
+              } else {
+                 console.log(`[handleMarkAsPaid][BidAdjust] No adjustment needed for other stages (difference is negligible).`);
+              }
+              
+              // Clean up the schedule and progress objects to ensure no undefined values
+              const cleanedSchedule = schedule.map(stage => {
+                // Create a clean copy of each stage
+                const cleanStage = { ...stage };
+                
+                // Ensure all required fields are present and not undefined
+                if (cleanStage.paymentDate) {
+                  // Convert to Firestore Timestamp if it's a Date
+                  if (cleanStage.paymentDate instanceof Date) {
+                    cleanStage.paymentDate = cleanStage.paymentDate;
+                  }
+                }
+                
+                if (cleanStage.createdAt) {
+                  // Convert to Firestore Timestamp if it's a Date
+                  if (cleanStage.createdAt instanceof Date) {
+                    cleanStage.createdAt = cleanStage.createdAt;
+                  }
+                }
+                
+                if (cleanStage.updatedAt) {
+                  // Convert to Firestore Timestamp if it's a Date
+                  if (cleanStage.updatedAt instanceof Date) {
+                    cleanStage.updatedAt = cleanStage.updatedAt;
+                  }
+                }
+                
+                if (cleanStage.dueDate) {
+                  // Convert to Firestore Timestamp if it's a Date
+                  if (cleanStage.dueDate instanceof Date) {
+                    cleanStage.dueDate = cleanStage.dueDate;
+                  }
+                }
+                
+                // Remove any undefined values
+                Object.keys(cleanStage).forEach(key => {
+                  if (cleanStage[key as keyof typeof cleanStage] === undefined) {
+                    delete cleanStage[key as keyof typeof cleanStage];
+                  }
+                });
+                
+                return cleanStage;
+              });
+              
+              // Clean up the progress object
+              const cleanedProgress = { ...progress };
+              Object.keys(cleanedProgress).forEach(key => {
+                if (cleanedProgress[key as keyof typeof cleanedProgress] === undefined) {
+                  delete cleanedProgress[key as keyof typeof cleanedProgress];
+                }
+              });
+              
+              // Update the bid with the modified schedule and progress
+              console.log('[handleMarkAsPaid][BidAdjust] Preparing to update Bid with final schedule:', JSON.stringify(cleanedSchedule));
+              console.log('[handleMarkAsPaid][BidAdjust] Preparing to update Bid with final progress:', JSON.stringify(cleanedProgress));
+              
+              // Create a clean update payload
+              const updatePayload = {
+                paymentSchedule: cleanedSchedule,
+                paymentProgress: cleanedProgress,
+                updatedAt: new Date()
+              };
+              
+              await BidService.updateBid(bid.id, updatePayload);
+              console.log(`[handleMarkAsPaid][BidAdjust] Bid ${bid.id} update successful.`);
+
+              // Refresh the expenses list to ensure all data is up to date
+              fetchExpenses();
+
+              // Show success message
+              setSnackbar({
+                open: true,
+                message: 'Expense marked as paid successfully',
+                severity: 'success'
+              });
+            }
+          }
+        } catch (bidUpdateError) {
+          console.error('[handleMarkAsPaid][BidAdjust] Error during Bid update:', bidUpdateError);
+          // Decide if we should notify the user about this secondary failure
+          setSnackbar({
+            open: true,
+            message: 'Expense marked as paid, but failed to update Bid schedule.',
+            severity: 'warning'
+          });
+        }
+      } else {
+         console.log('[handleMarkAsPaid] Expense not linked to a Payment Stage or Project ID. No Bid adjustment needed.');
+      }
+      // --- End Bid Payment Schedule Adjustment Logic ---
+
+      // Update local state for the expense list - ENSURE AMOUNT IS UPDATED HERE TOO
       setExpenses(prev => prev.map(e => 
         e.id === expenseId 
-          ? { ...e, status: 'paid' } 
+          ? { ...e, status: 'paid', amount: actualAmountPaid } // *** Update amount in local state ***
           : e
       ));
+      console.log(`[handleMarkAsPaid] Updated local expense state for ${expenseId} to 'paid' with amount ${actualAmountPaid}`);
 
       // If we have project-related expense, trigger a refresh using a custom event
       if (expenseToUpdate?.projectId) {
@@ -420,12 +656,6 @@ const Expenses: React.FC<{ projectId?: string }> = ({ projectId }) => {
         });
         window.dispatchEvent(event);
       }
-      
-      setSnackbar({
-        open: true,
-        message: 'Expense marked as paid',
-        severity: 'success'
-      });
     } catch (err) {
       console.error('Error marking expense as paid:', err);
       setSnackbar({
@@ -528,6 +758,241 @@ const Expenses: React.FC<{ projectId?: string }> = ({ projectId }) => {
         
         console.log('Updated expense in local state', expenseData.id);
         savedExpense = { ...expenseData } as Expense;
+        
+        // Check if this expense is being marked as paid and has payment details
+        if (expenseData.status === 'paid' && expenseData.paymentDetails && 
+            expenseData.paymentStageId && expenseData.bidId) {
+          console.log('Expense is being marked as paid with payment details. Triggering bid adjustment...');
+          
+          // Extract the actual amount paid from the expense data
+          const actualAmountPaid = expenseData.amount || 0;
+          
+          // Call the bid adjustment logic directly
+          try {
+            // Get the expense data
+            const expenseToUpdate = expenses.find(e => e.id === expenseData.id);
+            if (!expenseToUpdate) {
+              throw new Error('Expense not found locally');
+            }
+            
+            console.log(`[handleSaveExpense][BidAdjust] Expense ${expenseData.id} - Actual Amount Paid: ${actualAmountPaid}`);
+            
+            // --- Start Bid Payment Schedule Adjustment Logic ---
+            const paymentStageId = expenseToUpdate.paymentStageId;
+            const projectId = expenseToUpdate.projectId;
+            const bidId = expenseToUpdate.bidId;
+            
+            if (paymentStageId && projectId) {
+              console.log(`[handleSaveExpense][BidAdjust] Starting adjustment for stage ${paymentStageId} in project ${projectId}.`);
+              
+              // Fetch the full Bid associated with the project using getBids with a filter
+              console.log(`[handleSaveExpense][BidAdjust] Fetching bids for project ${projectId}...`);
+              const bids = await BidService.getBids(user.uid, { projectId: projectId });
+              
+              if (!bids || bids.length === 0) {
+                console.warn(`[handleSaveExpense][BidAdjust] No Bid found for project ${projectId}. Skipping adjustment.`);
+                return;
+              }
+              
+              // If we have a specific bidId from the expense, use that to find the correct bid
+              let bid;
+              if (bidId) {
+                bid = bids.find(b => b.id === bidId);
+                if (bid) {
+                  console.log(`[handleSaveExpense][BidAdjust] Found specific Bid ID: ${bid.id} from expense`);
+                } else {
+                  console.warn(`[handleSaveExpense][BidAdjust] Bid ID ${bidId} from expense not found. Using first bid.`);
+                  bid = bids[0];
+                }
+              } else {
+                // If no bidId in expense, use the first bid (with warning)
+                if (bids.length > 1) {
+                  console.warn(`[handleSaveExpense][BidAdjust] Multiple bids found for project ${projectId}. Using the first one. Consider implications.`);
+                }
+                bid = bids[0];
+              }
+              
+              console.log(`[handleSaveExpense][BidAdjust] Using Bid ID: ${bid.id}`);
+              
+              if (!bid.paymentSchedule || !bid.paymentProgress) {
+                console.warn(`[handleSaveExpense][BidAdjust] Bid ${bid.id} is missing paymentSchedule or paymentProgress. Skipping adjustment.`);
+              } else {
+                console.log(`[handleSaveExpense][BidAdjust] Bid has schedule and progress. Processing stage ${paymentStageId}.`);
+                const schedule = [...bid.paymentSchedule]; // Work with a copy
+                const progress = { ...bid.paymentProgress }; // Work with a copy
+                
+                const stageIndex = schedule.findIndex(stage => stage.id === paymentStageId);
+                
+                if (stageIndex === -1) {
+                  console.warn(`[handleSaveExpense][BidAdjust] Payment Stage ${paymentStageId} not found in Bid's schedule. Skipping adjustment.`);
+                } else {
+                  const paidStage = schedule[stageIndex];
+                  const originalStageAmount = paidStage.amount;
+                  
+                  console.log(`[handleSaveExpense][BidAdjust] Found Stage ${paidStage.id} ('${paidStage.name}') with original amount ${originalStageAmount}.`);
+                  
+                  // Update the paid stage status & details
+                  paidStage.status = 'paid';
+                  paidStage.paymentDate = new Date(); // Set payment date
+                  paidStage.expenseId = expenseData.id; // Ensure link
+                  // **CRITICAL:** Update the stage amount to the actual amount paid
+                  paidStage.amount = actualAmountPaid;
+                  console.log(`[handleSaveExpense][BidAdjust] Updated paid stage ${paidStage.id} status to 'paid' and amount to actual: ${paidStage.amount}`);
+                  
+                  // Recalculate overall payment progress based on ACTUAL amounts of ALL paid stages
+                  let calculatedTotalPaid = 0;
+                  schedule.forEach(stage => {
+                    if (stage.status === 'paid') {
+                      calculatedTotalPaid += stage.amount; // Use the updated actual amount for the current stage
+                    }
+                  });
+                  
+                  const newTotalPaid = calculatedTotalPaid; // Use the recalculated total
+                  const newRemaining = bid.totalAmount - newTotalPaid;
+                  
+                  progress.paid = newTotalPaid;
+                  progress.remaining = newRemaining;
+                  // Recalculate pending amount
+                  progress.pending = bid.totalAmount - newTotalPaid; 
+                  console.log(`[handleSaveExpense][BidAdjust] Recalculated Bid Progress: Paid=${progress.paid}, Remaining=${progress.remaining}, Pending=${progress.pending}`);
+                  
+                  // Check if adjustment is needed for subsequent stages based on the difference *for this stage*
+                  const difference = actualAmountPaid - originalStageAmount; 
+                  console.log(`[handleSaveExpense][BidAdjust] Payment difference for this stage: ${difference} (Actual: ${actualAmountPaid}, Scheduled Original: ${originalStageAmount})`);
+                  
+                  if (Math.abs(difference) > 0.001) { // Use a small tolerance for float comparison
+                    console.log(`[handleSaveExpense][BidAdjust] Adjustment needed due to difference.`);
+                    // Find the *last* pending stage
+                    let lastPendingStageIndex = -1;
+                    for (let i = schedule.length - 1; i >= 0; i--) {
+                      if (schedule[i].status !== 'paid') {
+                        lastPendingStageIndex = i;
+                        break;
+                      }
+                    }
+                    console.log(`[handleSaveExpense][BidAdjust] Found last pending stage index: ${lastPendingStageIndex}`);
+                    
+                    if (lastPendingStageIndex !== -1 && lastPendingStageIndex !== stageIndex) {
+                      const lastPendingStage = schedule[lastPendingStageIndex];
+                      console.log(`[handleSaveExpense][BidAdjust] Adjusting last pending stage: ${lastPendingStage.id} ('${lastPendingStage.name}')`);
+                      // Adjust the amount of the last pending stage
+                      // The difference needs to be SUBTRACTED from the last stage 
+                      lastPendingStage.amount -= difference; 
+                      console.log(`[handleSaveExpense][BidAdjust] Adjusted last pending stage amount to: ${lastPendingStage.amount}`);
+                      
+                      // Update the final payment expense if it exists
+                      if (lastPendingStage.expenseId) {
+                        console.log(`[handleSaveExpense][BidAdjust] Updating final payment expense: ${lastPendingStage.expenseId}`);
+                        try {
+                          // Update the expense amount to match the new stage amount
+                          await ExpenseService.updateExpense(lastPendingStage.expenseId, {
+                            amount: lastPendingStage.amount,
+                            updatedAt: new Date()
+                          });
+                          console.log(`[handleSaveExpense][BidAdjust] Final payment expense updated successfully`);
+                        } catch (expenseUpdateError) {
+                          console.error(`[handleSaveExpense][BidAdjust] Error updating final payment expense:`, expenseUpdateError);
+                        }
+                      } else {
+                        console.log(`[handleSaveExpense][BidAdjust] No expense ID found for final payment stage`);
+                      }
+                    } else if (lastPendingStageIndex === stageIndex) {
+                      // The stage being paid IS the last pending stage. Its amount is already updated above.
+                      console.log(`[handleSaveExpense][BidAdjust] The paid stage was the last pending stage. Amount already updated to actual paid.`);
+                    } else {
+                      console.warn('[handleSaveExpense][BidAdjust] No pending stages left to adjust. Difference recorded in overall progress.');
+                    }
+                  } else {
+                    console.log(`[handleSaveExpense][BidAdjust] No adjustment needed for other stages (difference is negligible).`);
+                  }
+                  
+                  // Clean up the schedule and progress objects to ensure no undefined values
+                  const cleanedSchedule = schedule.map(stage => {
+                    // Create a clean copy of each stage
+                    const cleanStage = { ...stage };
+                    
+                    // Ensure all required fields are present and not undefined
+                    if (cleanStage.paymentDate) {
+                      // Convert to Firestore Timestamp if it's a Date
+                      if (cleanStage.paymentDate instanceof Date) {
+                        cleanStage.paymentDate = cleanStage.paymentDate;
+                      }
+                    }
+                    
+                    if (cleanStage.createdAt) {
+                      // Convert to Firestore Timestamp if it's a Date
+                      if (cleanStage.createdAt instanceof Date) {
+                        cleanStage.createdAt = cleanStage.createdAt;
+                      }
+                    }
+                    
+                    if (cleanStage.updatedAt) {
+                      // Convert to Firestore Timestamp if it's a Date
+                      if (cleanStage.updatedAt instanceof Date) {
+                        cleanStage.updatedAt = cleanStage.updatedAt;
+                      }
+                    }
+                    
+                    if (cleanStage.dueDate) {
+                      // Convert to Firestore Timestamp if it's a Date
+                      if (cleanStage.dueDate instanceof Date) {
+                        cleanStage.dueDate = cleanStage.dueDate;
+                      }
+                    }
+                    
+                    // Remove any undefined values
+                    Object.keys(cleanStage).forEach(key => {
+                      if (cleanStage[key as keyof typeof cleanStage] === undefined) {
+                        delete cleanStage[key as keyof typeof cleanStage];
+                      }
+                    });
+                    
+                    return cleanStage;
+                  });
+                  
+                  // Clean up the progress object
+                  const cleanedProgress = { ...progress };
+                  Object.keys(cleanedProgress).forEach(key => {
+                    if (cleanedProgress[key as keyof typeof cleanedProgress] === undefined) {
+                      delete cleanedProgress[key as keyof typeof cleanedProgress];
+                    }
+                  });
+                  
+                  // Create a clean update payload
+                  const updatePayload = {
+                    paymentSchedule: cleanedSchedule,
+                    paymentProgress: cleanedProgress,
+                    updatedAt: new Date()
+                  };
+                  
+                  await BidService.updateBid(bid.id, updatePayload);
+                  console.log(`[handleSaveExpense][BidAdjust] Bid ${bid.id} update successful.`);
+
+                  // Refresh the expenses list to ensure all data is up to date
+                  fetchExpenses();
+
+                  // Show success message
+                  setSnackbar({
+                    open: true,
+                    message: 'Expense marked as paid successfully',
+                    severity: 'success'
+                  });
+                }
+              }
+            } else {
+              console.log('[handleSaveExpense] Expense not linked to a Payment Stage or Project ID. No Bid adjustment needed.');
+            }
+            // --- End Bid Payment Schedule Adjustment Logic ---
+          } catch (bidUpdateError) {
+            console.error('[handleSaveExpense][BidAdjust] Error during Bid update:', bidUpdateError);
+            // Decide if we should notify the user about this secondary failure
+            setSnackbar({
+              open: true,
+              message: 'Expense marked as paid, but failed to update Bid schedule.',
+              severity: 'warning'
+            });
+          }
+        }
       } else {
         // Create new expense with required fields
         const newExpenseData: Omit<Expense, 'id' | 'userId' | 'createdAt' | 'updatedAt' | 'createdBy'> = {
@@ -805,7 +1270,6 @@ const Expenses: React.FC<{ projectId?: string }> = ({ projectId }) => {
         >
           {/* Don't wrap the date text in a tooltip - only the sort indicator */}
           {(() => {
-            console.log(`Rendering date for expense ${expense.id}:`, expense.date);
             return formatDate(expense.date);
           })()}
           {sortField === 'date' && (
@@ -1234,10 +1698,16 @@ const Expenses: React.FC<{ projectId?: string }> = ({ projectId }) => {
         open={paymentModalOpen}
         onClose={handleClosePaymentModal}
         expense={fullExpenseForPayment} // Pass the full object or null
-        onSave={() => {
-          // Use the ID from the full object if it exists
+        onSave={(actualAmountPaid) => { 
+          console.log(`[Expenses] PaymentFormModal onSave callback triggered. Actual Amount Received: ${actualAmountPaid}`); // LOG A
           if (fullExpenseForPayment?.id) { 
-            handleMarkAsPaid(fullExpenseForPayment.id);
+            console.log(`[Expenses] fullExpenseForPayment ID is valid (${fullExpenseForPayment.id}). Calling handleMarkAsPaid...`); // LOG B
+            handleMarkAsPaid(fullExpenseForPayment.id, actualAmountPaid);
+          } else {
+            console.error('[Expenses] PaymentFormModal onSave called, BUT fullExpenseForPayment or its ID is missing! Cannot call handleMarkAsPaid.', { 
+              fullExpenseForPayment: fullExpenseForPayment,
+              id: fullExpenseForPayment?.id 
+            }); // LOG C
           }
         }}
       />

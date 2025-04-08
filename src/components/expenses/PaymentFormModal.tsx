@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Dialog,
   DialogTitle,
@@ -35,7 +35,7 @@ interface PaymentFormModalProps {
   open: boolean;
   onClose: () => void;
   expense: Expense | null;
-  onSave: () => void;
+  onSave: (actualAmountPaid: number) => void;
 }
 
 const PAYMENT_METHODS = [
@@ -58,6 +58,15 @@ const PaymentFormModal: React.FC<PaymentFormModalProps> = ({
   const [paymentDate, setPaymentDate] = useState(new Date().toISOString().split('T')[0]);
   const [notes, setNotes] = useState('');
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [actualAmount, setActualAmount] = useState<number | string>('');
+
+  useEffect(() => {
+    if (expense) {
+      setActualAmount(expense.amount || '');
+    } else {
+      setActualAmount('');
+    }
+  }, [expense]);
 
   const resetForm = () => {
     setPaymentMethod('');
@@ -65,6 +74,7 @@ const PaymentFormModal: React.FC<PaymentFormModalProps> = ({
     setPaymentDate(new Date().toISOString().split('T')[0]);
     setNotes('');
     setErrors({});
+    setActualAmount(expense?.amount || '');
   };
 
   const handleClose = () => {
@@ -75,6 +85,11 @@ const PaymentFormModal: React.FC<PaymentFormModalProps> = ({
   const validateForm = () => {
     const newErrors: Record<string, string> = {};
     
+    const numericAmount = Number(actualAmount);
+    if (isNaN(numericAmount) || numericAmount <= 0) {
+      newErrors.actualAmount = 'Please enter a valid positive amount.';
+    }
+    
     if (!paymentMethod) {
       newErrors.paymentMethod = 'Payment method is required';
     }
@@ -84,21 +99,27 @@ const PaymentFormModal: React.FC<PaymentFormModalProps> = ({
     }
     
     setErrors(newErrors);
+    if (Object.keys(newErrors).length > 0) {
+      console.log('[PaymentFormModal] Validation errors:', newErrors);
+    }
     return Object.keys(newErrors).length === 0;
   };
 
   const handleSubmit = () => {
-    if (!validateForm()) return;
+    if (!validateForm()) {
+      return;
+    }
     
     setLoading(true);
+    const finalAmount = Number(actualAmount);
+    console.log(`[PaymentFormModal] Processing payment - Amount: ${finalAmount}`);
     
-    // Create and dispatch the custom event to notify ProjectDetailPage
     if (expense?.projectId) {
       const event = new CustomEvent('expense-status-changed', {
         detail: {
           expenseId: expense.id,
           projectId: expense.projectId,
-          phaseId: expense.phaseId, // This might be undefined, which is fine
+          phaseId: expense.phaseId,
           oldStatus: expense.status,
           newStatus: 'paid'
         }
@@ -106,9 +127,12 @@ const PaymentFormModal: React.FC<PaymentFormModalProps> = ({
       window.dispatchEvent(event);
     }
     
-    // Simulate API call delay
     setTimeout(() => {
-      onSave();
+      try {
+        onSave(finalAmount);
+      } catch (error) {
+        console.error('[PaymentFormModal] Error processing payment:', error);
+      }
       setLoading(false);
       handleClose();
     }, 500);
@@ -198,6 +222,26 @@ const PaymentFormModal: React.FC<PaymentFormModalProps> = ({
         </Box>
         
         <Grid container spacing={2}>
+          <Grid item xs={12}>
+            <TextField
+              required
+              fullWidth
+              label="Actual Amount Paid"
+              type="number"
+              value={actualAmount}
+              onChange={(e) => setActualAmount(e.target.value)}
+              error={!!errors.actualAmount}
+              helperText={errors.actualAmount}
+              InputProps={{
+                startAdornment: (
+                  <InputAdornment position="start">
+                    <MoneyIcon fontSize="small" />
+                  </InputAdornment>
+                )
+              }}
+            />
+          </Grid>
+          
           <Grid item xs={12} sm={6}>
             <FormControl fullWidth error={!!errors.paymentMethod}>
               <InputLabel id="payment-method-label">Payment Method</InputLabel>
