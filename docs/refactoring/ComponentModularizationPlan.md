@@ -27,7 +27,7 @@ Through code analysis, we've identified the following components that require im
 - [x] Extract phases data fetching (`useProjectPhases` hook - completed)
 - [x] Extract bids data fetching (`useProjectBids` hook - completed)
 - [x] Extract expenses data fetching (`useProjectExpenses` hook - completed)
-- [ ] Create a combined `useProjectData` hook to simplify usage
+- [x] Create a combined `useProjectData` hook to simplify usage
 
 #### 1.2 Dialog State Management Extraction
 
@@ -40,11 +40,11 @@ Through code analysis, we've identified the following components that require im
 
 #### 1.3 Extract Business Logic
 
-- [ ] Move calculation functions to separate utility files:
-  - [ ] `projectMetrics.ts` for budget calculations
-  - [ ] `expenseAnalytics.ts` for expense breakdowns 
-  - [ ] `phaseCalculations.ts` for phase costs and progress
-  - [ ] `timelineUtils.ts` for timeline calculations
+- [x] Move calculation functions to separate utility files:
+  - [x] `projectMetrics.ts` for budget calculations
+  - [x] `expenseAnalytics.ts` for expense breakdowns
+  - [x] `phaseCalculations.ts` for phase costs and progress
+  - [x] `timelineUtils.ts` for timeline calculations
 
 #### 1.4 Create Dedicated Event Handler Modules
 

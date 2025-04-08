@@ -8,6 +8,7 @@ interface UseProjectBidsResult {
   loading: boolean;
   error: string | null;
   fetchBids: () => Promise<void>;
+  setBids: React.Dispatch<React.SetStateAction<Bid[]>>;
 }
 
 /**
@@ -80,5 +81,5 @@ export const useProjectBids = (projectId: string | undefined): UseProjectBidsRes
     };
   }, []); // Empty dependency array ensures this runs only once on mount/unmount
 
-  return { bids, loading, error, fetchBids };
+  return { bids, loading, error, fetchBids, setBids };
 };

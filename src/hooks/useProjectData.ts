@@ -1,152 +1,62 @@
 import { useState, useEffect, useCallback } from 'react';
-import { ProjectService } from '../services/project';
-import { ExpenseService } from '../services/expense';
-import { BidService } from '../services/bid';
-import { Project, Expense, Bid, Phase, ProjectPhase, Task } from '../types';
+import { Project, Expense, Bid, ProjectPhase } from '../types';
 import { useAuth } from '../contexts/AuthContext';
 
-// Define ProjectPhase locally if not already globally available in types
-// interface ProjectPhase extends Phase {
-//   id: string;
-//   name: string;
-//   startDate: Date | string;
-//   endDate: Date | string;
-//   status: 'not_started' | 'in_progress' | 'completed' | 'delayed';
-//   progress: number;
-//   budget: number;
-//   actualCost: number;
-//   tasks: any[]; // Replace 'any' with Task[] if Task type is defined
-// }
+// Import the individual hooks
+import { useProject } from './useProject';
+import { useProjectPhases } from './useProjectPhases';
+import { useProjectBids } from './useProjectBids';
+import { useProjectExpenses } from './useProjectExpenses';
 
 interface UseProjectDataReturn {
   project: Project | null;
   phases: ProjectPhase[];
   bids: Bid[];
   expenses: Expense[];
-  loading: boolean;
-  error: string | null;
+  loading: boolean; // Combined loading state
+  error: string | null; // Combined error state
   refreshAllProjectData: () => Promise<void>;
-  setPhases: React.Dispatch<React.SetStateAction<ProjectPhase[]>>; // Allow external updates if needed
+  setPhases: React.Dispatch<React.SetStateAction<ProjectPhase[]>>; // Keep for optimistic updates
+  // Make setters required
+  setBids: React.Dispatch<React.SetStateAction<Bid[]>>;
+  setExpenses: React.Dispatch<React.SetStateAction<Expense[]>>;
 }
 
 export const useProjectData = (projectId: string | undefined): UseProjectDataReturn => {
-  const { user } = useAuth();
-  const [project, setProject] = useState<Project | null>(null);
-  const [phases, setPhases] = useState<ProjectPhase[]>([]);
-  const [bids, setBids] = useState<Bid[]>([]);
-  const [expenses, setExpenses] = useState<Expense[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const { user } = useAuth(); // Keep useAuth if needed by individual hooks or logic here
+  
+  // Use the individual hooks
+  const { project, loading: projectLoading, error: projectError, fetchProject } = useProject(projectId);
+  const { phases, loading: phasesLoading, error: phasesError, fetchPhases, setPhases } = useProjectPhases(projectId);
+  const { bids, loading: bidsLoading, error: bidsError, fetchBids, setBids } = useProjectBids(projectId);
+  const { expenses, loading: expensesLoading, error: expensesError, fetchExpenses, setExpenses } = useProjectExpenses(projectId);
 
-  const fetchPhases = useCallback(async (currentProjectId: string) => {
-    if (!user?.uid) return [];
-    try {
-      const projectData = await ProjectService.getProject(currentProjectId, user.uid);
-      if (projectData && projectData.phases && projectData.phases.length > 0) {
-        // Ensure phases have IDs, potentially adding them if missing (though ideally they should come from DB)
-        const phasesWithIds = projectData.phases.map((phase: Phase, index: number) => ({ 
-          ...phase, 
-          id: phase.id || `temp-phase-${index}` // Example temporary ID
-        })) as ProjectPhase[];
-        return phasesWithIds;
-      } else {
-        return [];
-      }
-    } catch (err) {
-      console.error('Error fetching phases:', err);
-      setError('Failed to load phases');
-      return [];
-    }
-  }, [user?.uid]);
+  // Combine loading states
+  const loading = projectLoading || phasesLoading || bidsLoading || expensesLoading;
 
-  const fetchBids = useCallback(async (currentProjectId: string) => {
-    if (!user?.uid) return [];
-    try {
-      const bidFilters = { projectId: currentProjectId };
-      const bidData = await BidService.getBids(user.uid, bidFilters);
-      return bidData;
-    } catch (err) {
-      console.error('Error fetching bids:', err);
-      setError('Failed to load bids');
-      return [];
-    }
-  }, [user?.uid]);
+  // Combine error states (show first error encountered)
+  const error = projectError || phasesError || bidsError || expensesError;
 
-  const fetchExpenses = useCallback(async (currentProjectId: string) => {
-    if (!user?.uid) return [];
-    try {
-      const expenseData = await ExpenseService.getProjectExpenses(user.uid, currentProjectId);
-      return expenseData;
-    } catch (err) {
-      console.error('Error fetching expenses:', err);
-      setError('Failed to load expenses');
-      return [];
-    }
-  }, [user?.uid]);
-
-  const fetchProjectData = useCallback(async (currentProjectId: string) => {
-    if (!user?.uid) return;
-    setLoading(true);
-    setError(null);
-    try {
-      const projectData = await ProjectService.getProject(currentProjectId, user.uid);
-      if (!projectData) {
-        setError('Project not found');
-        setProject(null);
-        setPhases([]);
-        setBids([]);
-        setExpenses([]);
-      } else {
-        setProject(projectData);
-        // Fetch related data in parallel
-        const [fetchedPhases, fetchedBids, fetchedExpenses] = await Promise.all([
-          fetchPhases(currentProjectId),
-          fetchBids(currentProjectId),
-          fetchExpenses(currentProjectId),
-        ]);
-        setPhases(fetchedPhases);
-        setBids(fetchedBids);
-        setExpenses(fetchedExpenses);
-      }
-    } catch (err) {
-      console.error('Error fetching project data:', err);
-      setError('Failed to load project data');
-      setProject(null);
-      setPhases([]);
-      setBids([]);
-      setExpenses([]);
-    } finally {
-      setLoading(false);
-    }
-  }, [user?.uid, fetchPhases, fetchBids, fetchExpenses]);
-
+  // Combined refresh function
   const refreshAllProjectData = useCallback(async () => {
-    if (!projectId || !user?.uid) return;
-    setLoading(true); // Indicate loading during refresh
-    setError(null);
+    if (!projectId) return;
+    console.log(`useProjectData: Refreshing all data for project ${projectId}`);
     try {
-      const [fetchedPhases, fetchedBids, fetchedExpenses] = await Promise.all([
-        fetchPhases(projectId),
-        fetchBids(projectId),
-        fetchExpenses(projectId),
+      // Call individual fetch functions in parallel
+      await Promise.all([
+        fetchProject(),
+        fetchPhases(),
+        fetchBids(),
+        fetchExpenses(),
       ]);
-      setPhases(fetchedPhases);
-      setBids(fetchedBids);
-      setExpenses(fetchedExpenses);
-    } catch (error) {
-      console.error('Error refreshing project data:', error);
-      setError('Failed to refresh project data');
-    } finally {
-      setLoading(false);
+      console.log(`useProjectData: Refresh complete for project ${projectId}`);
+    } catch (refreshError) {
+      console.error(`useProjectData: Error during refreshAllProjectData for project ${projectId}:`, refreshError);
+      // Error state will be set by the individual hook that failed
     }
-  }, [projectId, user?.uid, fetchPhases, fetchBids, fetchExpenses]);
+  }, [projectId, fetchProject, fetchPhases, fetchBids, fetchExpenses]);
 
-  // Initial fetch when projectId or user changes
-  useEffect(() => {
-    if (projectId && user?.uid) {
-      fetchProjectData(projectId);
-    }
-  }, [projectId, user?.uid, fetchProjectData]);
+  // No need for the initial useEffect here, as individual hooks handle their own fetching
 
   return {
     project,
@@ -156,6 +66,9 @@ export const useProjectData = (projectId: string | undefined): UseProjectDataRet
     loading,
     error,
     refreshAllProjectData,
-    setPhases, // Expose setter if needed
+    setPhases, // Pass through the setter from useProjectPhases
+    // Optionally pass through other setters if needed
+    setBids, 
+    setExpenses,
   };
 }; 

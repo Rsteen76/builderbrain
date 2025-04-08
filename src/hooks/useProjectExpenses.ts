@@ -15,6 +15,7 @@ interface UseProjectExpensesResult {
   loading: boolean;
   error: string | null;
   fetchExpenses: () => Promise<void>;
+  setExpenses: React.Dispatch<React.SetStateAction<Expense[]>>;
 }
 
 // Define a set of colors for expense categories
@@ -106,5 +107,5 @@ export const useProjectExpenses = (projectId: string | undefined): UseProjectExp
     };
   }, [projectId, fetchExpenses]); // Re-run if projectId or fetchExpenses changes
 
-  return { expenses, expensesChartData, loading, error, fetchExpenses };
+  return { expenses, expensesChartData, loading, error, fetchExpenses, setExpenses };
 };
