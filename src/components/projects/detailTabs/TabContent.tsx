@@ -34,15 +34,33 @@ interface TabContentProps {
   userId: string;
   getStatusColor: (status: string) => string;
   handleAddPhase: () => void;
-  handleUpdatePhase: (phaseId: string) => void;
-  handleDeletePhase: (phaseId: string) => void;
+  onUpdatePhaseStatus: (phaseId: string, status: ProjectPhase['status']) => void;
+  handleDeletePhase?: (phaseId: string) => void;
   handleAddBid: () => void;
   handleEditBid: (bidId: string) => void;
-  handleOpenQuickBidDialog: (phaseId: string) => void;
-  handleOpenQuickExpenseDialog: (phaseId?: string) => void;
-  handleOpenTemplateAdjuster: () => void;
-  handleProjectUpdate: (updatedProject: Project) => void;
-  handleViewPhaseDetails: (phaseId: string) => void;
+  handleDeleteBid: (bidId: string) => void;
+  handleAddExpense?: () => void;
+  handleEditExpense?: (expense: Expense) => void;
+  handleDeleteExpense?: (expenseId: string) => void;
+  handleOpenQuickBidDialog?: (phaseId: string) => void;
+  handleOpenQuickExpenseDialog?: (phaseId?: string) => void;
+  handleOpenTemplateAdjuster?: () => void;
+  handleProjectUpdate?: (updatedProject: Project) => void;
+  handleViewPhaseDetails?: (phaseId: string) => void;
+  isLoading?: boolean;
+  error?: string | null;
+  onRefreshData?: () => void;
+  tasks?: any[];
+  subcontractors?: any[];
+  documents?: any[];
+  onAddTask?: () => void;
+  onUpdateTask?: () => void;
+  onDeleteTask?: () => void;
+  onAddDocument?: () => void;
+  onDeleteDocument?: () => void;
+  onAddSubcontractor?: () => void;
+  onEditSubcontractor?: () => void;
+  onDeleteSubcontractor?: () => void;
   children?: ReactNode;
 }
 
@@ -62,7 +80,7 @@ const TabContent: React.FC<TabContentProps> = ({
   userId,
   getStatusColor,
   handleAddPhase,
-  handleUpdatePhase,
+  onUpdatePhaseStatus,
   handleDeletePhase,
   handleAddBid,
   handleEditBid,
@@ -94,7 +112,7 @@ const TabContent: React.FC<TabContentProps> = ({
           combinedExpenses={combinedExpenses} 
           theme={theme}
           bids={bids}
-          handleOpenTemplateAdjuster={handleOpenTemplateAdjuster}
+          handleOpenTemplateAdjuster={handleOpenTemplateAdjuster || (() => {})}
         />
       )}
       {tabValue === 1 && (
@@ -106,12 +124,12 @@ const TabContent: React.FC<TabContentProps> = ({
           phaseActualCosts={phaseActualCosts}
           theme={theme}
           handleAddPhase={handleAddPhase}
-          handleUpdatePhase={handleUpdatePhase}
-          handleDeletePhase={handleDeletePhase}
-          handleOpenQuickBidDialog={handleOpenQuickBidDialog}
-          handleOpenQuickExpenseDialog={handleOpenQuickExpenseDialog}
-          handleViewPhaseDetails={handleViewPhaseDetails}
-          handleOpenTemplateAdjuster={handleOpenTemplateAdjuster}
+          onUpdatePhaseStatus={onUpdatePhaseStatus}
+          handleDeletePhase={handleDeletePhase || (() => {})}
+          handleOpenQuickBidDialog={handleOpenQuickBidDialog || (() => {})}
+          handleOpenQuickExpenseDialog={handleOpenQuickExpenseDialog || (() => {})}
+          handleViewPhaseDetails={handleViewPhaseDetails || (() => {})}
+          handleOpenTemplateAdjuster={handleOpenTemplateAdjuster || (() => {})}
           getStatusColor={getStatusColor}
           formatCurrency={formatCurrency}
         />
@@ -135,14 +153,14 @@ const TabContent: React.FC<TabContentProps> = ({
           expensesData={expensesData}
           phases={phases}
           theme={theme}
-          handleOpenQuickExpenseDialog={handleOpenQuickExpenseDialog}
+          handleOpenQuickExpenseDialog={handleOpenQuickExpenseDialog || (() => {})}
           formatCurrency={formatCurrency}
         />
       )}
       {tabValue === 4 && (
-        <ProjectTaskManager 
-          project={project} 
-          onProjectUpdate={handleProjectUpdate}
+        <ProjectTaskManager
+          project={project}
+          onProjectUpdate={handleProjectUpdate || (() => {})}
           userId={userId}
         />
       )}

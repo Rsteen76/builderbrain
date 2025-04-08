@@ -45,7 +45,7 @@ import {
   Schedule as ScheduleIcon,
   Done as DoneIcon,
   Info as InfoIcon,
-  Business as BusinessIcon, // Added missing BusinessIcon import
+  Business as BusinessIcon,
   MoreVert as MoreVertIcon,
   CalendarToday as CalendarTodayIcon,
   AccountBalanceWallet as AccountBalanceWalletIcon,
@@ -70,6 +70,16 @@ import {
 import { formatCurrency, formatDate, truncateText, safelyParseDate } from '../../../utils/formatters';
 
 import { ProjectPhase, Bid, Expense } from '../../../types';
+
+// Available phase statuses
+const PHASE_STATUSES: ProjectPhase['status'][] = [
+  'not_started',
+  'planning',
+  'in_progress',
+  'completed',
+  'on_hold',
+  'delayed'
+];
 
 // Helper functions
 const getPhaseInitials = (phaseName: string): string => {
@@ -100,7 +110,7 @@ interface ProjectPhasesTabProps {
   phaseActualCosts: Record<string, number>;
   theme: Theme;
   handleAddPhase: () => void;
-  handleUpdatePhase: (phaseId: string) => void;
+  onUpdatePhaseStatus: (phaseId: string, status: ProjectPhase['status']) => void;
   handleDeletePhase: (phaseId: string) => void;
   handleOpenQuickBidDialog: (phaseId: string) => void;
   handleOpenQuickExpenseDialog: (phaseId: string) => void;
@@ -118,7 +128,7 @@ const ProjectPhasesTab: React.FC<ProjectPhasesTabProps> = ({
   phaseActualCosts,
   theme,
   handleAddPhase,
-  handleUpdatePhase,
+  onUpdatePhaseStatus,
   handleDeletePhase,
   handleOpenQuickBidDialog,
   handleOpenQuickExpenseDialog,
@@ -154,6 +164,28 @@ const ProjectPhasesTab: React.FC<ProjectPhasesTabProps> = ({
   const handlePhaseMenuClose = () => {
     setAnchorEl(null);
     setSelectedPhaseId(null);
+  };
+
+  // --- Status Update Menu Handlers ---
+  const [statusMenuAnchorEl, setStatusMenuAnchorEl] = useState<null | HTMLElement>(null);
+  const [statusMenuPhaseId, setStatusMenuPhaseId] = useState<string | null>(null);
+
+  const handleStatusMenuOpen = (event: React.MouseEvent<HTMLElement>, phaseId: string) => {
+    event.stopPropagation(); // Prevent card click/expand
+    setStatusMenuAnchorEl(event.currentTarget);
+    setStatusMenuPhaseId(phaseId);
+  };
+
+  const handleStatusMenuClose = () => {
+    setStatusMenuAnchorEl(null);
+    setStatusMenuPhaseId(null);
+  };
+
+  const handleStatusSelect = (status: ProjectPhase['status']) => {
+    if (statusMenuPhaseId) {
+      onUpdatePhaseStatus(statusMenuPhaseId, status);
+    }
+    handleStatusMenuClose();
   };
 
   // Function to get payments for a specific phase from all bids
@@ -462,8 +494,13 @@ const ProjectPhasesTab: React.FC<ProjectPhasesTabProps> = ({
                             fontWeight: 600,
                             fontSize: '0.7rem',
                             height: 24,
-                            mr: 1
+                            mr: 1,
+                            cursor: 'pointer',
+                            '&:hover': {
+                              backgroundColor: alpha(getStatusColor(phase.status), 0.2),
+                            }
                           }} 
+                          onClick={(e) => handleStatusMenuOpen(e, phase.id)}
                         />
                         <IconButton 
                           aria-label="more options" 
@@ -941,20 +978,6 @@ const ProjectPhasesTab: React.FC<ProjectPhasesTabProps> = ({
         <MenuItem 
           onClick={() => {
             if (selectedPhaseId) {
-              handleUpdatePhase(selectedPhaseId);
-              handlePhaseMenuClose();
-            }
-          }}
-          sx={{ borderRadius: 1, py: 1 }}
-        >
-          <ListItemIcon>
-            <EditIcon fontSize="small" />
-          </ListItemIcon>
-          <ListItemText>Edit Phase</ListItemText>
-        </MenuItem>
-        <MenuItem 
-          onClick={() => {
-            if (selectedPhaseId) {
               handleViewPhaseDetails(selectedPhaseId);
               handlePhaseMenuClose();
             }
@@ -981,6 +1004,19 @@ const ProjectPhasesTab: React.FC<ProjectPhasesTabProps> = ({
           </ListItemIcon>
           <ListItemText>Delete Phase</ListItemText>
         </MenuItem>
+      </Menu>
+      
+      {/* Status Update Menu */}
+      <Menu
+        anchorEl={statusMenuAnchorEl}
+        open={Boolean(statusMenuAnchorEl)}
+        onClose={handleStatusMenuClose}
+      >
+        {PHASE_STATUSES.map((status) => (
+          <MenuItem key={status} onClick={() => handleStatusSelect(status)}>
+            <ListItemText primary={getStatusText(status)} />
+          </MenuItem>
+        ))}
       </Menu>
     </Box>
   );

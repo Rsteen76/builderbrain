@@ -252,10 +252,9 @@ export interface Phase {
   id?: string;
   projectId?: string;
   name: string;
-  // Change from 'any' to a more explicit union type that includes Timestamp
   startDate: Date | string | { toDate(): Date } | null;
   endDate: Date | string | { toDate(): Date } | null;
-  status: 'not_started' | 'in_progress' | 'completed' | 'delayed' | 'on_hold';
+  status: 'not_started' | 'planning' | 'in_progress' | 'completed' | 'delayed' | 'on_hold';
   progress: number;
   budget: number;
   actualCost: number;
