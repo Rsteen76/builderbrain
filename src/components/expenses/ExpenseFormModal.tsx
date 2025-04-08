@@ -69,23 +69,12 @@ import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns';
 import SubcontractorSelector from '../common/SubcontractorSelector';
 import VendorSelector from '../common/VendorSelector';
 
-import { Expense, LineItem, Subcontractor } from '../../types';
+import { Expense, LineItem, Subcontractor, ProjectPhase, Project } from '../../types';
 import { ExpenseService } from '../../services/expense';
 import { SubcontractorService } from '../../services/subcontractor';
 import { useAuth } from '../../contexts/AuthContext';
 import { v4 as uuidv4 } from 'uuid';
 import { formatCurrency } from '../../utils/formatters';
-
-interface Project {
-  id: string;
-  name: string;
-  phases?: ProjectPhase[];
-}
-
-interface ProjectPhase {
-  id: string;
-  name: string;
-}
 
 interface ExpenseFormModalProps {
   open: boolean;
@@ -93,7 +82,7 @@ interface ExpenseFormModalProps {
   expense?: Partial<Expense>;
   onSave: (expense: Partial<Expense>) => void;
   projects: Project[];
-  projectPhases?: Project['phases'];
+  projectPhases?: ProjectPhase[];
 }
 
 // Interface for errors
@@ -155,6 +144,488 @@ const cleanForFirestore = (data: any): any => {
   });
   
   return result;
+};
+
+// Define common expense descriptions by phase category
+const PHASE_EXPENSE_DESCRIPTIONS: Record<string, string[]> = {
+  "common": [
+    // Administration & General
+    "Project Management Fee",
+    "Supervision Labor",
+    "Office Supplies",
+    "Plan Printing/Documents",
+    "Project Software Subscription",
+    "Liability Insurance Premium",
+    "Workers' Comp Insurance",
+    "Builder's Risk Insurance",
+    "Legal Fees",
+    "Accounting Services",
+    "Portable Toilet Rental",
+    "Temporary Power/Utilities",
+    "Temporary Water Service",
+    "Site Security Services",
+    "Temporary Fencing Rental",
+    "Jobsite Trailer Rental",
+    "Debris Removal/Dumpster",
+    "Final Cleaning Service",
+    "Tool/Equipment Repair",
+    "Vehicle/Truck Expenses",
+    "Gas/Fuel for Equipment",
+    "Small Tools Purchase",
+    "Safety Equipment/PPE",
+  ],
+  
+  "site_work": [
+    // Permits & Surveys
+    "Building Permit Fee",
+    "Impact Fees",
+    "Water/Sewer Connection Fee",
+    "Utility Connection Fee",
+    "Land Survey Fee",
+    "Environmental Permit",
+    "Soil Testing Services",
+    
+    // Site Preparation
+    "Lot Clearing/Tree Removal",
+    "Stump Removal",
+    "Erosion Control Materials",
+    "Silt Fence Installation",
+    "Demolition Services",
+    "Asbestos/Hazardous Removal",
+    "Construction Entrance Materials",
+    
+    // Excavation & Grading
+    "Excavation Services",
+    "Grading/Site Leveling",
+    "Topsoil Removal/Storage",
+    "Fill Dirt/Gravel Delivery",
+    "Compaction Equipment Rental",
+    "Trenching Services",
+    "Backfill Materials",
+    "Drainage System Materials",
+    "Site Retaining Wall Materials",
+    "Earth Moving Equipment Rental",
+    "Dump Truck Services",
+    
+    // Utilities
+    "Water Line Installation",
+    "Sewer Line Connection",
+    "Gas Line Installation",
+    "Electrical Service Connection",
+    "Underground Conduit Materials",
+    "Septic System Installation",
+    "Well Drilling Services",
+  ],
+  
+  "foundation": [
+    // Layout & Forms
+    "Batter Board Materials",
+    "Form Materials/Plywood",
+    "Form Rental",
+    "Snap Ties/Spreader Clamps",
+    "Form Oil/Release Agent",
+    "Foundation Layout Labor",
+    
+    // Materials
+    "Concrete Materials",
+    "Rebar/Steel Reinforcement",
+    "Wire Mesh/WWF",
+    "Foundation Bolts/Hardware",
+    "Concrete Pump Service",
+    "Concrete Delivery",
+    "Ready-Mix Concrete",
+    "Vapor Barrier Materials",
+    "Foundation Waterproofing",
+    "Concrete Additives",
+    "Termite Treatment/Barrier",
+    
+    // Equipment & Labor
+    "Concrete Finishing Labor",
+    "Concrete Vibrator Rental",
+    "Concrete Testing Services",
+    "Power Trowel Rental",
+    "Concrete Hammer Drill Rental",
+    
+    // Footings & Specialty
+    "Footing Drain Materials",
+    "Pier Installation",
+    "Caisson Drilling",
+    "Slab Preparation Materials",
+    "Slab Insulation",
+    "ICF Block Materials",
+    "Foundation Drainage System",
+    "Foundation Insulation",
+    "Foundation Coating/Sealant",
+  ],
+  
+  "framing": [
+    // Framing Materials
+    "Dimensional Lumber Package",
+    "Treated Lumber Materials",
+    "Engineered Floor Joists",
+    "LVL/Engineered Beams",
+    "Roof Truss Package",
+    "Wall Sheathing/OSB",
+    "Roof Decking Materials",
+    "Metal Connectors/Joist Hangers",
+    "Framing Hardware/Nails",
+    "Framing Gun Rental",
+    "Scaffold Rental",
+    "Pneumatic Tool Rental",
+    "Crane Services for Trusses",
+    "Weather Barrier/House Wrap",
+    "Flashing Materials",
+    
+    // Steel & Specialty
+    "Structural Steel Beams",
+    "Steel Columns",
+    "Steel Connectors/Plates",
+    "Steel Fabrication",
+    "Timber Frame Materials",
+    "Timber Frame Connectors",
+    "SIP Panel Materials",
+    "Fastener Systems",
+    
+    // Labor
+    "Framing Labor - Walls",
+    "Framing Labor - Floors",
+    "Framing Labor - Roof",
+    "Framing Labor - Stairs",
+    "Temporary Bracing Materials",
+    "Safety Harness Rental",
+  ],
+  
+  "rough_ins": [
+    // Electrical
+    "Electrical Rough Materials",
+    "Electrical Wire/Romex",
+    "Conduit/Cable Tray Materials",
+    "Electrical Boxes",
+    "Recessed Light Cans",
+    "Electrical Panel/Breakers",
+    "Low Voltage Wiring",
+    "Generator Installation Materials",
+    "Solar Pre-Wire Materials",
+    "Electrical Permit Fee",
+    
+    // Plumbing
+    "Plumbing Rough Materials",
+    "PEX/Copper/PVC Pipe",
+    "Pipe Fittings",
+    "Pipe Insulation",
+    "Plumbing Fixtures Rough-in",
+    "Water Heater Installation",
+    "Gas Line Materials",
+    "Sewer & Drain Materials",
+    "Tub/Shower Pan Install",
+    "Plumbing Permit Fee",
+    
+    // HVAC
+    "HVAC Ductwork Materials",
+    "Flexible Duct Materials",
+    "HVAC Equipment",
+    "Furnace Installation",
+    "AC Condenser/Coil",
+    "Vent/Register Materials",
+    "Return Air Materials",
+    "HVAC Control Wiring",
+    "HVAC Permit Fee",
+    
+    // Other Systems
+    "Security System Wiring",
+    "Smart Home/Automation Wiring",
+    "Vacuum System Rough-in",
+    "Audio/Video System Wiring",
+    "Fire Suppression System",
+    "Data/Network Cabling",
+  ],
+  
+  "exterior": [
+    // Roofing
+    "Roofing Materials",
+    "Roof Underlayment",
+    "Roofing Shingles/Tiles",
+    "Metal Roofing Materials",
+    "Roof Flashing",
+    "Roof Vents/Boots",
+    "Gutter Materials",
+    "Downspout Materials",
+    "Soffit Materials",
+    "Fascia Materials",
+    "Roof Equipment Rental",
+    
+    // Siding & Exterior Walls
+    "Exterior Siding Materials",
+    "Fiber Cement Siding",
+    "Vinyl Siding Materials",
+    "Wood/Cedar Siding",
+    "Stone Veneer Materials",
+    "Brick Materials",
+    "Stucco Materials",
+    "EIFS/Synthetic Stucco",
+    "Exterior Trim Materials",
+    "Exterior Caulk/Sealant",
+    
+    // Windows & Doors
+    "Window Package",
+    "Exterior Door Package",
+    "Garage Door Purchase",
+    "Garage Door Opener",
+    "Entry Door Hardware",
+    "Window Flashing Materials",
+    "Door Threshold Materials",
+    "Window Installation Labor",
+    "Door Installation Labor",
+    
+    // Exterior Features
+    "Deck/Porch Materials",
+    "Deck Railing Systems",
+    "Exterior Stair Materials",
+    "Exterior Paint/Stain",
+    "Exterior Lighting Fixtures",
+    "Masonry Materials",
+    "Landscaping Allowance",
+    "Driveway Materials",
+    "Walkway Materials",
+    "Landscape Wall Materials",
+  ],
+  
+  "interior": [
+    // Insulation
+    "Wall Insulation Materials",
+    "Ceiling/Attic Insulation",
+    "Floor Insulation",
+    "Spray Foam Insulation",
+    "Rigid Foam Insulation",
+    "Sound Insulation Materials",
+    "Vapor Barrier Materials",
+    "Air Sealing Materials",
+    
+    // Drywall & Wall Finishes
+    "Drywall Materials",
+    "Drywall Delivery",
+    "Specialty Drywall/Cement Board",
+    "Drywall Mud/Joint Compound",
+    "Drywall Tape/Corner Bead",
+    "Drywall Screws/Fasteners",
+    "Drywall Tools Rental",
+    "Wall Texture Materials",
+    "Interior Wall Framing",
+    "Patch & Repair Materials",
+    
+    // Paint & Wall Coverings
+    "Interior Paint Materials",
+    "Primer/Sealer",
+    "Painting Equipment Rental",
+    "Painting Labor",
+    "Wallpaper Materials",
+    "Wall Paneling Materials",
+    "Decorative Wall Finishes",
+    
+    // Trim & Interior Doors
+    "Interior Door Package",
+    "Door Hardware/Hinges",
+    "Door Casing Materials",
+    "Baseboard Materials",
+    "Crown Molding Materials",
+    "Window Trim Materials",
+    "Interior Columns/Posts",
+    "Specialty Millwork",
+    "Wood Paneling/Wainscot",
+    "Closet Shelving/Organizers",
+    
+    // Ceilings
+    "Ceiling Grid System",
+    "Ceiling Tiles/Panels",
+    "Ceiling Fan Installation",
+    "Specialty Ceiling Materials",
+  ],
+  
+  "finishes": [
+    // Flooring
+    "Hardwood Flooring Materials",
+    "Engineered Wood Flooring",
+    "Laminate Flooring Materials",
+    "Vinyl/LVP Flooring",
+    "Tile Flooring Materials",
+    "Tile Setting Materials",
+    "Grout/Adhesives",
+    "Carpet Materials",
+    "Carpet Pad/Underlayment",
+    "Floor Transition Materials",
+    "Floor Finish/Sealer",
+    "Floor Protection Materials",
+    
+    // Cabinets & Countertops
+    "Kitchen Cabinet Package",
+    "Bathroom Vanity Cabinets",
+    "Cabinet Hardware",
+    "Countertop Materials",
+    "Solid Surface Countertops",
+    "Quartz/Granite Countertops",
+    "Countertop Fabrication",
+    "Countertop Installation",
+    "Backsplash Materials",
+    "Cabinet Installation Labor",
+    
+    // Plumbing Fixtures
+    "Kitchen Sink Purchase",
+    "Bathroom Sink(s) Purchase",
+    "Faucet Package",
+    "Shower System Purchase",
+    "Bathtub Purchase",
+    "Toilet Purchase",
+    "Garbage Disposal",
+    "Water Filtration System",
+    "Plumbing Trim-out Materials",
+    
+    // Electrical Finish
+    "Light Fixture Package",
+    "Recessed Light Trim",
+    "Ceiling Fan Purchase",
+    "Electrical Outlet Covers",
+    "Switch Plates",
+    "Doorbell/Chime",
+    "Smart Home Devices",
+    "Electrical Trim-out Materials",
+    
+    // Appliances & HVAC Finish
+    "Refrigerator Purchase",
+    "Range/Oven Purchase",
+    "Microwave Purchase",
+    "Dishwasher Purchase",
+    "Washer/Dryer Purchase",
+    "Range Hood Purchase",
+    "HVAC Registers/Grills",
+    "Thermostat Purchase",
+    
+    // Miscellaneous Finish
+    "Mirror Installation",
+    "Shower Door/Enclosure",
+    "Bathroom Accessories",
+    "Closet Shelving Installation",
+    "Window Treatment Materials",
+    "Final Touch-up Materials",
+  ],
+  
+  "specialty": [
+    // Specialty Spaces
+    "Home Theater Equipment",
+    "Wine Cellar Materials",
+    "Gym/Exercise Room Equipment",
+    "Sauna/Steam Room Materials",
+    "Pool Equipment",
+    "Hot Tub/Spa Installation",
+    "Outdoor Kitchen Equipment/Materials",
+    "Fireplace Installation Materials",
+    "Built-in Shelving Materials",
+    "Smart Home System Installation",
+    "Security System Equipment",
+    "Central Vacuum System",
+    "Elevator/Lift Installation",
+    "Solar Panel System",
+    "Backup Generator System",
+    "Radon Mitigation System",
+    "Water Treatment System",
+    
+    // Permits & Inspections
+    "Specialty System Permit",
+    "Pool Construction Permit",
+    "Electrical Specialty Inspection",
+    "Plumbing Specialty Inspection",
+    "HVAC Specialty Inspection",
+    "Final Building Inspection",
+    
+    // Professional Services
+    "Interior Design Fee",
+    "Landscape Design Fee",
+    "Engineering Consultation",
+    "Energy Audit Services",
+    "Specialty Cleaning Services",
+    "Specialty Contractor Fee",
+  ],
+  
+  "landscape": [
+    // Hardscape
+    "Patio Materials",
+    "Landscape Retaining Wall Materials",
+    "Paver Materials",
+    "Concrete Flatwork",
+    "Outdoor Steps/Stairs",
+    "Stone/Gravel Materials",
+    "Edging Materials",
+    "Landscape Curbing",
+    "Outdoor Lighting Fixtures",
+    "Irrigation System Materials",
+    "Landscape Drainage Materials",
+    
+    // Softscape
+    "Sod/Turf Installation",
+    "Topsoil/Garden Soil",
+    "Mulch/Ground Cover",
+    "Tree Purchase",
+    "Shrub/Plant Materials",
+    "Hydroseeding Services",
+    "Fertilizer/Soil Amendments",
+    
+    // Outdoor Features
+    "Fence Materials",
+    "Pergola/Arbor Materials",
+    "Outdoor Fire Pit/Fireplace",
+    "Water Feature Materials",
+    "Outdoor Furniture",
+    "Playground Equipment",
+    "Garden Bed Materials",
+    "Outdoor Kitchen Equipment",
+  ],
+  
+  "renovation": [
+    // Demolition & Preparation
+    "Interior Demolition Services",
+    "Dumpster Rental",
+    "Asbestos/Lead Testing",
+    "Mold Remediation",
+    "Structure Repair Materials",
+    "Wall Removal Labor",
+    "Subfloor Repair Materials",
+    "Electrical System Updates",
+    "Plumbing System Updates",
+    "HVAC System Updates",
+    "Permit for Renovation",
+    
+    // Conservation
+    "Historic Restoration Materials",
+    "Custom Millwork Reproduction",
+    "Period-Specific Hardware",
+    "Architectural Salvage",
+    "Conservation Specialist Fee",
+  ],
+  
+  "maintenance": [
+    // Repairs
+    "Roof Repair Materials",
+    "Siding Repair Materials",
+    "Gutter Cleaning/Repair",
+    "Window/Door Repair",
+    "Drywall Repair Materials",
+    "Plumbing Repair Parts",
+    "Electrical Repair Materials",
+    "HVAC Service/Repair",
+    "Appliance Repair",
+    "Flooring Repair Materials",
+    
+    // Scheduled Maintenance
+    "HVAC Filter Replacement",
+    "Water Heater Maintenance",
+    "Septic System Pumping",
+    "Chimney Cleaning",
+    "Pressure Washing Service",
+    "Duct Cleaning Service",
+    "Carpet Cleaning Service",
+    "Lawn Maintenance",
+    "Tree Trimming Service",
+    "Pest Control Service",
+  ],
 };
 
 const ExpenseFormModal: React.FC<ExpenseFormModalProps> = ({
@@ -245,10 +716,13 @@ const ExpenseFormModal: React.FC<ExpenseFormModalProps> = ({
         
         // Determine phases based on passed expense or project context
         if (expense.projectId) {
-          initialPhases = projectPhases && projectPhases.length > 0 
-            ? projectPhases 
-            : projects.find(p => p.id === expense.projectId)?.phases || [];
-          console.log(`Initializing from expense prop - Project: ${expense.projectId}, Initial phases:`, initialPhases);
+          const projectSource = projectPhases && projectPhases.length > 0 
+            ? { phases: projectPhases } 
+            : projects.find(p => p.id === expense.projectId);
+            
+          // Filter phases to ensure they have an ID before setting state
+          initialPhases = (projectSource?.phases || []).filter((p): p is ProjectPhase => typeof p.id === 'string' && p.id !== '');
+          console.log(`Initializing from expense prop - Project: ${expense.projectId}, Initial phases (filtered):`, initialPhases);
         }
         
       } else {
@@ -257,10 +731,11 @@ const ExpenseFormModal: React.FC<ExpenseFormModalProps> = ({
         // Auto-select project if only one is available (general expenses page)
         if (projects.length === 1) {
           initialFormData.projectId = projects[0].id;
-          initialPhases = projects[0].phases || [];
-          console.log('Auto-selected project (general): ', projects[0].name, 'Phases:', initialPhases);
+          // Filter phases to ensure they have an ID before setting state
+          initialPhases = (projects[0].phases || []).filter((p): p is ProjectPhase => typeof p.id === 'string' && p.id !== '');
+          console.log('Auto-selected project (general): ', projects[0].name, 'Phases (filtered):', initialPhases);
           // Auto-select phase if only one
-          if (initialPhases.length === 1) {
+          if (initialPhases.length === 1 && initialPhases[0].id) { // Check ID exists
             initialFormData.phaseId = initialPhases[0].id;
             initialFormData.phaseName = initialPhases[0].name;
           }
@@ -291,11 +766,10 @@ const ExpenseFormModal: React.FC<ExpenseFormModalProps> = ({
     }
   }, [open, expense, isEditMode, projects, projectPhases]); // Rerun when opening or expense/projects change
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
-    const { name, value } = e.target;
+  const handleChange = (name: string, value: any) => {
     setFormData({
       ...formData,
-      [name]: name === 'amount' ? parseFloat(value) || 0 : value,
+      [name]: value,
     });
 
     // Clear the error for this field if it exists
@@ -312,8 +786,9 @@ const ExpenseFormModal: React.FC<ExpenseFormModalProps> = ({
 
     if (name === 'projectId') {
       const selectedProject = projects.find(p => p.id === value);
-      const phases = selectedProject?.phases || [];
-      console.log(`Project changed to ${value}. Found phases:`, phases);
+      // Filter phases to ensure they have an ID before setting state
+      const phases = (selectedProject?.phases || []).filter((p): p is ProjectPhase => typeof p.id === 'string' && p.id !== '');
+      console.log(`Project changed to ${value}. Found phases (filtered):`, phases);
       setCurrentProjectPhases(phases); // Update the phases state
       setFormData({
         ...formData,
@@ -767,6 +1242,152 @@ const ExpenseFormModal: React.FC<ExpenseFormModalProps> = ({
     setTags(newTags);
   };
 
+  // Helper function to get expense description options based on phase
+  const getExpenseDescriptionOptions = (phaseId: string | undefined, projectPhases: ProjectPhase[]): string[] => {
+    // Start with common descriptions always
+    const applicableKeys: string[] = ["common"];
+    let phaseNameForLog = "(No Phase Selected)";
+
+    if (phaseId && projectPhases.length > 0) {
+      const phase = projectPhases.find(p => p.id === phaseId);
+      if (phase) {
+        phaseNameForLog = phase.name;
+        const phaseNameLower = phase.name.toLowerCase();
+        
+        console.log(`[getExpenseDescOptions] Analyzing phase: "${phase.name}" (ID: ${phase.id})`);
+
+        // Detect phase category based on name keywords
+        // Site work and excavation
+        if (phaseNameLower.includes("site") || 
+            phaseNameLower.includes("excav") || 
+            phaseNameLower.includes("demo") || 
+            phaseNameLower.includes("prep") || 
+            phaseNameLower.includes("clear")) {
+          applicableKeys.push("site_work");
+        }
+        
+        // Foundation work
+        if (phaseNameLower.includes("foundation") || 
+            phaseNameLower.includes("concrete") || 
+            phaseNameLower.includes("foot") || // catches footings/footing
+            phaseNameLower.includes("slab")) {
+          applicableKeys.push("foundation");
+        }
+        
+        // Framing
+        if (phaseNameLower.includes("frame") || 
+            phaseNameLower.includes("struct") || 
+            phaseNameLower.includes("joist") || 
+            phaseNameLower.includes("beam") || 
+            phaseNameLower.includes("truss")) {
+          applicableKeys.push("framing");
+        }
+        
+        // Rough-ins
+        if (phaseNameLower.includes("rough") || 
+            phaseNameLower.includes("plumb") || 
+            phaseNameLower.includes("electr") || 
+            phaseNameLower.includes("hvac") || 
+            phaseNameLower.includes("mechanic")) {
+          applicableKeys.push("rough_ins");
+        }
+        
+        // Exterior work
+        if (phaseNameLower.includes("exterior") || 
+            phaseNameLower.includes("roof") || 
+            phaseNameLower.includes("siding") || 
+            phaseNameLower.includes("window") || 
+            phaseNameLower.includes("door") || 
+            phaseNameLower.includes("flash")) {
+          applicableKeys.push("exterior");
+        }
+        
+        // Interior work
+        if (phaseNameLower.includes("interior") || 
+            phaseNameLower.includes("drywall") || 
+            phaseNameLower.includes("paint") || 
+            phaseNameLower.includes("wall") || 
+            phaseNameLower.includes("insul")) {
+          applicableKeys.push("interior");
+        }
+        
+        // Finishes
+        if (phaseNameLower.includes("finish") || 
+            phaseNameLower.includes("cabinet") || 
+            phaseNameLower.includes("counter") ||
+            phaseNameLower.includes("tile") || 
+            phaseNameLower.includes("floor") || 
+            phaseNameLower.includes("trim") || 
+            phaseNameLower.includes("paint")) {
+          applicableKeys.push("finishes");
+        }
+        
+        // Specialty items
+        if (phaseNameLower.includes("pool") || 
+            phaseNameLower.includes("special") || 
+            phaseNameLower.includes("custom") || 
+            phaseNameLower.includes("home theater") || 
+            phaseNameLower.includes("smart") || 
+            phaseNameLower.includes("automation")) {
+          applicableKeys.push("specialty");
+        }
+        
+        // Landscaping
+        if (phaseNameLower.includes("landscape") || 
+            phaseNameLower.includes("yard") || 
+            phaseNameLower.includes("garden") || 
+            phaseNameLower.includes("outdoor") || 
+            phaseNameLower.includes("patio") || 
+            phaseNameLower.includes("lawn")) {
+          applicableKeys.push("landscape");
+        }
+        
+        // Renovation
+        if (phaseNameLower.includes("renovat") || 
+            phaseNameLower.includes("remodel") || 
+            phaseNameLower.includes("restor") || 
+            phaseNameLower.includes("repair") || 
+            phaseNameLower.includes("updat")) {
+          applicableKeys.push("renovation");
+        }
+        
+        // Maintenance
+        if (phaseNameLower.includes("maint") || 
+            phaseNameLower.includes("repair") || 
+            phaseNameLower.includes("fix") || 
+            phaseNameLower.includes("service") || 
+            phaseNameLower.includes("clean")) {
+          applicableKeys.push("maintenance");
+        }
+      } else {
+        console.log(`[getExpenseDescOptions] Phase ID ${phaseId} provided but not found in phases list.`);
+      }
+    } else if (!phaseId) {
+        console.log('[getExpenseDescOptions] No phase selected.');
+    } else { // projectPhases.length === 0
+        console.log('[getExpenseDescOptions] Phase ID provided but phases list is empty.');
+    }
+
+    // Remove duplicates from applicableKeys
+    const uniqueKeys = Array.from(new Set(applicableKeys));
+    console.log(`[getExpenseDescOptions] For Phase: "${phaseNameForLog}", Applicable Keys:`, uniqueKeys);
+
+    // Collect descriptions from all applicable keys using a Set for automatic deduplication
+    const combinedDescriptions = new Set<string>();
+    uniqueKeys.forEach(key => {
+      const descriptions = PHASE_EXPENSE_DESCRIPTIONS[key] || [];
+      console.log(`[getExpenseDescOptions] Adding ${descriptions.length} descriptions from category "${key}"`);
+      descriptions.forEach(desc => combinedDescriptions.add(desc));
+    });
+
+    // Convert Set to sorted array
+    const finalOptions = Array.from(combinedDescriptions).sort();
+    
+    console.log(`[getExpenseDescOptions] Final Combined & Sorted Options: ${finalOptions.length} descriptions available`);
+    
+    return finalOptions;
+  };
+
   return (
     <>
     <Dialog
@@ -807,20 +1428,20 @@ const ExpenseFormModal: React.FC<ExpenseFormModalProps> = ({
           {/* Project + Date Row */}
           <Grid item xs={12} md={6}>
             <FormControl fullWidth error={!!errors.projectId} variant="outlined" size="small">
-            <InputLabel id="project-label">Project</InputLabel>
-            <Select
-              labelId="project-label"
-              id="projectId"
-              name="projectId"
-              value={formData.projectId || ''}
-              onChange={handleSelectChange}
-              label="Project"
-              disabled={!!expense?.projectId && !isEditMode}
-              startAdornment={
-                <InputAdornment position="start">
-                    <ProjectIcon fontSize="small" color="primary" />
-                </InputAdornment>
-              }
+              <InputLabel id="project-label">Project</InputLabel>
+              <Select
+                labelId="project-label"
+                id="projectId"
+                name="projectId"
+                value={formData.projectId || ''}
+                onChange={handleSelectChange}
+                label="Project"
+                disabled={!!expense?.projectId && !isEditMode}
+                startAdornment={
+                  <InputAdornment position="start">
+                      <ProjectIcon fontSize="small" color="primary" />
+                  </InputAdornment>
+                }
               >
                 <MenuItem value="" disabled>
                   <Typography variant="body2" color="text.secondary">Select a project</Typography>
@@ -830,92 +1451,70 @@ const ExpenseFormModal: React.FC<ExpenseFormModalProps> = ({
                     {project.name}
                   </MenuItem>
                 ))}
-            </Select>
+              </Select>
               {errors.projectId && (
                 <FormHelperText error>{errors.projectId}</FormHelperText>
               )}
-          </FormControl>
-        </Grid>
-        
+            </FormControl>
+          </Grid>
+
           <Grid item xs={12} md={6}>
-          <LocalizationProvider dateAdapter={AdapterDateFns}>
-            <DatePicker
-              label="Date"
+            <LocalizationProvider dateAdapter={AdapterDateFns}>
+              <DatePicker
+                label="Date"
                 value={typeof formData.date === 'string' ? new Date(formData.date) : formData.date || null}
-              onChange={handleDateChange}
-              slotProps={{
-                textField: {
-                  fullWidth: true,
-                  error: !!errors.date,
-                  helperText: errors.date,
-                    size: "small",
-                  InputProps: {
-                    startAdornment: (
-                      <InputAdornment position="start">
-                          <CalendarIcon fontSize="small" color="primary" />
-                      </InputAdornment>
+                onChange={handleDateChange}
+                slotProps={{
+                  textField: {
+                    fullWidth: true,
+                    error: !!errors.date,
+                    helperText: errors.date,
+                        size: "small",
+                    InputProps: {
+                      startAdornment: (
+                        <InputAdornment position="start">
+                            <CalendarIcon fontSize="small" color="primary" />
+                        </InputAdornment>
                       )
                     }
-                },
-              }}
-            />
-          </LocalizationProvider>
-        </Grid>
-        
-          {/* Description */}
-          <Grid item xs={12}>
-            <TextField
-              fullWidth
-              id="description"
-              name="description"
-              label="Description"
-              value={formData.description || ''}
-              onChange={handleChange}
-              error={!!errors.description}
-              helperText={errors.description || null}
-              placeholder="What is this expense for?"
-              size="small"
-              InputProps={{
-                startAdornment: (
-                  <InputAdornment position="start">
-                    <DescriptionIcon fontSize="small" color="primary" />
-                  </InputAdornment>
-                )
-              }}
-            />
+                  },
+                }}
+              />
+            </LocalizationProvider>
           </Grid>
-        
-          {/* Building Phase + Category Row */}
-        <Grid item xs={12} sm={6}>
-          <FormControl fullWidth size="small" error={!!errors.phaseId}>
-            <InputLabel id="phase-label">Phase</InputLabel>
-            <Select
-              labelId="phase-label"
-              id="phaseId"
-              name="phaseId"
-              value={formData.phaseId || ''}
-              label="Phase"
-              onChange={handlePhaseChange}
-              startAdornment={
-                <InputAdornment position="start">
-                  <BuildingPhaseIcon fontSize="small" color="action" />
-                </InputAdornment>
-              }
-              disabled={!formData.projectId || currentProjectPhases.length === 0}
-            >
-              <MenuItem value="">
-                <em>{formData.projectId ? (currentProjectPhases.length > 0 ? 'Select Phase' : 'No Phases Available') : 'Select Project First'}</em>
-              </MenuItem>
-              {PHASE_OPTIONS.map((option) => (
-                <MenuItem key={option.value} value={option.value}>
-                  {option.label}
+
+          {/* Phase Selection */}
+          <Grid item xs={12} sm={6}>
+            <FormControl fullWidth size="small" error={!!errors.phaseId}>
+              <InputLabel id="phase-label">Phase</InputLabel>
+              <Select
+                labelId="phase-label"
+                id="phaseId"
+                name="phaseId"
+                value={formData.phaseId || ''}
+                onChange={handlePhaseChange}
+                label="Phase"
+                startAdornment={
+                  <InputAdornment position="start">
+                    <BuildingPhaseIcon fontSize="small" color="action" />
+                  </InputAdornment>
+                }
+                disabled={!formData.projectId || currentProjectPhases.length === 0}
+              >
+                <MenuItem value="">
+                  <em>{formData.projectId ? (currentProjectPhases.length > 0 ? 'Select Phase' : 'No Phases Available') : 'Select Project First'}</em>
                 </MenuItem>
-              ))}
-            </Select>
-            {errors.phaseId && <FormHelperText>{errors.phaseId}</FormHelperText>}
-          </FormControl>
-        </Grid>
-        
+                {PHASE_OPTIONS.map((option) => (
+                  <MenuItem key={option.value} value={option.value}>
+                    {option.label}
+                  </MenuItem>
+                ))}
+              </Select>
+              {errors.phaseId && <FormHelperText>{errors.phaseId}</FormHelperText>}
+            </FormControl>
+          </Grid>
+
+          {/* Category Selection */}
           <Grid item xs={12} sm={6}>
             <FormControl fullWidth error={!!errors.category} variant="outlined" size="small">
               <InputLabel id="category-label">Category</InputLabel>
@@ -953,7 +1552,46 @@ const ExpenseFormModal: React.FC<ExpenseFormModalProps> = ({
               {errors.category && <FormHelperText error>{errors.category}</FormHelperText>}
             </FormControl>
           </Grid>
-          
+       
+          {/* Description */}
+          <Grid item xs={12}>
+            <Autocomplete
+              fullWidth
+              freeSolo
+              id="expense-description"
+              options={getExpenseDescriptionOptions(formData.phaseId, currentProjectPhases)}
+              value={formData.description || ''}
+              onChange={(event, newValue) => {
+                // Directly update the form data state
+                setFormData(prev => ({...prev, description: newValue || ''}));
+                // Clear potential error for description
+                if (errors.description) {
+                   setErrors(prev => ({...prev, description: undefined}));
+                }
+              }}
+              inputValue={formData.description || ''} // Keep controlled input value if needed for freeSolo interaction
+              onInputChange={(event, newInputValue) => {
+                // Update description as user types
+                setFormData(prev => ({...prev, description: newInputValue || ''}));
+                 // Clear potential error for description while typing
+                 if (errors.description) {
+                    setErrors(prev => ({...prev, description: undefined}));
+                 }
+              }}
+              renderInput={(params) => (
+                <TextField
+                  {...params}
+                  label="Description"
+                  required
+                  size="small"
+                  placeholder="Select or type a description..."
+                  error={!!errors.description}
+                  helperText={errors.description}
+                />
+              )}
+            />
+          </Grid>
+
           <Grid item xs={12} sm={6}>
             <VendorSelector
               value={formData.vendor || ''}
@@ -967,7 +1605,7 @@ const ExpenseFormModal: React.FC<ExpenseFormModalProps> = ({
               helperText={errors.vendor}
             />
           </Grid>
-          
+         
           {/* Subcontractor Selector - only visible when category is 'subcontractor' */}
           {formData.category === 'subcontractor' && (
             <Grid item xs={12} sm={6}>
@@ -979,19 +1617,19 @@ const ExpenseFormModal: React.FC<ExpenseFormModalProps> = ({
               />
             </Grid>
           )}
-          
+
           {/* Divider */}
-        <Grid item xs={12}>
-          <Divider sx={{ my: 1 }} />
+          <Grid item xs={12}>
+            <Divider sx={{ my: 1 }} />
           </Grid>
-          
+         
           {/* Amount Section */}
           <Grid item xs={12}>
             <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
               <Typography variant="subtitle2" fontWeight={600} color="text.primary">
                 Amount Details
-          </Typography>
-          
+              </Typography>
+         
               <FormControlLabel
                 control={
                   <Switch
@@ -1014,7 +1652,7 @@ const ExpenseFormModal: React.FC<ExpenseFormModalProps> = ({
                 label="Amount"
                 type="number"
                 value={formData.amount || ''}
-                onChange={handleChange}
+                onChange={(e) => handleChange('amount', parseFloat(e.target.value))}
                 error={!!errors.amount}
                 helperText={errors.amount || null}
                 size="small"
@@ -1029,18 +1667,18 @@ const ExpenseFormModal: React.FC<ExpenseFormModalProps> = ({
             ) : (
               <Box>
                 <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
-                <Button
-                  variant="outlined"
+                  <Button
+                    variant="outlined"
                     color="primary"
                     startIcon={<AddIcon />}
                     onClick={handleAddLineItem}
-                  size="small"
+                    size="small"
                     sx={{ 
                       textTransform: 'none',
                     }}
                   >
                     Add Item
-                </Button>
+                  </Button>
                   
                   <Typography variant="subtitle2" fontWeight={600} color="success.main">
                     Total: ${calculateTotalFromLineItems().toFixed(2)}
@@ -1100,9 +1738,6 @@ const ExpenseFormModal: React.FC<ExpenseFormModalProps> = ({
                                   value={item.unitPrice}
                                   onChange={(e) => handleLineItemChange(item.id, 'unitPrice', parseFloat(e.target.value) || 0)}
                                   error={!!errors.lineItems?.[item.id]?.unitPrice}
-                                  InputProps={{
-                                    startAdornment: <InputAdornment position="start">$</InputAdornment>,
-                                  }}
                                   inputProps={{ min: 0, step: 0.01, style: { textAlign: 'right' } }}
                                   variant="standard"
                                   size="small"
@@ -1131,18 +1766,18 @@ const ExpenseFormModal: React.FC<ExpenseFormModalProps> = ({
               </Box>
             )}
           </Grid>
-          
+
           {/* Divider */}
           <Grid item xs={12}>
             <Divider sx={{ my: 1 }} />
           </Grid>
-          
+         
           {/* Payment & Receipt Row */}
           <Grid item xs={12} sm={6}>
             <Typography variant="subtitle2" fontWeight={600} color="text.primary" gutterBottom>
               Payment Details
             </Typography>
-            
+           
             <FormControl fullWidth sx={{ mb: 1.5 }} size="small">
               <InputLabel id="status-label">Status</InputLabel>
               <Select
@@ -1208,7 +1843,7 @@ const ExpenseFormModal: React.FC<ExpenseFormModalProps> = ({
                     size="small"
                   />
                 </Grid>
-                
+
                 <Grid item xs={6}>
                   <TextField
                     fullWidth
@@ -1222,12 +1857,12 @@ const ExpenseFormModal: React.FC<ExpenseFormModalProps> = ({
               </Grid>
             )}
           </Grid>
-          
+
           <Grid item xs={12} sm={6}>
             <Typography variant="subtitle2" fontWeight={600} color="text.primary" gutterBottom>
               Receipt
             </Typography>
-            
+           
             {receiptPreview ? (
               <Box sx={{ position: 'relative', height: 120, display: 'flex', justifyContent: 'center' }}>
                 <img
@@ -1268,8 +1903,8 @@ const ExpenseFormModal: React.FC<ExpenseFormModalProps> = ({
                   id="receipt-file"
                 type="file"
                   style={{ display: 'none' }}
-                onChange={handleFileChange}
-              />
+                  onChange={handleFileChange}
+                />
                 <label htmlFor="receipt-file" style={{ width: '100%', textAlign: 'center' }}>
                   <Button
                     component="span"
@@ -1277,17 +1912,17 @@ const ExpenseFormModal: React.FC<ExpenseFormModalProps> = ({
                     sx={{ textTransform: 'none' }}
                   >
                     Upload Receipt
-            </Button>
+                  </Button>
                   <Typography variant="caption" display="block" color="text.secondary">
                     Drag & drop or click to browse
                   </Typography>
                 </label>
               </Box>
-          )}
-        </Grid>
-        
+            )}
+          </Grid>
+
           {/* Notes (optional) */}
-        <Grid item xs={12}>
+          <Grid item xs={12}>
             <Accordion
               disableGutters
               elevation={0}
@@ -1303,21 +1938,21 @@ const ExpenseFormModal: React.FC<ExpenseFormModalProps> = ({
                 <Typography variant="subtitle2">Additional Notes</Typography>
               </AccordionSummary>
               <AccordionDetails>
-              <TextField
-                fullWidth
-                      id="notes"
-                      name="notes"
-                multiline
-                rows={3}
-                value={formData.notes || ''}
-                onChange={handleChange}
-                      placeholder="Enter any additional notes here..."
-                      size="small"
-              />
+                <TextField
+                  fullWidth
+                  id="notes"
+                  name="notes"
+                  multiline
+                  rows={3}
+                  value={formData.notes || ''}
+                  onChange={(e) => handleChange('notes', e.target.value)}
+                  placeholder="Enter any additional notes here..."
+                  size="small"
+                />
               </AccordionDetails>
             </Accordion>
-        </Grid>
-          
+          </Grid>
+         
           {/* Tags section */}
           <Grid item xs={12}>
             <Typography variant="subtitle2" gutterBottom>
@@ -1357,7 +1992,7 @@ const ExpenseFormModal: React.FC<ExpenseFormModalProps> = ({
               Add tags to categorize this expense (press Enter after each tag)
             </Typography>
           </Grid>
-          
+         
           {/* Error message area */}
           {backendError && (
             <Grid item xs={12}>
@@ -1374,9 +2009,9 @@ const ExpenseFormModal: React.FC<ExpenseFormModalProps> = ({
               </Typography>
             </Grid>
           )}
-      </Grid>
-    </DialogContent>
-    
+        </Grid>
+      </DialogContent>
+      
       {/* Footer */}
       <DialogActions sx={{ px: 2.5, py: 1.5, borderTop: '1px solid', borderColor: 'divider' }}>
       <Button 

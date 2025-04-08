@@ -29,19 +29,7 @@ import {
   CheckCircle as ConfirmIcon,
 } from '@mui/icons-material';
 import { formatCurrency, formatDate } from '../../utils/formatters';
-
-interface Expense {
-  id: string;
-  description: string;
-  amount: number;
-  date: string;
-  vendor?: string;
-  projectId: string;
-  projectName?: string;
-  category: string;
-  status: string;
-  phaseId?: string;
-}
+import { Expense } from '../../types';
 
 interface PaymentFormModalProps {
   open: boolean;

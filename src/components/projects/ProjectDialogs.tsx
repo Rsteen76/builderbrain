@@ -147,7 +147,7 @@ const ProjectDialogs: React.FC<ProjectDialogsProps> = ({
           setCurrentPhaseForExpense(null); 
         }}
         onSave={handleAddQuickExpense}
-        projects={[{ id: project?.id || '', name: project?.name || '' }]}
+        projects={project ? [project] : []}
         expense={currentExpenseData}
         projectPhases={phases}
       />

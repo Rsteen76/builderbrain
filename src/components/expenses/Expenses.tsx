@@ -60,7 +60,7 @@ import {
 } from '@mui/icons-material';
 import { ExpenseService } from '../../services/expense';
 import { ProjectService } from '../../services/project';
-import { Expense, LineItem } from '../../types';
+import { Expense, Project, ProjectPhase } from '../../types';
 import { useAuth } from '../../contexts/AuthContext';
 import { formatCurrency, formatDate } from '../../utils/formatters';
 import ExpenseFormModal from './ExpenseFormModal';
@@ -75,25 +75,12 @@ const CATEGORY_ICONS = {
   other: <Avatar sx={{ bgcolor: '#ECEFF1', color: '#607D8B' }}><DescriptionIcon /></Avatar>,
 };
 
-// Define ProjectPhase locally or import if defined elsewhere
-interface ProjectPhase {
-  id: string;  // Changed from string | undefined to string
-  name: string;
-  // Add other relevant phase properties if needed
-}
-
-interface Project {
-  id: string;
-  name: string;
-  phases?: ProjectPhase[]; // Add phases here
-}
-
 const Expenses: React.FC<{ projectId?: string }> = ({ projectId }) => {
   const theme = useTheme();
   const { user } = useAuth();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [expenses, setExpenses] = useState<any[]>([]);
+  const [expenses, setExpenses] = useState<Expense[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
   const [tabValue, setTabValue] = useState(0);
   const [searchTerm, setSearchTerm] = useState('');
@@ -101,11 +88,11 @@ const Expenses: React.FC<{ projectId?: string }> = ({ projectId }) => {
   const [projectFilter, setProjectFilter] = useState<string | null>(null);
   const [expenseModalOpen, setExpenseModalOpen] = useState(false);
   const [paymentModalOpen, setPaymentModalOpen] = useState(false);
-  const [selectedExpense, setSelectedExpense] = useState<any>(null);
+  const [selectedExpense, setSelectedExpense] = useState<Partial<Expense> | null>(null);
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
   const [selectedExpenseId, setSelectedExpenseId] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
-  const [selectedProjectPhases, setSelectedProjectPhases] = useState<ProjectPhase[]>([]); // New state for phases
+  const [selectedProjectPhases, setSelectedProjectPhases] = useState<ProjectPhase[]>([]);
   const [snackbar, setSnackbar] = useState<{
     open: boolean;
     message: string;
@@ -149,14 +136,47 @@ const Expenses: React.FC<{ projectId?: string }> = ({ projectId }) => {
     setSelectedExpenseId(null);
   };
 
+  // --- Helper function to map raw phase data to ProjectPhase ---
+  // Ensures all required fields are present according to types/index.ts
+  const mapToProjectPhase = (phaseData: any): ProjectPhase => {
+    const id = phaseData.id!;
+    const name = phaseData.name!;
+
+    // *** USER TODO: YOU MUST ADD ALL OTHER REQUIRED FIELDS FROM src/types/index.ts ProjectPhase HERE ***
+    // Provide default values if necessary.
+    // Example defaults (VERIFY AGAINST YOUR ACTUAL TYPE DEFINITION):
+    const startDate = phaseData.startDate ? new Date(phaseData.startDate) : new Date();
+    const endDate = phaseData.endDate ? new Date(phaseData.endDate) : new Date();
+    const status = phaseData.status || 'Planned'; 
+    const progress = typeof phaseData.progress === 'number' ? phaseData.progress : 0; 
+    const budget = typeof phaseData.budget === 'number' ? phaseData.budget : 0; 
+    const actualCost = typeof phaseData.actualCost === 'number' ? phaseData.actualCost : 0; 
+
+    return {
+      id,
+      name,
+      startDate, // TODO: Verify field name and type
+      endDate,   // TODO: Verify field name and type
+      status,    // TODO: Verify field name and type
+      progress,  // TODO: Verify field name and type
+      budget,    // TODO: Verify field name and type
+      actualCost,// TODO: Verify field name and type
+      // ... add ALL OTHER required fields from ProjectPhase in src/types/index.ts
+    };
+  };
+  // --- End Helper Function ---
+
   const handleEditFromMenu = () => {
     if (selectedExpenseId) {
       const expenseToEdit = expenses.find(exp => exp.id === selectedExpenseId);
       if (expenseToEdit) {
-        setSelectedExpense(expenseToEdit);
-        // Find the project and its phases
+        setSelectedExpense(expenseToEdit); 
         const project = projects.find(p => p.id === expenseToEdit.projectId);
-        setSelectedProjectPhases(project?.phases || []); // Set phases for the modal
+        // Apply filter/map directly before setting state
+        const phases: ProjectPhase[] = (project?.phases || [])
+            .filter(p => !!p?.id && !!p?.name)
+            .map(mapToProjectPhase);
+        setSelectedProjectPhases(phases); 
         setExpenseModalOpen(true);
       }
     }
@@ -208,14 +228,13 @@ const Expenses: React.FC<{ projectId?: string }> = ({ projectId }) => {
     
     try {
       const fetchedProjects = await ProjectService.getProjects(user.uid);
-      setProjects(fetchedProjects.map(project => ({
-        id: project.id,
-        name: project.name,
-        phases: (project.phases || []).map(phase => ({
-          id: phase.id || '', // Ensure id is always a string
-          name: phase.name
-        }))
-      })));
+      const validatedProjects = fetchedProjects.map(proj => ({
+        ...proj,
+        phases: (proj.phases || [])
+                  .filter(p => !!p?.id && !!p?.name)
+                  .map(mapToProjectPhase)
+      }));
+      setProjects(validatedProjects);
     } catch (err) {
       console.error('Error fetching projects:', err);
     }
@@ -251,45 +270,46 @@ const Expenses: React.FC<{ projectId?: string }> = ({ projectId }) => {
         filters.projectId = projectFilter;
       }
       
-      // First get projects to ensure we have them for the expense lookup
-      const fetchedProjects = await ProjectService.getProjects(user.uid);
-      setProjects(fetchedProjects.map(project => ({
-        id: project.id,
-        name: project.name,
-        phases: (project.phases || []).map(phase => ({
-          id: phase.id || '', // Ensure id is always a string
-          name: phase.name
-        }))
-      })));
+      // Fetch projects first - Apply same validation/mapping as fetchProjects
+      let validatedProjects = projects;
+      if (validatedProjects.length === 0) { 
+          const fetched = await ProjectService.getProjects(user.uid);
+          validatedProjects = fetched.map(proj => ({
+              ...proj,
+              phases: (proj.phases || [])
+                        .filter(p => !!p?.id && !!p?.name)
+                        .map(mapToProjectPhase)
+          }));
+          setProjects(validatedProjects); 
+      }
       
-      // Project ID to name lookup map for faster lookups
-      const projectMap = fetchedProjects.reduce((map, project) => {
+      const projectMap = validatedProjects.reduce((map, project) => {
         map[project.id] = project.name;
         return map;
       }, {} as Record<string, string>);
       
-      // Now fetch expenses with our filters
       const fetchedExpenses = await ExpenseService.getExpenses(user.uid, filters);
       
-      // Add projectName to each expense by looking up the project ID
       const enhancedExpenses = fetchedExpenses.map(expense => {
         return {
           ...expense,
           projectName: projectMap[expense.projectId] || 'Unknown Project',
-          vendor: expense.vendor || '', // Ensure vendor is always a string
-        };
+          vendor: expense.vendor || '', 
+        } as Expense;
       });
       
-      console.log('Enhanced expenses with project names:', enhancedExpenses);
       setExpenses(enhancedExpenses);
       
-      // If we have a projectId, let's also fetch the project phases for the phase selector
-      if (projectId || projectFilter) {
-        const currentProjectId = projectId || projectFilter;
-        const currentProject = fetchedProjects.find(p => p.id === currentProjectId);
-        if (currentProject?.phases) {
-          setSelectedProjectPhases(currentProject.phases as ProjectPhase[]);
-        }
+      // Apply filter/map directly before setting state
+      const currentProjectIdForFilter = projectId || projectFilter;
+      if (currentProjectIdForFilter) {
+        const currentProject = validatedProjects.find(p => p.id === currentProjectIdForFilter);
+        const phases: ProjectPhase[] = (currentProject?.phases || [])
+            .filter(p => !!p?.id && !!p?.name)
+            .map(mapToProjectPhase);
+        setSelectedProjectPhases(phases);
+      } else {
+          setSelectedProjectPhases([]);
       }
     } catch (err) {
       console.error('Error fetching expenses:', err);
@@ -314,20 +334,17 @@ const Expenses: React.FC<{ projectId?: string }> = ({ projectId }) => {
   };
   
   const handleAddExpense = () => {
-    // Check if we are in a specific project context (projectId prop is set)
     if (projectId) {
-      // Find the current project from the fetched projects list
       const currentProject = projects.find(p => p.id === projectId);
-      const projectPhases = currentProject?.phases || [];
-      
-      // Set the phases for the modal's phase dropdown
+      // Apply filter/map directly before setting state
+      const projectPhases: ProjectPhase[] = (currentProject?.phases || [])
+            .filter(p => !!p?.id && !!p?.name)
+            .map(mapToProjectPhase); 
       setSelectedProjectPhases(projectPhases);
       
-      // Initialize the expense data with the current project ID
-      const initialExpenseData = {
+      const initialExpenseData: Partial<Expense> = {
         projectId: projectId,
-        // Auto-select the phase if there's only one
-        ...(projectPhases.length === 1 ? { 
+        ...(projectPhases.length === 1 && projectPhases[0].id ? { 
             phaseId: projectPhases[0].id, 
             phaseName: projectPhases[0].name 
         } : {})
@@ -335,9 +352,7 @@ const Expenses: React.FC<{ projectId?: string }> = ({ projectId }) => {
       
       console.log('handleAddExpense (Project Context): Initializing with:', initialExpenseData, 'Phases:', projectPhases);
       setSelectedExpense(initialExpenseData); 
-
     } else {
-      // Not in project context, reset everything for a generic new expense
       console.log('handleAddExpense (General Context): Resetting');
       setSelectedExpense(null); 
       setSelectedProjectPhases([]); 
@@ -346,11 +361,14 @@ const Expenses: React.FC<{ projectId?: string }> = ({ projectId }) => {
     setExpenseModalOpen(true);
   };
   
-  const handleViewExpense = (expense: any) => {
-    setSelectedExpense(expense);
-    // Find the project and its phases
+  const handleViewExpense = (expense: Expense) => {
+    setSelectedExpense(expense); 
     const project = projects.find(p => p.id === expense.projectId);
-    setSelectedProjectPhases(project?.phases || []); // Set phases for the modal
+    // Apply filter/map directly before setting state
+    const phases: ProjectPhase[] = (project?.phases || [])
+            .filter(p => !!p?.id && !!p?.name)
+            .map(mapToProjectPhase);
+    setSelectedProjectPhases(phases); 
     setExpenseModalOpen(true);
   };
   
@@ -778,6 +796,13 @@ const Expenses: React.FC<{ projectId?: string }> = ({ projectId }) => {
     );
   };
 
+  // Find the full expense object for the Payment Modal when rendering
+  const fullExpenseForPayment = React.useMemo(() => {
+      if (!selectedExpense?.id) return null;
+      // Find the full object from the main expenses list
+      return expenses.find(e => e.id === selectedExpense.id) || null;
+  }, [selectedExpense, expenses]);
+
   return (
     <Box sx={{ maxWidth: 1200, mx: 'auto', p: { xs: 2, sm: 3 } }}>
       {/* Header section */}
@@ -1081,25 +1106,27 @@ const Expenses: React.FC<{ projectId?: string }> = ({ projectId }) => {
         </MenuItem>
       </Menu>
 
-      {/* Expense Form Modal */}
+      {/* Expense Form Modal - Props should be correct now */}
       <ExpenseFormModal
-        key={`expense-form-${selectedExpense?.id || 'new'}-${selectedExpense?.updatedAt || Date.now()}`}
+        key={`expense-form-${selectedExpense?.id || 'new'}`}
         open={expenseModalOpen}
         onClose={handleCloseModal}
-        expense={selectedExpense}
+        expense={selectedExpense || undefined} 
         onSave={handleSaveExpense}
-        projects={projects}
-        projectPhases={selectedProjectPhases}
+        projects={projects} 
+        projectPhases={selectedProjectPhases} 
       />
       
-      {/* Payment Modal */}
+      {/* Payment Modal - Pass the full expense object or null */}
       <PaymentFormModal
+        key={`payment-form-${fullExpenseForPayment?.id || 'none'}`}
         open={paymentModalOpen}
         onClose={handleClosePaymentModal}
-        expense={selectedExpense}
+        expense={fullExpenseForPayment} // Pass the full object or null
         onSave={() => {
-          if (selectedExpense?.id) {
-            handleMarkAsPaid(selectedExpense.id);
+          // Use the ID from the full object if it exists
+          if (fullExpenseForPayment?.id) { 
+            handleMarkAsPaid(fullExpenseForPayment.id);
           }
         }}
       />
