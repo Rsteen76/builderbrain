@@ -9,6 +9,7 @@ import ProjectBidsTab from './ProjectBidsTab';
 import ProjectExpensesTab from './ProjectExpensesTab';
 import ProjectDocumentsTab from './ProjectDocumentsTab';
 import ProjectTaskManager from './ProjectTaskManager';
+import BudgetDashboard from '../budget/BudgetDashboard';
 
 // Removed unused formatter imports
 
@@ -43,28 +44,31 @@ const TabContent: React.FC<TabContentProps> = ({
         // handleAddPhase, combinedExpenses, theme, bids, handleOpenTemplateAdjuster
       )}
       {tabValue === 1 && (
+        <BudgetDashboard />
+      )}
+      {tabValue === 2 && (
         <ProjectPhasesTab />
         // Removed props: phases, bids, expenses, phaseProposedCosts, phaseActualCosts,
         // theme, handleAddPhase, onUpdatePhaseStatus, handleDeletePhase, 
         // handleOpenQuickBidDialog, handleOpenQuickExpenseDialog, handleViewPhaseDetails,
         // handleOpenTemplateAdjuster, getStatusColor, formatCurrency
       )}
-      {tabValue === 2 && (
+      {tabValue === 3 && (
         <ProjectBidsTab />
         // Removed props: projectId, bids, recentBids, theme, handleAddBid, 
         // handleEditBid, formatCurrency, formatDate
       )}
-      {tabValue === 3 && (
+      {tabValue === 4 && (
         <ProjectExpensesTab />
         // Removed props: projectId, expenses, expensesData, phases, theme,
         // handleOpenQuickExpenseDialog, formatCurrency
       )}
-      {tabValue === 4 && (
+      {tabValue === 5 && (
         <ProjectTaskManager />
         // Removed props: project, onProjectUpdate, userId
         // Note: ProjectTaskManager might need refactoring to use context/hooks too
       )}
-      {tabValue === 5 && (
+      {tabValue === 6 && (
         <ProjectDocumentsTab /> 
         // Assuming this doesn't need project context data yet
       )}

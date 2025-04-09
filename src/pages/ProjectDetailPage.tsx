@@ -204,7 +204,8 @@ const ProjectDetailContent: React.FC = () => {
           onSubmitSuccess={handleBidSubmitSuccess} 
           initialBidData={bidInitialData || undefined} 
           editingBidId={editingBidId}
-          projectId={projectId ?? undefined} 
+          projectId={projectId ?? undefined}
+          phases={phases}
           onAddSubcontractor={quickAddSubDialog.openQuickAddSubDialog}
         />
       )}

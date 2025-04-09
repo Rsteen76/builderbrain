@@ -201,6 +201,7 @@ const PHASE_BID_TITLES: Record<string, string[]> = {
   // Interior phase
   "interior": [
     "Drywall Installation",
+    "Insulation Installation",
     "Interior Trim",
     "Interior Painting",
     "Flooring Installation",
@@ -310,6 +311,7 @@ const BID_SCOPE_TEMPLATES: Record<string, string> = {
   
   // Interior scopes
   "Drywall Installation": "Install drywall according to specifications. Includes hanging, taping, mudding, sanding, and preparation for finish work.",
+  "Insulation Installation": "Install insulation according to specifications. Includes installation of insulation materials and application to building components.",
   "Interior Trim": "Install interior trim including baseboards, crown molding, window/door trim, and other decorative elements. Includes cutting, fitting, and installation of trim materials.",
   "Interior Painting": "Prepare and paint interior surfaces according to specifications. Includes surface preparation, primer application, and finish coat application.",
   "Flooring Installation": "Install flooring materials according to manufacturer specifications. Includes subfloor preparation, installation of underlayment, and installation of flooring materials.",
@@ -806,7 +808,7 @@ const ReusableBidForm: React.FC<ReusableBidFormProps> = ({
         if (phaseNameLower.includes("exterior") || phaseNameLower.includes("roof") || phaseNameLower.includes("siding")) {
           applicableKeys.push("exterior");
         }
-        if (phaseNameLower.includes("interior") || phaseNameLower.includes("drywall") || phaseNameLower.includes("paint")) {
+        if (phaseNameLower.includes("interior") || phaseNameLower.includes("drywall") || phaseNameLower.includes("paint") || phaseNameLower.includes("insulat")) {
           applicableKeys.push("interior");
         }
         if (phaseNameLower.includes("finish") || phaseNameLower.includes("cabinet") || phaseNameLower.includes("counter")) {
