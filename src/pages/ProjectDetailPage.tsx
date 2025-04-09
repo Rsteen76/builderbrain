@@ -92,7 +92,7 @@ const ProjectDetailContent: React.FC = () => {
     if (!phases || phases.length === 0) return 0;
     return calculateProjectProgress(phases);
   }, [phases]);
-
+  
   const expenseBreakdownData: ExpenseBreakdown = useMemo(() => {
     if (!expenses) return { pending: 0, approved: 0, paid: 0, rejected: 0 };
     return calculateExpenseBreakdown(expenses);
@@ -156,7 +156,7 @@ const ProjectDetailContent: React.FC = () => {
     const bidToDelete = bids.find((b: Bid | BidSummary) => b.id === bidId);
     if (bidToDelete) {
       requestDeleteBid(bidToDelete); 
-    } else {
+      } else {
        showNotification("Bid not found for deletion.", "error");
     }
   }, [bids, requestDeleteBid, showNotification]);
@@ -170,15 +170,15 @@ const ProjectDetailContent: React.FC = () => {
     <Box sx={{ mt: 4, mb: 4 }}> 
       <ProjectDetailHeader project={project} onEdit={() => {}} onArchive={() => {}} />
       <NotificationComponent /> 
-      <ProjectMetricCards 
-        project={project}
-        budgetData={budgetData}
+        <ProjectMetricCards 
+          project={project}
+          budgetData={budgetData}
         projectProgress={projectProgress}
         expenseBreakdown={expenseBreakdownData}
         timeline={timelineData}
-        theme={theme}
-        formatCurrency={formatCurrency}
-        formatPercentage={formatPercentage}
+          theme={theme}
+          formatCurrency={formatCurrency}
+          formatPercentage={formatPercentage}
         getStatusColor={(status: string) => {
           if (status?.includes('complete')) return theme.palette.success.main;
           if (status?.includes('progress')) return theme.palette.info.main;

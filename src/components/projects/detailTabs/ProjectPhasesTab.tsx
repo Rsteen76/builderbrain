@@ -87,7 +87,7 @@ const ProjectPhasesTab: React.FC = () => {
   const theme = useTheme();
   const {
     project,
-    phases,
+  phases,
     bids = [],
     expenses = [],
     loading,
