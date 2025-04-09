@@ -3,7 +3,7 @@ import React, { useState, useMemo, useCallback } from 'react';
 import { useParams } from 'react-router-dom';
 import {
   Container, Typography, CircularProgress, Alert, Tab, Tabs, Box,
-  Button, Menu, MenuItem, Snackbar
+  Button, Menu, MenuItem, Snackbar, IconButton, LinearProgress
 } from '@mui/material';
 import { AlertColor } from '@mui/material/Alert';
 import MoreVertIcon from '@mui/icons-material/MoreVert';
@@ -15,7 +15,7 @@ import { CheckCircle, ErrorOutline, Schedule, PlayCircleOutline, Block, HelpOutl
 import { ProjectDetailProvider, useProjectDetail } from '../contexts/ProjectDetailContext';
 
 // Components
-// import PageHeader from '../components/layout/PageHeader'; // Commented out - Path not found
+import ProjectDetailHeader from '../components/projects/ProjectDetailHeader';
 import ProjectMetricCards from '../components/projects/ProjectMetricCards';
 import TabContent from '../components/projects/detailTabs/TabContent';
 import BidFormDialog from '../components/dialogs/BidFormDialog';
@@ -24,11 +24,22 @@ import QuickAddSubcontractorDialog from '../components/dialogs/QuickAddSubcontra
 
 // Hooks & Services
 import { useAuth } from '../hooks/useAuth';
-import { BidService } from '../services/bid';
-import { ExpenseService } from '../services/expense';
+// Removed direct service imports, now handled by operation hooks
+// import { BidService } from '../services/bid';
+// import { ExpenseService } from '../services/expense';
+// Import Operation Hooks
+import { 
+  usePhaseOperations, 
+  useBidOperations, 
+  useExpenseOperations, 
+  useProjectOperations, 
+  useBidFormDialog,
+  useQuickAddSubcontractorDialog,
+  useNotification
+} from '../hooks';
 
 // Types & Utils
-import { ProjectPhase, Bid, Expense, Subcontractor, Project, Phase, ExpenseCategory } from '../types';
+import { ProjectPhase, Bid, Expense, Subcontractor, Project, Phase, ExpenseCategory, BidSummary } from '../types';
 import { calculateBudgetData } from '../utils/projectMetrics';
 import { calculateExpenseBreakdown, calculateExpensesChartData, calculateCombinedExpenses, ExpenseChartData, CombinedExpenseData, ExpenseBreakdown } from '../utils/expenseAnalytics';
 import { calculateProjectProgress, calculatePhaseProposedCosts, calculatePhaseActualCosts } from '../utils/phaseCalculations';
@@ -51,7 +62,7 @@ const ProjectDetailPage: React.FC = () => {
 const ProjectDetailContent: React.FC = () => {
   const {
     project, phases, bids, expenses, loading, error,
-    refreshAllProjectData, setPhases,
+    refreshAllProjectData, setPhases, setBids, setExpenses, // Get setters from context
     projectId
   } = useProjectDetail();
   const { user } = useAuth();
@@ -60,12 +71,92 @@ const ProjectDetailContent: React.FC = () => {
   // == Local UI State ==
   const [tabValue, setTabValue] = useState(0);
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null); // For Actions Menu
-  const [showBidForm, setShowBidForm] = useState(false);
-  const [editingBidId, setEditingBidId] = useState<string | null>(null);
-  const [showQuickAddSubcontractor, setShowQuickAddSubcontractor] = useState(false);
-  const [isSaving, setIsSaving] = useState(false); // For specific actions like updates/submits
-  const [actionError, setActionError] = useState<string | null>(null); // For errors from specific actions
-  const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'info' as AlertColor });
+  const [isSaving, setIsSaving] = useState(false); // Maybe rename or use hook's loading state
+  const [actionError, setActionError] = useState<string | null>(null); // Maybe rename or use hook's error state
+
+  // == Instantiate Notification Hook ==
+  const { showNotification, NotificationComponent } = useNotification();
+
+  // Define Callbacks BEFORE hook instantiation
+  const handleSubmitBidSuccess = useCallback((savedBid: Bid) => {
+     console.log('Bid saved successfully (via Dialog): ', savedBid.id);
+      refreshAllProjectData();
+     showNotification(editingBidId ? 'Bid updated successfully!' : 'Bid added successfully!', 'success');
+  }, [refreshAllProjectData, showNotification /* Add editingBidId dependency later if needed */]);
+  
+  // == Instantiate Operation Hooks ==
+  const { 
+    isUpdatingPhase, 
+    updatePhaseStatus 
+  } = usePhaseOperations({ 
+    projectId: projectId ?? '', 
+    onPhaseUpdate: (updatedPhase) => { 
+      setPhases(currentPhases => 
+        currentPhases.map(p => p.id === updatedPhase.id ? (updatedPhase as ProjectPhase) : p)
+      );
+    }
+  });
+
+  const { 
+    isOperating: isBidOperating, 
+    requestDeleteBid, 
+    duplicateBid 
+  } = useBidOperations({ 
+    projectId: projectId ?? '', 
+    onBidUpdate: (affectedBidId, operation) => {
+      // Refetch all data after delete/duplicate
+      showNotification(`Bid ${operation} successful!`, 'success');
+      refreshAllProjectData(); 
+    } 
+  });
+
+  const { 
+    isOperating: isExpenseOperating, 
+    addExpense, 
+    // updateExpense, // Not used directly here yet
+    deleteExpense 
+  } = useExpenseOperations({ 
+    projectId: projectId ?? '',
+    onExpenseUpdate: (newExpense, operation) => {
+      showNotification(`Expense ${operation} successful!`, 'success');
+      refreshAllProjectData();
+    },
+    onExpenseDelete: (deletedExpenseId) => {
+      showNotification('Expense deleted successfully!', 'success');
+      refreshAllProjectData();
+    }
+  });
+
+  const { 
+    isOperating: isProjectOperating, 
+    updateProjectDetails, 
+    deleteProject 
+  } = useProjectOperations({
+    onProjectUpdate: (updatedProject) => {
+      showNotification('Project details updated!', 'success');
+      refreshAllProjectData(); // Refresh to ensure consistency
+    },
+    // Default delete behavior (navigate) is likely fine, no callback needed
+  });
+
+  // == Instantiate Dialog Hooks ==
+  const bidFormDialog = useBidFormDialog(user?.uid, {
+    projectId: projectId ?? '',
+    onSubmitSuccess: handleSubmitBidSuccess, // Now defined
+    onError: (msg) => showNotification(msg, 'error'),
+  });
+  const { editingBidId } = bidFormDialog; // Get editingBidId from hook state
+  
+  // Instantiate Quick Add Sub Dialog Hook
+  const quickAddSubDialog = useQuickAddSubcontractorDialog({
+    onSubmitSuccess: (newSub) => {
+        showNotification(`Subcontractor ${newSub.name} added!`, 'success');
+        // Optionally refresh subcontractor list if needed elsewhere (e.g., in BidFormDialog)
+    }
+  });
+
+  // Combine ALL relevant loading states
+  const isProcessing = loading || isUpdatingPhase || isBidOperating || isExpenseOperating || isProjectOperating || quickAddSubDialog.isSavingSub;
 
   // == Placeholder Status Helpers ==
   const getStatusColor = useCallback((status: string): string => {
@@ -85,8 +176,8 @@ const ProjectDetailContent: React.FC = () => {
     if (status?.includes('delayed') || status?.includes('hold')) return <Block fontSize="small" />;
     if (status?.includes('reject') || status?.includes('cancel')) return <ErrorOutline fontSize="small" />;
     return <HelpOutline fontSize="small" />; // Default
-  }, []);
-
+  }, []);  
+  
   // == Memoized Calculations ==
   const budgetData = useMemo(() => {
     if (!project || !expenses) return { totalBudget: 0, totalActual: 0, difference: 0, percentUsed: 0 };
@@ -135,75 +226,19 @@ const ProjectDetailContent: React.FC = () => {
     setAnchorEl(null);
   }, []);
 
-  // --- Snackbar Notification ---
-  const showNotification = useCallback((message: string, severity: AlertColor = 'success') => {
-    setSnackbar({ open: true, message, severity });
-  }, []);
-
-  const handleCloseSnackbar = useCallback((event?: React.SyntheticEvent | Event, reason?: string) => {
-    if (reason === 'clickaway') {
-      return;
-    }
-    setSnackbar(prev => ({ ...prev, open: false }));
-  }, []);
-
-  // --- Phase Status Update ---
+  // --- Phase Status Update (Using Hook) ---
   const handleUpdatePhaseStatus = useCallback(async (phaseId: string, status: Phase['status']) => {
-    if (!user || !projectId) {
-        setActionError("Cannot update phase: Missing user or project ID.");
-        showNotification("Cannot update phase: Missing user or project ID.", "error");
-        return;
+    if (!status || !['not_started', 'in_progress', 'completed', 'on_hold'].includes(status)) {
+      console.error('Invalid status passed to handleUpdatePhaseStatus:', status);
+      showNotification(`Invalid phase status: ${status}`, 'error');
+      return; 
     }
+    await updatePhaseStatus(phaseId, status as 'not_started' | 'in_progress' | 'completed' | 'on_hold'); 
+  }, [updatePhaseStatus, showNotification]);
 
-    const originalPhases = [...phases];
-    const updatedPhases = phases.map(p => p.id === phaseId ? { ...p, status } : p);
-    if (updatedPhases.some(p => p.id === phaseId && p.status === status)) {
-        setPhases(updatedPhases);
-    } else {
-        console.error("Optimistic update failed to apply correctly.");
-    }
-
-    setIsSaving(true);
-    setActionError(null);
-    try {
-      // TODO: Find/implement actual phase status update service call
-      // await updatePhaseStatus(projectId, phaseId, status); // Call commented out
-      console.warn('Phase status update API call is not implemented yet.');
-      // Simulate API delay for optimistic UI
-      await new Promise(resolve => setTimeout(resolve, 500));
-      showNotification('Phase status updated (optimistically)!', 'success');
-    } catch (error: any) {
-      console.error("Error updating phase status (API call placeholder):", error);
-      const errorMsg = `Failed to update phase: ${error.message || 'API call not implemented'}`;
-      setActionError(errorMsg);
-      showNotification(errorMsg, "error");
-      setPhases(originalPhases); // Rollback
-    } finally {
-      setIsSaving(false);
-    }
-  }, [phases, setPhases, user?.uid, projectId, showNotification]);
-
-  // --- Bid Submission (Triggered by Dialog Success) ---
-  const handleSubmitBidSuccess = useCallback((savedBid: Bid) => {
-     console.log('Bid saved successfully (via Dialog): ', savedBid.id);
-     // Refresh data and show notification after successful save
-     refreshAllProjectData();
-     showNotification(editingBidId ? 'Bid updated successfully!' : 'Bid added successfully!', 'success');
-     // Reset editing state if needed (Dialog might handle this on close)
-     // setEditingBidId(null);
-  }, [refreshAllProjectData, showNotification, editingBidId]);
-
-  // --- Quick Expense Addition ---
+  // --- Quick Expense Addition (Using Hook) ---
   const handleAddQuickExpense = useCallback(async (description: string, amount: number, category: string, phaseId?: string) => {
-    if (!user || !projectId) {
-        const errorMsg = "Cannot add expense: Missing user or project ID.";
-        setActionError(errorMsg);
-        showNotification(errorMsg, "error");
-        return;
-    }
-
-    const newExpense: Omit<Expense, 'id' | 'createdAt' | 'updatedAt' | 'userId' | 'createdBy'> = {
-        projectId,
+    const newExpenseData: Partial<Expense> = {
         description,
         amount,
         category: category as ExpenseCategory,
@@ -211,99 +246,50 @@ const ProjectDetailContent: React.FC = () => {
         date: format(new Date(), 'yyyy-MM-dd'),
         phaseId: phaseId || undefined,
     };
+    await addExpense(newExpenseData);
+  }, [addExpense]);
 
-    setIsSaving(true);
-    setActionError(null);
-    try {
-      await ExpenseService.createExpense(user.uid, newExpense as any);
-      await refreshAllProjectData();
-      showNotification('Expense added successfully', 'success');
-    } catch (error: any) {
-      console.error("Error adding quick expense:", error);
-      const errorMsg = `Failed to add expense: ${error.message || 'Unknown error'}`;
-      setActionError(errorMsg);
-      showNotification(errorMsg, "error");
-    } finally {
-      setIsSaving(false);
-    }
-  }, [user?.uid, projectId, refreshAllProjectData, showNotification]);
-
-  // --- Placeholder Handlers (To be replaced by dedicated hooks/logic later) ---
+  // --- Placeholder Handlers ---
   const handleAddPhase = useCallback(() => {
       console.warn('handleAddPhase functionality not implemented yet.');
       showNotification('Add Phase action is not yet available.', 'info');
       // TODO: Implement using a dialog and PhaseService.createPhase
   }, [showNotification]);
 
+  // --- Bid Actions (Using Hooks & Accepting ID) ---
+  const handleAddBid = useCallback(() => {
+    bidFormDialog.openNewBidDialog(projectId); // Use dialog hook to open for new bid
+  }, [bidFormDialog, projectId]);
+  
   const handleEditBid = useCallback((bidId: string) => {
+    const bidSummary = bids.find(b => b.id === bidId);
+    if (bidSummary) {
       console.log('Opening bid form for editing bid ID:', bidId);
-      setEditingBidId(bidId);
-      setShowBidForm(true);
-  }, []);
+      bidFormDialog.openEditBidDialog(bidSummary);
+    } else {
+      console.error('Bid not found for editing:', bidId);
+      showNotification('Could not find bid to edit.', 'error');
+    }
+  }, [bids, bidFormDialog, showNotification]);
 
   const handleDeleteBid = useCallback((bidId: string) => {
-      console.warn('handleDeleteBid functionality not implemented yet.', bidId);
-      showNotification('Delete Bid action is not yet available.', 'info');
-      // TODO: Implement using useBidDeleteDialog hook and BidService.deleteBid
-      // Example: openBidDeleteDialog(bidId);
-  }, [showNotification]);
+    const bidSummary = bids.find(b => b.id === bidId);
+    if (bidSummary) {
+      // Revert cast to any, try casting to Bid
+      requestDeleteBid(bidSummary as Bid);
+    } else {
+      console.error('Bid not found for deletion request:', bidId);
+      showNotification('Could not find bid to delete.', 'error');
+    }
+  }, [bids, requestDeleteBid, showNotification]);
 
-  const handleAddBid = useCallback(() => {
-      console.log('Opening bid form for adding a new bid.');
-      setEditingBidId(null); // Ensure we are adding
-      setShowBidForm(true);
-  }, []);
-
-  const handleEditExpense = useCallback((expense: Expense) => {
-      console.warn('handleEditExpense functionality not implemented yet.', expense.id);
-      showNotification('Edit Expense action is not yet available.', 'info');
-      // TODO: Open Expense Form Dialog with expense data
-  }, [showNotification]);
-
-  const handleDeleteExpense = useCallback((expenseId: string) => {
-      console.warn('handleDeleteExpense functionality not implemented yet.', expenseId);
-      showNotification('Delete Expense action is not yet available.', 'info');
-      // TODO: Implement confirmation dialog and ExpenseService.deleteExpense
-  }, [showNotification]);
-
-  // --- Add Placeholders for missing TabContent handlers ---
-  const handleDeletePhase = useCallback((phaseId: string) => {
-    console.warn('handleDeletePhase not implemented', phaseId);
-    showNotification('Delete Phase not implemented.', 'info');
-  }, [showNotification]);
-
-  const handleAddExpense = useCallback(() => {
-    console.warn('handleAddExpense not implemented');
-    showNotification('Add Expense not implemented.', 'info');
-    // TODO: Likely open an Expense Form Dialog
-  }, [showNotification]);
-
-  const handleOpenQuickBidDialog = useCallback((phaseId?: string) => {
-    console.warn('handleOpenQuickBidDialog not implemented', phaseId);
-    showNotification('Quick Add Bid not implemented.', 'info');
-    // TODO: Open a simplified Bid Dialog, potentially pre-filled with phaseId
-  }, [showNotification]);
-
-  const handleOpenQuickExpenseDialog = useCallback((phaseId?: string) => {
-    console.warn('handleOpenQuickExpenseDialog not implemented', phaseId);
-    showNotification('Quick Add Expense not implemented.', 'info');
-    // TODO: Trigger Quick Expense Add, maybe using a simpler form/dialog
-  }, [showNotification]);
-
-  const handleOpenTemplateAdjuster = useCallback(() => {
-      console.warn('handleOpenTemplateAdjuster not implemented');
-      showNotification('Template Adjuster not implemented.', 'info');
-  }, [showNotification]);
-
-  const handleProjectUpdate = useCallback((updatedProject: Project) => {
-      console.warn('handleProjectUpdate not implemented', updatedProject);
-      showNotification('Project Update not implemented.', 'info');
-  }, [showNotification]);
-
-  const handleViewPhaseDetails = useCallback((phaseId: string) => {
-      console.warn('handleViewPhaseDetails not implemented', phaseId);
-      showNotification('View Phase Details not implemented.', 'info');
-  }, [showNotification]);
+  // --- Project Actions (Using Hook - Example for Menu) ---
+  const handleDeleteProject = useCallback(() => {
+    if (!projectId) return;
+    handleMenuClose(); // Close menu before potentially navigating away
+    deleteProject(projectId);
+    // Hook handles confirmation, API call, navigation
+  }, [projectId, deleteProject, handleMenuClose]);
 
   // == Conditional Returns ==
   // Show loading indicator only on initial load when project data isn't available yet
@@ -311,8 +297,8 @@ const ProjectDetailContent: React.FC = () => {
     return (
         // Use imported Box
         <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '80vh' }}>
-            <CircularProgress />
-        </Box>
+          <CircularProgress />
+                </Box>
     );
   }
 
@@ -328,157 +314,94 @@ const ProjectDetailContent: React.FC = () => {
 
   // == Render Project Details Page ==
   return (
-    // Use imported Container
     <Container maxWidth="lg" sx={{ mt: 4, mb: 4 }}>
-      {/* PageHeader usage commented out */}
-      {/* <PageHeader
-        title={project.name}
-        breadcrumbs={[{ label: 'Projects', path: '/projects' }, { label: project.name }]}
+      <ProjectDetailHeader 
+        project={project} 
+        onOpenMenu={handleMenuOpen} 
+      />
+      <Menu
+        anchorEl={anchorEl}
+        open={Boolean(anchorEl)}
+        onClose={handleMenuClose}
       >
-        <Button
-          aria-controls="project-actions-menu"
-          aria-haspopup="true"
-          onClick={handleMenuOpen}
-          variant="outlined"
-          endIcon={<MoreVertIcon />}
-        >
-          Actions
-        </Button>
-        <Menu
-          id="project-actions-menu"
-          anchorEl={anchorEl}
-          keepMounted
-          open={Boolean(anchorEl)}
-          onClose={handleMenuClose}
-        >
-          <MenuItem onClick={() => { handleAddBid(); handleMenuClose(); }}>Add New Bid</MenuItem>
-          <MenuItem onClick={() => { handleAddPhase(); handleMenuClose(); }}>Add New Phase</MenuItem>
-        </Menu>
-      </PageHeader> */}
+        <MenuItem onClick={handleMenuClose}>Edit Project (NYI)</MenuItem>
+        <MenuItem onClick={handleDeleteProject} sx={{ color: 'error.main' }}>Delete Project</MenuItem>
+      </Menu>
+        
+      {isProcessing && <LinearProgress sx={{ mb: 2 }} />}
 
-      <ProjectMetricCards
+      {/* Render the NotificationComponent provided by the hook */}
+      <NotificationComponent /> 
+
+      <ProjectMetricCards 
         project={project}
         budgetData={budgetData}
-        projectProgress={projectProgress}
-        expenseBreakdown={expenseBreakdownData}
-        timeline={timelineData}
+      projectProgress={projectProgress}
+      expenseBreakdown={expenseBreakdownData}
+      timeline={timelineData}
         theme={theme}
         formatCurrency={formatCurrency}
         formatPercentage={formatPercentage}
-        getStatusColor={getStatusColor}
-        getStatusIcon={getStatusIcon}
+      getStatusColor={getStatusColor}
+      getStatusIcon={getStatusIcon}
+    />
+
+    <Box sx={{ borderBottom: 1, borderColor: 'divider', mb: 3 }}>
+      <Tabs value={tabValue} onChange={handleTabChange} aria-label="Project Details Tabs">
+        <Tab label="Overview" />
+        <Tab label="Phases" />
+        <Tab label="Bids" />
+        <Tab label="Expenses" />
+        <Tab label="Documents" />
+        <Tab label="Tasks" />
+      </Tabs>
+    </Box>
+
+    <TabContent
+      tabValue={tabValue}
+      project={project}
+      phases={phases}
+      bids={bids}
+    expenses={expenses}
+    theme={theme}
+      recentBids={recentBids}
+    expensesData={expensesChartData}
+    combinedExpenses={combinedExpensesData}
+      budgetData={budgetData}
+      phaseProposedCosts={phaseProposedCosts}
+      phaseActualCosts={phaseActualCosts}
+      userId={user?.uid || ''}
+      getStatusColor={getStatusColor}
+      handleAddPhase={handleAddPhase}
+      handleEditBid={handleEditBid}
+      handleDeleteBid={handleDeleteBid}
+      onUpdatePhaseStatus={handleUpdatePhaseStatus}
+      handleAddBid={handleAddBid}
+      isLoading={isSaving || (loading && !phases.length && !bids.length)}
+      error={actionError || (tabValue > 0 ? error : null)}
+      onRefreshData={refreshAllProjectData}
+    />
+
+    {bidFormDialog.isModalOpen && (
+      <BidFormDialog
+        open={bidFormDialog.isModalOpen}
+        onClose={bidFormDialog.closeBidDialog}
+        onSubmitSuccess={bidFormDialog.handleBidSubmitSuccess}
+        initialBidData={bidFormDialog.initialBidData || undefined}
+        editingBidId={bidFormDialog.editingBidId}
+        projectId={projectId} 
+        onAddSubcontractor={quickAddSubDialog.openQuickAddSubDialog}
       />
+    )}
 
-      {/* Tabs Navigation */}
-      <Box sx={{ borderBottom: 1, borderColor: 'divider', mb: 3 }}>
-        {/* Use imported Tabs and Tab */}
-        <Tabs value={tabValue} onChange={handleTabChange} aria-label="Project Details Tabs">
-          <Tab label="Overview" />
-          <Tab label="Phases" />
-          <Tab label="Bids" />
-          <Tab label="Expenses" />
-          <Tab label="Documents" />
-          <Tab label="Tasks" />
-          {/* Potential future tabs */}
-        </Tabs>
-      </Box>
-
-      {/* Pass all required props to TabContent */}
-      <TabContent
-        tabValue={tabValue}
-        project={project}
-        phases={phases}
-        bids={bids}
-        expenses={expenses}
-        theme={theme}
-        recentBids={recentBids}
-        expensesData={expensesChartData}
-        combinedExpenses={combinedExpensesData}
-        budgetData={budgetData}
-        phaseProposedCosts={phaseProposedCosts}
-        phaseActualCosts={phaseActualCosts}
-        userId={user?.uid || ''}
-        getStatusColor={getStatusColor}
-        handleAddPhase={handleAddPhase}
-        onUpdatePhaseStatus={handleUpdatePhaseStatus}
-        handleDeletePhase={handleDeletePhase}
-        handleAddBid={handleAddBid}
-        handleEditBid={handleEditBid}
-        handleDeleteBid={handleDeleteBid}
-        handleAddExpense={handleAddExpense}
-        handleEditExpense={handleEditExpense}
-        handleDeleteExpense={handleDeleteExpense}
-        handleOpenQuickBidDialog={handleOpenQuickBidDialog}
-        handleOpenQuickExpenseDialog={handleOpenQuickExpenseDialog}
-        handleOpenTemplateAdjuster={handleOpenTemplateAdjuster}
-        handleProjectUpdate={handleProjectUpdate}
-        handleViewPhaseDetails={handleViewPhaseDetails}
-        isLoading={isSaving || (loading && !phases.length && !bids.length)}
-        error={actionError || (tabValue > 0 ? error : null)}
-        onRefreshData={refreshAllProjectData}
+    {quickAddSubDialog.isQuickAddSubDialogOpen && (
+      <QuickAddSubcontractorDialog
+        open={quickAddSubDialog.isQuickAddSubDialogOpen}
+        onClose={quickAddSubDialog.closeQuickAddSubDialog}
+        onSubmit={quickAddSubDialog.handleDialogSubmit} 
+        isSaving={quickAddSubDialog.isSavingSub} 
       />
-
-      {/* Dialogs & Portals Section */}
-
-      {/* Bid Form Dialog */}
-      {showBidForm && (
-            <BidFormDialog
-              open={showBidForm}
-              onClose={() => {
-                setShowBidForm(false);
-                setEditingBidId(null);
-              }}
-              onSubmitSuccess={handleSubmitBidSuccess}
-              projectId={project.id}
-              phases={phases}
-              initialBidData={editingBidId ? bids.find(b => b.id === editingBidId) as any : undefined}
-              editingBidId={editingBidId}
-              onAddSubcontractor={() => setShowQuickAddSubcontractor(true)}
-            />
-      )}
-
-      {/* Quick Add Subcontractor Dialog */}
-       {showQuickAddSubcontractor && (
-          <QuickAddSubcontractorDialog
-            open={showQuickAddSubcontractor}
-            onClose={() => setShowQuickAddSubcontractor(false)}
-            onSubmit={async (newSubData) => {
-                console.log("Subcontractor add requested (action pending):", newSubData);
-                setIsSaving(true);
-                try {
-                  // TODO: Replace with actual SubcontractorService.createSubcontractor call
-                  await new Promise(res => setTimeout(res, 500)); // Simulate API Call
-                  showNotification('Subcontractor added (placeholder).', 'info');
-                  // Optionally refresh data if needed (e.g., refreshAllProjectData or specific subcontractor list)
-                } catch(err) {
-                  showNotification('Failed to add subcontractor (placeholder).', 'error');
-                } finally {
-                  setIsSaving(false);
-                  setShowQuickAddSubcontractor(false);
-                }
-            }}
-            isSaving={isSaving}
-          />
-      )}
-
-      {/* Bid Delete Portal (Placeholder Comment) */}
-      {/* TODO: Implement BidDeletePortal & related state/hook */}
-      {/* <BidDeletePortal ... /> */}
-
-      {/* Snackbar for Notifications */}
-      {/* Use imported Snackbar */}
-      <Snackbar
-         open={snackbar.open}
-         autoHideDuration={6000}
-         onClose={handleCloseSnackbar}
-         anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
-      >
-           {/* Ensure Alert is used inside Snackbar for proper styling */}
-           {/* Use imported Alert */}
-           <Alert onClose={handleCloseSnackbar} severity={snackbar.severity} sx={{ width: '100%' }} variant="filled">
-               {snackbar.message}
-           </Alert>
-      </Snackbar>
+    )}
 
     </Container>
   );

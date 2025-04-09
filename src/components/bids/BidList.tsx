@@ -70,7 +70,7 @@ import FilterPanel from './FilterPanel';
 import BidListHeader from './BidListHeader';
 import BidListActions from './BidListActions';
 import { v4 as uuidv4 } from 'uuid';
-import { useBidDialogs } from '../../hooks';
+import { useBidFormDialog } from '../../hooks';
 
 // Status colors
 const bidStatusColors: Record<Bid['status'], string> = {
@@ -131,14 +131,14 @@ const BidList: React.FC<BidListProps> = ({ projectId, hideHeader = false }) => {
   const [selectedBidId, setSelectedBidId] = useState<string | null>(null);
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
   
-  // Use the bid dialogs hook instead of internal state
-  const bidDialogs = useBidDialogs(user?.uid, {
+  // Use the renamed hook
+  const bidDialogs = useBidFormDialog(user?.uid, {
     projectId,
-    onSubmitSuccess: (savedBid) => {
+    onSubmitSuccess: (savedBid: Bid) => {
       console.log('BidList - Bid saved/updated:', savedBid);
       fetchBids(); // Refetch the list after saving
     },
-    onError: (errorMsg) => {
+    onError: (errorMsg: string) => {
       setError(errorMsg);
     }
   });

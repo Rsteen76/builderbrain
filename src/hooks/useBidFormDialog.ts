@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
 import { v4 as uuidv4 } from 'uuid';
 import { BidService } from '../services/bid';
 import { Bid, BidSummary, BidFormData, BidCallbacks } from '../types';
@@ -8,11 +8,8 @@ import { safelyParseDate } from '../utils/formatters';
  * Options for initializing the useBidFormDialog hook
  */
 export interface UseBidFormDialogOptions {
-  /** Callback function to run after successfully submitting a bid */
   onSubmitSuccess?: (bid: Bid) => void;
-  /** Callback function to run when an error occurs */
   onError?: (error: string) => void;
-  /** Project ID to associate with new bids (optional) */
   projectId?: string;
 }
 
@@ -23,16 +20,12 @@ export interface UseBidFormDialogOptions {
  * used for creating and editing bids.
  */
 export function useBidFormDialog(userId: string | undefined, options: UseBidFormDialogOptions = {}) {
-  // State for the Bid Form Dialog
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingBidId, setEditingBidId] = useState<string | null>(null);
   const [initialBidData, setInitialBidData] = useState<Partial<BidFormData> | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  /**
-   * Helper function to format bid for the dialog
-   */
   const formatBidForDialog = (bid: Bid): Partial<BidFormData> => {
     let downPaymentPercent = 20;
     let installments: any[] = [];
@@ -75,12 +68,8 @@ export function useBidFormDialog(userId: string | undefined, options: UseBidForm
     };
   };
 
-  /**
-   * Opens the dialog for creating a new bid
-   */
   const openNewBidDialog = (defaultProjectId?: string) => {
     setEditingBidId(null);
-    // Set default initial data with projectId if provided
     setInitialBidData(defaultProjectId ? { projectId: defaultProjectId } : null);
     setIsModalOpen(true);
     setError(null);
@@ -89,7 +78,7 @@ export function useBidFormDialog(userId: string | undefined, options: UseBidForm
   /**
    * Opens the dialog for editing an existing bid
    */
-  const openEditBidDialog = async (bid: BidSummary) => {
+  const openEditBidDialog = useCallback(async (bid: Bid | BidSummary) => {
     if (!userId) {
       setError('User not authenticated');
       if (options.onError) options.onError('User not authenticated');
@@ -99,9 +88,7 @@ export function useBidFormDialog(userId: string | undefined, options: UseBidForm
     try {
       setLoading(true);
       setError(null);
-
-      // Fetch full bid using the ID from the summary
-      const fullBid = await BidService.getBid(userId, bid.id); 
+      const fullBid = await BidService.getBid(userId, bid.id);
       if (fullBid) {
         setInitialBidData(formatBidForDialog(fullBid));
         setEditingBidId(bid.id);
@@ -119,11 +106,9 @@ export function useBidFormDialog(userId: string | undefined, options: UseBidForm
     } finally {
       setLoading(false);
     }
-  };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [userId, options.onError]);
 
-  /**
-   * Closes the bid dialog and resets its state
-   */
   const closeBidDialog = () => {
     setIsModalOpen(false);
     setEditingBidId(null);
@@ -131,9 +116,6 @@ export function useBidFormDialog(userId: string | undefined, options: UseBidForm
     setError(null);
   };
 
-  /**
-   * Handles successful bid submission
-   */
   const handleBidSubmitSuccess = (savedBid: Bid) => {
     closeBidDialog();
     if (options.onSubmitSuccess) {
@@ -142,14 +124,11 @@ export function useBidFormDialog(userId: string | undefined, options: UseBidForm
   };
 
   return {
-    // Dialog state
     isModalOpen,
     editingBidId,
     initialBidData,
     loading,
     error,
-
-    // Dialog actions
     openNewBidDialog,
     openEditBidDialog,
     closeBidDialog,
