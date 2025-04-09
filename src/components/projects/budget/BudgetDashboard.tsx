@@ -71,6 +71,7 @@ import {
 import { useProjectDetail } from '../../../contexts/ProjectDetailContext';
 import { formatCurrency, formatPercentage, formatDate } from '../../../utils/formatters';
 import { Project, ProjectPhase, Bid, Expense } from '../../../types';
+import BudgetAllocationTracker from './BudgetAllocationTracker';
 
 const BudgetDashboard: React.FC = () => {
   const theme = useTheme();
@@ -333,126 +334,91 @@ const BudgetDashboard: React.FC = () => {
   }
 
   return (
-    <Box sx={{ p: 2 }}>
-      {/* Header with core metrics */}
-      <Box sx={{ 
-        mb: 4, 
-        p: 3, 
-        borderRadius: 2,
-        background: `linear-gradient(90deg, ${alpha(theme.palette.primary.main, 0.05)} 0%, ${alpha(theme.palette.primary.main, 0.15)} 100%)`,
-        border: `1px solid ${alpha(theme.palette.primary.main, 0.1)}`,
-      }}>
-        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-          <Typography variant="h4" fontWeight="bold">Budget Overview</Typography>
-          
-          <Box>
-            <Tooltip title="Export Budget Report">
-              <IconButton sx={{ mr: 1 }}>
-                <DownloadIcon />
-              </IconButton>
-            </Tooltip>
-            <Tooltip title="Print Budget Report">
-              <IconButton>
-                <PrintIcon />
-              </IconButton>
-            </Tooltip>
-          </Box>
-        </Box>
-        
-        <Typography variant="h6" sx={{ mb: 3, display: 'flex', alignItems: 'center' }}>
-          <AccountBalanceIcon sx={{ mr: 1, color: theme.palette.primary.main }} />
-          {project.name}
-          <Chip 
-            label={budgetHealth.status}
-            icon={budgetHealth.icon}
-            sx={{ 
-              ml: 2,
-              bgcolor: alpha(budgetHealth.color, 0.1),
-              color: budgetHealth.color,
-              fontWeight: 'bold'
-            }}
-          />
-        </Typography>
-        
-        <Grid container spacing={3}>
-          <Grid item xs={12} sm={6} md={3}>
-            <Paper elevation={0} sx={{ p: 2, borderRadius: 2, bgcolor: alpha(theme.palette.background.paper, 0.7) }}>
-              <Typography variant="subtitle2" color="text.secondary">Total Budget</Typography>
-              <Typography variant="h4" fontWeight="bold" sx={{ mt: 1 }}>
-                {formatCurrency(budgetSummary.totalBudget)}
-              </Typography>
-            </Paper>
-          </Grid>
-          
-          <Grid item xs={12} sm={6} md={3}>
-            <Paper elevation={0} sx={{ p: 2, borderRadius: 2, bgcolor: alpha(theme.palette.background.paper, 0.7) }}>
-              <Typography variant="subtitle2" color="text.secondary">Spent to Date</Typography>
-              <Typography variant="h4" fontWeight="bold" sx={{ mt: 1, color: theme.palette.primary.main }}>
-                {formatCurrency(budgetSummary.totalSpent)}
-              </Typography>
-              <Box sx={{ display: 'flex', alignItems: 'center', mt: 1 }}>
-                <Typography variant="body2" color="text.secondary">
-                  {formatPercentage(budgetSummary.percentSpent/100)} of budget used
-                </Typography>
-              </Box>
-            </Paper>
-          </Grid>
-          
-          <Grid item xs={12} sm={6} md={3}>
-            <Paper elevation={0} sx={{ p: 2, borderRadius: 2, bgcolor: alpha(theme.palette.background.paper, 0.7) }}>
-              <Typography variant="subtitle2" color="text.secondary">Remaining Budget</Typography>
-              <Typography 
-                variant="h4" 
-                fontWeight="bold" 
-                sx={{ 
-                  mt: 1, 
-                  color: budgetSummary.remaining >= 0 ? theme.palette.success.main : theme.palette.error.main 
-                }}
-              >
-                {formatCurrency(budgetSummary.remaining)}
-              </Typography>
-              <Box sx={{ display: 'flex', alignItems: 'center', mt: 1 }}>
-                <Typography variant="body2" color="text.secondary">
-                  {budgetSummary.remaining >= 0 ? 'Available' : 'Overrun'}
-                </Typography>
-              </Box>
-            </Paper>
-          </Grid>
-          
-          <Grid item xs={12} sm={6} md={3}>
-            <Paper elevation={0} sx={{ p: 2, borderRadius: 2, bgcolor: alpha(theme.palette.background.paper, 0.7) }}>
-              <Typography variant="subtitle2" color="text.secondary">Projected Total</Typography>
-              <Typography 
-                variant="h4" 
-                fontWeight="bold" 
-                sx={{ 
-                  mt: 1,
-                  color: budgetSummary.variance >= 0 ? theme.palette.success.main : theme.palette.error.main 
-                }}
-              >
-                {formatCurrency(budgetSummary.totalProjected || 0)}
-              </Typography>
-              <Box sx={{ display: 'flex', alignItems: 'center', mt: 1 }}>
-                {budgetSummary.variance >= 0 ? (
-                  <Box sx={{ display: 'flex', alignItems: 'center', color: theme.palette.success.main }}>
-                    <ArrowDownwardIcon fontSize="small" sx={{ mr: 0.5 }} />
-                    <Typography variant="body2" fontWeight="medium" color="inherit">
-                      {formatCurrency(budgetSummary.variance)} under budget
-                    </Typography>
-                  </Box>
-                ) : (
-                  <Box sx={{ display: 'flex', alignItems: 'center', color: theme.palette.error.main }}>
-                    <ArrowUpwardIcon fontSize="small" sx={{ mr: 0.5 }} />
-                    <Typography variant="body2" fontWeight="medium" color="inherit">
-                      {formatCurrency(Math.abs(budgetSummary.variance))} over budget
-                    </Typography>
-                  </Box>
-                )}
-              </Box>
-            </Paper>
-          </Grid>
+    <Box sx={{ p: { xs: 2, md: 3 } }}>
+      {/* Budget Overview Section */}
+      <Typography variant="h5" sx={{ mb: 3, fontWeight: 600 }}>
+        Budget Overview
+      </Typography>
+      
+      {/* Budget Overview Cards */}
+      <Grid container spacing={3} sx={{ mb: 4 }}>
+        <Grid item xs={12} sm={6} md={3}>
+          <Paper elevation={0} sx={{ p: 2, borderRadius: 2, bgcolor: alpha(theme.palette.background.paper, 0.7) }}>
+            <Typography variant="subtitle2" color="text.secondary">Total Budget</Typography>
+            <Typography variant="h4" fontWeight="bold" sx={{ mt: 1 }}>
+              {formatCurrency(budgetSummary.totalBudget)}
+            </Typography>
+          </Paper>
         </Grid>
-      </Box>
+        
+        <Grid item xs={12} sm={6} md={3}>
+          <Paper elevation={0} sx={{ p: 2, borderRadius: 2, bgcolor: alpha(theme.palette.background.paper, 0.7) }}>
+            <Typography variant="subtitle2" color="text.secondary">Spent to Date</Typography>
+            <Typography variant="h4" fontWeight="bold" sx={{ mt: 1, color: theme.palette.primary.main }}>
+              {formatCurrency(budgetSummary.totalSpent)}
+            </Typography>
+            <Box sx={{ display: 'flex', alignItems: 'center', mt: 1 }}>
+              <Typography variant="body2" color="text.secondary">
+                {formatPercentage(budgetSummary.percentSpent/100)} of budget used
+              </Typography>
+            </Box>
+          </Paper>
+        </Grid>
+        
+        <Grid item xs={12} sm={6} md={3}>
+          <Paper elevation={0} sx={{ p: 2, borderRadius: 2, bgcolor: alpha(theme.palette.background.paper, 0.7) }}>
+            <Typography variant="subtitle2" color="text.secondary">Remaining Budget</Typography>
+            <Typography 
+              variant="h4" 
+              fontWeight="bold" 
+              sx={{ 
+                mt: 1, 
+                color: budgetSummary.remaining >= 0 ? theme.palette.success.main : theme.palette.error.main 
+              }}
+            >
+              {formatCurrency(budgetSummary.remaining)}
+            </Typography>
+            <Box sx={{ display: 'flex', alignItems: 'center', mt: 1 }}>
+              <Typography variant="body2" color="text.secondary">
+                {budgetSummary.remaining >= 0 ? 'Available' : 'Overrun'}
+              </Typography>
+            </Box>
+          </Paper>
+        </Grid>
+        
+        <Grid item xs={12} sm={6} md={3}>
+          <Paper elevation={0} sx={{ p: 2, borderRadius: 2, bgcolor: alpha(theme.palette.background.paper, 0.7) }}>
+            <Typography variant="subtitle2" color="text.secondary">Projected Total</Typography>
+            <Typography 
+              variant="h4" 
+              fontWeight="bold" 
+              sx={{ 
+                mt: 1,
+                color: budgetSummary.variance >= 0 ? theme.palette.success.main : theme.palette.error.main 
+              }}
+            >
+              {formatCurrency(budgetSummary.totalProjected || 0)}
+            </Typography>
+            <Box sx={{ display: 'flex', alignItems: 'center', mt: 1 }}>
+              {budgetSummary.variance >= 0 ? (
+                <Box sx={{ display: 'flex', alignItems: 'center', color: theme.palette.success.main }}>
+                  <ArrowDownwardIcon fontSize="small" sx={{ mr: 0.5 }} />
+                  <Typography variant="body2" fontWeight="medium" color="inherit">
+                    {formatCurrency(budgetSummary.variance)} under budget
+                  </Typography>
+                </Box>
+              ) : (
+                <Box sx={{ display: 'flex', alignItems: 'center', color: theme.palette.error.main }}>
+                  <ArrowUpwardIcon fontSize="small" sx={{ mr: 0.5 }} />
+                  <Typography variant="body2" fontWeight="medium" color="inherit">
+                    {formatCurrency(Math.abs(budgetSummary.variance))} over budget
+                  </Typography>
+                </Box>
+              )}
+            </Box>
+          </Paper>
+        </Grid>
+      </Grid>
       
       {/* Main content grid */}
       <Grid container spacing={3}>
@@ -965,6 +931,14 @@ const BudgetDashboard: React.FC = () => {
           </Card>
         </Grid>
       </Grid>
+      
+      {/* Add Budget Allocation Tracker here, right before the final closing tag */}
+      <BudgetAllocationTracker 
+        project={project}
+        phases={phases}
+        expenses={expenses}
+        bids={bids}
+      />
     </Box>
   );
 };
