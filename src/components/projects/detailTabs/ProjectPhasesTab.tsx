@@ -52,8 +52,9 @@ import { formatCurrency, formatDate, truncateText, safelyParseDate } from '../..
 import { getPhaseBids, getPhaseExpenses } from '../../../utils/phaseCalculations';
 import PhaseTimelineChart from '../charts/PhaseTimelineChart';
 import PhaseCard from './PhaseCard';
-
 import { ProjectPhase, Bid, Expense } from '../../../types';
+import { usePhaseExpandState } from '../../../hooks/usePhaseExpandState';
+import { usePhaseMenuState } from '../../../hooks/usePhaseMenuState';
 
 // Available phase statuses
 const PHASE_STATUSES: ProjectPhase['status'][] = [
@@ -103,53 +104,32 @@ const ProjectPhasesTab: React.FC<ProjectPhasesTabProps> = ({
   // Get breakpoint for responsive design
   const isXs = useMediaQuery(theme.breakpoints.only('xs'));
   
-  // Add state for expanded details
-  const [expandedPhases, setExpandedPhases] = useState<Record<string, boolean>>({});
-  const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
-  const [selectedPhaseId, setSelectedPhaseId] = useState<string | null>(null);
+  // Use the custom hook for expansion state
+  const { expandedPhases, handleToggleExpand } = usePhaseExpandState();
+
+  // Use custom hooks for UI state
+  const {
+    actionAnchorEl,
+    actionMenuPhaseId,
+    handleActionMenuOpen,
+    handleActionMenuClose,
+    isActionMenuOpen,
+    statusAnchorEl,
+    statusMenuPhaseId,
+    handleStatusMenuOpen,
+    handleStatusMenuClose,
+    isStatusMenuOpen,
+  } = usePhaseMenuState();
+
   const appTheme = useTheme();
   
-  // Toggle expanded state for a phase
-  const handleToggleExpand = (phaseId: string) => {
-    setExpandedPhases(prev => ({
-      ...prev,
-      [phaseId]: !prev[phaseId]
-    }));
-  };
-
-  // Phase menu handling
-  const handlePhaseMenuOpen = (event: React.MouseEvent<HTMLElement>, phaseId: string) => {
-    event.stopPropagation();
-    setAnchorEl(event.currentTarget);
-    setSelectedPhaseId(phaseId);
-  };
-
-  const handlePhaseMenuClose = () => {
-    setAnchorEl(null);
-    setSelectedPhaseId(null);
-  };
-
-  // --- Status Update Menu Handlers ---
-  const [statusMenuAnchorEl, setStatusMenuAnchorEl] = useState<null | HTMLElement>(null);
-  const [statusMenuPhaseId, setStatusMenuPhaseId] = useState<string | null>(null);
-
-  const handleStatusMenuOpen = (event: React.MouseEvent<HTMLElement>, phaseId: string) => {
-    event.stopPropagation(); // Prevent card click/expand
-    setStatusMenuAnchorEl(event.currentTarget);
-    setStatusMenuPhaseId(phaseId);
-  };
-
-  const handleStatusMenuClose = () => {
-    setStatusMenuAnchorEl(null);
-    setStatusMenuPhaseId(null);
-  };
-
-  const handleStatusSelect = (status: ProjectPhase['status']) => {
+  // Status selection handler - uses hook state
+  const handleStatusSelect = useCallback((status: ProjectPhase['status']) => {
     if (statusMenuPhaseId) {
       onUpdatePhaseStatus(statusMenuPhaseId, status);
     }
     handleStatusMenuClose();
-  };
+  }, [statusMenuPhaseId, onUpdatePhaseStatus, handleStatusMenuClose]);
 
   // Re-add getPhaseStatusIcon definition here
   const getPhaseStatusIcon = useCallback((status: string): React.ReactElement => {
@@ -256,6 +236,7 @@ const ProjectPhasesTab: React.FC<ProjectPhasesTabProps> = ({
           {phases.map((phase) => {
             const proposedCost = phaseProposedCosts[phase.id] || 0;
             const actualCost = phaseActualCosts[phase.id] || 0;
+            const isExpanded = expandedPhases[phase.id] || false;
 
             return (
               <Grid item xs={12} md={6} lg={4} key={phase.id}>
@@ -264,7 +245,7 @@ const ProjectPhasesTab: React.FC<ProjectPhasesTabProps> = ({
                   proposedCost={proposedCost}
                   actualCost={actualCost}
                   onStatusMenuOpen={handleStatusMenuOpen}
-                  onPhaseMenuOpen={handlePhaseMenuOpen}
+                  onPhaseMenuOpen={handleActionMenuOpen}
                   onOpenQuickExpenseDialog={handleOpenQuickExpenseDialog}
                   onOpenQuickBidDialog={handleOpenQuickBidDialog}
                   onViewPhaseDetails={handleViewPhaseDetails}
@@ -318,11 +299,11 @@ const ProjectPhasesTab: React.FC<ProjectPhasesTabProps> = ({
         </Box>
       )}
       
-      {/* Phase action menu */}
+      {/* Phase Action Menu - Uses hook state/handlers */}
       <Menu
-        anchorEl={anchorEl}
-        open={Boolean(anchorEl)}
-        onClose={handlePhaseMenuClose}
+        anchorEl={actionAnchorEl}
+        open={isActionMenuOpen}
+        onClose={handleActionMenuClose}
         transformOrigin={{ horizontal: 'right', vertical: 'top' }}
         anchorOrigin={{ horizontal: 'right', vertical: 'bottom' }}
         PaperProps={{
@@ -336,9 +317,9 @@ const ProjectPhasesTab: React.FC<ProjectPhasesTabProps> = ({
       >
         <MenuItem 
           onClick={() => {
-            if (selectedPhaseId) {
-              handleViewPhaseDetails(selectedPhaseId);
-              handlePhaseMenuClose();
+            if (actionMenuPhaseId) {
+              handleViewPhaseDetails(actionMenuPhaseId);
+              handleActionMenuClose();
             }
           }}
           sx={{ borderRadius: 1, py: 1 }}
@@ -351,9 +332,9 @@ const ProjectPhasesTab: React.FC<ProjectPhasesTabProps> = ({
         <Divider sx={{ my: 0.5 }} />
         <MenuItem 
           onClick={() => {
-            if (selectedPhaseId) {
-              handleDeletePhase(selectedPhaseId);
-              handlePhaseMenuClose();
+            if (actionMenuPhaseId) {
+              handleDeletePhase(actionMenuPhaseId);
+              handleActionMenuClose();
             }
           }}
           sx={{ borderRadius: 1, py: 1, color: theme.palette.error.main }}
@@ -365,10 +346,10 @@ const ProjectPhasesTab: React.FC<ProjectPhasesTabProps> = ({
         </MenuItem>
       </Menu>
       
-      {/* Status Update Menu */}
+      {/* Status Update Menu - Uses hook state/handlers */}
       <Menu
-        anchorEl={statusMenuAnchorEl}
-        open={Boolean(statusMenuAnchorEl)}
+        anchorEl={statusAnchorEl}
+        open={isStatusMenuOpen}
         onClose={handleStatusMenuClose}
       >
         {PHASE_STATUSES.map((status) => (

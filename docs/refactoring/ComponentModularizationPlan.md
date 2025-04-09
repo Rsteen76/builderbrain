@@ -79,15 +79,15 @@ Through code analysis, we've identified the following components that require im
 
 #### 2.3 Extract Helper Functions
 
-- [ ] Move `getPhasePayments` to a utility file
-- [ ] Move `getPhaseBids` to a utility file
-- [ ] Move `getPhaseExpenses` to a utility file
-- [ ] Move status-related functions to a utility file
+- [x] Move `getPhasePayments` to a utility file
+- [x] Move `getPhaseBids` to a utility file
+- [x] Move `getPhaseExpenses` to a utility file
+- [x] Move status-related functions to a utility file
 
 #### 2.4 Create Local State Hooks
 
-- [ ] Create a `usePhaseExpandState` hook for expand/collapse state
-- [ ] Create a `usePhaseMenuState` hook for menu state
+- [x] Create a `usePhaseExpandState` hook for expand/collapse state
+- [x] Create a `usePhaseMenuState` hook for menu state
 
 ### 3. Other Tab Components
 
