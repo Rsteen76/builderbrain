@@ -5,7 +5,7 @@ import { useAuth } from './useAuth'; // To get userId
 import { toast } from 'react-hot-toast';
 
 // Define the status union type explicitly for clarity if desired, or use Phase['status']
-type PhaseStatusType = 'not_started' | 'in_progress' | 'completed' | 'on_hold';
+export type PhaseStatusType = 'not_started' | 'in_progress' | 'completed' | 'on_hold';
 
 // Define options/arguments for the hook
 interface UsePhaseOperationsOptions {

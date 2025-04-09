@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
-import { Project, ProjectPhase, Bid, Expense, BidFormData, BidSummary } from '../types';
+import { Project, ProjectPhase, Bid, Expense, BidFormData, BidSummary, Phase } from '../types';
 import { useProjectData } from '../hooks/useProjectData'; // Keep using this for core data
 // Import necessary hooks FOR the provider
 import { useAuth } from '../hooks/useAuth';
@@ -7,6 +7,9 @@ import { useNotification } from '../hooks/useNotification';
 import { useBidFormDialog } from '../hooks/useBidFormDialog';
 import { useBidOperations } from '../hooks/useBidOperations';
 import { useExpenseFormDialog } from '../hooks/useExpenseFormDialog'; // Import expense dialog hook and type
+// Import the remaining operation hooks
+import { usePhaseOperations, PhaseStatusType } from '../hooks/usePhaseOperations';
+import { useExpenseOperations } from '../hooks/useExpenseOperations';
 
 // --- Context Shape ---
 interface ProjectDetailContextState {
@@ -51,6 +54,16 @@ interface ProjectDetailContextState {
   openEditExpenseDialog: (expense: Expense) => void; // Correct signature
   closeExpenseDialog: () => void; // Renamed
   // Removed isExpenseSubmitting, expenseDialogError - hook doesn't provide them
+
+  // Phase Operations State & Actions
+  isUpdatingPhase: boolean;
+  updatePhaseStatus: (phaseId: string, status: PhaseStatusType) => Promise<void>;
+
+  // Expense Operations State & Actions
+  isExpenseOperating: boolean;
+  addExpense: (expenseData: Partial<Expense>) => Promise<Expense | null>;
+  updateExpense: (expenseId: string, expenseData: Partial<Expense>) => Promise<void>;
+  deleteExpense: (expenseId: string) => Promise<void>;
 }
 
 // --- Default Context Value ---
@@ -89,6 +102,16 @@ const defaultContextValue: ProjectDetailContextState = {
   openEditExpenseDialog: () => { console.warn("openEditExpenseDialog called on default context"); }, // Returns void
   closeExpenseDialog: () => { console.warn("closeExpenseDialog called on default context"); },
   // Removed isExpenseSubmitting, expenseDialogError defaults
+
+  // Phase Operations Defaults
+  isUpdatingPhase: false,
+  updatePhaseStatus: async () => { console.warn("updatePhaseStatus called on default context"); },
+
+  // Expense Operations Defaults
+  isExpenseOperating: false,
+  addExpense: async () => { console.warn("addExpense called on default context"); return null; },
+  updateExpense: async () => { console.warn("updateExpense called on default context"); },
+  deleteExpense: async () => { console.warn("deleteExpense called on default context"); },
 };
 
 // --- Create Context ---
@@ -146,6 +169,29 @@ export const ProjectDetailProvider: React.FC<ProjectDetailProviderProps> = ({ ch
     onError: (msg: string) => showNotification(msg, 'error'), // Add type to msg
   });
 
+  // Instantiate Phase Operations Hook
+  const phaseOperations = usePhaseOperations({
+    projectId: actualProjectId,
+    onPhaseUpdate: (updatedPhase: Phase) => {
+      // Hook uses toast, just refresh data
+      refreshAllProjectData(); 
+    },
+    // Assuming no specific onError needed here as hook uses toast
+  });
+
+  // Instantiate Expense Operations Hook
+  const expenseOperations = useExpenseOperations({
+    projectId: actualProjectId,
+    onExpenseUpdate: (expense: Expense, operation: 'add' | 'update') => {
+       // Hook uses toast, just refresh data
+      refreshAllProjectData();
+    },
+    onExpenseDelete: (deletedId: string) => {
+       // Hook uses toast, just refresh data
+      refreshAllProjectData();
+    },
+  });
+
   // === Construct Context Value ===
   const contextValue: ProjectDetailContextState = {
     projectId: actualProjectId,
@@ -182,6 +228,16 @@ export const ProjectDetailProvider: React.FC<ProjectDetailProviderProps> = ({ ch
     openNewExpenseDialog: expenseFormDialog.openNewExpenseDialog,
     openEditExpenseDialog: expenseFormDialog.openEditExpenseDialog,
     closeExpenseDialog: expenseFormDialog.closeExpenseDialog,
+
+    // Phase Operations Values
+    isUpdatingPhase: phaseOperations.isUpdatingPhase,
+    updatePhaseStatus: phaseOperations.updatePhaseStatus,
+
+    // Expense Operations Values
+    isExpenseOperating: expenseOperations.isOperating,
+    addExpense: expenseOperations.addExpense,
+    updateExpense: expenseOperations.updateExpense,
+    deleteExpense: expenseOperations.deleteExpense,
   };
 
   return (

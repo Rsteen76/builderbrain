@@ -30,9 +30,7 @@ import { useAuth } from '../hooks/useAuth';
 // import { ExpenseService } from '../services/expense';
 // Import Operation Hooks
 import { 
-  usePhaseOperations, 
   useBidOperations, 
-  useExpenseOperations, 
   useProjectOperations, 
   useBidFormDialog,
   useQuickAddSubcontractorDialog,
@@ -50,50 +48,37 @@ import { formatCurrency, formatPercentage } from '../utils/formatters';
 // --- Inner Content Component (Defined BEFORE ProjectDetailPage) ---
 const ProjectDetailContent: React.FC = () => {
   const {
-    // Core data & context functions
+    // Core data
     project, phases, bids, expenses, loading, error, projectId,
+    // Context Functions
     refreshAllProjectData, showNotification, NotificationComponent,
-    // Bid Dialog state & actions from context
+    // Bid Dialog state & actions
     isBidModalOpen, bidInitialData, editingBidId, 
-    openNewBidDialog, openEditBidDialog, closeBidDialog, handleBidSubmitSuccess,
+    openNewBidDialog, openEditBidDialog, closeBidDialog, handleBidSubmitSuccess, 
     isBidSubmitting, bidDialogError,
-    // Bid Operations from context
-    requestDeleteBid, duplicateBid, isBidOperating
+    // Bid Operations
+    requestDeleteBid, duplicateBid, isBidOperating,
+    // Expense Dialog State & Actions
+    isExpenseDialogOpen, editingExpenseId, initialExpenseData,
+    openNewExpenseDialog, openEditExpenseDialog, closeExpenseDialog,
+    // Phase Operations State & Actions
+    isUpdatingPhase,
+    updatePhaseStatus,
+    // Expense Operations State & Actions
+    isExpenseOperating,
+    addExpense,
+    updateExpense,
+    deleteExpense,
   } = useProjectDetail();
   
   const { user } = useAuth();
   const theme = useTheme();
   const [tabValue, setTabValue] = useState(0);
-  const [isSaving, setIsSaving] = useState(false); // Maybe rename or use hook's loading state
-  const [actionError, setActionError] = useState<string | null>(null); // Maybe rename or use hook's error state
-
-  // Re-instantiate local operation hooks, using context functions for refresh/notifications
-  const { updatePhaseStatus, isUpdatingPhase } = usePhaseOperations({
-    projectId: projectId ?? '',
-    // Define onPhaseUpdate correctly: it receives the updated phase
-    onPhaseUpdate: (updatedPhase: Phase) => {
-      showNotification('Phase status updated (simulated)', 'info'); // Example notification
-      refreshAllProjectData(); // Refresh data via context
-    }, 
-  });
-
-  const { addExpense, isOperating: isExpenseOperating } = useExpenseOperations({
-    projectId: projectId ?? '',
-    // Define onExpenseUpdate correctly
-    onExpenseUpdate: (expense: Expense, operation: 'add' | 'update') => {
-      showNotification(`Expense ${operation} successful!`, 'success');
-      refreshAllProjectData(); // Refresh data via context
-    },
-    // Define onExpenseDelete correctly
-    onExpenseDelete: (deletedId: string) => {
-      showNotification('Expense deleted successfully!', 'success');
-      refreshAllProjectData(); // Refresh data via context
-    },
-  });
 
   // Keep Quick Add Subcontractor Dialog hook local
   const quickAddSubDialog = useQuickAddSubcontractorDialog();
 
+  // Update combined loading state
   const isProcessing = loading || isUpdatingPhase || isBidOperating || isExpenseOperating || quickAddSubDialog.isSavingSub || isBidSubmitting;
 
   // --- Memoized Calculations ---
@@ -130,31 +115,27 @@ const ProjectDetailContent: React.FC = () => {
     setTabValue(newValue);
   }, []);
 
-  // Use local hook for phase status update
+  // Use updatePhaseStatus from context
   const handleUpdatePhaseStatus = useCallback(async (phaseId: string, status: Phase['status']) => {
     if (!status || !['not_started', 'in_progress', 'completed', 'on_hold'].includes(status)) {
       showNotification(`Invalid phase status: ${status}`, 'error');
       return; 
     }
-    // Call the function returned by the local hook
+    // Use function directly from context
     await updatePhaseStatus(phaseId, status as 'not_started' | 'in_progress' | 'completed' | 'on_hold'); 
-    // Refresh is now handled by the onPhaseUpdate callback passed to the hook
-  }, [updatePhaseStatus, showNotification]);
+    // Refresh is handled by the hook callback within the context provider
+  }, [updatePhaseStatus, showNotification]); // Dependency is the function from context
 
-  // Use local hook for quick expense add
+  // Use addExpense from context
   const handleAddQuickExpense = useCallback(async (description: string, amount: number, category: string, phaseId?: string) => {
     const newExpenseData: Partial<Expense> = {
-        description,
-        amount,
-        category: category as Expense['category'],
-        status: 'pending',
-        date: format(new Date(), 'yyyy-MM-dd'),
-        phaseId: phaseId || undefined,
-        projectId: projectId ?? undefined, 
+        description, amount, category: category as Expense['category'],
+        status: 'pending', date: format(new Date(), 'yyyy-MM-dd'),
+        phaseId: phaseId || undefined, projectId: projectId ?? undefined, 
     };
-    // Call the function returned by the local hook
+    // Use function directly from context
     await addExpense(newExpenseData);
-    // Refresh is now handled by the onExpenseUpdate callback passed to the hook
+    // Refresh is handled by the hook callback within the context provider
   }, [addExpense, projectId]);
 
   // Bid actions use context functions
@@ -163,7 +144,7 @@ const ProjectDetailContent: React.FC = () => {
   }, [openNewBidDialog, projectId]);
   
   const handleEditBid = useCallback((bidId: string) => {
-    const bidToEdit = bids.find(b => b.id === bidId);
+    const bidToEdit = bids.find((b: Bid | BidSummary) => b.id === bidId);
     if (bidToEdit) {
       openEditBidDialog(bidToEdit); 
     } else {
@@ -172,7 +153,7 @@ const ProjectDetailContent: React.FC = () => {
   }, [bids, openEditBidDialog, showNotification]);
 
   const handleDeleteBid = useCallback(async (bidId: string) => {
-    const bidToDelete = bids.find(b => b.id === bidId);
+    const bidToDelete = bids.find((b: Bid | BidSummary) => b.id === bidId);
     if (bidToDelete) {
       requestDeleteBid(bidToDelete); 
     } else {

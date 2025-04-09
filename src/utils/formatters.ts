@@ -28,11 +28,15 @@ export const formatDate = (
   
   try {
     // Try to convert to a Date object if it's not already one
-    const dateObj = typeof date === 'string' ? new Date(date) : 
-                   date instanceof Date ? date : 
-                   // Handle Firestore Timestamp objects
-                   (date && typeof date.toDate === 'function') ? date.toDate() :
-                   new Date(date);
+    const dateObj = 
+        typeof date === 'string' ? new Date(date) : 
+        date instanceof Date ? date : 
+        // Handle objects with toDate() method (e.g., Firebase Timestamps)
+        (date && typeof date === 'object' && typeof date.toDate === 'function') ? date.toDate() :
+        // Handle plain objects with seconds/nanoseconds (e.g., serialized Timestamps)
+        (date && typeof date === 'object' && typeof date.seconds === 'number' && typeof date.nanoseconds === 'number') ? new Date(date.seconds * 1000) :
+        // Fallback for other types (including direct numbers which might be timestamps)
+        new Date(date);
     
     // Check if the date is valid
     if (isNaN(dateObj.getTime())) {

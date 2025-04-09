@@ -49,9 +49,9 @@ Through code analysis, we've identified the following components that require im
 
 #### 1.4 Create Dedicated Event Handler Modules
 
-- [x] Extract phase-related handlers to `usePhaseOperations` hook (Hook instantiated locally in `ProjectDetailPage`, uses context for refresh/notify)
+- [x] Extract phase-related handlers to `usePhaseOperations` hook (Hook instantiated in `ProjectDetailContext` Provider)
 - [x] Extract bid-related handlers to `useBidOperations` hook (Hook instantiated in `ProjectDetailContext` Provider)
-- [x] Extract expense-related handlers to `useExpenseOperations` hook (Hook instantiated locally in `ProjectDetailPage`, uses context for refresh/notify)
+- [x] Extract expense-related handlers to `useExpenseOperations` hook (Hook instantiated in `ProjectDetailContext` Provider)
 - [x] Extract project-related handlers to `useProjectOperations` hook (Not yet integrated with context)
 
 #### 1.5 Refine Component Structure

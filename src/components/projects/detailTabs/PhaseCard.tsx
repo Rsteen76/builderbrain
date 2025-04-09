@@ -1,79 +1,37 @@
 import React from 'react';
 import {
   Card,
-  CardHeader,
   CardContent,
   Typography,
   Box,
-  Avatar,
-  IconButton,
-  Chip,
-  Tooltip,
-  Button,
   LinearProgress,
   alpha,
   useTheme,
-  Theme,
-  Grid // Keep Grid for the item wrapper
 } from '@mui/material';
-import {
-  MoreVert as MoreVertIcon,
-  CalendarToday as CalendarTodayIcon,
-  ReceiptLong as ReceiptLongIcon,
-  Handshake as HandshakeIcon,
-  ChevronRight as ChevronRightIcon,
-} from '@mui/icons-material';
 import { ProjectPhase } from '../../../types'; // Adjusted path
-import { formatCurrency, formatDate, truncateText, safelyParseDate } from '../../../utils/formatters'; // Adjusted path
+import { formatCurrency } from '../../../utils/formatters'; // Adjusted path
 import PhaseMetricsDisplay from './PhaseMetricsDisplay'; // Use the extracted component
-import PhaseBudgetPieChart from '../charts/PhaseBudgetPieChart'; // Use the extracted component
+// Removed PhaseBudgetPieChart import - not used here
 
-// Helper functions (can be moved to utils later if shared)
-const getPhaseInitials = (phaseName: string): string => {
-  if (!phaseName) return '?';
-  return phaseName
-    .split(' ')
-    .map(word => word[0])
-    .join('')
-    .substring(0, 2)
-    .toUpperCase();
-};
+// Import the new sub-components
+import PhaseCardHeader from './phases/PhaseCardHeader';
+import PhaseCardActions from './phases/PhaseCardActions';
 
-const getStatusText = (status: string) => {
-  if (!status) return 'Unknown';
-  return status.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
-};
+// Remove local helper functions (assuming moved to utils/phaseUtils.ts)
+// REMOVED: getPhaseInitials, getStatusText, formatPhaseDate definitions
 
-// TODO: Consider moving formatPhaseDate to formatters utils if not already there
-const formatPhaseDate = (date: Date | string | { toDate(): Date } | null): string => {
-  try {
-    // Assuming safelyParseDate handles various input types and returns a Date
-    const parsedDate = safelyParseDate(date);
-    if (parsedDate && !isNaN(parsedDate.getTime())) {
-         // Example format, adjust as needed
-        return parsedDate.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
-    }
-    return 'N/A';
-  } catch (error) {
-    console.error('Error formatting phase date:', error);
-    return 'Invalid Date';
-  }
-};
-
+// Props interface remains largely the same, but some props are passed down
 interface PhaseCardProps {
   phase: ProjectPhase;
   proposedCost: number;
   actualCost: number;
-  // Callbacks for actions
   onStatusMenuOpen: (event: React.MouseEvent<HTMLElement>, phaseId: string) => void;
   onPhaseMenuOpen: (event: React.MouseEvent<HTMLElement>, phaseId: string) => void;
   onOpenQuickExpenseDialog: (phaseId: string) => void;
   onOpenQuickBidDialog: (phaseId: string) => void;
   onViewPhaseDetails: (phaseId: string) => void;
-  // Helpers passed down
   getStatusColor: (status: string) => string;
   formatCurrency: (value: number) => string;
-  // Potentially pass theme or rely on useTheme
 }
 
 const PhaseCard: React.FC<PhaseCardProps> = ({
@@ -94,7 +52,6 @@ const PhaseCard: React.FC<PhaseCardProps> = ({
   const isOverBudget = budget > 0 && actualCost > budget;
 
   return (
-    // The Grid item wrapper remains in the parent component (ProjectPhasesTab)
     <Card
       elevation={2}
       sx={{
@@ -110,89 +67,14 @@ const PhaseCard: React.FC<PhaseCardProps> = ({
         overflow: 'hidden',
       }}
     >
-      <CardHeader
-        avatar={
-          <Avatar
-            sx={{
-              width: 38,
-              height: 38,
-              bgcolor: getStatusColor(phase.status)
-            }}
-          >
-            {getPhaseInitials(phase.name)}
-          </Avatar>
-        }
-        action={
-          <Box>
-            <Chip
-              label={getStatusText(phase.status)}
-              size="small"
-              sx={{
-                backgroundColor: alpha(getStatusColor(phase.status), 0.1),
-                color: getStatusColor(phase.status),
-                fontWeight: 600,
-                fontSize: '0.7rem',
-                height: 24,
-                mr: 1,
-                cursor: 'pointer',
-                '&:hover': {
-                  backgroundColor: alpha(getStatusColor(phase.status), 0.2),
-                }
-              }}
-              onClick={(e) => onStatusMenuOpen(e, phase.id)}
-            />
-            <IconButton
-              aria-label="more options"
-              size="small"
-              onClick={(event) => {
-                event.stopPropagation(); // Prevent card click if necessary
-                onPhaseMenuOpen(event, phase.id);
-              }}
-            >
-              <MoreVertIcon fontSize="small" />
-            </IconButton>
-          </Box>
-        }
-        title={
-          <Typography
-            variant="subtitle1"
-            sx={{
-              fontWeight: 700,
-              fontSize: '1.1rem',
-              mb: 0,
-              lineHeight: 1.3
-            }}
-          >
-            {phase.name}
-          </Typography>
-        }
-        subheader={
-          <Box sx={{ display: 'flex', alignItems: 'center', mt: 0 }}>
-            <Tooltip title="Timeline">
-              <CalendarTodayIcon
-                fontSize="small"
-                sx={{
-                  color: theme.palette.text.secondary,
-                  fontSize: '0.9rem',
-                  mr: 0.5
-                }}
-              />
-            </Tooltip>
-            <Typography
-              variant="body2"
-              color="text.secondary"
-              sx={{ fontSize: '0.8rem' }}
-            >
-              {formatPhaseDate(phase.startDate)} - {formatPhaseDate(phase.endDate)}
-            </Typography>
-          </Box>
-        }
-        sx={{
-          p: 1.5,
-          pb: 0.5,
-          '.MuiCardHeader-content': { minWidth: 0 }
-        }}
+      {/* Use the extracted header component */}
+      <PhaseCardHeader
+        phase={phase}
+        getStatusColor={getStatusColor}
+        onStatusMenuOpen={onStatusMenuOpen}
+        onPhaseMenuOpen={onPhaseMenuOpen}
       />
+      
       <CardContent
         sx={{
           p: 1.5,
@@ -203,7 +85,7 @@ const PhaseCard: React.FC<PhaseCardProps> = ({
           flexDirection: 'column'
         }}
       >
-        {/* Use extracted Metrics Display */}
+        {/* Keep Metrics Display here */}
         <PhaseMetricsDisplay
           phase={phase}
           proposedCost={proposedCost}
@@ -211,7 +93,7 @@ const PhaseCard: React.FC<PhaseCardProps> = ({
           formatCurrency={formatCurrency}
         />
 
-        {/* Budget progress indicator */}
+        {/* Keep Budget progress indicator here */}
         <Box
           sx={{
             width: '100%',
@@ -230,8 +112,8 @@ const PhaseCard: React.FC<PhaseCardProps> = ({
                 height: 6,
                 borderRadius: 3,
                 backgroundColor: alpha(
-                    isOverBudget ? theme.palette.error.light : theme.palette.success.light, // Use lighter background based on budget status
-                     0.3 // Adjust opacity for background
+                    isOverBudget ? theme.palette.error.light : theme.palette.success.light,
+                     0.3
                 ),
                 '& .MuiLinearProgress-bar': {
                   borderRadius: 3,
@@ -249,96 +131,17 @@ const PhaseCard: React.FC<PhaseCardProps> = ({
             color={isOverBudget ? "error.main" : "text.primary"}
             sx={{ lineHeight: 1.2, whiteSpace: 'nowrap' }}
           >
-            {budget > 0 ? `${Math.round(budgetUsedPercentage)}%` : 'N/A'}
+            {budgetUsedPercentage.toFixed(0)}%
           </Typography>
         </Box>
 
-        {/* Use extracted Pie Chart */}
-        <PhaseBudgetPieChart
-          budget={budget}
-          proposedCost={proposedCost}
-          actualCost={actualCost}
+        {/* Use the extracted actions component */}
+        <PhaseCardActions 
+          phaseId={phase.id}
+          onOpenQuickExpenseDialog={onOpenQuickExpenseDialog}
+          onOpenQuickBidDialog={onOpenQuickBidDialog}
+          onViewPhaseDetails={onViewPhaseDetails}
         />
-
-        {/* Phase description - truncated */}
-        {phase.description && (
-            <Box sx={{
-              mt: 1.5, // Add some margin top
-              maxHeight: '60px',
-              overflow: 'hidden',
-              textOverflow: 'ellipsis',
-              position: 'relative',
-              WebkitLineClamp: 3, // Standard CSS for line clamping
-              display: '-webkit-box', // Needed for line clamping
-              WebkitBoxOrient: 'vertical', // Needed for line clamping
-            }}>
-            <Typography
-                variant="body2"
-                color="text.secondary"
-                sx={{ fontSize: '0.8rem' }}
-            >
-                {phase.description}
-            </Typography>
-            {/* Optional fade effect if needed
-            <Box sx={{
-                position: 'absolute',
-                bottom: 0, left: 0, right: 0, height: '20px',
-                background: `linear-gradient(to bottom, transparent, ${theme.palette.background.paper})`
-            }}/> */}
-            </Box>
-        )}
-
-        {/* Footer actions */}
-        <Box
-          sx={{
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-            mt: 'auto', // Push to bottom
-            pt: 1.5 // Add padding top
-          }}
-        >
-          <Box sx={{ display: 'flex', gap: 0.5 }}>
-            <Tooltip title="Add expense">
-              <IconButton
-                size="small"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onOpenQuickExpenseDialog(phase.id);
-                }}
-                sx={{ p: 0.5 }}
-              >
-                <ReceiptLongIcon fontSize="small" />
-              </IconButton>
-            </Tooltip>
-            <Tooltip title="Add bid">
-              <IconButton
-                size="small"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onOpenQuickBidDialog(phase.id);
-                }}
-                sx={{ p: 0.5 }}
-              >
-                <HandshakeIcon fontSize="small" />
-              </IconButton>
-            </Tooltip>
-          </Box>
-
-          <Button
-            size="small"
-            endIcon={<ChevronRightIcon />}
-            onClick={() => onViewPhaseDetails(phase.id)}
-            sx={{
-              textTransform: 'none',
-              fontSize: '0.75rem',
-              py: 0.3,
-              px: 0.8
-            }}
-          >
-            Details
-          </Button>
-        </Box>
       </CardContent>
     </Card>
   );

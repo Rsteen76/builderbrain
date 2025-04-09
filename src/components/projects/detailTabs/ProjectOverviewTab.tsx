@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React from 'react';
 import {
   Box,
   Grid,
@@ -43,87 +43,62 @@ import {
   ArrowDownward as ArrowDownwardIcon,
 } from '@mui/icons-material';
 import { formatCurrency, formatDate, safelyParseDate } from '../../../utils/formatters';
-import { calculateBudgetData } from '../../../utils/projectMetrics';
-import { 
-  Project, 
-  ProjectPhase,
-  Bid, 
-  Expense 
-} from '../../../types';
-import { PieChart, Pie, ResponsiveContainer, Cell, Tooltip as RechartsTooltip } from 'recharts';
 import { useProjectDetail } from '../../../contexts/ProjectDetailContext';
-import { usePhaseOperations } from '../../../hooks/usePhaseOperations';
-import { useNotification } from '../../../hooks/useNotification';
+import { PieChart, Pie, ResponsiveContainer, Cell, Tooltip as RechartsTooltip } from 'recharts';
 
 const ProjectOverviewTab: React.FC = () => {
-  const {
+  const { 
     project, 
     phases, 
-    bids = [], 
-    expenses = [], 
+    bids, 
+    expenses, 
     loading, 
-    error, 
-    showNotification
+    error,
+    openNewExpenseDialog,
+    refreshAllProjectData,
   } = useProjectDetail();
-  
+
   const theme = useTheme();
 
-  const totalSpent = useMemo(() => expenses.reduce((sum, exp) => sum + (exp.amount || 0), 0), [expenses]);
-  const budgetData = useMemo(() => { 
-    if (!project) return { totalBudget: 0, totalActual: 0, difference: 0, percentUsed: 0 };
-    return calculateBudgetData(project, expenses);
-  }, [project, expenses]);
-  const budgetVariance = useMemo(() => budgetData.totalBudget - budgetData.totalActual, [budgetData]);
-  const projectProgress = useMemo(() => calculateProjectProgress(phases || []), [phases]);
+  const budgetData = React.useMemo(() => {
+    if (!phases) return { totalBudget: 0, totalActual: 0, difference: 0, percentUsed: 0 };
+    const totalBudget = phases.reduce((sum, phase) => sum + (phase.budget || 0), 0);
+    const totalActual = phases.reduce((sum, phase) => sum + (phase.actualCost || 0), 0);
+    const difference = totalBudget - totalActual;
+    const percentUsed = totalBudget > 0 ? (totalActual / totalBudget) * 100 : 0;
+    return { totalBudget, totalActual, difference, percentUsed };
+  }, [phases]);
 
-  const budgetAllocationData = useMemo(() => (phases || []).map((phase, index) => {
-    const colors = [theme.palette.primary.main, theme.palette.secondary.main, theme.palette.success.main, theme.palette.warning.main, theme.palette.error.main, theme.palette.info.main];
-    return {
-      name: phase.name,
-      value: phase.budget || 0,
-      color: colors[index % colors.length],
-    };
-  }), [phases, theme]);
+  const totalBudget = budgetData.totalBudget;
+  const totalSpent = budgetData.totalActual;
   
-  const expensesByCategory = useMemo(() => expenses.reduce((acc, exp) => {
-    const category = exp.category || 'Uncategorized';
-    if (!acc[category]) acc[category] = 0;
-    acc[category] += exp.amount;
-    return acc;
-  }, {} as Record<string, number>), [expenses]);
+  const getBudgetStatus = React.useCallback(() => {
+    if (totalBudget <= 0) return { label: 'No Budget', color: theme.palette.warning.main, icon: null };
+    
+    const percentUsed = (totalSpent / totalBudget) * 100;
+    
+    if (percentUsed > 100) {
+      return { 
+        label: 'Over Budget', 
+        color: theme.palette.error.main,
+        icon: <ArrowDownwardIcon fontSize="small" />,
+      };
+    } else if (percentUsed > 85) {
+      return { 
+        label: 'Near Budget', 
+        color: theme.palette.warning.main,
+        icon: <MilestoneIcon fontSize="small" />,
+      };
+    } else {
+      return { 
+        label: 'Under Budget', 
+        color: theme.palette.success.main,
+        icon: <ArrowUpwardIcon fontSize="small" />,
+      };
+    }
+  }, [totalBudget, totalSpent, theme]);
   
-  const expenseCategoryData = useMemo(() => Object.entries(expensesByCategory).map(([category, amount], index) => {
-    const colors = [theme.palette.primary.main, theme.palette.secondary.main, theme.palette.success.main, theme.palette.warning.main, theme.palette.error.main, theme.palette.info.main];
-    return {
-      name: category.charAt(0).toUpperCase() + category.slice(1),
-      value: amount,
-      color: colors[index % colors.length],
-    };
-  }), [expensesByCategory, theme]);
-  
-  const totalExpenses = useMemo(() => expenses.reduce((sum, exp) => sum + exp.amount, 0), [expenses]);
-  const pendingExpenses = useMemo(() => expenses.filter(e => e.status === 'pending').reduce((sum, exp) => sum + exp.amount, 0), [expenses]);
-  const approvedExpenses = useMemo(() => expenses.filter(e => e.status === 'approved').reduce((sum, exp) => sum + exp.amount, 0), [expenses]);
-  const paidExpenses = useMemo(() => expenses.filter(e => e.status === 'paid').reduce((sum, exp) => sum + exp.amount, 0), [expenses]);
-  
-  const keyMilestones = useMemo(() => (phases || [])
-    .filter(phase => (phase.progress ?? 0) < 100) 
-    .sort((a, b) => (safelyParseDate(a.startDate)?.getTime() || 0) - (safelyParseDate(b.startDate)?.getTime() || 0))
-    .slice(0, 3), [phases]);
-  
-  const acceptedBidsTotal = useMemo(() => bids
-    .filter(bid => bid.status === 'accepted')
-    .reduce((sum, bid) => sum + (bid.totalAmount || 0), 0), [bids]);
-  
-  const getBudgetStatus = () => {
-    if (!project || budgetData.totalBudget <= 0) return { label: 'No Budget', color: theme.palette.warning.main, icon: <InfoIcon fontSize="small"/> };
-    const percentUsed = (budgetData.totalActual / budgetData.totalBudget) * 100;
-    if (percentUsed > 100) return { label: 'Over Budget', color: theme.palette.error.main, icon: <ArrowDownwardIcon fontSize="small" /> };
-    if (percentUsed > 85) return { label: 'Near Budget', color: theme.palette.warning.main, icon: <MilestoneIcon fontSize="small" /> };
-    return { label: 'Under Budget', color: theme.palette.success.main, icon: <ArrowUpwardIcon fontSize="small" /> };
-  };
-  
-  const getProjectStatus = () => {
+  const getProjectStatus = React.useCallback(() => {
     if (!project) return { label: 'Unknown', color: theme.palette.grey[500] };
     const statusMap: Record<string, {label: string, color: string}> = {
       'draft': { label: 'Draft', color: theme.palette.info.main },
@@ -136,12 +111,94 @@ const ProjectOverviewTab: React.FC = () => {
       'active': { label: 'Active', color: theme.palette.warning.main },
     };
     
-    const status = project.status?.toLowerCase() || '';
+    const status = project.status.toLowerCase();
     return statusMap[status] || { label: 'Unknown', color: theme.palette.grey[500] };
-  };
+  }, [project, theme]);
+
+  const budgetStatus = getBudgetStatus();
+  const projectStatus = getProjectStatus();
   
-  const getLocationDisplay = () => {
-    if (!project?.location) return 'Not specified';
+  const budgetAllocationData = React.useMemo(() => {
+    if (!phases) return [];
+    return phases.map((phase, index) => {
+      const colors = [
+        theme.palette.primary.main,
+        theme.palette.secondary.main,
+        theme.palette.success.main,
+        theme.palette.warning.main,
+        theme.palette.error.main,
+        theme.palette.info.main,
+      ];
+      
+      return {
+        name: phase.name,
+        value: phase.budget || 0,
+        color: colors[index % colors.length],
+      };
+    });
+  }, [phases, theme]);
+  
+  const expensesByCategory = React.useMemo(() => {
+    if (!expenses) return {};
+    return expenses.reduce((acc, exp) => {
+      if (!acc[exp.category]) acc[exp.category] = 0;
+      acc[exp.category] += exp.amount;
+      return acc;
+    }, {} as Record<string, number>);
+  }, [expenses]);
+
+  const expenseCategoryData = React.useMemo(() => {
+    if (!expensesByCategory) return [];
+    return Object.entries(expensesByCategory).map(([category, amount], index) => {
+      const colors = [
+        theme.palette.primary.main,
+        theme.palette.secondary.main,
+        theme.palette.success.main,
+        theme.palette.warning.main,
+        theme.palette.error.main,
+        theme.palette.info.main,
+      ];
+      
+      return {
+        name: category.charAt(0).toUpperCase() + category.slice(1),
+        value: amount,
+        color: colors[index % colors.length],
+      };
+    });
+  }, [expensesByCategory, theme]);
+  
+  const expenseTotals = React.useMemo(() => {
+    if (!expenses) return { totalExpenses: 0, pendingExpenses: 0, approvedExpenses: 0, paidExpenses: 0 };
+    const totalExpenses = expenses.reduce((sum, exp) => sum + exp.amount, 0);
+    const pendingExpenses = expenses.filter(e => e.status === 'pending').reduce((sum, exp) => sum + exp.amount, 0);
+    const approvedExpenses = expenses.filter(e => e.status === 'approved').reduce((sum, exp) => sum + exp.amount, 0);
+    const paidExpenses = expenses.filter(e => e.status === 'paid').reduce((sum, exp) => sum + exp.amount, 0);
+    return { totalExpenses, pendingExpenses, approvedExpenses, paidExpenses };
+  }, [expenses]);
+
+  const { totalExpenses, pendingExpenses, approvedExpenses, paidExpenses } = expenseTotals;
+
+  const keyMilestones = React.useMemo(() => {
+    if (!phases) return [];
+    return phases
+      .filter(phase => phase.progress < 100)
+      .sort((a, b) => {
+        const dateA = safelyParseDate(a.startDate).getTime();
+        const dateB = safelyParseDate(b.startDate).getTime();
+        return dateA - dateB;
+      })
+      .slice(0, 3);
+  }, [phases]);
+  
+  const acceptedBidsTotal = React.useMemo(() => {
+    if (!bids) return 0;
+    return bids
+      .filter(bid => bid.status === 'accepted')
+      .reduce((sum, bid) => sum + bid.totalAmount, 0);
+  }, [bids]);
+  
+  const getLocationDisplay = React.useCallback(() => {
+    if (!project || !project.location) return 'Not specified';
     
     if (typeof project.location === 'string') {
       return project.location;
@@ -153,25 +210,28 @@ const ProjectOverviewTab: React.FC = () => {
     }
     
     return 'Not specified';
-  };
+  }, [project]);
   
-  const getClientName = () => {
-    return project?.clientId || 'Not specified';
-  };
-  
-  const budgetStatus = useMemo(getBudgetStatus, [project, budgetData, theme]);
-  const projectStatus = useMemo(getProjectStatus, [project, theme]);
-  
-  const handleAddPhase = () => { 
-    showNotification('Add Phase functionality not implemented on Overview Tab yet.', 'info');
-  };
-  const handleOpenTemplateAdjuster = () => { 
-     showNotification('Adjust Template functionality not implemented on Overview Tab yet.', 'info');
-  };
+  const getClientName = React.useCallback(() => {
+    if (!project) return 'Not specified';
+    return project.clientId || 'Not specified';
+  }, [project]);
 
-  if (loading) return <CircularProgress sx={{ /* styles */ }} />;
-  if (error) return <Alert severity="error">{error}</Alert>;
-  if (!project) return <Alert severity="warning">Project data not available.</Alert>;
+  if (loading) {
+    return (
+      <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '400px' }}>
+        <CircularProgress />
+      </Box>
+    );
+  }
+
+  if (error) {
+    return <Alert severity="error">Error loading project overview: {error}</Alert>;
+  }
+
+  if (!project) {
+    return <Alert severity="warning">Project data not available.</Alert>;
+  }
 
   return (
     <Box sx={{ py: 2 }}>
@@ -263,7 +323,7 @@ const ProjectOverviewTab: React.FC = () => {
                     primary="Budget Status" 
                     secondary={
                       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                        <span>{formatCurrency(budgetData.totalBudget)}</span>
+                        <span>{formatCurrency(totalBudget)}</span>
                         <Chip 
                           label={budgetStatus.label}
                           size="small"
@@ -340,7 +400,7 @@ const ProjectOverviewTab: React.FC = () => {
               }
               action={
                 <Tooltip title="Refresh financial data">
-                  <IconButton>
+                  <IconButton onClick={refreshAllProjectData}>
                     <RefreshIcon />
                   </IconButton>
                 </Tooltip>
@@ -360,7 +420,7 @@ const ProjectOverviewTab: React.FC = () => {
                   >
                     <Typography variant="subtitle2" color="text.secondary">Total Budget</Typography>
                     <Typography variant="h5" sx={{ fontWeight: 700, my: 1 }}>
-                      {formatCurrency(budgetData.totalBudget)}
+                      {formatCurrency(totalBudget)}
                     </Typography>
                     
                     <Divider sx={{ my: 1.5 }} />
@@ -458,6 +518,7 @@ const ProjectOverviewTab: React.FC = () => {
                       size="small" 
                       variant="outlined" 
                       sx={{ mt: 1 }}
+                      onClick={() => openNewExpenseDialog()}
                     >
                       Add Expense
                     </Button>
@@ -484,7 +545,7 @@ const ProjectOverviewTab: React.FC = () => {
                 <Button
                   size="small"
                   startIcon={<AddIcon />}
-                  onClick={handleAddPhase}
+                  onClick={() => console.warn("Add Phase button clicked - handler needs context action")}
                   sx={{ bgcolor: alpha(theme.palette.primary.main, 0.1), color: 'primary.main' }}
                 >
                   Add Phase
@@ -568,7 +629,7 @@ const ProjectOverviewTab: React.FC = () => {
                   <Button 
                     variant="contained" 
                     color="primary" 
-                    onClick={handleOpenTemplateAdjuster}
+                    onClick={() => console.warn("Add Project Phases button clicked - handler needs context action")}
                     startIcon={<AddIcon />}
                   >
                     Add Project Phases
@@ -671,7 +732,7 @@ const ProjectOverviewTab: React.FC = () => {
                   <Typography color="text.secondary" sx={{ mb: 1 }}>No upcoming milestones</Typography>
                   <Button 
                     variant="outlined" 
-                    onClick={handleAddPhase}
+                    onClick={() => console.warn("Add Milestone button clicked - handler needs context action")}
                     startIcon={<AddIcon />}
                   >
                     Add Milestone
@@ -684,12 +745,6 @@ const ProjectOverviewTab: React.FC = () => {
       </Grid>
     </Box>
   );
-};
-
-const calculateProjectProgress = (phases: any[]): number => { 
-  if (!phases || phases.length === 0) return 0;
-  const totalProgress = phases.reduce((sum, phase) => sum + (phase.progress || 0), 0);
-  return totalProgress / phases.length;
 };
 
 export default ProjectOverviewTab; 
