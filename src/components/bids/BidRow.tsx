@@ -8,6 +8,7 @@ import {
   Tooltip,
   alpha,
   Theme,
+  Stack,
 } from '@mui/material';
 import {
   Visibility as VisibilityIcon,
@@ -19,7 +20,13 @@ import { useAuth } from '../../hooks/useAuth';
 import { formatCurrency, formatDate } from '../../utils/formatters';
 import { BidSummary } from '../../types';
 
-interface BidRowProps {
+/**
+ * BidRow component - A simplified bid card used in some views
+ * 
+ * This component provides a more compact view of a bid, compared to the full
+ * BidCard component. It's designed for tables and condensed lists.
+ */
+export interface BidRowProps {
   bid: BidSummary;
   onView: (bid: BidSummary) => void;
   onEdit: (bid: BidSummary) => void;
@@ -38,6 +45,9 @@ const BidRow: React.FC<BidRowProps> = ({
 }) => {
   const { user } = useAuth();
 
+  /**
+   * Returns the appropriate color for a bid status
+   */
   const getStatusColor = (status: string) => {
     switch (status.toLowerCase()) {
       case 'accepted':
@@ -70,7 +80,7 @@ const BidRow: React.FC<BidRowProps> = ({
     >
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <Box sx={{ flex: 1 }}>
-          <Typography variant="h6" sx={{ mb: 1 }}>
+          <Typography variant="h6" sx={{ mb: 1, fontWeight: 500 }}>
             {bid.title || 'Untitled Bid'}
           </Typography>
           <Box sx={{ display: 'flex', gap: 2, mb: 1 }}>
@@ -102,9 +112,9 @@ const BidRow: React.FC<BidRowProps> = ({
             )}
           </Box>
         </Box>
-        <Box sx={{ display: 'flex', gap: 1 }}>
+        <Stack direction="row" spacing={1}>
           <Tooltip title="View Bid">
-            <IconButton size="small" onClick={() => onView(bid)}>
+            <IconButton size="small" onClick={() => onView(bid)} color="primary">
               <VisibilityIcon fontSize="small" />
             </IconButton>
           </Tooltip>
@@ -113,17 +123,17 @@ const BidRow: React.FC<BidRowProps> = ({
               <EditIcon fontSize="small" />
             </IconButton>
           </Tooltip>
-          <Tooltip title="Delete Bid">
-            <IconButton size="small" onClick={() => onDeleteRequest(bid)} color="error">
-              <DeleteIcon fontSize="small" />
-            </IconButton>
-          </Tooltip>
           <Tooltip title="Duplicate Bid">
             <IconButton size="small" onClick={() => onDuplicate(bid)}>
               <ContentCopyIcon fontSize="small" />
             </IconButton>
           </Tooltip>
-        </Box>
+          <Tooltip title="Delete Bid">
+            <IconButton size="small" onClick={() => onDeleteRequest(bid)} color="error">
+              <DeleteIcon fontSize="small" />
+            </IconButton>
+          </Tooltip>
+        </Stack>
       </Box>
     </Paper>
   );

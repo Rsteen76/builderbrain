@@ -64,7 +64,7 @@ export const submitBid = async (
       }[];
     };
     notes: string;
-    status: 'draft' | 'submitted' | 'accepted' | 'rejected' | 'expired';
+    status: 'draft' | 'submitted' | 'accepted' | 'rejected' | 'expired' | 'withdrawn' | 'revision_requested';
     attachments: string[];
     tags: string[];
   },

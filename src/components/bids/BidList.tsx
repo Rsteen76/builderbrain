@@ -30,8 +30,6 @@ import {
   Divider,
   Stack,
   Badge,
-  Card,
-  CardContent,
   Tabs,
   Tab,
   useTheme,
@@ -61,42 +59,18 @@ import {
   BidSummary
 } from '../../services/bid';
 import { formatCurrency, safelyParseDate } from '../../utils/formatters';
-import { Bid, Subcontractor } from '../../types';
+import { formatBidForDialog } from '../../utils/bidUtils';
+import { Bid, BidFormData } from '../../types';
 import { useAuth } from '../../contexts/AuthContext';
 import { openBidDeleteDialog } from '../dialogs/BidDeletePortal';
 import BidDeletePortal from '../dialogs/BidDeletePortal';
 import BidFormDialog from '../dialogs/BidFormDialog';
+import BidCard from './BidCard';
+import FilterPanel from './FilterPanel';
+import BidListHeader from './BidListHeader';
+import BidListActions from './BidListActions';
 import { v4 as uuidv4 } from 'uuid';
-
-// Add the BidFormData interface definition near the top
-interface BidFormData {
-  title: string;
-  subcontractorName: string;
-  subcontractorId?: string;
-  totalAmount: number;
-  phaseId?: string;
-  phaseName?: string;
-  scope: string;
-  timeline: number;
-  submissionDeadline?: Date;
-  paymentTerms: {
-    downPaymentPercent: number;
-    installments: {
-      id: string;
-      name: string;
-      percent: number;
-      milestoneDescription: string;
-      phaseId?: string;
-      phaseName?: string;
-    }[];
-  };
-  notes: string;
-  status: 'draft' | 'submitted' | 'accepted' | 'rejected' | 'expired';
-  attachments: string[];
-  tags: string[];
-  projectId?: string;
-  projectName?: string;
-}
+import { useBidDialogs } from '../../hooks';
 
 // Status colors
 const bidStatusColors: Record<Bid['status'], string> = {
@@ -136,432 +110,10 @@ const PRIORITY_DISPLAY: Record<NonNullable<Bid['priority']>, string> = {
   urgent: 'Urgent',
 };
 
-interface BidRowProps {
-  bid: BidSummary;
-  onView: (bid: BidSummary) => void;
-  onEdit: (bid: BidSummary) => void;
-  onDeleteRequest: (bid: BidSummary) => void;
-  onDuplicate: (bid: BidSummary) => void;
-  theme: any;
-}
-
-const BidRow: React.FC<BidRowProps> = ({ 
-  bid, 
-  onView, 
-  onEdit, 
-  onDeleteRequest, 
-  onDuplicate,
-  theme,
-}) => {
-  const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
-  const open = Boolean(anchorEl);
-  const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
-
-  const handleClick = (event: React.MouseEvent<HTMLButtonElement>) => {
-    setAnchorEl(event.currentTarget);
-  };
-
-  const handleClose = () => {
-    setAnchorEl(null);
-  };
-
-  const handleAction = (action: (bid: BidSummary) => void) => {
-    action(bid);
-    handleClose();
-  };
-
-  // Calculate if deadline is close (within 3 days)
-  const isDeadlineClose = () => {
-    // Check if deadline exists first
-    if (!bid.submissionDeadline) {
-        return false;
-    }
-    const now = new Date();
-    const deadlineDate = new Date(bid.submissionDeadline); // Now safe to call
-    const diffTime = deadlineDate.getTime() - now.getTime();
-    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-    return diffDays <= 3 && diffDays >= 0;
-  };
-
-  return (
-    <Card 
-      sx={{ 
-        mb: 2, 
-        border: isDeadlineClose() ? `1px solid ${theme.palette.warning.main}` : 'none',
-        boxShadow: isDeadlineClose() ? `0 0 5px ${theme.palette.warning.main}` : undefined,
-        transition: 'transform 0.2s',
-        '&:hover': {
-          transform: 'translateY(-2px)',
-          boxShadow: 3
-        }
-      }}
-    >
-      <CardContent>
-        <Grid container spacing={2} alignItems="center">
-          <Grid item xs={12} sm={6}>
-            <Box sx={{ display: 'flex', alignItems: 'flex-start', flexDirection: 'column' }}>
-              <Typography 
-                variant="h6" 
-                sx={{ 
-                  mb: 0.5, 
-                  cursor: 'pointer', 
-                  '&:hover': { color: 'primary.main' },
-                  wordBreak: 'break-word'
-                }}
-                onClick={() => onView(bid)}
-              >
-                {bid.title}
-              </Typography>
-              <Typography 
-                variant="body2" 
-                color="text.secondary" 
-                sx={{ mb: 1 }}
-              >
-                Project: {bid.projectName}
-              </Typography>
-              <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, mb: 1 }}>
-                <Chip 
-                  size="small" 
-                  label={STATUS_DISPLAY[bid.status]} 
-                  color={bidStatusColors[bid.status] as any} 
-                />
-                {bid.priority && (
-                    <Chip 
-                      size="small" 
-                      label={PRIORITY_DISPLAY[bid.priority]} 
-                      color={bidPriorityColors[bid.priority] as any} 
-                    />
-                )}
-                {isDeadlineClose() && (
-                  <Chip 
-                    size="small" 
-                    label="Deadline Soon" 
-                    color="warning" 
-                  />
-                )}
-              </Box>
-            </Box>
-          </Grid>
-          <Grid item xs={12} sm={3}>
-            <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: isMobile ? 'flex-start' : 'center' }}>
-              <Typography variant="body2" color="text.secondary">
-                Subcontractor
-              </Typography>
-              <Typography variant="body1">
-                {bid.subcontractorName}
-              </Typography>
-              <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
-                Deadline
-              </Typography>
-              <Typography variant="body1">
-                {bid.submissionDeadline ? new Date(bid.submissionDeadline).toLocaleDateString() : 'N/A'}
-              </Typography>
-            </Box>
-          </Grid>
-          <Grid item xs={12} sm={2}>
-            <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: isMobile ? 'flex-start' : 'center' }}>
-              <Typography variant="body2" color="text.secondary">
-                Amount
-              </Typography>
-              <Typography variant="h6" color="primary.main">
-                {formatCurrency(bid.totalAmount)}
-              </Typography>
-            </Box>
-          </Grid>
-          <Grid item xs={12} sm={1}>
-            <Box sx={{ display: 'flex', justifyContent: 'flex-end' }}>
-              <IconButton
-                aria-label="more"
-                aria-controls="bid-menu"
-                aria-haspopup="true"
-                onClick={handleClick}
-              >
-                <MoreVertIcon />
-              </IconButton>
-              <Menu
-                id="bid-menu"
-                anchorEl={anchorEl}
-                keepMounted
-                open={open}
-                onClose={handleClose}
-              >
-                <MenuItem onClick={() => handleAction(onView)}>
-                  <ListItemIcon>
-                    <ViewIcon fontSize="small" />
-                  </ListItemIcon>
-                  <ListItemText>View Details</ListItemText>
-                </MenuItem>
-                <MenuItem onClick={() => handleAction(onEdit)}>
-                  <ListItemIcon>
-                    <EditIcon fontSize="small" />
-                  </ListItemIcon>
-                  <ListItemText>Edit</ListItemText>
-                </MenuItem>
-                <MenuItem onClick={() => handleAction(onDuplicate)}>
-                  <ListItemIcon>
-                    <DuplicateIcon fontSize="small" />
-                  </ListItemIcon>
-                  <ListItemText>Duplicate</ListItemText>
-                </MenuItem>
-                <Divider />
-                <MenuItem onClick={() => handleAction(onDeleteRequest)} sx={{ color: 'error.main' }}>
-                  <ListItemIcon sx={{ color: 'error.main' }}>
-                    <DeleteIcon fontSize="small" />
-                  </ListItemIcon>
-                  <ListItemText>Delete</ListItemText>
-                </MenuItem>
-              </Menu>
-            </Box>
-          </Grid>
-        </Grid>
-      </CardContent>
-    </Card>
-  );
-};
-
-interface FilterPanelProps {
-  filter: BidFilter;
-  onFilterChange: (filter: BidFilter) => void;
-  sort: BidSort;
-  onSortChange: (sort: BidSort) => void;
-  statusOptions: Bid['status'][];
-  priorityOptions: NonNullable<Bid['priority']>[];
-}
-
-const FilterPanel: React.FC<FilterPanelProps> = ({ 
-  filter, 
-  onFilterChange, 
-  sort, 
-  onSortChange,
-  statusOptions,
-  priorityOptions,
-}) => {
-  const handleStatusChange = (event: React.ChangeEvent<{ value: unknown }>) => {
-    onFilterChange({
-      ...filter,
-      status: event.target.value as Bid['status'] | Bid['status'][],
-    });
-  };
-  
-  const handlePriorityChange = (event: React.ChangeEvent<{ value: unknown }>) => {
-    onFilterChange({
-      ...filter,
-      priority: event.target.value as NonNullable<Bid['priority']>,
-    });
-  };
-  
-  const handleMinAmountChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const value = event.target.value ? Number(event.target.value) : undefined;
-    onFilterChange({
-      ...filter,
-      minAmount: value,
-    });
-  };
-  
-  const handleMaxAmountChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const value = event.target.value ? Number(event.target.value) : undefined;
-    onFilterChange({
-      ...filter,
-      maxAmount: value,
-    });
-  };
-  
-  const handleDeadlineFromChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const value = event.target.value ? new Date(event.target.value) : undefined;
-    onFilterChange({
-      ...filter,
-      submissionDeadlineFrom: value,
-    });
-  };
-  
-  const handleDeadlineToChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const value = event.target.value ? new Date(event.target.value) : undefined;
-    onFilterChange({
-      ...filter,
-      submissionDeadlineTo: value,
-    });
-  };
-
-  const handleSortChange = (newSort: BidSort) => {
-    onSortChange(newSort);
-  };
-
-  return (
-    <Paper sx={{ p: 2, mb: 3 }}>
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 2 }}>
-        <Typography variant="h6">Filters</Typography>
-        <Button 
-          size="small" 
-          startIcon={<RefreshIcon />}
-          onClick={() => {
-            onFilterChange({});
-            onSortChange({ field: 'submissionDeadline', direction: 'asc' });
-          }}
-        >
-          Reset
-        </Button>
-      </Box>
-      <Grid container spacing={2}>
-        <Grid item xs={12} sm={6} md={3}>
-          <FormControl fullWidth size="small">
-            <InputLabel id="status-label">Status</InputLabel>
-            <Select
-              labelId="status-label"
-              id="status-select"
-              multiple
-              value={filter.status || []}
-              label="Status"
-              onChange={handleStatusChange as any}
-              renderValue={(selected) => (
-                <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
-                  {(selected as Bid['status'][]).map((value) => (
-                    <Chip 
-                      key={value} 
-                      label={STATUS_DISPLAY[value]} 
-                      size="small" 
-                    />
-                  ))}
-                </Box>
-              )}
-            >
-              {statusOptions.map((value) => (
-                <MenuItem key={value} value={value}>
-                  {STATUS_DISPLAY[value]}
-                </MenuItem>
-              ))}
-            </Select>
-          </FormControl>
-        </Grid>
-        <Grid item xs={12} sm={6} md={3}>
-          <FormControl fullWidth size="small">
-            <InputLabel id="priority-label">Priority</InputLabel>
-            <Select
-              labelId="priority-label"
-              id="priority-select"
-              value={filter.priority || ''}
-              label="Priority"
-              onChange={handlePriorityChange as any}
-            >
-              <MenuItem value="">Any Priority</MenuItem>
-              {priorityOptions.map((value) => (
-                <MenuItem key={value} value={value}>
-                  {PRIORITY_DISPLAY[value]}
-                </MenuItem>
-              ))}
-            </Select>
-          </FormControl>
-        </Grid>
-        <Grid item xs={12} sm={6} md={3}>
-          <TextField
-            label="Min Amount"
-            type="number"
-            value={filter.minAmount || ''}
-            onChange={handleMinAmountChange}
-            size="small"
-            fullWidth
-            InputProps={{
-              startAdornment: <InputAdornment position="start">$</InputAdornment>,
-            }}
-          />
-        </Grid>
-        <Grid item xs={12} sm={6} md={3}>
-          <TextField
-            label="Max Amount"
-            type="number"
-            value={filter.maxAmount || ''}
-            onChange={handleMaxAmountChange}
-            size="small"
-            fullWidth
-            InputProps={{
-              startAdornment: <InputAdornment position="start">$</InputAdornment>,
-            }}
-          />
-        </Grid>
-        <Grid item xs={12} sm={6}>
-          <TextField
-            label="Deadline From"
-            type="date"
-            value={filter.submissionDeadlineFrom ? filter.submissionDeadlineFrom.toISOString().split('T')[0] : ''}
-            onChange={handleDeadlineFromChange}
-            InputLabelProps={{ shrink: true }}
-            size="small"
-            fullWidth
-          />
-        </Grid>
-        <Grid item xs={12} sm={6}>
-          <TextField
-            label="Deadline To"
-            type="date"
-            value={filter.submissionDeadlineTo ? filter.submissionDeadlineTo.toISOString().split('T')[0] : ''}
-            onChange={handleDeadlineToChange}
-            InputLabelProps={{ shrink: true }}
-            size="small"
-            fullWidth
-          />
-        </Grid>
-        <Grid item xs={12}>
-          <Button
-            variant="outlined"
-            startIcon={<SortIcon />}
-            onClick={() => handleSortChange({ field: 'submissionDeadline', direction: sort.direction === 'asc' ? 'desc' : 'asc' })}
-            sx={{ minWidth: 100 }}
-          >
-            Sort
-          </Button>
-        </Grid>
-      </Grid>
-    </Paper>
-  );
-};
-
 interface BidListProps {
   projectId?: string;
   hideHeader?: boolean;
 }
-
-// Helper function to format bid for the dialog
-// Similar to the one in ProjectDetailPage, adjust as needed
-const formatBidForDialog = (bid: Bid): Partial<any> => {
-  let downPaymentPercent = 20;
-  let installments: any[] = [];
-  if (bid.paymentSchedule && bid.paymentSchedule.length > 0) {
-    const downPayment = bid.paymentSchedule.find(p => p.name === 'Down Payment');
-    downPaymentPercent = downPayment?.percentage || 20;
-    installments = bid.paymentSchedule
-      .filter(p => p.name !== 'Down Payment')
-      .map(p => ({
-        id: p.id || uuidv4(),
-        name: p.name || 'Installment',
-        percent: p.percentage || 0,
-        milestoneDescription: p.description || '',
-        phaseId: p.phaseId,
-        phaseName: p.phaseName,
-      }));
-  }
-
-  return {
-    title: bid.title || '',
-    subcontractorName: bid.subcontractorName || '',
-    subcontractorId: bid.subcontractorId || '',
-    totalAmount: bid.totalAmount || 0,
-    phaseId: bid.phaseId || '',
-    phaseName: bid.phaseName || '',
-    projectId: bid.projectId, 
-    scope: bid.scope || '',
-    timeline: bid.timeline || 30,
-    submissionDeadline: bid.submissionDeadline ? safelyParseDate(bid.submissionDeadline) : undefined,
-    paymentTerms: {
-      downPaymentPercent: downPaymentPercent,
-      installments: installments,
-    },
-    notes: bid.notes || '',
-    status: bid.status || 'draft',
-    attachments: Array.isArray(bid.attachments)
-      ? bid.attachments.map(att => (typeof att === 'string' ? att : att?.url)).filter(Boolean) as string[]
-      : [],
-    tags: Array.isArray(bid.tags) ? [...bid.tags] : [],
-  };
-};
 
 const BidList: React.FC<BidListProps> = ({ projectId, hideHeader = false }) => {
   const { user, loading: authLoading } = useAuth();
@@ -579,10 +131,17 @@ const BidList: React.FC<BidListProps> = ({ projectId, hideHeader = false }) => {
   const [selectedBidId, setSelectedBidId] = useState<string | null>(null);
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
   
-  // State for the Bid Form Modal
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  const [editingBidId, setEditingBidId] = useState<string | null>(null);
-  const [initialBidData, setInitialBidData] = useState<Partial<BidFormData> | null>(null);
+  // Use the bid dialogs hook instead of internal state
+  const bidDialogs = useBidDialogs(user?.uid, {
+    projectId,
+    onSubmitSuccess: (savedBid) => {
+      console.log('BidList - Bid saved/updated:', savedBid);
+      fetchBids(); // Refetch the list after saving
+    },
+    onError: (errorMsg) => {
+      setError(errorMsg);
+    }
+  });
 
   const fetchBids = async () => {
     if (!user?.uid) {
@@ -680,15 +239,25 @@ const BidList: React.FC<BidListProps> = ({ projectId, hideHeader = false }) => {
 
   const handleFilterChange = (newFilter: BidFilter) => {
     setFilter(newFilter);
+    fetchBids();
   };
 
   const handleSortChange = (newSort: BidSort) => {
     setSort(newSort);
+    fetchBids();
   };
 
   const handleRefresh = () => {
     fetchBids();
   };
+
+  const handleToggleFilters = () => {
+    setShowFilters((prev) => !prev);
+  };
+
+  const hasActiveFilters = Object.keys(filter).some(k => 
+    filter[k as keyof BidFilter] !== undefined
+  );
 
   const handleMenuOpen = (event: React.MouseEvent<HTMLElement>, bidId: string) => {
     event.stopPropagation(); // Prevent card click
@@ -705,52 +274,10 @@ const BidList: React.FC<BidListProps> = ({ projectId, hideHeader = false }) => {
     setTabValue(newValue);
   };
 
-  // --- Modal Handlers ---
+  // --- Dialog Handlers (using the hook) ---
   const handleOpenNewBidModal = () => {
-    setEditingBidId(null);
-    setInitialBidData(null);
-    setIsModalOpen(true);
+    bidDialogs.openNewBidDialog();
   };
-
-  const handleOpenEditBidModal = async (bid: BidSummary) => {
-    if (!user?.uid) return;
-    try {
-      setLoading(true);
-      // Fetch full bid using the ID from the summary
-      const fullBid = await BidService.getBid(user.uid, bid.id); 
-      if (fullBid) {
-        setInitialBidData(formatBidForDialog(fullBid));
-        setEditingBidId(bid.id);
-        setIsModalOpen(true);
-      } else {
-        setError('Could not load bid data for editing.');
-      }
-    } catch (err) {
-      setError('Error loading bid data.');
-      console.error(err);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleCloseModal = () => {
-    setIsModalOpen(false);
-    setEditingBidId(null);
-    setInitialBidData(null);
-    setError(null); // Clear any errors from the dialog fetch
-  };
-
-  const handleBidSubmitSuccess = (savedBid: Bid) => {
-    console.log('BidList - Bid saved/updated:', savedBid);
-    fetchBids(); // Refetch the list after saving
-    // Reset form state after successful submission
-    setEditingBidId(null);
-    setInitialBidData(null); 
-    // We typically close the modal in the dialog itself after calling onSubmitSuccess
-    // but ensure isModalOpen is set to false if not already handled.
-    // setIsModalOpen(false); // Uncomment if the dialog doesn't close automatically
-  };
-  // --- End Modal Handlers ---
 
   const handleView = (bid: BidSummary) => {
     navigate(`/bids/${bid.id}`);
@@ -758,15 +285,14 @@ const BidList: React.FC<BidListProps> = ({ projectId, hideHeader = false }) => {
   };
 
   const handleEdit = (bid: BidSummary) => {
-    handleOpenEditBidModal(bid); 
+    bidDialogs.openEditBidDialog(bid);
     handleMenuClose();
   };
 
   const handleDeleteRequest = (bid: BidSummary) => {
     console.log('BidList: handleDeleteRequest called for bid ID:', bid.id);
-    // Pass only the bid object. The callback is handled globally.
-    openBidDeleteDialog(bid); 
     handleMenuClose();
+    openBidDeleteDialog(bid);
   };
 
   const handleDuplicate = async (bid: BidSummary) => {
@@ -810,75 +336,39 @@ const BidList: React.FC<BidListProps> = ({ projectId, hideHeader = false }) => {
   const availableStatuses = Array.from(new Set(bids.map(b => b.status))) as Bid['status'][];
   const availablePriorities = Array.from(new Set(bids.filter(b => b.priority).map(b => b.priority))) as NonNullable<Bid['priority']>[];
 
+  // Display combined loading state
+  const isLoading = loading || bidDialogs.loading;
+  // Display combined error state
+  const displayError = error || bidDialogs.error;
+
   return (
-    <Box sx={{ py: 3 }}>
+    <Box sx={{ mt: 2 }}>
       {!hideHeader && (
-        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
-          <Typography variant="h4" component="h1">Bids</Typography>
-          <Button 
-            variant="contained" 
-            color="primary" 
-            startIcon={<AddIcon />}
-            onClick={handleOpenNewBidModal}
-          >
-            New Bid
-          </Button>
+        <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 2, alignItems: 'center' }}>
+          <Typography variant="h5">Bids</Typography>
         </Box>
       )}
 
-      {error && (
+      <BidListActions onOpenNewBidDialog={handleOpenNewBidModal} />
+
+      {displayError && (
         <Alert severity="error" sx={{ mb: 3 }}>
           <AlertTitle>Error</AlertTitle>
-          {error}
+          {displayError}
         </Alert>
       )}
 
       <Box sx={{ mb: 3 }}>
-        <Box sx={{ display: 'flex', gap: 2, mb: 2 }}>
-          <TextField
-            placeholder="Search bids..."
-            variant="outlined"
-            size="small"
-            fullWidth
-            value={searchTerm}
-            onChange={handleSearchChange}
-            InputProps={{
-              startAdornment: (
-                <InputAdornment position="start">
-                  <SearchIcon />
-                </InputAdornment>
-              ),
-            }}
-          />
-          <Button
-            variant="outlined"
-            startIcon={<FilterIcon />}
-            onClick={() => setShowFilters(!showFilters)}
-            sx={{ minWidth: 100 }}
-          >
-            Filters
-            {Object.keys(filter).some(k => filter[k as keyof BidFilter] !== undefined) && (
-              <Badge 
-                color="primary" 
-                variant="dot" 
-                sx={{ ml: 1 }}
-              />
-            )}
-          </Button>
-          <Button
-            variant="outlined"
-            startIcon={<SortIcon />}
-            onClick={() => handleSortChange({ field: 'submissionDeadline', direction: sort.direction === 'asc' ? 'desc' : 'asc' })}
-            sx={{ minWidth: 100 }}
-          >
-            Sort
-          </Button>
-          <Tooltip title="Refresh">
-            <IconButton onClick={handleRefresh}>
-              <RefreshIcon />
-            </IconButton>
-          </Tooltip>
-        </Box>
+        <BidListHeader
+          searchTerm={searchTerm}
+          onSearchChange={handleSearchChange}
+          showFilters={showFilters}
+          onToggleFilters={handleToggleFilters}
+          hasActiveFilters={hasActiveFilters}
+          sort={sort}
+          onSortChange={handleSortChange}
+          onRefresh={handleRefresh}
+        />
 
         <Collapse in={showFilters}>
           <FilterPanel 
@@ -888,6 +378,8 @@ const BidList: React.FC<BidListProps> = ({ projectId, hideHeader = false }) => {
             onSortChange={handleSortChange}
             statusOptions={availableStatuses}
             priorityOptions={availablePriorities}
+            statusDisplay={STATUS_DISPLAY}
+            priorityDisplay={PRIORITY_DISPLAY}
           />
         </Collapse>
 
@@ -906,54 +398,95 @@ const BidList: React.FC<BidListProps> = ({ projectId, hideHeader = false }) => {
         </Tabs>
       </Box>
 
-      {loading ? (
-        <Box sx={{ display: 'flex', justifyContent: 'center', my: 4 }}>
+      {isLoading ? (
+        <Box sx={{ display: 'flex', justifyContent: 'center', mt: 4 }}>
           <CircularProgress />
         </Box>
+      ) : displayError ? (
+        <Alert severity="error" sx={{ mt: 2 }}>
+          <AlertTitle>Error</AlertTitle>
+          {displayError}
+        </Alert>
       ) : filteredBids.length === 0 ? (
-        <Paper sx={{ p: 4, textAlign: 'center' }}>
-          <Typography variant="h6" color="text.secondary" gutterBottom>
-            No bids found
-          </Typography>
-          <Typography variant="body2" color="text.secondary" paragraph>
-            {searchTerm 
-              ? "No bids match your search criteria. Try using different keywords."
-              : "There are no bids yet for the selected status. Create your first bid to get started."}
-          </Typography>
-          <Button 
-            variant="contained" 
-            startIcon={<AddIcon />}
-            onClick={handleOpenNewBidModal}
-          >
-            Create New Bid
-          </Button>
-        </Paper>
+        <Alert severity="info" sx={{ mt: 2 }}>
+          <AlertTitle>No bids found</AlertTitle>
+          {searchTerm ? 'Try adjusting your search or filters.' : 'Create your first bid to get started.'}
+        </Alert>
       ) : (
-        <Box>
+        <Box sx={{ mt: 2 }}>
           {filteredBids.map(bid => (
-            <BidRow
+            <BidCard
               key={bid.id}
               bid={bid}
               onView={() => handleView(bid)}
               onEdit={() => handleEdit(bid)}
               onDeleteRequest={() => handleDeleteRequest(bid)}
               onDuplicate={() => handleDuplicate(bid)}
-              theme={theme}
+              onMenuOpen={(event: React.MouseEvent<HTMLElement>) => handleMenuOpen(event, bid.id)}
             />
           ))}
         </Box>
       )}
 
       {/* Conditionally render the Bid Form Dialog only when open */}
-      {isModalOpen && (
+      {bidDialogs.isModalOpen && (
         <BidFormDialog
-          open={isModalOpen}
-          onClose={handleCloseModal}
-          onSubmitSuccess={handleBidSubmitSuccess}
-          initialBidData={initialBidData || undefined}
-          editingBidId={editingBidId}
+          open={bidDialogs.isModalOpen}
+          onClose={bidDialogs.closeBidDialog}
+          onSubmitSuccess={bidDialogs.handleBidSubmitSuccess}
+          initialBidData={bidDialogs.initialBidData || undefined}
+          editingBidId={bidDialogs.editingBidId}
+          projectId={projectId}
         />
       )}
+
+      {/* Menu for Bid Actions */}
+      <Menu
+        anchorEl={anchorEl}
+        open={Boolean(anchorEl) && selectedBidId !== null}
+        onClose={handleMenuClose}
+      >
+        {/* Find the selected bid to pass to handlers */}
+        {selectedBidId && bids.find(b => b.id === selectedBidId) && (
+          <>
+            <MenuItem onClick={() => { 
+              const selected = bids.find(b => b.id === selectedBidId);
+              if (selected) handleView(selected);
+            }}>
+              <ListItemIcon><ViewIcon fontSize="small" /></ListItemIcon>
+              <ListItemText>View Details</ListItemText>
+            </MenuItem>
+            <MenuItem onClick={() => { 
+              const selected = bids.find(b => b.id === selectedBidId);
+              if (selected) handleEdit(selected);
+            }}>
+              <ListItemIcon><EditIcon fontSize="small" /></ListItemIcon>
+              <ListItemText>Edit</ListItemText>
+            </MenuItem>
+            <MenuItem onClick={() => { 
+              const selected = bids.find(b => b.id === selectedBidId);
+              if (selected) handleDuplicate(selected);
+            }}>
+              <ListItemIcon><DuplicateIcon fontSize="small" /></ListItemIcon>
+              <ListItemText>Duplicate</ListItemText>
+            </MenuItem>
+            <Divider />
+            <MenuItem 
+              onClick={() => { 
+                const selected = bids.find(b => b.id === selectedBidId);
+                if (selected) handleDeleteRequest(selected);
+              }}
+              sx={{ color: 'error.main' }}
+            >
+              <ListItemIcon sx={{ color: 'error.main' }}><DeleteIcon fontSize="small" /></ListItemIcon>
+              <ListItemText>Delete</ListItemText>
+            </MenuItem>
+          </>
+        )}
+      </Menu>
+
+      {/* Pass the required userId prop */}
+      <BidDeletePortal userId={user?.uid ?? ''} />
     </Box>
   );
 };

@@ -1,5 +1,6 @@
 import { Timestamp } from 'firebase/firestore';
 import { Expense, ExpenseCategory, ExpenseStatus, PaymentDetails } from './expense.types';
+export * from './bids.types';
 
 export interface User {
   id: string;

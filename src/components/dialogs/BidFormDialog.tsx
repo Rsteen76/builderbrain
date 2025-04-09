@@ -1,42 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { Dialog } from '@mui/material';
-import { Bid, Phase, Subcontractor, Project } from '../../types';
+import { Bid, Phase, Subcontractor, Project, BidFormData } from '../../types';
 import ReusableBidForm from '../bids/ReusableBidForm';
 import { SubcontractorService } from '../../services/subcontractor';
 import { ProjectService } from '../../services/project';
 import { useAuth } from '../../contexts/AuthContext';
 import { submitBid } from '../../utils/bidOperations';
 import { toast } from 'react-hot-toast';
-
-// Interface for bid form data used by ReusableBidForm
-interface BidFormData {
-  title: string;
-  subcontractorName: string;
-  subcontractorId?: string;
-  totalAmount: number;
-  phaseId?: string;
-  phaseName?: string;
-  scope: string;
-  timeline: number;
-  submissionDeadline?: Date;
-  paymentTerms: {
-    downPaymentPercent: number;
-    installments: {
-      id: string;
-      name: string;
-      percent: number;
-      milestoneDescription: string;
-      phaseId?: string;
-      phaseName?: string;
-    }[];
-  };
-  notes: string;
-  status: 'draft' | 'submitted' | 'accepted' | 'rejected' | 'expired';
-  attachments: string[];
-  tags: string[];
-  projectId?: string;
-  projectName?: string;
-}
 
 interface BidFormDialogProps {
   open: boolean;

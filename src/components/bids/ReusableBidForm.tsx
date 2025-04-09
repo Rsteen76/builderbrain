@@ -37,7 +37,7 @@ import {
 } from '@mui/icons-material';
 import { v4 as uuidv4 } from 'uuid';
 import { formatCurrency } from '../../utils/formatters';
-import { Bid, BidPaymentStage, Project, Subcontractor, Phase } from '../../types';
+import { Bid, BidPaymentStage, Project, Subcontractor, Phase, BidFormData } from '../../types';
 import { ProjectService } from '../../services/project';
 import { useAuth } from '../../contexts/AuthContext';
 
@@ -344,35 +344,6 @@ const BID_SCOPE_TEMPLATES: Record<string, string> = {
   "Wine Cellar": "Construct wine cellar according to specifications. Includes installation of cooling system, storage, lighting, and finish work.",
   "Custom Shower/Bathroom": "Construct custom shower or bathroom according to specifications. Includes installation of fixtures, tile, and specialty features.",
 };
-
-// Interface for bid form data
-interface BidFormData {
-  title: string;
-  subcontractorName: string;
-  subcontractorId?: string;
-  totalAmount: number;
-  phaseId?: string;
-  phaseName?: string;
-  scope: string;
-  timeline: number;
-  submissionDeadline?: Date;
-  paymentTerms: {
-    downPaymentPercent: number;
-    installments: {
-      id: string;
-      name: string;
-      percent: number;
-      milestoneDescription: string;
-      phaseId?: string;
-      phaseName?: string;
-    }[];
-  };
-  notes: string;
-  status: 'draft' | 'submitted' | 'accepted' | 'rejected' | 'expired';
-  attachments: string[];
-  tags: string[];
-  projectId?: string;
-}
 
 interface ReusableBidFormProps {
   open?: boolean;
@@ -1037,6 +1008,16 @@ const ReusableBidForm: React.FC<ReusableBidFormProps> = ({
                   <MenuItem value="expired">
                     <Box sx={{ display: 'flex', alignItems: 'center' }}>
                       <Box sx={{ width: 7, height: 7, borderRadius: '50%', bgcolor: 'warning.dark', mr: 1 }} /> Expired
+                    </Box>
+                  </MenuItem>
+                  <MenuItem value="withdrawn">
+                    <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                      <Box sx={{ width: 7, height: 7, borderRadius: '50%', bgcolor: 'text.secondary', mr: 1 }} /> Withdrawn
+                    </Box>
+                  </MenuItem>
+                  <MenuItem value="revision_requested">
+                    <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                      <Box sx={{ width: 7, height: 7, borderRadius: '50%', bgcolor: 'warning.main', mr: 1 }} /> Revision Requested
                     </Box>
                   </MenuItem>
                 </Select>
