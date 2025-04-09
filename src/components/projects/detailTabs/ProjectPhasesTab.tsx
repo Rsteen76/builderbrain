@@ -8,7 +8,6 @@ import {
   Tooltip,
   IconButton,
   Grid,
-  LinearProgress,
   Chip,
   Avatar,
   alpha,
@@ -32,42 +31,27 @@ import {
   Delete as DeleteIcon,
   Add as AddIcon,
   Timeline as TimelineIcon,
-  Receipt as ReceiptIcon,
   ExpandMore as ExpandMoreIcon,
   ExpandLess as ExpandLessIcon,
   CheckCircle as CheckCircleIcon,
   DonutLarge as DonutLargeIcon,
   AttachMoney as AttachMoneyIcon,
-  Construction as ConstructionIcon,
   Pending as PendingIcon,
-  Task as TaskIcon,
   PriorityHigh as PriorityHighIcon,
   Schedule as ScheduleIcon,
   Done as DoneIcon,
   Info as InfoIcon,
   Business as BusinessIcon,
   MoreVert as MoreVertIcon,
-  CalendarToday as CalendarTodayIcon,
-  AccountBalanceWallet as AccountBalanceWalletIcon,
   ReceiptLong as ReceiptLongIcon,
   Handshake as HandshakeIcon,
   Assignment as AssignmentIcon,
   ChevronRight as ChevronRightIcon,
 } from '@mui/icons-material';
-import {
-  ResponsiveContainer,
-  PieChart,
-  Pie,
-  Cell,
-  Tooltip as RechartsTooltip,
-  AreaChart, 
-  Area, 
-  XAxis, 
-  YAxis,
-  CartesianGrid,
-  Legend
-} from 'recharts';
 import { formatCurrency, formatDate, truncateText, safelyParseDate } from '../../../utils/formatters';
+import { getPhaseBids, getPhaseExpenses } from '../../../utils/phaseCalculations';
+import PhaseTimelineChart from '../charts/PhaseTimelineChart';
+import PhaseCard from './PhaseCard';
 
 import { ProjectPhase, Bid, Expense } from '../../../types';
 
@@ -80,27 +64,6 @@ const PHASE_STATUSES: ProjectPhase['status'][] = [
   'on_hold',
   'delayed'
 ];
-
-// Helper functions
-const getPhaseInitials = (phaseName: string): string => {
-  if (!phaseName) return '?';
-  return phaseName
-    .split(' ')
-    .map(word => word[0])
-    .join('')
-    .substring(0, 2)
-    .toUpperCase();
-};
-
-// Helper function to format dates consistently
-const formatPhaseDate = (date: Date | string | { toDate(): Date } | null): string => {
-  try {
-    return safelyParseDate(date).toLocaleDateString();
-  } catch (error) {
-    console.error('Error formatting phase date:', error);
-    return 'Invalid date';
-  }
-};
 
 interface ProjectPhasesTabProps {
   phases: ProjectPhase[];
@@ -188,103 +151,25 @@ const ProjectPhasesTab: React.FC<ProjectPhasesTabProps> = ({
     handleStatusMenuClose();
   };
 
-  // Function to get payments for a specific phase from all bids
-  const getPhasePayments = (phaseId: string) => {
-    const phasePayments: Array<{
-      bidId: string;
-      bidTitle: string;
-      subcontractorName: string;
-      payment: any;
-    }> = [];
-    
-    bids.forEach(bid => {
-      if (bid.paymentSchedule?.length) {
-        // Find all payments in this bid that belong to this phase
-        const paymentsForPhase = bid.paymentSchedule.filter(
-          payment => payment.phaseId === phaseId
-        );
-        
-        // If we found payments for this phase, add them to our results
-        if (paymentsForPhase.length > 0) {
-          paymentsForPhase.forEach(payment => {
-            phasePayments.push({
-              bidId: bid.id,
-              bidTitle: bid.title || 'Unnamed Bid',
-              subcontractorName: bid.subcontractorName || bid.contractorName || 'Unnamed',
-              payment
-            });
-          });
-        }
-      }
-      
-      // Also check for top-level phaseId (legacy support)
-      if (bid.phaseId === phaseId) {
-        console.log(`Found bid ${bid.id} with top-level phaseId ${phaseId}`);
-        // Add a synthetic payment for bids that have phaseId but no payment schedule
-        
-        // Ensure paymentSchedule exists AND is an array before calling .some()
-        const hasMatchingPaymentInSchedule = Array.isArray(bid.paymentSchedule) && 
-                                            bid.paymentSchedule.some(payment => payment.phaseId === phaseId);
-
-        if (!hasMatchingPaymentInSchedule) {
-          phasePayments.push({
-            bidId: bid.id,
-            bidTitle: bid.title || 'Unnamed Bid',
-            subcontractorName: bid.subcontractorName || bid.contractorName || 'Unnamed',
-            payment: {
-              id: `synthetic-${bid.id}`,
-              name: 'Full Payment',
-              amount: bid.totalAmount,
-              percentage: 100,
-              phaseId: bid.phaseId
-            }
-          });
-        }
-      }
-    });
-    
-    return phasePayments;
-  };
-  
-  // Function to get all the bids associated with a phase
-  const getPhaseBids = (phaseId: string) => {
-    // Get unique bids from the payments list
-    const phasePayments = getPhasePayments(phaseId);
-    const bidIds = new Set(phasePayments.map(item => item.bidId));
-    
-    // Return the full bid objects for these IDs
-    return bids.filter(bid => bidIds.has(bid.id));
-  };
-  
-  // Get phase expenses
-  const getPhaseExpenses = useCallback((phaseId: string) => {
-    return expenses.filter(expense => expense.phaseId === phaseId);
-  }, [expenses]);
-
-  // Helper to get status text
-  const getStatusText = (status: string) => {
-    return status.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
-  };
-  
-  // Helper to get status icon
-  const getStatusIcon = (status: string) => {
-    switch (status.toLowerCase()) {
+  // Re-add getPhaseStatusIcon definition here
+  const getPhaseStatusIcon = useCallback((status: string): React.ReactElement => {
+    switch (status?.toLowerCase()) { 
       case 'completed':
         return <DoneIcon />;
       case 'in_progress':
-        return <ConstructionIcon />;
+        return <PendingIcon />; 
       case 'not_started':
         return <PendingIcon />;
+      case 'planning': 
+          return <PendingIcon />; 
+      case 'on_hold': 
+          return <PendingIcon />; 
+      case 'delayed': 
+          return <PendingIcon />; 
       default:
         return <InfoIcon />;
     }
-  };
-
-  // Calculate percentage of budget used for a phase
-  const calculateBudgetPercentage = useCallback((phaseId: string, budget: number) => {
-    if (budget === 0) return 0;
-    return (phaseActualCosts[phaseId] || 0) / budget * 100;
-  }, [phaseActualCosts]);
+  }, []); // Added useCallback with empty dependency array
 
   return (
     <Box>
@@ -362,556 +247,30 @@ const ProjectPhasesTab: React.FC<ProjectPhasesTabProps> = ({
         </Box>
       </Box>
       
-      {/* Project Timeline Visualization */}
-      <Card 
-        elevation={0} 
-        sx={{ 
-          borderRadius: 3,
-          border: `1px solid ${alpha(theme.palette.divider, 0.08)}`,
-          boxShadow: `0 2px 12px ${alpha(theme.palette.common.black, 0.04)}`,
-          mb: 4,
-          overflow: 'hidden',
-          p: 0
-        }}
-      >
-        <Box 
-          sx={{ 
-            p: 2, 
-            background: `linear-gradient(45deg, ${alpha(theme.palette.background.default, 0.5)}, ${alpha(theme.palette.background.default, 0.8)})`,
-            borderBottom: `1px solid ${alpha(theme.palette.divider, 0.08)}`
-          }}
-        >
-          <Typography variant="h6" fontWeight={500} sx={{ display: 'flex', alignItems: 'center' }}>
-            <TimelineIcon sx={{ mr: 1.5, fontSize: '1.2rem', color: theme.palette.primary.main }} />
-            Project Timeline
-          </Typography>
-        </Box>
-        
-        <Box sx={{ p: 2, height: 160 }}>
-          <ResponsiveContainer width="100%" height="100%">
-            <AreaChart
-              data={phases.map(phase => ({
-                name: phase.name,
-                budget: phase.budget,
-                spent: phase.actualCost,
-                progress: phase.progress,
-                status: phase.status,
-              }))}
-              margin={{ top: 10, right: 20, left: 20, bottom: 10 }}
-            >
-              <defs>
-                <linearGradient id="colorBudget" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor={theme.palette.primary.main} stopOpacity={0.8}/>
-                  <stop offset="95%" stopColor={theme.palette.primary.main} stopOpacity={0.1}/>
-                </linearGradient>
-                <linearGradient id="colorSpent" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor={theme.palette.secondary.main} stopOpacity={0.8}/>
-                  <stop offset="95%" stopColor={theme.palette.secondary.main} stopOpacity={0.1}/>
-                </linearGradient>
-              </defs>
-              <CartesianGrid strokeDasharray="3 3" stroke={alpha(theme.palette.divider, 0.2)} />
-              <XAxis dataKey="name" fontSize={12} tick={{ fill: theme.palette.text.secondary }} />
-              <YAxis fontSize={12} tick={{ fill: theme.palette.text.secondary }} />
-              <RechartsTooltip 
-                formatter={(value: any, name: string) => [
-                  `${formatCurrency(value)}`, 
-                  name === 'budget' ? 'Budget' : 'Spent'
-                ]}
-                labelFormatter={(label) => `Phase: ${label}`}
-              />
-              <Legend />
-              <Area 
-                type="monotone" 
-                dataKey="budget" 
-                name="Budget" 
-                stroke={theme.palette.primary.main} 
-                fillOpacity={1} 
-                fill="url(#colorBudget)" 
-              />
-              <Area 
-                type="monotone" 
-                dataKey="spent" 
-                name="Spent" 
-                stroke={theme.palette.secondary.main} 
-                fillOpacity={1} 
-                fill="url(#colorSpent)" 
-              />
-            </AreaChart>
-          </ResponsiveContainer>
-        </Box>
-      </Card>
+      {/* Project Timeline Visualization - Replaced with component */}
+      <PhaseTimelineChart phases={phases} />
       
       {/* Phase Cards */}
       {phases.length > 0 ? (
         <Grid container spacing={3}>
-          {phases.map((phase, index) => {
-            const progress = phase.budget > 0 ? (phase.actualCost / phase.budget) * 100 : 0;
-            const isExpanded = expandedPhases[phase.id];
-            const phaseBids = getPhaseBids(phase.id);
-            const phaseExpenses = getPhaseExpenses(phase.id);
+          {phases.map((phase) => {
             const proposedCost = phaseProposedCosts[phase.id] || 0;
             const actualCost = phaseActualCosts[phase.id] || 0;
-            const budget = phase.budget || 0;
-            const budgetUsedPercentage = calculateBudgetPercentage(phase.id, budget);
 
             return (
               <Grid item xs={12} md={6} lg={4} key={phase.id}>
-                <Card 
-                  elevation={2}
-                  sx={{ 
-                    height: '100%', 
-                    display: 'flex', 
-                    flexDirection: 'column',
-                    transition: 'all 0.2s ease-in-out',
-                    '&:hover': {
-                      transform: 'translateY(-3px)',
-                      boxShadow: 5
-                    },
-                    borderRadius: 2,
-                    overflow: 'hidden',
-                  }}
-                >
-                  <CardHeader
-                    avatar={
-                      <Avatar 
-                        sx={{ 
-                          width: 38, 
-                          height: 38, 
-                          bgcolor: getStatusColor(phase.status) 
-                        }}
-                      >
-                        {getPhaseInitials(phase.name)}
-                      </Avatar>
-                    }
-                    action={
-                      <Box>
-                        <Chip 
-                          label={getStatusText(phase.status)} 
-                          size="small"
-                          sx={{ 
-                            backgroundColor: alpha(getStatusColor(phase.status), 0.1),
-                            color: getStatusColor(phase.status),
-                            fontWeight: 600,
-                            fontSize: '0.7rem',
-                            height: 24,
-                            mr: 1,
-                            cursor: 'pointer',
-                            '&:hover': {
-                              backgroundColor: alpha(getStatusColor(phase.status), 0.2),
-                            }
-                          }} 
-                          onClick={(e) => handleStatusMenuOpen(e, phase.id)}
-                        />
-                        <IconButton 
-                          aria-label="more options" 
-                          size="small"
-                          onClick={(event) => {
-                            event.stopPropagation();
-                            handlePhaseMenuOpen(event, phase.id);
-                          }}
-                        >
-                          <MoreVertIcon fontSize="small" />
-                        </IconButton>
-                      </Box>
-                    }
-                    title={
-                      <Typography 
-                        variant="subtitle1" 
-                        sx={{ 
-                          fontWeight: 700, 
-                          fontSize: '1.1rem',
-                          mb: 0,
-                          lineHeight: 1.3
-                        }}
-                      >
-                        {phase.name}
-                      </Typography>
-                    }
-                    subheader={
-                      <Box sx={{ display: 'flex', alignItems: 'center', mt: 0 }}>
-                        <Tooltip title="Timeline">
-                          <CalendarTodayIcon 
-                            fontSize="small" 
-                            sx={{ 
-                              color: theme.palette.text.secondary,
-                              fontSize: '0.9rem',
-                              mr: 0.5
-                            }} 
-                          />
-                        </Tooltip>
-                        <Typography 
-                          variant="body2" 
-                          color="text.secondary"
-                          sx={{ fontSize: '0.8rem' }}
-                        >
-                          {formatPhaseDate(phase.startDate)} - {formatPhaseDate(phase.endDate)}
-                        </Typography>
-                      </Box>
-                    }
-                    sx={{ 
-                      p: 1.5,
-                      pb: 0.5,
-                      '.MuiCardHeader-content': { minWidth: 0 } 
-                    }}
-                  />
-                  <CardContent 
-                    sx={{ 
-                      p: 1.5, 
-                      pt: 0.5,
-                      pb: '8px !important',
-                      flexGrow: 1,
-                      display: 'flex',
-                      flexDirection: 'column'
-                    }}
-                  >
-                    {/* Phase Stats - Compact row of key metrics */}
-                    <Grid 
-                      container 
-                      spacing={1} 
-                      sx={{ 
-                        mb: 1.5,
-                        mt: 0.5
-                      }}
-                    >
-                      {/* Tasks Summary */}
-                      <Grid item xs={6} sm={3}>
-                        <Paper 
-                          elevation={0} 
-                          sx={{ 
-                            p: 0.75, 
-                            textAlign: 'center',
-                            borderRadius: 2,
-                            bgcolor: alpha(theme.palette.info.main, 0.1),
-                            height: '100%',
-                            display: 'flex',
-                            flexDirection: 'column',
-                            justifyContent: 'center',
-                          }}
-                        >
-                          <TaskIcon 
-                            sx={{ 
-                              color: theme.palette.info.main,
-                              fontSize: '1.2rem',
-                              mb: 0.3
-                            }} 
-                          />
-                          <Typography 
-                            variant="h6" 
-                            color="text.primary" 
-                            sx={{ fontSize: '1rem', fontWeight: 700, lineHeight: 1.2 }}
-                          >
-                            {phase.tasks?.length || 0}
-                          </Typography>
-                          <Typography variant="body2" color="text.secondary" sx={{ fontSize: '0.7rem' }}>Tasks</Typography>
-                        </Paper>
-                      </Grid>
-                      
-                      {/* Budget */}
-                      <Grid item xs={6} sm={3}>
-                        <Paper 
-                          elevation={0} 
-                          sx={{ 
-                            p: 0.75, 
-                            textAlign: 'center',
-                            borderRadius: 2,
-                            bgcolor: alpha(theme.palette.primary.main, 0.1),
-                            height: '100%',
-                            display: 'flex',
-                            flexDirection: 'column',
-                            justifyContent: 'center',
-                          }}
-                        >
-                          <AccountBalanceWalletIcon 
-                            sx={{ 
-                              color: theme.palette.primary.main,
-                              fontSize: '1.2rem',
-                              mb: 0.3
-                            }} 
-                          />
-                          <Typography 
-                            variant="h6" 
-                            color="text.primary" 
-                            sx={{ fontSize: '1rem', fontWeight: 700, lineHeight: 1.2 }}
-                          >
-                            {formatCurrency(budget)}
-                          </Typography>
-                          <Typography variant="body2" color="text.secondary" sx={{ fontSize: '0.7rem' }}>Budget</Typography>
-                        </Paper>
-                      </Grid>
-                      
-                      {/* Proposed Cost */}
-                      <Grid item xs={6} sm={3}>
-                        <Paper 
-                          elevation={0} 
-                          sx={{ 
-                            p: 0.75, 
-                            textAlign: 'center',
-                            borderRadius: 2,
-                            bgcolor: alpha(theme.palette.warning.main, 0.1),
-                            height: '100%',
-                            display: 'flex',
-                            flexDirection: 'column',
-                            justifyContent: 'center',
-                          }}
-                        >
-                          <ConstructionIcon 
-                            sx={{ 
-                              color: theme.palette.warning.main,
-                              fontSize: '1.2rem',
-                              mb: 0.3
-                            }} 
-                          />
-                          <Typography 
-                            variant="h6" 
-                            color="text.primary" 
-                            sx={{ fontSize: '1rem', fontWeight: 700, lineHeight: 1.2 }}
-                          >
-                            {formatCurrency(proposedCost)}
-                          </Typography>
-                          <Typography variant="body2" color="text.secondary" sx={{ fontSize: '0.7rem' }}>Proposed</Typography>
-                        </Paper>
-                      </Grid>
-                      
-                      {/* Actual Cost */}
-                      <Grid item xs={6} sm={3}>
-                        <Paper 
-                          elevation={0} 
-                          sx={{ 
-                            p: 0.75, 
-                            textAlign: 'center',
-                            borderRadius: 2,
-                            bgcolor: actualCost > budget 
-                              ? alpha(theme.palette.error.main, 0.1)
-                              : alpha(theme.palette.success.main, 0.1),
-                            height: '100%',
-                            display: 'flex',
-                            flexDirection: 'column',
-                            justifyContent: 'center',
-                          }}
-                        >
-                          <ReceiptIcon 
-                            sx={{ 
-                              color: actualCost > budget
-                                ? theme.palette.error.main
-                                : theme.palette.success.main,
-                              fontSize: '1.2rem',
-                              mb: 0.3
-                            }} 
-                          />
-                          <Typography 
-                            variant="h6" 
-                            color={actualCost > budget ? "error" : "text.primary"}
-                            sx={{ fontSize: '1rem', fontWeight: 700, lineHeight: 1.2 }}
-                          >
-                            {formatCurrency(actualCost)}
-                          </Typography>
-                          <Typography variant="body2" color="text.secondary" sx={{ fontSize: '0.7rem' }}>Actual</Typography>
-                        </Paper>
-                      </Grid>
-                    </Grid>
-
-                    {/* Budget progress indicator */}
-                    <Box 
-                      sx={{ 
-                        width: '100%', 
-                        mt: 0.5,
-                        mb: 1,
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'space-between'
-                      }}
-                    >
-                      <Box sx={{ flexGrow: 1, mr: 1 }}>
-                        <LinearProgress
-                          variant="determinate"
-                          value={Math.min(budgetUsedPercentage, 100)}
-                          sx={{
-                            height: 6,
-                            borderRadius: 3,
-                            backgroundColor: alpha(theme.palette.primary.main, 0.1),
-                            '& .MuiLinearProgress-bar': {
-                              borderRadius: 3,
-                              backgroundColor: 
-                                actualCost > budget
-                                  ? theme.palette.error.main
-                                  : theme.palette.success.main,
-                            },
-                          }}
-                        />
-                      </Box>
-                      <Typography
-                        variant="body2"
-                        fontWeight="bold"
-                        color={
-                          actualCost > budget 
-                            ? theme.palette.error.main
-                            : theme.palette.text.primary
-                        }
-                        sx={{ lineHeight: 1.2, whiteSpace: 'nowrap' }}
-                      >
-                        {budget > 0 ? Math.round((actualCost / budget) * 100) : 0}%
-                      </Typography>
-                    </Box>
-
-                    {/* Chart area */}
-                    <Box sx={{ 
-                      display: 'flex', 
-                      justifyContent: 'center', 
-                      alignItems: 'center',
-                      flexGrow: 1,
-                      height: 160, 
-                      mt: 0.5
-                    }}>
-                      <ResponsiveContainer width="100%" height="100%">
-                        <PieChart
-                          width={isXs ? 160 : 180}
-                          height={160}
-                          margin={{ top: 0, right: 0, bottom: 0, left: 0 }}
-                        >
-                          <Pie
-                            data={[
-                              { name: 'Budget', value: budget, color: theme.palette.primary.main },
-                              { name: 'Proposed', value: proposedCost, color: theme.palette.warning.main },
-                              { name: 'Actual', value: Math.max(actualCost, 0), color: 
-                                actualCost > budget 
-                                  ? theme.palette.error.main 
-                                  : theme.palette.success.main 
-                              },
-                            ]}
-                            cx="50%"
-                            cy="50%"
-                            innerRadius={35}
-                            outerRadius={60}
-                            paddingAngle={2}
-                            dataKey="value"
-                          >
-                            {[
-                              { name: 'Budget', value: budget, color: theme.palette.primary.main },
-                              { name: 'Proposed', value: proposedCost, color: theme.palette.warning.main },
-                              { name: 'Actual', value: Math.max(actualCost, 0), color: 
-                                actualCost > budget 
-                                  ? theme.palette.error.main 
-                                  : theme.palette.success.main 
-                              },
-                            ].map((entry, index) => (
-                              <Cell 
-                                key={`cell-${index}`} 
-                                fill={entry.color}
-                                stroke={alpha(entry.color, 0.2)}
-                                strokeWidth={2}
-                              />
-                            ))}
-                          </Pie>
-                          <Legend 
-                            verticalAlign="bottom" 
-                            height={24}
-                            iconSize={8}
-                            iconType="circle"
-                            wrapperStyle={{ 
-                              fontSize: '0.75rem',
-                              marginTop: '-20px'
-                            }}
-                          />
-                          <RechartsTooltip
-                            formatter={(value: number) => formatCurrency(value)}
-                            contentStyle={{
-                              background: alpha(theme.palette.background.paper, 0.9),
-                              borderRadius: 4,
-                              fontSize: '0.8rem',
-                              boxShadow: '0 4px 20px rgba(0,0,0,0.1)',
-                              border: 'none',
-                              padding: '4px 8px'
-                            }}
-                          />
-                        </PieChart>
-                      </ResponsiveContainer>
-                    </Box>
-
-                    {/* Phase description - truncated */}
-                    <Box sx={{ 
-                      mt: 0.5,
-                      maxHeight: '60px',
-                      overflow: 'hidden',
-                      textOverflow: 'ellipsis',
-                      position: 'relative',
-                      display: phase.description ? 'block' : 'none'
-                    }}>
-                      <Typography 
-                        variant="body2" 
-                        color="text.secondary"
-                        sx={{ 
-                          fontSize: '0.8rem',
-                          display: '-webkit-box',
-                          WebkitLineClamp: 3,
-                          WebkitBoxOrient: 'vertical',
-                          overflow: 'hidden'
-                        }}
-                      >
-                        {phase.description}
-                      </Typography>
-                      <Box sx={{ 
-                        position: 'absolute',
-                        bottom: 0,
-                        left: 0,
-                        right: 0,
-                        height: '20px',
-                        background: 'linear-gradient(rgba(255,255,255,0), rgba(255,255,255,0.9))'
-                      }}/>
-                    </Box>
-
-                    {/* Footer actions */}
-                    <Box 
-                      sx={{ 
-                        display: 'flex', 
-                        justifyContent: 'space-between',
-                        alignItems: 'center',
-                        mt: 'auto',
-                        pt: 1
-                      }}
-                    >
-                      <Box sx={{ display: 'flex', gap: 0.5 }}>
-                        <Tooltip title="Add expense">
-                          <IconButton 
-                            size="small" 
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleOpenQuickExpenseDialog(phase.id);
-                            }}
-                            sx={{ p: 0.5 }}
-                          >
-                            <ReceiptLongIcon fontSize="small" />
-                          </IconButton>
-                        </Tooltip>
-                        <Tooltip title="Add bid">
-                          <IconButton 
-                            size="small" 
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleOpenQuickBidDialog(phase.id);
-                            }}
-                            sx={{ p: 0.5 }}
-                          >
-                            <HandshakeIcon fontSize="small" />
-                          </IconButton>
-                        </Tooltip>
-                      </Box>
-                      
-                      <Button
-                        size="small"
-                        endIcon={<ChevronRightIcon />}
-                        onClick={() => handleViewPhaseDetails(phase.id)}
-                        sx={{ 
-                          textTransform: 'none',
-                          fontSize: '0.75rem',
-                          py: 0.3,
-                          px: 0.8
-                        }}
-                      >
-                        Details
-                      </Button>
-                    </Box>
-                  </CardContent>
-                </Card>
+                <PhaseCard 
+                  phase={phase}
+                  proposedCost={proposedCost}
+                  actualCost={actualCost}
+                  onStatusMenuOpen={handleStatusMenuOpen}
+                  onPhaseMenuOpen={handlePhaseMenuOpen}
+                  onOpenQuickExpenseDialog={handleOpenQuickExpenseDialog}
+                  onOpenQuickBidDialog={handleOpenQuickBidDialog}
+                  onViewPhaseDetails={handleViewPhaseDetails}
+                  getStatusColor={getStatusColor}
+                  formatCurrency={formatCurrency}
+                />
               </Grid>
             );
           })}
@@ -1014,7 +373,8 @@ const ProjectPhasesTab: React.FC<ProjectPhasesTabProps> = ({
       >
         {PHASE_STATUSES.map((status) => (
           <MenuItem key={status} onClick={() => handleStatusSelect(status)}>
-            <ListItemText primary={getStatusText(status)} />
+            <ListItemIcon>{getPhaseStatusIcon(status)}</ListItemIcon>
+            <ListItemText primary={status.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())} />
           </MenuItem>
         ))}
       </Menu>

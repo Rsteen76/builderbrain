@@ -58,23 +58,23 @@ Through code analysis, we've identified the following components that require im
 
 - [x] Create a `ProjectDetailHeader` component
 - [x] Extract notification logic to a `useNotification` hook
-- [ ] Create a `ProjectActionsMenu` component
+- [x] Create a `ProjectActionsMenu` component
 
 ### 2. ProjectPhasesTab.tsx
 
 #### 2.1 Extract Visualization Components
 
-- [ ] Create a `PhaseTimelineChart` component
-- [ ] Create a `PhaseBudgetPieChart` component
-- [ ] Create a `PhaseMetricsCards` component
+- [x] Create a `PhaseTimelineChart` component
+- [x] Create a `PhaseBudgetPieChart` component
+- [x] Create a `PhaseMetricsCards` component
 
 #### 2.2 Extract Phase Card Component
 
-- [ ] Create a `PhaseCard` component with the following sub-components:
+- [x] Create a `PhaseCard` component with the following sub-components:
   - [ ] `PhaseCardHeader`
-  - [ ] `PhaseCardMetrics`
+  - [x] `PhaseCardMetrics`
   - [ ] `PhaseCardActions`
-  - [ ] `PhaseCardCharts`
+  - [x] `PhaseCardCharts`
   - [ ] `PhaseCardDetails` (expanded content)
 
 #### 2.3 Extract Helper Functions

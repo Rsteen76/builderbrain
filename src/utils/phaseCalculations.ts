@@ -1,4 +1,11 @@
+// import React from 'react'; // Added for getStatusIcon
 import { ProjectPhase, Bid, Expense } from '../types'; // Adjust path if needed
+// import {
+//   Done as DoneIcon,
+//   Pending as PendingIcon,
+//   Info as InfoIcon
+//   // Add other icons if getStatusIcon logic expands
+// } from '@mui/icons-material';
 
 /**
  * Calculates the total proposed costs (sum of accepted bids) for each phase.
@@ -64,4 +71,98 @@ export const calculateProjectProgress = (phases: ProjectPhase[]): number => {
   if (totalPhases === 0) return 0;
   const completedPhases = phases.filter((p: ProjectPhase) => p.status === 'completed').length;
   return Math.round((completedPhases / totalPhases) * 100);
-}; 
+};
+
+/**
+ * Retrieves all payment schedule entries associated with a specific phase ID from a list of bids.
+ * Includes synthetic payments for bids linked via top-level phaseId for legacy support.
+ */
+export const getPhasePayments = (
+  phaseId: string,
+  bids: Bid[] // Pass bids as argument
+): Array<{ bidId: string; bidTitle: string; subcontractorName: string; payment: any; }> => {
+  const phasePayments: Array<{ bidId: string; bidTitle: string; subcontractorName: string; payment: any; }> = [];
+
+  bids.forEach(bid => {
+    if (bid.paymentSchedule?.length) {
+      const paymentsForPhase = bid.paymentSchedule.filter(
+        payment => payment.phaseId === phaseId
+      );
+      if (paymentsForPhase.length > 0) {
+        paymentsForPhase.forEach(payment => {
+          phasePayments.push({
+            bidId: bid.id,
+            bidTitle: bid.title || 'Unnamed Bid',
+            subcontractorName: bid.subcontractorName || bid.contractorName || 'Unnamed',
+            payment
+          });
+        });
+      }
+    }
+    if (bid.phaseId === phaseId) {
+      const hasMatchingPaymentInSchedule = Array.isArray(bid.paymentSchedule) &&
+                                            bid.paymentSchedule.some(payment => payment.phaseId === phaseId);
+      if (!hasMatchingPaymentInSchedule) {
+        phasePayments.push({
+          bidId: bid.id,
+          bidTitle: bid.title || 'Unnamed Bid',
+          subcontractorName: bid.subcontractorName || bid.contractorName || 'Unnamed',
+          payment: {
+            id: `synthetic-${bid.id}`,
+            name: 'Full Payment',
+            amount: bid.totalAmount,
+            percentage: 100,
+            phaseId: bid.phaseId
+          }
+        });
+      }
+    }
+  });
+
+  return phasePayments;
+};
+
+/**
+ * Retrieves all full Bid objects associated with a specific phase ID.
+ */
+export const getPhaseBids = (
+  phaseId: string,
+  bids: Bid[] // Pass bids as argument
+): Bid[] => {
+  // Get unique bids from the payments list
+  const phasePayments = getPhasePayments(phaseId, bids); // Pass bids down
+  const bidIds = new Set(phasePayments.map(item => item.bidId));
+  return bids.filter(bid => bidIds.has(bid.id));
+};
+
+/**
+ * Retrieves all Expense objects associated with a specific phase ID.
+ */
+export const getPhaseExpenses = (
+  phaseId: string,
+  expenses: Expense[] // Pass expenses as argument
+): Expense[] => {
+  return expenses.filter(expense => expense.phaseId === phaseId);
+};
+
+// Removed getPhaseStatusIcon function definition
+/*
+export const getPhaseStatusIcon = (status: string): React.ReactElement => {
+  switch (status?.toLowerCase()) { // Added safety check for status
+    case 'completed':
+      return <DoneIcon />;
+    case 'in_progress':
+      return <PendingIcon />; // Assuming PendingIcon is suitable, adjust if needed
+    case 'not_started':
+      return <PendingIcon />;
+    case 'planning': // Added planning case
+        return <PendingIcon />; // Or a different icon like Schedule? 
+    case 'on_hold': // Added on_hold case
+        return <PendingIcon />; // Or a different icon? 
+    case 'delayed': // Added delayed case
+        return <PendingIcon />; // Or a different icon? 
+    default:
+      return <InfoIcon />;
+  }
+};
+*/ 
