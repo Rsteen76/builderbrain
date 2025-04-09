@@ -303,7 +303,7 @@ const PhaseCard: React.FC<PhaseCardProps> = ({
               <IconButton
                 size="small"
                 onClick={(e) => {
-                  e.stopPropagation(); // Prevent card click
+                  e.stopPropagation();
                   onOpenQuickExpenseDialog(phase.id);
                 }}
                 sx={{ p: 0.5 }}
@@ -315,7 +315,7 @@ const PhaseCard: React.FC<PhaseCardProps> = ({
               <IconButton
                 size="small"
                 onClick={(e) => {
-                  e.stopPropagation(); // Prevent card click
+                  e.stopPropagation();
                   onOpenQuickBidDialog(phase.id);
                 }}
                 sx={{ p: 0.5 }}

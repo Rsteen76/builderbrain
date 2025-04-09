@@ -1,17 +1,15 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import {
   Box,
   Typography,
-  Button,
   Grid,
   Paper,
   Divider,
-  Chip,
   alpha,
-  Theme,
+  CircularProgress,
+  Alert,
 } from '@mui/material';
 import {
-  Add as AddIcon,
   AttachMoney as ExpensesIcon,
   Numbers as BudgetIcon,
 } from '@mui/icons-material';
@@ -28,31 +26,40 @@ import {
   YAxis,
   CartesianGrid,
 } from 'recharts';
-import { Expense, ProjectPhase } from '../../../types';
+import { useTheme } from '@mui/material/styles';
+import { useProjectDetail } from '../../../contexts/ProjectDetailContext';
 import ExpensesList from '../../expenses/Expenses';
+import { formatCurrency } from '../../../utils/formatters';
+import { calculateExpensesChartData, ExpenseChartData } from '../../../utils/expenseAnalytics';
 
-interface ProjectExpensesTabProps {
-  projectId: string;
-  expenses: Expense[];
-  expensesData: { name: string; value: number; color: string }[];
-  phases: ProjectPhase[];
-  theme: Theme;
-  handleOpenQuickExpenseDialog: (phaseId?: string) => void;
-  formatCurrency: (value: number) => string;
-}
+const ProjectExpensesTab: React.FC = () => {
+  const theme = useTheme();
+  const {
+    projectId,
+    expenses,
+    phases,
+    loading,
+    error,
+    openNewExpenseDialog,
+  } = useProjectDetail();
 
-const ProjectExpensesTab: React.FC<ProjectExpensesTabProps> = ({
-  projectId,
-  expenses,
-  expensesData,
-  phases,
-  theme,
-  handleOpenQuickExpenseDialog,
-  formatCurrency,
-}) => {
+  const expensesChartData: ExpenseChartData[] = useMemo(() => {
+    if (!expenses || expenses.length === 0) return [];
+    return calculateExpensesChartData(expenses);
+  }, [expenses]);
+
+  if (loading) {
+    return <CircularProgress sx={{ display: 'block', margin: 'auto', mt: 2 }} />;
+  }
+  if (error) {
+    return <Alert severity="error" sx={{ mt: 2 }}>Error loading expense data: {error}</Alert>;
+  }
+  if (!projectId) {
+    return <Alert severity="warning" sx={{ mt: 2 }}>Project context not available.</Alert>;
+  }
+
   return (
-    <Box>
-      
+    <Box sx={{ mt: 3 }}>
       {/* Expense Charts */}
       <Grid container spacing={3} sx={{ mb: 3 }}>
         <Grid item xs={12} md={6}>
@@ -70,39 +77,36 @@ const ProjectExpensesTab: React.FC<ProjectExpensesTabProps> = ({
             <Divider sx={{ mb: 2 }} />
             
             <Box sx={{ height: 300 }}>
-              {expensesData.length > 0 ? (
+              {expensesChartData && expensesChartData.length > 0 ? (
                 <ResponsiveContainer width="100%" height="100%">
                   <PieChart>
                     <Pie
-                      data={expensesData}
+                      data={expensesChartData}
                       cx="50%"
                       cy="50%"
                       labelLine={false}
                       outerRadius={80}
-                      fill="#8884d8" // Default fill, overridden by Cell
+                      fill="#8884d8"
                       dataKey="value"
                       nameKey="name"
-                      label={(entry: any) => `${entry.name}: ${((entry.value / expensesData.reduce((acc, curr) => acc + curr.value, 0)) * 100).toFixed(0)}%`}
+                      label={(entry: any) => {
+                        const total = expensesChartData.reduce((acc: number, curr: ExpenseChartData) => acc + curr.value, 0);
+                        return total > 0 ? `${entry.name}: ${((entry.value / total) * 100).toFixed(0)}%` : entry.name;
+                      }}
                     >
-                      {expensesData.map((entry, index) => (
+                      {expensesChartData.map((entry: ExpenseChartData, index: number) => (
                         <Cell key={`cell-${index}`} fill={entry.color} />
                       ))}
                     </Pie>
-                    <RechartsTooltip formatter={(value: any) => formatCurrency(value as number)} />
+                    <RechartsTooltip formatter={(value: number) => formatCurrency(value)} />
                     <Legend />
                   </PieChart>
                 </ResponsiveContainer>
               ) : (
-                <Box sx={{ 
-                  height: '100%', 
-                  display: 'flex', 
-                  flexDirection: 'column', 
-                  justifyContent: 'center', 
-                  alignItems: 'center'
-                }}>
+                <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center' }}>
                   <ExpensesIcon sx={{ fontSize: 40, color: 'text.secondary', opacity: 0.3, mb: 2 }} />
                   <Typography variant="body1" color="text.secondary" align="center">
-                    No expense data available
+                    No expense data available for chart
                   </Typography>
                 </Box>
               )}
@@ -124,22 +128,22 @@ const ProjectExpensesTab: React.FC<ProjectExpensesTabProps> = ({
             </Typography>
             <Divider sx={{ mb: 2 }} />
             
-            {phases.length > 0 ? (
+            {phases && phases.length > 0 ? (
               <Box sx={{ height: 300 }}>
                 <ResponsiveContainer width="100%" height="100%">
                   <BarChart
                     data={phases.map(p => ({
                       name: p.name,
-                      budget: p.budget,
-                      actual: p.actualCost,
-                      variance: p.budget - p.actualCost
+                      budget: p.budget || 0,
+                      actual: p.actualCost || 0,
+                      variance: (p.budget || 0) - (p.actualCost || 0)
                     }))}
                     margin={{ top: 20, right: 30, left: 20, bottom: 5 }}
                   >
                     <CartesianGrid strokeDasharray="3 3" />
                     <XAxis dataKey="name" />
                     <YAxis />
-                    <RechartsTooltip formatter={(value: any) => formatCurrency(value as number)} />
+                    <RechartsTooltip formatter={(value: number) => formatCurrency(value)} />
                     <Legend />
                     <Bar 
                       dataKey="budget" 
@@ -159,13 +163,7 @@ const ProjectExpensesTab: React.FC<ProjectExpensesTabProps> = ({
                 </ResponsiveContainer>
               </Box>
             ) : (
-              <Box sx={{ 
-                height: 300, 
-                display: 'flex', 
-                flexDirection: 'column', 
-                justifyContent: 'center', 
-                alignItems: 'center'
-              }}>
+              <Box sx={{ height: 300, display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center' }}>
                 <BudgetIcon sx={{ fontSize: 40, color: 'text.secondary', opacity: 0.3, mb: 2 }} /> 
                 <Typography variant="body1" color="text.secondary" align="center">
                   No phase budget data available
@@ -176,7 +174,6 @@ const ProjectExpensesTab: React.FC<ProjectExpensesTabProps> = ({
         </Grid>
       </Grid>
       
-      {/* Display project-specific expenses using the enhanced Expenses component */}
       <ExpensesList projectId={projectId} />
     </Box>
   );

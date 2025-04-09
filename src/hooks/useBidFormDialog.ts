@@ -68,9 +68,13 @@ export function useBidFormDialog(userId: string | undefined, options: UseBidForm
     };
   };
 
-  const openNewBidDialog = (defaultProjectId?: string) => {
+  const openNewBidDialog = (initialData?: Partial<BidFormData>) => {
     setEditingBidId(null);
-    setInitialBidData(defaultProjectId ? { projectId: defaultProjectId } : null);
+    const dataToSet = { 
+      ...(initialData || {}), 
+      projectId: initialData?.projectId ?? options.projectId, 
+    };
+    setInitialBidData(Object.keys(dataToSet).length > 0 ? dataToSet : null);
     setIsModalOpen(true);
     setError(null);
   };

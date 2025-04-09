@@ -1,39 +1,188 @@
-import React, { createContext, useContext, ReactNode, useMemo } from 'react';
-import { Project, ProjectPhase, Bid, Expense } from '../types'; // Adjust paths if needed
-import { useProjectData } from '../hooks/useProjectData';
+import React, { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
+import { Project, ProjectPhase, Bid, Expense, BidFormData, BidSummary } from '../types';
+import { useProjectData } from '../hooks/useProjectData'; // Keep using this for core data
+// Import necessary hooks FOR the provider
+import { useAuth } from '../hooks/useAuth';
+import { useNotification } from '../hooks/useNotification';
+import { useBidFormDialog } from '../hooks/useBidFormDialog';
+import { useBidOperations } from '../hooks/useBidOperations';
+import { useExpenseFormDialog } from '../hooks/useExpenseFormDialog'; // Import expense dialog hook and type
 
-// 1. Define the Context Shape (based on useProjectData return)
-interface ProjectDetailContextType {
+// --- Context Shape ---
+interface ProjectDetailContextState {
+  // Core Data
+  projectId: string | null;
   project: Project | null;
   phases: ProjectPhase[];
   bids: Bid[];
   expenses: Expense[];
   loading: boolean;
-  error: string | null;
+  error: string | null; // Error from useProjectData
   refreshAllProjectData: () => Promise<void>;
-  setPhases: React.Dispatch<React.SetStateAction<ProjectPhase[]>>;
-  setBids: React.Dispatch<React.SetStateAction<Bid[]>>;
-  setExpenses: React.Dispatch<React.SetStateAction<Expense[]>>;
-  projectId?: string; // Include projectId for reference
+  // REMOVED Setters: setProject, setPhases, setBids, setExpenses - useProjectData is read-only for data
+
+  // Notification
+  showNotification: (message: string, severity: 'success' | 'error' | 'warning' | 'info') => void;
+  NotificationComponent: React.FC; // Expose the component too
+
+  // Bid Dialog State & Triggers
+  isBidModalOpen: boolean;
+  editingBidId: string | null;
+  bidInitialData: Partial<BidFormData> | null;
+  openNewBidDialog: (initialData?: Partial<BidFormData>) => void;
+  openEditBidDialog: (bid: Bid | BidSummary) => Promise<void>;
+  closeBidDialog: () => void;
+  handleBidSubmitSuccess: (savedBid: Bid) => void; 
+  isBidSubmitting: boolean; // Loading state from useBidFormDialog
+  bidDialogError: string | null; // Error state from useBidFormDialog
+
+  // Bid Operations
+  isBidOperating: boolean; // Loading state from useBidOperations
+  // Updated signatures based on useBidOperations.ts
+  requestDeleteBid: (bid: Bid | BidSummary) => void; 
+  duplicateBid: (bidToDuplicate: Bid | BidSummary) => Promise<void>; 
+  // REMOVED bidOperationError - hook uses toasts internally
+
+  // Expense Dialog State & Triggers
+  isExpenseDialogOpen: boolean; // Renamed
+  editingExpenseId: string | null;
+  initialExpenseData: Partial<Expense> | null; // Use correct type
+  openNewExpenseDialog: (defaultData?: Partial<Expense>) => void; // Use correct type and name
+  openEditExpenseDialog: (expense: Expense) => void; // Correct signature
+  closeExpenseDialog: () => void; // Renamed
+  // Removed isExpenseSubmitting, expenseDialogError - hook doesn't provide them
 }
 
-// 2. Create the Context with default values
-const ProjectDetailContext = createContext<ProjectDetailContextType | undefined>(undefined);
+// --- Default Context Value ---
+const defaultContextValue: ProjectDetailContextState = {
+  projectId: null,
+  project: null,
+  phases: [],
+  bids: [],
+  expenses: [],
+  loading: true,
+  error: null,
+  refreshAllProjectData: async () => { console.warn("refreshAllProjectData called on default context"); },
+  // REMOVED Setters
+  showNotification: () => { console.warn("showNotification called on default context"); },
+  NotificationComponent: () => null, 
+  isBidModalOpen: false,
+  editingBidId: null,
+  bidInitialData: null,
+  openNewBidDialog: () => { console.warn("openNewBidDialog called on default context"); },
+  openEditBidDialog: async () => { console.warn("openEditBidDialog called on default context"); },
+  closeBidDialog: () => { console.warn("closeBidDialog called on default context"); },
+  handleBidSubmitSuccess: () => { console.warn("handleBidSubmitSuccess called on default context"); },
+  isBidSubmitting: false,
+  bidDialogError: null,
+  isBidOperating: false,
+  // Updated default function signatures
+  requestDeleteBid: () => { console.warn("requestDeleteBid called on default context"); },
+  duplicateBid: async () => { console.warn("duplicateBid called on default context"); },
+  // REMOVED bidOperationError
 
-// 3. Create the Provider Component
+  // Expense Dialog Defaults
+  isExpenseDialogOpen: false,
+  editingExpenseId: null,
+  initialExpenseData: null,
+  openNewExpenseDialog: () => { console.warn("openNewExpenseDialog called on default context"); },
+  openEditExpenseDialog: () => { console.warn("openEditExpenseDialog called on default context"); }, // Returns void
+  closeExpenseDialog: () => { console.warn("closeExpenseDialog called on default context"); },
+  // Removed isExpenseSubmitting, expenseDialogError defaults
+};
+
+// --- Create Context ---
+const ProjectDetailContext = createContext<ProjectDetailContextState>(defaultContextValue);
+
+// --- Provider Component ---
 interface ProjectDetailProviderProps {
-  projectId: string | undefined;
   children: ReactNode;
+  projectId?: string; // Accept projectId as prop
 }
 
-export const ProjectDetailProvider: React.FC<ProjectDetailProviderProps> = ({ projectId, children }) => {
-  const projectData = useProjectData(projectId);
+export const ProjectDetailProvider: React.FC<ProjectDetailProviderProps> = ({ children, projectId }) => {
+  // === Instantiate Hooks ===
+  const { user } = useAuth();
+  const actualProjectId = projectId || ''; 
 
-  // Use useMemo to prevent unnecessary re-renders of consumers when the provider itself re-renders
-  const contextValue = useMemo(() => ({
-    ...projectData,
-    projectId,
-  }), [projectData, projectId]);
+  // Core Data Hook
+  const {
+    project, phases, bids, expenses, loading, error, // Note: no setters returned
+    refreshAllProjectData, 
+  } = useProjectData(actualProjectId);
+
+  // Notification Hook
+  const { showNotification, NotificationComponent } = useNotification();
+
+  // Bid Dialog Hook
+  const bidFormDialog = useBidFormDialog(user?.uid, {
+    projectId: actualProjectId,
+    onSubmitSuccess: (savedBid: Bid) => {
+       refreshAllProjectData();
+       showNotification(bidFormDialog.editingBidId ? 'Bid updated successfully!' : 'Bid added successfully!', 'success');
+       bidFormDialog.closeBidDialog();
+    },
+    onError: (msg: string) => showNotification(msg, 'error'), // Add type to msg
+  });
+
+  // Bid Operations Hook (Removed onError from options)
+  const bidOperations = useBidOperations({
+    projectId: actualProjectId,
+    onBidUpdate: (affectedBidId, operation) => {
+      showNotification(`Bid ${operation} successful!`, 'success');
+      refreshAllProjectData();
+    },
+    // REMOVED onError: (msg) => showNotification(msg, 'error'),
+  });
+
+  // Instantiate Expense Dialog Hook (Corrected arguments and callbacks)
+  const expenseFormDialog = useExpenseFormDialog(user?.uid, {
+    projectId: actualProjectId, // Pass projectId in options
+    onSubmitSuccess: (savedExpense: Expense) => {
+      refreshAllProjectData();
+      showNotification(expenseFormDialog.editingExpenseId ? 'Expense updated!' : 'Expense added!', 'success');
+      expenseFormDialog.closeExpenseDialog(); // Use the correct close function name
+    },
+    onError: (msg: string) => showNotification(msg, 'error'), // Add type to msg
+  });
+
+  // === Construct Context Value ===
+  const contextValue: ProjectDetailContextState = {
+    projectId: actualProjectId,
+    project,
+    phases,
+    bids,
+    expenses,
+    loading,
+    error, // Error from useProjectData
+    refreshAllProjectData,
+    // REMOVED Setters
+    showNotification,
+    NotificationComponent,
+    // Bid Dialogs
+    isBidModalOpen: bidFormDialog.isModalOpen,
+    editingBidId: bidFormDialog.editingBidId,
+    bidInitialData: bidFormDialog.initialBidData,
+    openNewBidDialog: bidFormDialog.openNewBidDialog,
+    openEditBidDialog: bidFormDialog.openEditBidDialog,
+    closeBidDialog: bidFormDialog.closeBidDialog,
+    handleBidSubmitSuccess: bidFormDialog.handleBidSubmitSuccess, 
+    isBidSubmitting: bidFormDialog.loading,
+    bidDialogError: bidFormDialog.error,
+    // Bid Operations
+    isBidOperating: bidOperations.isOperating,
+    requestDeleteBid: bidOperations.requestDeleteBid, // Correct signature now
+    duplicateBid: bidOperations.duplicateBid,       // Correct signature now
+    // REMOVED bidOperationError
+
+    // Expense Dialog Values
+    isExpenseDialogOpen: expenseFormDialog.isExpenseDialogOpen,
+    editingExpenseId: expenseFormDialog.editingExpenseId,
+    initialExpenseData: expenseFormDialog.initialExpenseData,
+    openNewExpenseDialog: expenseFormDialog.openNewExpenseDialog,
+    openEditExpenseDialog: expenseFormDialog.openEditExpenseDialog,
+    closeExpenseDialog: expenseFormDialog.closeExpenseDialog,
+  };
 
   return (
     <ProjectDetailContext.Provider value={contextValue}>
@@ -42,11 +191,11 @@ export const ProjectDetailProvider: React.FC<ProjectDetailProviderProps> = ({ pr
   );
 };
 
-// 4. Create the Consumer Hook
-export const useProjectDetail = (): ProjectDetailContextType => {
+// --- Consumer Hook ---
+export const useProjectDetail = (): ProjectDetailContextState => {
   const context = useContext(ProjectDetailContext);
-  if (context === undefined) {
-    throw new Error('useProjectDetail must be used within a ProjectDetailProvider');
+  if (context === defaultContextValue) {
+    throw new Error('useProjectDetail must be used within a ProjectDetailProvider. Make sure the component is wrapped correctly.');
   }
   return context;
 }; 

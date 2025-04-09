@@ -1,6 +1,6 @@
 import React, { ReactNode } from 'react';
 import { Box, Theme } from '@mui/material';
-import { Project, ProjectPhase, Bid, Expense } from '../../../types';
+// Removed unused type imports (Project, ProjectPhase, Bid, Expense)
 
 // Import tab components
 import ProjectOverviewTab from './ProjectOverviewTab';
@@ -8,89 +8,23 @@ import ProjectPhasesTab from './ProjectPhasesTab';
 import ProjectBidsTab from './ProjectBidsTab';
 import ProjectExpensesTab from './ProjectExpensesTab';
 import ProjectDocumentsTab from './ProjectDocumentsTab';
-import ProjectTaskManager from '../ProjectTaskManager';
+import ProjectTaskManager from './ProjectTaskManager';
 
-// Import formatters
-import { formatCurrency, formatDate } from '../../../utils/formatters';
+// Removed unused formatter imports
 
+// Simplified Props: Only keep tabValue and children
 interface TabContentProps {
   tabValue: number;
-  project: Project;
-  phases: ProjectPhase[];
-  bids: Bid[];
-  recentBids: Bid[];
-  expenses: Expense[];
-  expensesData: { name: string; value: number; color: string }[];
-  combinedExpenses: { name: string; budget: number; actual: number }[];
-  budgetData: {
-    totalBudget: number;
-    totalActual: number;
-    difference: number;
-    percentUsed: number;
-  };
-  phaseProposedCosts: Record<string, number>;
-  phaseActualCosts: Record<string, number>;
-  theme: Theme;
-  userId: string;
-  getStatusColor: (status: string) => string;
-  handleAddPhase: () => void;
-  onUpdatePhaseStatus: (phaseId: string, status: ProjectPhase['status']) => void;
-  handleDeletePhase?: (phaseId: string) => void;
-  handleAddBid: () => void;
-  handleEditBid: (bidId: string) => void;
-  handleDeleteBid: (bidId: string) => void;
-  handleAddExpense?: () => void;
-  handleEditExpense?: (expense: Expense) => void;
-  handleDeleteExpense?: (expenseId: string) => void;
-  handleOpenQuickBidDialog?: (phaseId: string) => void;
-  handleOpenQuickExpenseDialog?: (phaseId?: string) => void;
-  handleOpenTemplateAdjuster?: () => void;
-  handleProjectUpdate?: (updatedProject: Project) => void;
-  handleViewPhaseDetails?: (phaseId: string) => void;
-  isLoading?: boolean;
-  error?: string | null;
-  onRefreshData?: () => void;
-  tasks?: any[];
-  subcontractors?: any[];
-  documents?: any[];
-  onAddTask?: () => void;
-  onUpdateTask?: () => void;
-  onDeleteTask?: () => void;
-  onAddDocument?: () => void;
-  onDeleteDocument?: () => void;
-  onAddSubcontractor?: () => void;
-  onEditSubcontractor?: () => void;
-  onDeleteSubcontractor?: () => void;
   children?: ReactNode;
+  // Removed numerous props: project, phases, bids, expenses, calculated data, handlers, theme, userId, etc.
 }
 
 const TabContent: React.FC<TabContentProps> = ({
   tabValue,
-  project,
-  phases,
-  bids,
-  recentBids,
-  expenses,
-  expensesData,
-  combinedExpenses,
-  budgetData,
-  phaseProposedCosts,
-  phaseActualCosts,
-  theme,
-  userId,
-  getStatusColor,
-  handleAddPhase,
-  onUpdatePhaseStatus,
-  handleDeletePhase,
-  handleAddBid,
-  handleEditBid,
-  handleOpenQuickBidDialog,
-  handleOpenQuickExpenseDialog,
-  handleOpenTemplateAdjuster,
-  handleProjectUpdate,
-  handleViewPhaseDetails,
   children,
+  // Removed destructured props
 }) => {
+  // Handle children prop if provided (for custom tab content)
   if (children) {
     return (
       <Box sx={{ mt: 2 }}>
@@ -99,74 +33,42 @@ const TabContent: React.FC<TabContentProps> = ({
     );
   }
 
+  // Render specific tab component based on tabValue
+  // Stop passing down props that components will get from context/hooks
   return (
     <Box sx={{ mt: 2 }}>
       {tabValue === 0 && (
-        <ProjectOverviewTab
-          project={project}
-          phases={phases}
-          expenses={expenses} 
-          budgetData={budgetData} 
-          expensesData={expensesData}
-          handleAddPhase={handleAddPhase}
-          combinedExpenses={combinedExpenses} 
-          theme={theme}
-          bids={bids}
-          handleOpenTemplateAdjuster={handleOpenTemplateAdjuster || (() => {})}
-        />
+        <ProjectOverviewTab />
+        // Removed props: project, phases, expenses, budgetData, expensesData, 
+        // handleAddPhase, combinedExpenses, theme, bids, handleOpenTemplateAdjuster
       )}
       {tabValue === 1 && (
-        <ProjectPhasesTab
-          phases={phases}
-          bids={bids}
-          expenses={expenses}
-          phaseProposedCosts={phaseProposedCosts}
-          phaseActualCosts={phaseActualCosts}
-          theme={theme}
-          handleAddPhase={handleAddPhase}
-          onUpdatePhaseStatus={onUpdatePhaseStatus}
-          handleDeletePhase={handleDeletePhase || (() => {})}
-          handleOpenQuickBidDialog={handleOpenQuickBidDialog || (() => {})}
-          handleOpenQuickExpenseDialog={handleOpenQuickExpenseDialog || (() => {})}
-          handleViewPhaseDetails={handleViewPhaseDetails || (() => {})}
-          handleOpenTemplateAdjuster={handleOpenTemplateAdjuster || (() => {})}
-          getStatusColor={getStatusColor}
-          formatCurrency={formatCurrency}
-        />
+        <ProjectPhasesTab />
+        // Removed props: phases, bids, expenses, phaseProposedCosts, phaseActualCosts,
+        // theme, handleAddPhase, onUpdatePhaseStatus, handleDeletePhase, 
+        // handleOpenQuickBidDialog, handleOpenQuickExpenseDialog, handleViewPhaseDetails,
+        // handleOpenTemplateAdjuster, getStatusColor, formatCurrency
       )}
       {tabValue === 2 && (
-        <ProjectBidsTab
-          projectId={project.id}
-          bids={bids}
-          recentBids={recentBids}
-          theme={theme}
-          handleAddBid={handleAddBid}
-          handleEditBid={handleEditBid}
-          formatCurrency={formatCurrency}
-          formatDate={formatDate}
-        />
+        <ProjectBidsTab />
+        // Removed props: projectId, bids, recentBids, theme, handleAddBid, 
+        // handleEditBid, formatCurrency, formatDate
       )}
       {tabValue === 3 && (
-        <ProjectExpensesTab
-          projectId={project.id}
-          expenses={expenses}
-          expensesData={expensesData}
-          phases={phases}
-          theme={theme}
-          handleOpenQuickExpenseDialog={handleOpenQuickExpenseDialog || (() => {})}
-          formatCurrency={formatCurrency}
-        />
+        <ProjectExpensesTab />
+        // Removed props: projectId, expenses, expensesData, phases, theme,
+        // handleOpenQuickExpenseDialog, formatCurrency
       )}
       {tabValue === 4 && (
-        <ProjectTaskManager
-          project={project}
-          onProjectUpdate={handleProjectUpdate || (() => {})}
-          userId={userId}
-        />
+        <ProjectTaskManager />
+        // Removed props: project, onProjectUpdate, userId
+        // Note: ProjectTaskManager might need refactoring to use context/hooks too
       )}
       {tabValue === 5 && (
         <ProjectDocumentsTab /> 
+        // Assuming this doesn't need project context data yet
       )}
+      {/* Add cases for other tabs as needed */}
     </Box>
   );
 };

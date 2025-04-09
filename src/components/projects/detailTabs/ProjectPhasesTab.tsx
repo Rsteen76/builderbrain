@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useMemo } from 'react';
 import {
   Box,
   Stack,
@@ -24,7 +24,9 @@ import {
   Menu,
   MenuItem,
   ListItemIcon,
-  ListItemText
+  ListItemText,
+  CircularProgress,
+  Alert
 } from '@mui/material';
 import {
   Edit as EditIcon,
@@ -55,9 +57,24 @@ import PhaseCard from './PhaseCard';
 import { ProjectPhase, Bid, Expense } from '../../../types';
 import { usePhaseExpandState } from '../../../hooks/usePhaseExpandState';
 import { usePhaseMenuState } from '../../../hooks/usePhaseMenuState';
+import { useProjectDetail } from '../../../contexts/ProjectDetailContext';
+import { usePhaseOperations } from '../../../hooks/usePhaseOperations';
+import { usePhaseDetailsDialog } from '../../../hooks/usePhaseDetailsDialog';
+import { useBidFormDialog } from '../../../hooks/useBidFormDialog';
+import { useExpenseFormDialog } from '../../../hooks/useExpenseFormDialog';
+import { useNotification } from '../../../hooks/useNotification';
+import { 
+  calculatePhaseProposedCosts, 
+  calculatePhaseActualCosts 
+} from '../../../utils/phaseCalculations';
+import { useAuth } from '../../../hooks/useAuth';
+import PhaseDetailsDialog from '../../../dialogs/PhaseDetailsDialog';
 
-// Available phase statuses
-const PHASE_STATUSES: ProjectPhase['status'][] = [
+// Define the subset of statuses the hook currently supports
+type PhaseStatusType = 'not_started' | 'in_progress' | 'completed' | 'on_hold';
+
+// Original broader status list (used for menu population)
+const ALL_PHASE_STATUSES: ProjectPhase['status'][] = [
   'not_started',
   'planning',
   'in_progress',
@@ -66,94 +83,117 @@ const PHASE_STATUSES: ProjectPhase['status'][] = [
   'delayed'
 ];
 
-interface ProjectPhasesTabProps {
-  phases: ProjectPhase[];
-  bids: Bid[];
-  expenses: Expense[];
-  phaseProposedCosts: Record<string, number>;
-  phaseActualCosts: Record<string, number>;
-  theme: Theme;
-  handleAddPhase: () => void;
-  onUpdatePhaseStatus: (phaseId: string, status: ProjectPhase['status']) => void;
-  handleDeletePhase: (phaseId: string) => void;
-  handleOpenQuickBidDialog: (phaseId: string) => void;
-  handleOpenQuickExpenseDialog: (phaseId: string) => void;
-  handleOpenTemplateAdjuster: (phaseId?: string) => void;
-  handleViewPhaseDetails: (phaseId: string) => void;
-  getStatusColor: (status: string) => string;
-  formatCurrency: (value: number) => string;
-}
-
-const ProjectPhasesTab: React.FC<ProjectPhasesTabProps> = ({
-  phases,
-  bids,
-  expenses,
-  phaseProposedCosts,
-  phaseActualCosts,
-  theme,
-  handleAddPhase,
-  onUpdatePhaseStatus,
-  handleDeletePhase,
-  handleOpenQuickBidDialog,
-  handleOpenQuickExpenseDialog,
-  handleOpenTemplateAdjuster,
-  handleViewPhaseDetails,
-  getStatusColor,
-  formatCurrency,
-}) => {
-  // Get breakpoint for responsive design
-  const isXs = useMediaQuery(theme.breakpoints.only('xs'));
-  
-  // Use the custom hook for expansion state
-  const { expandedPhases, handleToggleExpand } = usePhaseExpandState();
-
-  // Use custom hooks for UI state
+const ProjectPhasesTab: React.FC = () => {
+  const theme = useTheme();
   const {
-    actionAnchorEl,
-    actionMenuPhaseId,
-    handleActionMenuOpen,
-    handleActionMenuClose,
-    isActionMenuOpen,
-    statusAnchorEl,
-    statusMenuPhaseId,
-    handleStatusMenuOpen,
-    handleStatusMenuClose,
-    isStatusMenuOpen,
-  } = usePhaseMenuState();
+    project,
+    phases,
+    bids = [],
+    expenses = [],
+    loading,
+    error,
+    openNewBidDialog,
+    openNewExpenseDialog,
+  } = useProjectDetail();
 
-  const appTheme = useTheme();
+  const { 
+    expandedPhases, 
+    handleToggleExpand 
+  } = usePhaseExpandState();
   
-  // Status selection handler - uses hook state
-  const handleStatusSelect = useCallback((status: ProjectPhase['status']) => {
-    if (statusMenuPhaseId) {
-      onUpdatePhaseStatus(statusMenuPhaseId, status);
-    }
-    handleStatusMenuClose();
-  }, [statusMenuPhaseId, onUpdatePhaseStatus, handleStatusMenuClose]);
+  const phaseMenu = usePhaseMenuState();
+  const { user } = useAuth();
+  const { showNotification } = useNotification();
+  const { isUpdatingPhase, updatePhaseStatus } = usePhaseOperations({
+    projectId: project?.id ?? '',
+  });
+  const phaseDetailsDialog = usePhaseDetailsDialog();
 
-  // Re-add getPhaseStatusIcon definition here
+  const phaseProposedCosts = useMemo(() => calculatePhaseProposedCosts(phases || [], bids || []), [phases, bids]);
+  const phaseActualCosts = useMemo(() => calculatePhaseActualCosts(phases || [], expenses || []), [phases, expenses]);
+
+  const handleStatusSelect = useCallback((status: ProjectPhase['status']) => {
+    const validStatus = status as PhaseStatusType;
+    if (phaseMenu.statusMenuPhaseId && ['not_started', 'in_progress', 'completed', 'on_hold'].includes(validStatus)) {
+      updatePhaseStatus(phaseMenu.statusMenuPhaseId, validStatus);
+    } else if (phaseMenu.statusMenuPhaseId) {
+      showNotification(`Status update to '${status}' not currently supported.`, 'warning');
+      console.warn(`Attempted to update phase ${phaseMenu.statusMenuPhaseId} to unsupported status ${status}`);
+    }
+    phaseMenu.handleStatusMenuClose();
+  }, [phaseMenu.statusMenuPhaseId, updatePhaseStatus, phaseMenu.handleStatusMenuClose, showNotification]);
+
+  const handleAddPhaseClick = () => {
+    console.warn('Add phase button clicked, but hook doesn\'t provide addPhase.');
+    showNotification('Add Phase functionality not available.', 'info');
+  };
+
+  const handleOpenTemplateAdjusterClick = () => {
+    console.warn('Adjust template button clicked, but not implemented yet.');
+    showNotification('Adjust Template functionality not yet implemented.', 'info');
+  };
+
+  const handleDeletePhaseClick = useCallback(() => {
+    showNotification('Delete Phase functionality not available.', 'warning');
+    phaseMenu.handleActionMenuClose();
+  }, [phaseMenu.handleActionMenuClose, showNotification]);
+
+  const handleViewDetailsClick = useCallback(() => {
+    if (phaseMenu.actionMenuPhaseId) {
+      const phaseToView = phases.find(p => p.id === phaseMenu.actionMenuPhaseId);
+      if (phaseToView) {
+        phaseDetailsDialog.openPhaseDetailsDialog(phaseToView as ProjectPhase);
+      } else {
+        showNotification('Could not find phase details.', 'error');
+      }
+    }
+    phaseMenu.handleActionMenuClose();
+  }, [phaseMenu.actionMenuPhaseId, phases, phaseDetailsDialog, phaseMenu.handleActionMenuClose, showNotification]);
+
+  const getStatusColor = useCallback((status: string): string => {
+    if (status?.includes('complete')) return theme.palette.success.main;
+    if (status?.includes('progress')) return theme.palette.info.main;
+    if (status?.includes('planning')) return theme.palette.secondary.main;
+    if (status?.includes('delayed') || status?.includes('hold')) return theme.palette.warning.main;
+    return theme.palette.grey[500];
+  }, [theme]);
+
   const getPhaseStatusIcon = useCallback((status: string): React.ReactElement => {
     switch (status?.toLowerCase()) { 
-      case 'completed':
-        return <DoneIcon />;
-      case 'in_progress':
-        return <PendingIcon />; 
-      case 'not_started':
-        return <PendingIcon />;
-      case 'planning': 
-          return <PendingIcon />; 
-      case 'on_hold': 
-          return <PendingIcon />; 
-      case 'delayed': 
-          return <PendingIcon />; 
-      default:
-        return <InfoIcon />;
+      case 'completed': return <DoneIcon />;
+      case 'in_progress': return <PendingIcon />;
+      case 'not_started': return <PendingIcon />;
+      case 'planning': return <PendingIcon />;
+      case 'on_hold': return <PendingIcon />;
+      case 'delayed': return <PendingIcon />;
+      default: return <InfoIcon />;
     }
-  }, []); // Added useCallback with empty dependency array
+  }, []);
+
+  const handleOpenQuickBidDialog = useCallback((phaseId: string) => {
+    openNewBidDialog({ phaseId: phaseId, projectId: project?.id });
+  }, [openNewBidDialog, project?.id]);
+
+  const handleOpenQuickExpenseDialog = useCallback((phaseId: string) => {
+    openNewExpenseDialog({ phaseId: phaseId, projectId: project?.id });
+  }, [openNewExpenseDialog, project?.id]);
+
+  const handleOpenPhaseDetails = useCallback((phaseId: string) => {
+    console.log("Open details for phase ID:", phaseId);
+    const phase = phases.find(p => p.id === phaseId);
+    if (phase) {
+      phaseDetailsDialog.openPhaseDetailsDialog(phase as ProjectPhase);
+    } else {
+      showNotification("Could not find phase details to open.", "error");
+    }
+  }, [phases, phaseDetailsDialog, showNotification]);
+
+  if (loading) return <CircularProgress sx={{ display: 'block', margin: 'auto', mt: 2 }} />;
+  if (error) return <Alert severity="error">Error loading phases: {error}</Alert>;
+  if (!phases) return <Alert severity="warning">No phases found for this project.</Alert>;
 
   return (
     <Box>
-      {/* Header with title and actions */}
       <Box 
         sx={{ 
           display: 'flex',
@@ -169,7 +209,7 @@ const ProjectPhasesTab: React.FC<ProjectPhasesTabProps> = ({
             left: 0,
             right: 0,
             height: '3px',
-            background: `linear-gradient(90deg, ${alpha(appTheme.palette.primary.main, 0.7)} 0%, ${alpha(appTheme.palette.secondary.main, 0.5)} 100%)`,
+            background: `linear-gradient(90deg, ${alpha(theme.palette.primary.main, 0.7)} 0%, ${alpha(theme.palette.secondary.main, 0.5)} 100%)`,
             borderRadius: '3px'
           }
         }}
@@ -195,7 +235,7 @@ const ProjectPhasesTab: React.FC<ProjectPhasesTabProps> = ({
             startIcon={<EditIcon />}
             size="medium"
             color="secondary"
-            onClick={() => handleOpenTemplateAdjuster()}
+            onClick={handleOpenTemplateAdjusterClick}
             sx={{ 
               borderRadius: 2,
               boxShadow: `0 2px 5px ${alpha(theme.palette.secondary.main, 0.2)}`,
@@ -211,7 +251,7 @@ const ProjectPhasesTab: React.FC<ProjectPhasesTabProps> = ({
             variant="contained"
             startIcon={<AddIcon />}
             size="medium"
-            onClick={handleAddPhase}
+            onClick={handleAddPhaseClick}
             sx={{ 
               borderRadius: 2,
               background: `linear-gradient(45deg, ${theme.palette.primary.main}, ${alpha(theme.palette.primary.main, 0.8)})`,
@@ -227,10 +267,8 @@ const ProjectPhasesTab: React.FC<ProjectPhasesTabProps> = ({
         </Box>
       </Box>
       
-      {/* Project Timeline Visualization - Replaced with component */}
       <PhaseTimelineChart phases={phases} />
       
-      {/* Phase Cards */}
       {phases.length > 0 ? (
         <Grid container spacing={3}>
           {phases.map((phase) => {
@@ -244,11 +282,11 @@ const ProjectPhasesTab: React.FC<ProjectPhasesTabProps> = ({
                   phase={phase}
                   proposedCost={proposedCost}
                   actualCost={actualCost}
-                  onStatusMenuOpen={handleStatusMenuOpen}
-                  onPhaseMenuOpen={handleActionMenuOpen}
-                  onOpenQuickExpenseDialog={handleOpenQuickExpenseDialog}
+                  onStatusMenuOpen={phaseMenu.handleStatusMenuOpen}
+                  onPhaseMenuOpen={phaseMenu.handleActionMenuOpen}
                   onOpenQuickBidDialog={handleOpenQuickBidDialog}
-                  onViewPhaseDetails={handleViewPhaseDetails}
+                  onOpenQuickExpenseDialog={handleOpenQuickExpenseDialog}
+                  onViewPhaseDetails={handleOpenPhaseDetails}
                   getStatusColor={getStatusColor}
                   formatCurrency={formatCurrency}
                 />
@@ -281,7 +319,7 @@ const ProjectPhasesTab: React.FC<ProjectPhasesTabProps> = ({
             variant="contained" 
             startIcon={<AddIcon />} 
             size="large"
-            onClick={handleAddPhase}
+            onClick={handleAddPhaseClick}
             sx={{ 
               borderRadius: 2,
               background: `linear-gradient(45deg, ${theme.palette.primary.main}, ${alpha(theme.palette.primary.main, 0.8)})`,
@@ -299,11 +337,10 @@ const ProjectPhasesTab: React.FC<ProjectPhasesTabProps> = ({
         </Box>
       )}
       
-      {/* Phase Action Menu - Uses hook state/handlers */}
       <Menu
-        anchorEl={actionAnchorEl}
-        open={isActionMenuOpen}
-        onClose={handleActionMenuClose}
+        anchorEl={phaseMenu.actionAnchorEl}
+        open={phaseMenu.isActionMenuOpen}
+        onClose={phaseMenu.handleActionMenuClose}
         transformOrigin={{ horizontal: 'right', vertical: 'top' }}
         anchorOrigin={{ horizontal: 'right', vertical: 'bottom' }}
         PaperProps={{
@@ -316,12 +353,7 @@ const ProjectPhasesTab: React.FC<ProjectPhasesTabProps> = ({
         }}
       >
         <MenuItem 
-          onClick={() => {
-            if (actionMenuPhaseId) {
-              handleViewPhaseDetails(actionMenuPhaseId);
-              handleActionMenuClose();
-            }
-          }}
+          onClick={handleViewDetailsClick}
           sx={{ borderRadius: 1, py: 1 }}
         >
           <ListItemIcon>
@@ -331,12 +363,7 @@ const ProjectPhasesTab: React.FC<ProjectPhasesTabProps> = ({
         </MenuItem>
         <Divider sx={{ my: 0.5 }} />
         <MenuItem 
-          onClick={() => {
-            if (actionMenuPhaseId) {
-              handleDeletePhase(actionMenuPhaseId);
-              handleActionMenuClose();
-            }
-          }}
+          onClick={handleDeletePhaseClick}
           sx={{ borderRadius: 1, py: 1, color: theme.palette.error.main }}
         >
           <ListItemIcon>
@@ -346,19 +373,26 @@ const ProjectPhasesTab: React.FC<ProjectPhasesTabProps> = ({
         </MenuItem>
       </Menu>
       
-      {/* Status Update Menu - Uses hook state/handlers */}
       <Menu
-        anchorEl={statusAnchorEl}
-        open={isStatusMenuOpen}
-        onClose={handleStatusMenuClose}
+        anchorEl={phaseMenu.statusAnchorEl}
+        open={phaseMenu.isStatusMenuOpen}
+        onClose={phaseMenu.handleStatusMenuClose}
       >
-        {PHASE_STATUSES.map((status) => (
+        {ALL_PHASE_STATUSES.map((status) => (
           <MenuItem key={status} onClick={() => handleStatusSelect(status)}>
             <ListItemIcon>{getPhaseStatusIcon(status)}</ListItemIcon>
             <ListItemText primary={status.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())} />
           </MenuItem>
         ))}
       </Menu>
+      
+      {phaseDetailsDialog.isPhaseDetailsOpen && (
+        <PhaseDetailsDialog 
+          open={phaseDetailsDialog.isPhaseDetailsOpen} 
+          onClose={phaseDetailsDialog.closePhaseDetailsDialog}
+          phase={phaseDetailsDialog.selectedPhase} 
+        />
+      )}
     </Box>
   );
 };

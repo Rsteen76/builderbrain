@@ -322,4 +322,27 @@ export interface BidSummary {
   updatedAt: Date;
 }
 
+// Expense Analytics Types (Moved from utils)
+export interface ExpenseChartData {
+  name: string; // Category name
+  value: number; // Total amount
+  color: string; // Color for the chart segment
+}
+
+export interface ExpenseBreakdown {
+  pending: number;
+  approved: number;
+  paid: number;
+  rejected: number;
+}
+
+// Ensure all relevant types are exported
+export type {
+  // ... existing exports ...
+  // ProjectPhase, // Removed duplicate export
+  // ExpenseChartData, // Removed duplicate export
+  // ExpenseBreakdown, // Removed duplicate export
+  // ... ensure other necessary TYPE-ONLY exports are here ...
+};
+
 // Add more common types as needed

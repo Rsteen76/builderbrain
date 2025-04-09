@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import {
   Box,
   Grid,
@@ -18,6 +18,8 @@ import {
   IconButton,
   Tooltip,
   Button,
+  CircularProgress,
+  Alert,
 } from '@mui/material';
 import {
   Business as BusinessIcon,
@@ -41,74 +43,88 @@ import {
   ArrowDownward as ArrowDownwardIcon,
 } from '@mui/icons-material';
 import { formatCurrency, formatDate, safelyParseDate } from '../../../utils/formatters';
+import { calculateBudgetData } from '../../../utils/projectMetrics';
 import { 
   Project, 
-  Phase as ProjectPhase,
+  ProjectPhase,
   Bid, 
   Expense 
 } from '../../../types';
 import { PieChart, Pie, ResponsiveContainer, Cell, Tooltip as RechartsTooltip } from 'recharts';
+import { useProjectDetail } from '../../../contexts/ProjectDetailContext';
+import { usePhaseOperations } from '../../../hooks/usePhaseOperations';
+import { useNotification } from '../../../hooks/useNotification';
 
-interface ProjectOverviewTabProps {
-  project: Project;
-  phases: ProjectPhase[];
-  bids: Bid[];
-  combinedExpenses: Array<{name: string; budget: number; actual: number}>;
-  expenses: Expense[];
-  theme: any;
-  handleAddPhase: () => void;
-  handleOpenTemplateAdjuster: () => void;
-  budgetData: {
-    totalBudget: number;
-    totalActual: number;
-    difference: number;
-    percentUsed: number;
-  };
-  expensesData: Array<any>;
-}
+const ProjectOverviewTab: React.FC = () => {
+  const {
+    project, 
+    phases, 
+    bids = [], 
+    expenses = [], 
+    loading, 
+    error, 
+    showNotification
+  } = useProjectDetail();
+  
+  const theme = useTheme();
 
-const ProjectOverviewTab: React.FC<ProjectOverviewTabProps> = ({
-  project,
-  phases,
-  bids,
-  combinedExpenses,
-  expenses,
-  theme,
-  handleAddPhase,
-  handleOpenTemplateAdjuster,
-  budgetData,
-  expensesData,
-}) => {
-  const totalBudget = budgetData.totalBudget;
-  const totalSpent = budgetData.totalActual;
+  const totalSpent = useMemo(() => expenses.reduce((sum, exp) => sum + (exp.amount || 0), 0), [expenses]);
+  const budgetData = useMemo(() => { 
+    if (!project) return { totalBudget: 0, totalActual: 0, difference: 0, percentUsed: 0 };
+    return calculateBudgetData(project, expenses);
+  }, [project, expenses]);
+  const budgetVariance = useMemo(() => budgetData.totalBudget - budgetData.totalActual, [budgetData]);
+  const projectProgress = useMemo(() => calculateProjectProgress(phases || []), [phases]);
+
+  const budgetAllocationData = useMemo(() => (phases || []).map((phase, index) => {
+    const colors = [theme.palette.primary.main, theme.palette.secondary.main, theme.palette.success.main, theme.palette.warning.main, theme.palette.error.main, theme.palette.info.main];
+    return {
+      name: phase.name,
+      value: phase.budget || 0,
+      color: colors[index % colors.length],
+    };
+  }), [phases, theme]);
+  
+  const expensesByCategory = useMemo(() => expenses.reduce((acc, exp) => {
+    const category = exp.category || 'Uncategorized';
+    if (!acc[category]) acc[category] = 0;
+    acc[category] += exp.amount;
+    return acc;
+  }, {} as Record<string, number>), [expenses]);
+  
+  const expenseCategoryData = useMemo(() => Object.entries(expensesByCategory).map(([category, amount], index) => {
+    const colors = [theme.palette.primary.main, theme.palette.secondary.main, theme.palette.success.main, theme.palette.warning.main, theme.palette.error.main, theme.palette.info.main];
+    return {
+      name: category.charAt(0).toUpperCase() + category.slice(1),
+      value: amount,
+      color: colors[index % colors.length],
+    };
+  }), [expensesByCategory, theme]);
+  
+  const totalExpenses = useMemo(() => expenses.reduce((sum, exp) => sum + exp.amount, 0), [expenses]);
+  const pendingExpenses = useMemo(() => expenses.filter(e => e.status === 'pending').reduce((sum, exp) => sum + exp.amount, 0), [expenses]);
+  const approvedExpenses = useMemo(() => expenses.filter(e => e.status === 'approved').reduce((sum, exp) => sum + exp.amount, 0), [expenses]);
+  const paidExpenses = useMemo(() => expenses.filter(e => e.status === 'paid').reduce((sum, exp) => sum + exp.amount, 0), [expenses]);
+  
+  const keyMilestones = useMemo(() => (phases || [])
+    .filter(phase => (phase.progress ?? 0) < 100) 
+    .sort((a, b) => (safelyParseDate(a.startDate)?.getTime() || 0) - (safelyParseDate(b.startDate)?.getTime() || 0))
+    .slice(0, 3), [phases]);
+  
+  const acceptedBidsTotal = useMemo(() => bids
+    .filter(bid => bid.status === 'accepted')
+    .reduce((sum, bid) => sum + (bid.totalAmount || 0), 0), [bids]);
   
   const getBudgetStatus = () => {
-    if (totalBudget <= 0) return { label: 'No Budget', color: theme.palette.warning.main };
-    
-    const percentUsed = (totalSpent / totalBudget) * 100;
-    
-    if (percentUsed > 100) {
-      return { 
-        label: 'Over Budget', 
-        color: theme.palette.error.main,
-        icon: <ArrowDownwardIcon fontSize="small" />,
-      };
-    } else if (percentUsed > 85) {
-      return { 
-        label: 'Near Budget', 
-        color: theme.palette.warning.main,
-        icon: <MilestoneIcon fontSize="small" />,
-      };
-    } else {
-      return { 
-        label: 'Under Budget', 
-        color: theme.palette.success.main,
-        icon: <ArrowUpwardIcon fontSize="small" />,
-      };
-    }
+    if (!project || budgetData.totalBudget <= 0) return { label: 'No Budget', color: theme.palette.warning.main, icon: <InfoIcon fontSize="small"/> };
+    const percentUsed = (budgetData.totalActual / budgetData.totalBudget) * 100;
+    if (percentUsed > 100) return { label: 'Over Budget', color: theme.palette.error.main, icon: <ArrowDownwardIcon fontSize="small" /> };
+    if (percentUsed > 85) return { label: 'Near Budget', color: theme.palette.warning.main, icon: <MilestoneIcon fontSize="small" /> };
+    return { label: 'Under Budget', color: theme.palette.success.main, icon: <ArrowUpwardIcon fontSize="small" /> };
   };
   
   const getProjectStatus = () => {
+    if (!project) return { label: 'Unknown', color: theme.palette.grey[500] };
     const statusMap: Record<string, {label: string, color: string}> = {
       'draft': { label: 'Draft', color: theme.palette.info.main },
       'estimate': { label: 'Estimate', color: theme.palette.info.main },
@@ -120,89 +136,17 @@ const ProjectOverviewTab: React.FC<ProjectOverviewTabProps> = ({
       'active': { label: 'Active', color: theme.palette.warning.main },
     };
     
-    const status = project.status.toLowerCase();
+    const status = project.status?.toLowerCase() || '';
     return statusMap[status] || { label: 'Unknown', color: theme.palette.grey[500] };
   };
-
-  const budgetStatus = getBudgetStatus();
-  const projectStatus = getProjectStatus();
   
-  // Calculate budget allocation data for the pie chart
-  const budgetAllocationData = phases.map((phase, index) => {
-    // Generate colors based on index if phase color is not available
-    const colors = [
-      theme.palette.primary.main,
-      theme.palette.secondary.main,
-      theme.palette.success.main,
-      theme.palette.warning.main,
-      theme.palette.error.main,
-      theme.palette.info.main,
-    ];
-    
-    return {
-      name: phase.name,
-      value: phase.budget || 0,
-      color: colors[index % colors.length],
-    };
-  });
-  
-  // Calculate expense breakdown by category
-  const expensesByCategory = expenses.reduce((acc, exp) => {
-    if (!acc[exp.category]) acc[exp.category] = 0;
-    acc[exp.category] += exp.amount;
-    return acc;
-  }, {} as Record<string, number>);
-  
-  const expenseCategoryData = Object.entries(expensesByCategory).map(([category, amount], index) => {
-    // Define colors for each category
-    const colors = [
-      theme.palette.primary.main,
-      theme.palette.secondary.main,
-      theme.palette.success.main,
-      theme.palette.warning.main,
-      theme.palette.error.main,
-      theme.palette.info.main,
-    ];
-    
-    return {
-      name: category.charAt(0).toUpperCase() + category.slice(1),
-      value: amount,
-      color: colors[index % colors.length],
-    };
-  });
-  
-  // Calculate total budget and expenses
-  const totalExpenses = expenses.reduce((sum, exp) => sum + exp.amount, 0);
-  const pendingExpenses = expenses.filter(e => e.status === 'pending').reduce((sum, exp) => sum + exp.amount, 0);
-  const approvedExpenses = expenses.filter(e => e.status === 'approved').reduce((sum, exp) => sum + exp.amount, 0);
-  const paidExpenses = expenses.filter(e => e.status === 'paid').reduce((sum, exp) => sum + exp.amount, 0);
-  
-  // Key milestones based on phases
-  const keyMilestones = phases
-    .filter(phase => phase.progress < 100) // Only include incomplete phases
-    .sort((a, b) => {
-      // Sort by start date (closest first)
-      const dateA = safelyParseDate(a.startDate).getTime();
-      const dateB = safelyParseDate(b.startDate).getTime();
-      return dateA - dateB;
-    })
-    .slice(0, 3); // Get only the next 3 upcoming phases
-  
-  // Get accepted bids total
-  const acceptedBidsTotal = bids
-    .filter(bid => bid.status === 'accepted')
-    .reduce((sum, bid) => sum + bid.totalAmount, 0);
-  
-  // Function to safely display location
   const getLocationDisplay = () => {
-    if (!project.location) return 'Not specified';
+    if (!project?.location) return 'Not specified';
     
-    // If location is a string, return it directly
     if (typeof project.location === 'string') {
       return project.location;
     }
     
-    // If location is an object with address fields, format it
     if (typeof project.location === 'object' && project.location.address) {
       const loc = project.location;
       return `${loc.address}, ${loc.city || ''} ${loc.state || ''} ${loc.zipCode || ''}`.trim();
@@ -211,15 +155,27 @@ const ProjectOverviewTab: React.FC<ProjectOverviewTabProps> = ({
     return 'Not specified';
   };
   
-  // Get client name safely
   const getClientName = () => {
-    return project.clientId || 'Not specified';
+    return project?.clientId || 'Not specified';
   };
   
+  const budgetStatus = useMemo(getBudgetStatus, [project, budgetData, theme]);
+  const projectStatus = useMemo(getProjectStatus, [project, theme]);
+  
+  const handleAddPhase = () => { 
+    showNotification('Add Phase functionality not implemented on Overview Tab yet.', 'info');
+  };
+  const handleOpenTemplateAdjuster = () => { 
+     showNotification('Adjust Template functionality not implemented on Overview Tab yet.', 'info');
+  };
+
+  if (loading) return <CircularProgress sx={{ /* styles */ }} />;
+  if (error) return <Alert severity="error">{error}</Alert>;
+  if (!project) return <Alert severity="warning">Project data not available.</Alert>;
+
   return (
     <Box sx={{ py: 2 }}>
       <Grid container spacing={3}>
-        {/* Project Details Card */}
         <Grid item xs={12} md={6}>
           <Card elevation={0} sx={{ 
             borderRadius: 2,
@@ -307,7 +263,7 @@ const ProjectOverviewTab: React.FC<ProjectOverviewTabProps> = ({
                     primary="Budget Status" 
                     secondary={
                       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                        <span>{formatCurrency(totalBudget)}</span>
+                        <span>{formatCurrency(budgetData.totalBudget)}</span>
                         <Chip 
                           label={budgetStatus.label}
                           size="small"
@@ -369,7 +325,6 @@ const ProjectOverviewTab: React.FC<ProjectOverviewTabProps> = ({
           </Card>
         </Grid>
         
-        {/* Financial Overview Card */}
         <Grid item xs={12} md={6}>
           <Card elevation={0} sx={{ 
             borderRadius: 2,
@@ -405,7 +360,7 @@ const ProjectOverviewTab: React.FC<ProjectOverviewTabProps> = ({
                   >
                     <Typography variant="subtitle2" color="text.secondary">Total Budget</Typography>
                     <Typography variant="h5" sx={{ fontWeight: 700, my: 1 }}>
-                      {formatCurrency(totalBudget)}
+                      {formatCurrency(budgetData.totalBudget)}
                     </Typography>
                     
                     <Divider sx={{ my: 1.5 }} />
@@ -513,7 +468,6 @@ const ProjectOverviewTab: React.FC<ProjectOverviewTabProps> = ({
           </Card>
         </Grid>
         
-        {/* Phase Summary Card */}
         <Grid item xs={12} md={6}>
           <Card elevation={0} sx={{ 
             borderRadius: 2,
@@ -625,7 +579,6 @@ const ProjectOverviewTab: React.FC<ProjectOverviewTabProps> = ({
           </Card>
         </Grid>
         
-        {/* Upcoming Milestones Card */}
         <Grid item xs={12} md={6}>
           <Card elevation={0} sx={{ 
             borderRadius: 2,
@@ -731,6 +684,12 @@ const ProjectOverviewTab: React.FC<ProjectOverviewTabProps> = ({
       </Grid>
     </Box>
   );
+};
+
+const calculateProjectProgress = (phases: any[]): number => { 
+  if (!phases || phases.length === 0) return 0;
+  const totalProgress = phases.reduce((sum, phase) => sum + (phase.progress || 0), 0);
+  return totalProgress / phases.length;
 };
 
 export default ProjectOverviewTab; 
