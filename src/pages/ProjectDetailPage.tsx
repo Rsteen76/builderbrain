@@ -3,10 +3,10 @@ import React, { useState, useMemo, useCallback } from 'react';
 import { useParams } from 'react-router-dom';
 import {
   Container, Typography, CircularProgress, Alert, Tab, Tabs, Box,
-  Button, Menu, MenuItem, Snackbar, IconButton, LinearProgress
+  Button, /* Menu, MenuItem, */ Snackbar, /* IconButton, */ LinearProgress // Removed Menu, MenuItem, IconButton
 } from '@mui/material';
 import { AlertColor } from '@mui/material/Alert';
-import MoreVertIcon from '@mui/icons-material/MoreVert';
+// Removed MoreVertIcon import
 import { useTheme } from '@mui/material/styles';
 import { format } from 'date-fns';
 import { CheckCircle, ErrorOutline, Schedule, PlayCircleOutline, Block, HelpOutline } from '@mui/icons-material';
@@ -70,7 +70,8 @@ const ProjectDetailContent: React.FC = () => {
 
   // == Local UI State ==
   const [tabValue, setTabValue] = useState(0);
-  const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null); // For Actions Menu
+  // Removed state for old menu
+  // const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null); 
   const [isSaving, setIsSaving] = useState(false); // Maybe rename or use hook's loading state
   const [actionError, setActionError] = useState<string | null>(null); // Maybe rename or use hook's error state
 
@@ -134,9 +135,8 @@ const ProjectDetailContent: React.FC = () => {
   } = useProjectOperations({
     onProjectUpdate: (updatedProject) => {
       showNotification('Project details updated!', 'success');
-      refreshAllProjectData(); // Refresh to ensure consistency
+      refreshAllProjectData();
     },
-    // Default delete behavior (navigate) is likely fine, no callback needed
   });
 
   // == Instantiate Dialog Hooks ==
@@ -218,13 +218,13 @@ const ProjectDetailContent: React.FC = () => {
     setTabValue(newValue);
   }, []);
 
-  const handleMenuOpen = useCallback((event: React.MouseEvent<HTMLElement>) => {
-    setAnchorEl(event.currentTarget);
-  }, []);
-
-  const handleMenuClose = useCallback(() => {
-    setAnchorEl(null);
-  }, []);
+  // Removed handlers for old menu
+  // const handleMenuOpen = useCallback((event: React.MouseEvent<HTMLElement>) => {
+  //   setAnchorEl(event.currentTarget);
+  // }, []);
+  // const handleMenuClose = useCallback(() => {
+  //   setAnchorEl(null);
+  // }, []);
 
   // --- Phase Status Update (Using Hook) ---
   const handleUpdatePhaseStatus = useCallback(async (phaseId: string, status: Phase['status']) => {
@@ -283,13 +283,26 @@ const ProjectDetailContent: React.FC = () => {
     }
   }, [bids, requestDeleteBid, showNotification]);
 
-  // --- Project Actions (Using Hook - Example for Menu) ---
-  const handleDeleteProject = useCallback(() => {
-    if (!projectId) return;
-    handleMenuClose(); // Close menu before potentially navigating away
-    deleteProject(projectId);
-    // Hook handles confirmation, API call, navigation
-  }, [projectId, deleteProject, handleMenuClose]);
+  // --- Project Action Handlers (for ProjectActionsMenu) ---
+  const handleEditProject = useCallback((id: string) => {
+    // TODO: Implement Edit Project Logic
+    console.log("Edit project requested:", id);
+    showNotification('Edit project functionality not yet implemented.', 'info');
+  }, [showNotification]);
+
+  const handleArchiveProject = useCallback(async (id: string) => {
+    if (window.confirm('Are you sure you want to archive (delete) this project?')) {
+      try {
+        await deleteProject(id);
+        // On success, the hook likely handles navigation.
+        // If not, you might need to navigate here.
+      } catch (error: any) {
+        // Show notification on error
+        console.error("Failed to archive project:", error);
+        showNotification(`Failed to archive project: ${error?.message || 'Unknown error'}`, 'error');
+      }
+    }
+  }, [deleteProject, showNotification]);
 
   // == Conditional Returns ==
   // Show loading indicator only on initial load when project data isn't available yet
@@ -317,16 +330,9 @@ const ProjectDetailContent: React.FC = () => {
     <Container maxWidth="lg" sx={{ mt: 4, mb: 4 }}>
       <ProjectDetailHeader 
         project={project} 
-        onOpenMenu={handleMenuOpen} 
+        onEdit={handleEditProject} 
+        onArchive={handleArchiveProject} 
       />
-      <Menu
-        anchorEl={anchorEl}
-        open={Boolean(anchorEl)}
-        onClose={handleMenuClose}
-      >
-        <MenuItem onClick={handleMenuClose}>Edit Project (NYI)</MenuItem>
-        <MenuItem onClick={handleDeleteProject} sx={{ color: 'error.main' }}>Delete Project</MenuItem>
-      </Menu>
         
       {isProcessing && <LinearProgress sx={{ mb: 2 }} />}
 

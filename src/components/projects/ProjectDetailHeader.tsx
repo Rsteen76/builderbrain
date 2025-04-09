@@ -1,17 +1,18 @@
 import React from 'react';
-import { Box, Typography, IconButton, Menu, MenuItem } from '@mui/material';
-import MoreVertIcon from '@mui/icons-material/MoreVert';
+import { Box, Typography } from '@mui/material';
 import { Project } from '../../types'; // Assuming Project type
+import { ProjectActionsMenu } from './ProjectActionsMenu'; // Import the new menu component
 
 interface ProjectDetailHeaderProps {
   project: Project;
-  onOpenMenu: (event: React.MouseEvent<HTMLElement>) => void; // Callback to open parent's menu
-  // Potentially add other props like status display, breadcrumbs etc.
+  onEdit: (projectId: string) => void; // Added prop for edit action
+  onArchive: (projectId: string) => void; // Added prop for archive action
 }
 
 const ProjectDetailHeader: React.FC<ProjectDetailHeaderProps> = ({ 
   project, 
-  onOpenMenu 
+  onEdit, 
+  onArchive
 }) => {
   return (
     <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
@@ -20,10 +21,11 @@ const ProjectDetailHeader: React.FC<ProjectDetailHeaderProps> = ({
         {/* TODO: Maybe add status indicator here */}
       </Typography>
       <Box>
-        {/* Any other header actions like Edit button could go here */}
-        <IconButton onClick={onOpenMenu} aria-label="Project Actions">
-          <MoreVertIcon />
-        </IconButton>
+        <ProjectActionsMenu 
+          projectId={project.id} 
+          onEdit={onEdit} 
+          onArchive={onArchive} 
+        />
       </Box>
     </Box>
   );
