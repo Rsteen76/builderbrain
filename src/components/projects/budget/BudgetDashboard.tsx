@@ -86,6 +86,7 @@ import { useProjectDetail } from '../../../contexts/ProjectDetailContext';
 import { formatCurrency, formatPercentage, formatDate } from '../../../utils/formatters';
 import { Project, ProjectPhase, Bid, Expense, BudgetProjection } from '../../../types';
 import BudgetAllocationTracker, { CONSTRUCTION_CATEGORIES } from './BudgetAllocationTracker';
+import BudgetReportButton from './BudgetReportButton';
 
 interface BudgetDashboardProps {
   project?: Project | null;
@@ -531,9 +532,21 @@ const BudgetDashboard: React.FC<BudgetDashboardProps> = ({
   return (
     <Box sx={{ p: { xs: 2, md: 3 } }}>
       {/* Budget Overview Section */}
-      <Typography variant="h5" sx={{ mb: 3, fontWeight: 600 }}>
-        Budget Overview
-      </Typography>
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
+        <Typography variant="h5" sx={{ fontWeight: 600 }}>
+          Budget Overview
+        </Typography>
+        <BudgetReportButton 
+          project={project}
+          expenses={expenses}
+          phases={phases}
+          bids={bids}
+          projections={projections || []}
+          variant="outlined"
+          color="primary"
+          size="medium"
+        />
+      </Box>
       
       {/* Budget Overview Cards */}
       <Grid container spacing={3} sx={{ mb: 4 }}>

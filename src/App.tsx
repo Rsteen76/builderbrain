@@ -13,6 +13,7 @@ import NewCustomProjectPage from './pages/NewCustomProjectPage';
 import NewResidentialProjectForm from './components/projects/NewResidentialProjectForm';
 import ResidentialTemplateLanding from './components/landing/ResidentialTemplateLanding';
 import BidDeletePortal from './components/dialogs/BidDeletePortal';
+import SharedReportView from './pages/SharedReportView';
 
 // Lazy load components
 const Dashboard = lazy(() => import('./components/dashboard/Dashboard'));
@@ -181,6 +182,7 @@ const App: React.FC = () => {
                     <Route path="templates" element={<ProtectedRoute><ProjectTemplates /></ProtectedRoute>} />
                     <Route path="timeline" element={<ProtectedRoute><Timeline /></ProtectedRoute>} />
                     <Route path="calendar" element={<ProtectedRoute><Calendar /></ProtectedRoute>} />
+                    <Route path="shared-reports/:shareId" element={<ProtectedRoute><SharedReportView /></ProtectedRoute>} />
                   </Route>
                 </Routes>
                 
