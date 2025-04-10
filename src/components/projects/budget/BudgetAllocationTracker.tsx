@@ -31,7 +31,8 @@ import {
   DialogTitle,
   DialogContent,
   DialogActions,
-  Autocomplete
+  Autocomplete,
+  Snackbar
 } from '@mui/material';
 import {
   CheckCircle as CheckCircleIcon,
@@ -45,224 +46,25 @@ import {
   ExpandLess as ExpandLessIcon,
   Edit as EditIcon
 } from '@mui/icons-material';
-import { Expense, Bid, ProjectPhase, Project, CategoryMappingPreferences, BudgetProjection } from '../../../types';
+import { Expense, Bid, ProjectPhase, Project, BudgetProjection } from '../../../types';
 import { formatCurrency, formatPercentage } from '../../../utils/formatters';
 import { getProjectById, updateProject } from '../../../services/project';
 import { useAuth } from '../../../contexts/AuthContext';
 import { Timestamp } from 'firebase/firestore';
+import { mapItemToCategory as utilsMapItemToCategory } from '../../../utils/categoryUtils';
+import { CONSTRUCTION_CATEGORIES } from '../../../utils/constructionCategories';
+import { doc, updateDoc } from 'firebase/firestore';
+import { db } from '../../../config/firebase';
 
-// Define interface for BudgetItem to fix type issues
-interface BudgetItem {
-  id: string;
-  description?: string;
-  phaseId?: string;
-  // Add other common fields if needed
-}
+// Import types from budget.types.ts
+import { BudgetItem, CategoryMappingPreferences } from '../../../types/budget.types';
 
 // Create a type for category mapping preferences
 // REMOVED from here
 // type CategoryMappingPreferences = Record<string, string>;
 
 // Define standard construction categories
-export const CONSTRUCTION_CATEGORIES = {
-  // Add Land Purchase category
-  'land': [
-    { id: 'land_purchase', name: 'Land Purchase', description: 'Cost of acquiring the building lot' },
-    { id: 'land_financing', name: 'Land Financing', description: 'Costs associated with land loans' },
-  ],
-  
-  // Add Escrow/Closing category
-  'escrow': [
-    { id: 'closing_costs', name: 'Closing Costs', description: 'Fees paid at property closing (title, appraisal, etc.)' },
-    { id: 'escrow_fees', name: 'Escrow Fees', description: 'Fees for escrow services during closing' },
-    { id: 'property_taxes_prepaid', name: 'Property Taxes (Prepaid)', description: 'Prepaid property taxes at closing' },
-    { id: 'insurance_prepaid', name: 'Insurance (Prepaid)', description: "Prepaid homeowner's insurance at closing" },
-  ],
-
-  // Pre-Construction
-  'pre_construction': [
-    { id: 'design_fees', name: 'Design Fees', description: 'Architectural and engineering design services' },
-    { id: 'permits', name: 'Permits & Fees', description: 'Building permits, impact fees, connection fees' },
-    { id: 'surveys', name: 'Surveys', description: 'Land surveys, soil testing, environmental studies' },
-    { id: 'insurance', name: 'Insurance', description: 'Builder\'s risk insurance, liability insurance' },
-  ],
-  
-  // Site Work
-  'site_work': [
-    { id: 'demolition', name: 'Demolition', description: 'Removal of existing structures' },
-    { id: 'excavation_grading', name: 'Excavation & Grading', description: 'Site preparation, earth moving, grading' },
-    { id: 'utilities', name: 'Utilities', description: 'Water, sewer, gas, electrical service connections' },
-    { id: 'erosion_control', name: 'Erosion Control', description: 'Silt fencing, erosion mats, drainage' },
-    { id: 'site_improvements', name: 'Site Improvements', description: 'Driveways, walkways, landscaping' },
-  ],
-  
-  // Foundation
-  'foundation': [
-    { id: 'footings', name: 'Footings', description: 'Concrete footings and foundation support' },
-    { id: 'foundation_walls', name: 'Foundation Walls', description: 'Poured concrete or block foundation walls' },
-    { id: 'waterproofing', name: 'Waterproofing', description: 'Foundation waterproofing, drain tile' },
-    { id: 'concrete_slab', name: 'Concrete Slab', description: 'Basement or main level concrete slab' },
-  ],
-  
-  // Framing
-  'framing': [
-    { id: 'rough_framing', name: 'Rough Framing', description: 'Wall, floor and roof framing' },
-    { id: 'roof_trusses', name: 'Roof Trusses', description: 'Engineered roof trusses or rafters' },
-    { id: 'sheathing', name: 'Sheathing', description: 'Wall and roof sheathing materials' },
-    { id: 'steel_framing', name: 'Steel Framing', description: 'Structural steel and metal framing' },
-  ],
-  
-  // Exterior Envelope
-  'exterior': [
-    { id: 'roofing', name: 'Roofing', description: 'Roofing materials and installation' },
-    { id: 'siding', name: 'Siding & Facade', description: 'Exterior cladding materials' },
-    { id: 'windows', name: 'Windows', description: 'Windows, skylights, glass installations' },
-    { id: 'exterior_doors', name: 'Exterior Doors', description: 'Entry doors, garage doors, patio doors' },
-    { id: 'masonry', name: 'Masonry', description: 'Brick, stone, or block work' },
-    { id: 'gutters', name: 'Gutters & Downspouts', description: 'Rainwater management systems' },
-  ],
-  
-  // Mechanical Systems
-  'mechanical': [
-    { id: 'hvac', name: 'HVAC', description: 'Heating, ventilation, air conditioning systems' },
-    { id: 'plumbing', name: 'Plumbing', description: 'Supply, waste and vent piping, fixtures' },
-    { id: 'electrical', name: 'Electrical', description: 'Wiring, outlets, switches, panels' },
-    { id: 'low_voltage', name: 'Low Voltage', description: 'Audio/video, security, networking' },
-    { id: 'fire_protection', name: 'Fire Protection', description: 'Sprinklers, alarms, fire suppression' },
-  ],
-  
-  // Insulation & Interior Walls
-  'interior_rough': [
-    { id: 'insulation', name: 'Insulation', description: 'Wall, ceiling, and floor insulation' },
-    { id: 'drywall', name: 'Drywall/Plaster', description: 'Interior wall and ceiling finishes' },
-    { id: 'interior_framing', name: 'Interior Framing', description: 'Non-load bearing walls and soffits' },
-    { id: 'soundproofing', name: 'Soundproofing', description: 'Acoustic treatments and sound barriers' },
-  ],
-  
-  // Interior Finishes
-  'interior_finishes': [
-    { id: 'flooring', name: 'Flooring', description: 'All flooring materials and installation' },
-    { id: 'painting', name: 'Painting', description: 'Interior painting and wallcoverings' },
-    { id: 'trim_carpentry', name: 'Trim Carpentry', description: 'Baseboards, crown molding, casings' },
-    { id: 'cabinets', name: 'Cabinets', description: 'Kitchen and bathroom cabinetry' },
-    { id: 'countertops', name: 'Countertops', description: 'Kitchen and bathroom countertops' },
-    { id: 'tile', name: 'Tile Work', description: 'Ceramic, porcelain, stone tile installation' },
-    { id: 'interior_doors', name: 'Interior Doors', description: 'Interior passage and closet doors' },
-  ],
-  
-  // Fixtures & Appliances
-  'fixtures': [
-    { id: 'plumbing_fixtures', name: 'Plumbing Fixtures', description: 'Sinks, faucets, tubs, toilets' },
-    { id: 'lighting_fixtures', name: 'Lighting Fixtures', description: 'Interior and exterior lighting' },
-    { id: 'appliances', name: 'Appliances', description: 'Kitchen and laundry appliances' },
-    { id: 'hardware', name: 'Hardware', description: 'Door hardware, bath accessories' },
-  ],
-  
-  // Specialty Features
-  'specialty': [
-    { id: 'stairs', name: 'Stairs', description: 'Interior and exterior stairs and railings' },
-    { id: 'fireplace', name: 'Fireplace', description: 'Fireplaces and chimneys' },
-    { id: 'deck_patio', name: 'Deck/Patio', description: 'Outdoor living spaces' },
-    { id: 'landscaping', name: 'Landscaping', description: 'Landscape design, plants, irrigation systems' },
-    { id: 'pool_spa', name: 'Pool/Spa', description: 'Swimming pools, hot tubs, saunas' },
-    { id: 'smart_home', name: 'Smart Home', description: 'Home automation and technology' },
-    { id: 'solar', name: 'Solar/Renewable', description: 'Solar panels, renewable energy systems' },
-  ],
-  
-  // Project Management
-  'management': [
-    { id: 'general_conditions', name: 'General Conditions', description: 'Job site supervision, temporary utilities' },
-    { id: 'project_management', name: 'Project Management', description: 'Contractor management fees' },
-    { id: 'cleanup', name: 'Cleanup', description: 'Construction cleanup and waste removal' },
-    { id: 'contingency', name: 'Contingency', description: 'Budget reserve for unforeseen costs' },
-  ],
-  
-  // Add uncategorized as a special section
-  'uncategorized': [
-    { id: 'uncategorized', name: 'Uncategorized Items', description: 'Items that could not be automatically assigned' },
-  ]
-};
-
-// Utility function to map bids and expenses to construction categories
-const mapItemToCategory = (item: BudgetItem, userPreferences?: Record<string, string>): string => {
-  // Use the category from preferences if available
-  if (userPreferences && userPreferences[item.id]) {
-    return userPreferences[item.id];
-  }
-
-  // Convert to lowercase for case-insensitive matching, handle null/undefined description
-  const desc = (item.description || '').toLowerCase();
-  
-  // Map by keywords in description
-  if (desc.includes('architect') || desc.includes('design') || desc.includes('engineering')) return 'design_fees';
-  if (desc.includes('permit') || desc.includes('inspection') || desc.includes('fee') && desc.includes('building')) return 'permits';
-  if (desc.includes('survey') || desc.includes('soil') || desc.includes('test')) return 'surveys';
-  if (desc.includes('insurance') || desc.includes('bond')) return 'insurance';
-  if (desc.includes('demo')) return 'demolition';
-  if (desc.includes('excav') || desc.includes('grad') || desc.includes('dirt') || desc.includes('earth')) return 'excavation_grading';
-  if (desc.includes('utilit') || desc.includes('sewer') || desc.includes('water line')) return 'utilities';
-  if (desc.includes('erosion') || desc.includes('silt') || desc.includes('fence') && desc.includes('control')) return 'erosion_control';
-  if (desc.includes('driveway') || desc.includes('walkway')) return 'site_improvements';
-  if (desc.includes('landscape') || desc.includes('garden') || desc.includes('plant') || desc.includes('lawn') || desc.includes('irrigation')) return 'landscaping';
-  if (desc.includes('foot') && (desc.includes('foundation') || desc.includes('concrete'))) return 'footings';
-  if (desc.includes('foundation') && desc.includes('wall')) return 'foundation_walls';
-  if (desc.includes('waterproof') || desc.includes('dampproof') || desc.includes('drain tile')) return 'waterproofing';
-  if (desc.includes('slab') || desc.includes('concrete') && (desc.includes('floor') || desc.includes('basement'))) return 'concrete_slab';
-  if (desc.includes('foundation')) return 'foundation_walls';
-  
-  // Framing checks
-  if (desc.includes('fram') && !desc.includes('trim')) return 'rough_framing';
-  if (desc.includes('truss') || desc.includes('rafter')) return 'roof_trusses';
-  if (desc.includes('sheath') || desc.includes('plywood') || desc.includes('osb')) return 'sheathing';
-  if (desc.includes('steel') || desc.includes('metal') && desc.includes('fram')) return 'steel_framing';
-  if (desc.includes('roof') && !desc.includes('truss')) return 'roofing';
-  if (desc.includes('siding') || desc.includes('facade') || desc.includes('cladding')) return 'siding';
-  if (desc.includes('window')) return 'windows';
-  if ((desc.includes('door') && desc.includes('exterior')) || desc.includes('entry') || desc.includes('garage door')) return 'exterior_doors';
-  if (desc.includes('brick') || desc.includes('stone') || desc.includes('mason')) return 'masonry';
-  if (desc.includes('gutter') || desc.includes('downspout')) return 'gutters';
-  if (desc.includes('hvac') || desc.includes('heat') || desc.includes('air conditioning') || desc.includes('furnace')) return 'hvac';
-  if (desc.includes('plumb') && !desc.includes('fixture')) return 'plumbing';
-  if (desc.includes('electric') && !desc.includes('fixture')) return 'electrical';
-  if (desc.includes('low voltage') || desc.includes('audio') || desc.includes('security')) return 'low_voltage';
-  if (desc.includes('fire') || desc.includes('sprinkler') || desc.includes('alarm')) return 'fire_protection';
-  if (desc.includes('insulat')) return 'insulation';
-  if (desc.includes('drywall') || desc.includes('plaster') || desc.includes('sheet') && desc.includes('rock')) return 'drywall';
-  if ((desc.includes('fram') && desc.includes('interior')) || desc.includes('partition')) return 'interior_framing';
-  if (desc.includes('sound') || desc.includes('acoustic')) return 'soundproofing';
-  if (desc.includes('floor') && !desc.includes('fram')) return 'flooring';
-  if (desc.includes('paint') || desc.includes('wall') && desc.includes('cover')) return 'painting';
-  if (desc.includes('trim') || desc.includes('baseboard') || desc.includes('crown') || desc.includes('mold')) return 'trim_carpentry';
-  if (desc.includes('cabinet')) return 'cabinets';
-  if (desc.includes('counter')) return 'countertops';
-  if (desc.includes('tile')) return 'tile';
-  if ((desc.includes('door') && desc.includes('interior')) || desc.includes('closet door')) return 'interior_doors';
-  if ((desc.includes('plumb') && desc.includes('fixture')) || desc.includes('sink') || desc.includes('toilet') || desc.includes('tub')) return 'plumbing_fixtures';
-  if (desc.includes('light') && desc.includes('fixture')) return 'lighting_fixtures';
-  if (desc.includes('appliance') || desc.includes('refrigerator') || desc.includes('oven') || desc.includes('dishwasher')) return 'appliances';
-  if (desc.includes('hardware') || desc.includes('handle') || desc.includes('knob')) return 'hardware';
-  if (desc.includes('stair') || desc.includes('railing')) return 'stairs';
-  if (desc.includes('fireplace') || desc.includes('chimney')) return 'fireplace';
-  if (desc.includes('deck') || desc.includes('patio')) return 'deck_patio';
-  if (desc.includes('pool') || desc.includes('spa') || desc.includes('hot tub')) return 'pool_spa';
-  if (desc.includes('smart') || desc.includes('home automation')) return 'smart_home';
-  if (desc.includes('solar') || desc.includes('renewable')) return 'solar';
-  if (desc.includes('general conditions') || desc.includes('supervision') || desc.includes('job site')) return 'general_conditions';
-  if (desc.includes('project management') || desc.includes('contractor fee')) return 'project_management';
-  if (desc.includes('clean') || desc.includes('debris') || desc.includes('trash')) return 'cleanup';
-  if (desc.includes('contingency') || desc.includes('reserve')) return 'contingency';
-  
-  // If no specific match, try to categorize by phase
-  if (item.phaseId) {
-    // This is a placeholder - you'll need to implement more sophisticated logic based on your phase structure
-    // Ideally, you'd map each phase ID to the most relevant category
-    // Returning uncategorized for now to satisfy type requirements
-    return 'uncategorized';
-  }
-  
-  // No match found
-  return 'uncategorized';
-};
+// SOURCE OF TRUTH: This constant should be imported from this file in other components
 
 // Update interface to include projections
 interface BudgetAllocationTrackerProps {
@@ -302,6 +104,9 @@ const BudgetAllocationTracker: React.FC<BudgetAllocationTrackerProps> = ({
   const [editingItemId, setEditingItemId] = useState<string | null>(null);
   // Add loading state for preferences
   const [prefsLoading, setPrefsLoading] = useState<boolean>(true);
+  
+  // After the useState declarations, add a new state for showing uncategorized items
+  const [showOrphanedExpenses, setShowOrphanedExpenses] = useState(false);
   
   const { user } = useAuth(); // Get user from auth context
   
@@ -477,7 +282,7 @@ const BudgetAllocationTracker: React.FC<BudgetAllocationTrackerProps> = ({
                               expense.description.toLowerCase().includes('deposit'));
         
         // Determine the category, passing preferences
-        const categoryId = mapItemToCategory(expense as BudgetItem, categoryMappingPreferences);
+        const categoryId = utilsMapItemToCategory(expense as BudgetItem, categoryMappingPreferences);
         
         // Initialize category if needed
         if (!allocations[categoryId]) {
@@ -534,7 +339,7 @@ const BudgetAllocationTracker: React.FC<BudgetAllocationTrackerProps> = ({
           
           const bidTitle = bid.title || 'Unnamed bid';
           // Determine the category, passing preferences (bid.id is now guaranteed)
-          const categoryId = mapItemToCategory({ id: bid.id, description: bidTitle, phaseId: bid.phaseId }, categoryMappingPreferences);
+          const categoryId = utilsMapItemToCategory({ id: bid.id, description: bidTitle, phaseId: bid.phaseId }, categoryMappingPreferences);
           
            // Initialize category if needed
           if (!allocations[categoryId]) {
@@ -944,6 +749,53 @@ const BudgetAllocationTracker: React.FC<BudgetAllocationTrackerProps> = ({
       )
       .filter(cat => cat.value !== 'uncategorized'); // Don't allow assigning *to* uncategorized
   }, []);
+
+  // Add a function to find expenses that aren't properly categorized
+  const orphanedExpenses = useMemo(() => {
+    // Get all category IDs from CONSTRUCTION_CATEGORIES
+    const allCategoryIds = Object.values(CONSTRUCTION_CATEGORIES)
+      .flat()
+      .map(cat => cat.id);
+    
+    // Find expenses that don't match any of our defined categories
+    return expenses.filter(expense => {
+      const mappedCategory = utilsMapItemToCategory(expense as BudgetItem, categoryMappingPreferences);
+      // Check if the mapped category is recognized in our system
+      return !allCategoryIds.includes(mappedCategory) || 
+             mappedCategory === 'uncategorized' || 
+             expense.category === 'other';
+    });
+  }, [expenses, categoryMappingPreferences]);
+
+  // Handle changing category for an expense
+  const handleCategoryChange = async (expenseId: string, newCategoryId: string) => {
+    // Update the local state first
+    const updatedPreferences = {
+      ...categoryMappingPreferences,
+      [expenseId]: newCategoryId
+    };
+    
+    setCategoryMappingPreferences(updatedPreferences);
+    
+    // Then update in Firebase
+    if (project?.id) {
+      try {
+        await updateDoc(doc(db, 'projects', project.id), {
+          categoryMappingPreferences: updatedPreferences
+        });
+        
+        // Show success message
+        alert('Category mapping updated');
+        
+        // After updating the preferences, refresh the data
+        setShowOrphanedExpenses(false); // Hide the panel initially
+        setTimeout(() => setShowOrphanedExpenses(true), 300); // Show it again after a brief delay to trigger a re-render
+      } catch (error) {
+        console.error('Error updating category preferences:', error);
+        alert('Failed to update category mapping');
+      }
+    }
+  };
 
   return (
     <Box sx={{ mb: 4 }}>
@@ -1404,6 +1256,90 @@ const BudgetAllocationTracker: React.FC<BudgetAllocationTrackerProps> = ({
           </Alert>
         </CardContent>
       </Card>
+
+      {/* Add a button and section to show orphaned expenses */}
+      <Box sx={{ mt: 4, mb: 2 }}>
+        <Paper elevation={0} sx={{ p: 2, bgcolor: theme.palette.background.default }}>
+          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+            <Typography variant="h6">
+              Find "Other" Category Expenses
+            </Typography>
+            <Button 
+              variant={showOrphanedExpenses ? "contained" : "outlined"}
+              color="primary"
+              onClick={() => setShowOrphanedExpenses(!showOrphanedExpenses)}
+              startIcon={<InfoIcon />}
+            >
+              {showOrphanedExpenses ? "Hide Uncategorized" : "Show Uncategorized"}
+            </Button>
+          </Box>
+          
+          {showOrphanedExpenses && (
+            <>
+              <Typography variant="body2" color="text.secondary" paragraph>
+                The following expenses are showing as "Other" in reports because they don't match any specific construction category.
+                You can manually assign them to categories by using the dropdown in each row.
+              </Typography>
+              
+              {orphanedExpenses.length > 0 ? (
+                <TableContainer>
+                  <Table size="small">
+                    <TableHead>
+                      <TableRow>
+                        <TableCell>Description</TableCell>
+                        <TableCell>Amount</TableCell>
+                        <TableCell>Date</TableCell>
+                        <TableCell>Original Category</TableCell>
+                        <TableCell>Actions</TableCell>
+                      </TableRow>
+                    </TableHead>
+                    <TableBody>
+                      {orphanedExpenses.map(expense => (
+                        <TableRow key={expense.id}>
+                          <TableCell>{expense.description}</TableCell>
+                          <TableCell>{formatCurrency(expense.amount)}</TableCell>
+                          <TableCell>
+                            {expense.date instanceof Date 
+                              ? expense.date.toLocaleDateString() 
+                              : typeof expense.date === 'string' 
+                                ? expense.date 
+                                : 'Unknown date'}
+                          </TableCell>
+                          <TableCell>{expense.category || 'None'}</TableCell>
+                          <TableCell>
+                            <FormControl size="small" fullWidth>
+                              <Select
+                                value=""
+                                displayEmpty
+                                onChange={(e) => {
+                                  if (expense.id) {
+                                    handleCategoryChange(expense.id as string, e.target.value);
+                                  }
+                                }}
+                              >
+                                <MenuItem value="" disabled>Assign Category</MenuItem>
+                                {Object.entries(CONSTRUCTION_CATEGORIES).map(([section, categories]) => (
+                                  categories.map(category => (
+                                    <MenuItem key={category.id} value={category.id}>{category.name}</MenuItem>
+                                  ))
+                                ))}
+                              </Select>
+                            </FormControl>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </TableContainer>
+              ) : (
+                <Alert severity="success">
+                  No uncategorized expenses found! All your expenses appear to be properly categorized.
+                </Alert>
+              )}
+            </>
+          )}
+        </Paper>
+      </Box>
     </Box>
   );
 };

@@ -85,7 +85,8 @@ import {
 import { useProjectDetail } from '../../../contexts/ProjectDetailContext';
 import { formatCurrency, formatPercentage, formatDate } from '../../../utils/formatters';
 import { Project, ProjectPhase, Bid, Expense, BudgetProjection } from '../../../types';
-import BudgetAllocationTracker, { CONSTRUCTION_CATEGORIES } from './BudgetAllocationTracker';
+import BudgetAllocationTracker from './BudgetAllocationTracker';
+import { CONSTRUCTION_CATEGORIES } from '../../../utils/constructionCategories';
 import BudgetReportButton from './BudgetReportButton';
 
 interface BudgetDashboardProps {

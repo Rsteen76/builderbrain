@@ -72,6 +72,7 @@ import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
 import ReportService from '../../../services/ReportService';
 import { useAuth } from '../../../contexts/AuthContext';
+import { mapItemToCategory, getCategorySectionById } from '../../../utils/categoryUtils';
 
 // Props interface
 interface BudgetReportProps {
@@ -234,34 +235,14 @@ const BudgetReport: React.FC<BudgetReportProps> = ({
 
   // Helper to determine category ID for an expense
   function getCategoryIdForItem(item: any): string {
-    // This is a simplified version - you would need more robust logic based on your app
-    if (item.categoryId) return item.categoryId;
-    
-    const desc = (item.description || '').toLowerCase();
-    
-    // Very basic mapping based on description keywords
-    if (desc.includes('architect') || desc.includes('design')) return 'design_fees';
-    if (desc.includes('permit')) return 'permits';
-    if (desc.includes('plumb')) return 'plumbing';
-    if (desc.includes('electric')) return 'electrical';
-    if (desc.includes('hvac')) return 'hvac';
-    if (desc.includes('framing')) return 'rough_framing';
-    if (desc.includes('drywall')) return 'drywall';
-    if (desc.includes('paint')) return 'painting';
-    if (desc.includes('cabinet')) return 'cabinets';
-    if (desc.includes('landscape')) return 'landscaping';
-    
-    return 'uncategorized';
+    // Use our centralized category mapping utility
+    return mapItemToCategory(item);
   }
 
   // Helper to find which group a category belongs to
   function getCategoryGroupForId(categoryId: string): string {
-    for (const [groupName, categoryIds] of Object.entries(CATEGORY_GROUPS)) {
-      if (categoryIds.includes(categoryId)) {
-        return groupName;
-      }
-    }
-    return 'Other';
+    // Use our centralized section lookup utility
+    return getCategorySectionById(categoryId);
   }
 
   // Prepare data for the category spending chart

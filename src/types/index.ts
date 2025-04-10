@@ -1,5 +1,6 @@
 import { Timestamp } from 'firebase/firestore';
 import { Expense, ExpenseCategory, ExpenseStatus, PaymentDetails } from './expense.types';
+import { CategoryMappingPreferences } from './budget.types';
 export * from './bids.types';
 
 export interface User {
@@ -337,9 +338,6 @@ export interface ExpenseBreakdown {
   paid: number;
   rejected: number;
 }
-
-// Preferences for manual budget item categorization
-export type CategoryMappingPreferences = Record<string, string>;
 
 // Interface for Budget Projections
 export interface BudgetProjection {
