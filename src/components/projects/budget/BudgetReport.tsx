@@ -1,4 +1,4 @@
-import React, { useRef, useState } from 'react';
+import React, { useRef, useState, useEffect, useMemo } from 'react';
 import {
   Box, 
   Button,
@@ -33,6 +33,8 @@ import {
   ListItemButton,
   FormControlLabel,
   Switch,
+  Snackbar,
+  Alert,
 } from '@mui/material';
 import {
   DownloadOutlined as DownloadIcon,
@@ -51,6 +53,7 @@ import {
   PictureAsPdf as PdfIcon,
   WhatsApp as WhatsAppIcon,
   ContentCopy as ContentCopyIcon,
+  Lock as LockIcon,
 } from '@mui/icons-material';
 import { 
   ResponsiveContainer, 
@@ -72,33 +75,25 @@ import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
 import ReportService from '../../../services/ReportService';
 import { useAuth } from '../../../contexts/AuthContext';
-import { mapItemToCategory, getCategorySectionById } from '../../../utils/categoryUtils';
+import { getCategoryMappingsForProject } from '../../../services/category.service';
+import { 
+  MAIN_CATEGORIES, 
+  getCategoryById, 
+  getSubcategories, 
+  getParentCategory, 
+  mapSimpleToDetailedCategory 
+} from '../../../data/hierarchicalCategories';
+import { Category, CategoryMapping } from '../../../types/category.types';
 
 // Props interface
 interface BudgetReportProps {
-  project: Project;
+  project: Project | null;
   expenses: Expense[];
   phases: ProjectPhase[];
   bids: Bid[];
   projections: BudgetProjection[];
   onClose?: () => void;
 }
-
-// Define construction category groups for simpler reporting
-const CATEGORY_GROUPS = {
-  'Pre-Construction': ['design_fees', 'permits', 'surveys', 'insurance'],
-  'Land & Escrow': ['land_purchase', 'land_financing', 'closing_costs', 'escrow_fees', 'property_taxes_prepaid', 'insurance_prepaid'],
-  'Site Work': ['demolition', 'excavation_grading', 'utilities', 'erosion_control', 'site_improvements'],
-  'Foundation': ['footings', 'foundation_walls', 'waterproofing', 'concrete_slab'],
-  'Framing & Structure': ['rough_framing', 'roof_trusses', 'sheathing', 'steel_framing'],
-  'Exterior': ['roofing', 'siding', 'windows', 'exterior_doors', 'masonry', 'gutters'],
-  'Mechanical': ['hvac', 'plumbing', 'electrical', 'low_voltage', 'fire_protection'],
-  'Interior': ['insulation', 'drywall', 'interior_framing', 'soundproofing', 'flooring', 'painting', 'trim_carpentry', 'cabinets', 'countertops', 'tile', 'interior_doors'],
-  'Fixtures & Appliances': ['plumbing_fixtures', 'lighting_fixtures', 'appliances', 'hardware'],
-  'Specialty': ['stairs', 'fireplace', 'deck_patio', 'landscaping', 'pool_spa', 'smart_home', 'solar'],
-  'Management': ['general_conditions', 'project_management', 'cleanup', 'contingency'],
-  'Other': ['uncategorized']
-};
 
 const BudgetReport: React.FC<BudgetReportProps> = ({ 
   project, 
@@ -118,6 +113,30 @@ const BudgetReport: React.FC<BudgetReportProps> = ({
   const { user } = useAuth();
   const [isPasswordProtected, setIsPasswordProtected] = useState(false);
   const [sharePassword, setSharePassword] = useState('');
+  const [categoryMappings, setCategoryMappings] = useState<Record<string, string>>({});
+  const [mappingsLoading, setMappingsLoading] = useState<boolean>(true);
+  const [snackbar, setSnackbar] = useState<{ open: boolean, message: string, severity: 'success' | 'error' }>({ open: false, message: '', severity: 'success' });
+
+  // Add effect to load user preferences
+  useEffect(() => {
+    if (project?.id) {
+      setMappingsLoading(true);
+      getCategoryMappingsForProject(project.id)
+        .then((mappings) => {
+          setCategoryMappings(mappings);
+        })
+        .catch((error) => {
+          console.error("Error loading category mappings for report:", error);
+          setSnackbar({ open: true, message: 'Error loading category data', severity: 'error' });
+        })
+        .finally(() => {
+          setMappingsLoading(false);
+        });
+    } else {
+      setCategoryMappings({});
+      setMappingsLoading(false);
+    }
+  }, [project?.id]);
 
   // Calculate budget summary
   const budgetSummary = React.useMemo(() => {
@@ -129,7 +148,9 @@ const BudgetReport: React.FC<BudgetReportProps> = ({
         remainingBudget: 0, 
         projectedTotal: 0, 
         projectedRemaining: 0,
-        projectedPercentage: 0 
+        projectedPercentage: 0,
+        spentPercentage: 0,
+        pendingPercentage: 0
       };
     }
 
@@ -150,10 +171,10 @@ const BudgetReport: React.FC<BudgetReportProps> = ({
     const projectionTotal = projections.reduce((sum, projection) => sum + projection.amount, 0);
     
     // Calculate remaining budget (without projections)
-    const remainingBudget = totalBudget - totalSpent - pendingTotal;
+    const remainingBudget = totalBudget - totalSpent;
     
-    // Calculate projected remaining after accounting for projections
-    const projectedRemaining = remainingBudget - projectionTotal;
+    // Calculate projected remaining after accounting for projections and pending expenses
+    const projectedRemaining = remainingBudget - projectionTotal - pendingTotal;
     
     // Calculate percentage metrics
     const spentPercentage = totalBudget > 0 
@@ -164,6 +185,7 @@ const BudgetReport: React.FC<BudgetReportProps> = ({
       ? (pendingTotal / totalBudget) * 100
       : 0;
       
+    // Match dashboard calculation - include pending in the projected percentage
     const projectedPercentage = totalBudget > 0
       ? ((totalSpent + pendingTotal + projectionTotal) / totalBudget) * 100
       : 0;
@@ -191,64 +213,110 @@ const BudgetReport: React.FC<BudgetReportProps> = ({
     ].filter(item => item.value > 0);
   }, [budgetSummary, theme]);
 
-  // Group expenses by category
-  const expensesByCategory = React.useMemo(() => {
-    const categoryMap = new Map();
-    
-    // Initialize categories
-    Object.entries(CATEGORY_GROUPS).forEach(([groupName, categoryIds]) => {
-      categoryMap.set(groupName, {
-        name: groupName,
-        spent: 0,
-        pending: 0,
-        projected: 0,
-        total: 0
-      });
-    });
-    
+  // REFACTORED: Group expenses and projections by hierarchical main category
+  const expensesByCategory = useMemo(() => {
+    // Define the structure for grouped data
+    const categoryMap = new Map<string, { 
+      name: string; // Main category name
+      spent: number;
+      pending: number;
+      projected: number;
+      total: number;
+      items: Array<Expense | BudgetProjection>; // Store original items for drill-down?
+    }>();
+
+    // Helper function to determine category ID for an item
+    // (Leverages mappings and fallback logic)
+    const getItemCategoryId = (item: Partial<Expense | BudgetProjection>): string => {
+        if (item.id && categoryMappings[item.id]) {
+          return categoryMappings[item.id];
+        }
+        // Fallback using mapSimpleToDetailedCategory for uncategorized items
+        try {
+            let itemTypeHint = 'other';
+            if ('category' in item && item.category) itemTypeHint = item.category;
+            else if ('categoryId' in item && item.categoryId) itemTypeHint = 'projection'; // Identify projections
+
+            const itemDescription = ('description' in item ? item.description : ('notes' in item ? item.notes : '')) || '';
+            const vendorOrSub = ('subcontractorName' in item ? item.subcontractorName : undefined) || ('vendor' in item ? item.vendor : '') || '';
+            
+            return mapSimpleToDetailedCategory(itemTypeHint, vendorOrSub, itemDescription);
+        } catch (e) { 
+            console.error("Mapping error in getItemCategoryId:", e);
+            return 'uncategorized';
+        }
+    };
+
     // Process expenses
     expenses.forEach(expense => {
-      const categoryId = getCategoryIdForItem(expense);
-      const groupName = getCategoryGroupForId(categoryId);
-      
-      const group = categoryMap.get(groupName);
-      if (expense.status === 'paid' || expense.status === 'approved') {
-        group.spent += expense.amount;
-      } else if (expense.status === 'pending') {
-        group.pending += expense.amount;
+      if (!expense.id) return; // Need ID for mapping
+      const detailedCategoryId = getItemCategoryId(expense);
+      const mainCategory = getParentCategory(detailedCategoryId) || getCategoryById(detailedCategoryId);
+      const mainCategoryId = mainCategory?.id || 'uncategorized';
+      const mainCategoryName = mainCategory?.name || 'Uncategorized';
+
+      if (!categoryMap.has(mainCategoryId)) {
+        categoryMap.set(mainCategoryId, {
+          name: mainCategoryName,
+          spent: 0,
+          pending: 0,
+          projected: 0,
+          total: 0,
+          items: []
+        });
       }
-      group.total += expense.amount;
+      
+      const group = categoryMap.get(mainCategoryId)!;
+      group.items.push(expense);
+      if (expense.amount) {
+        if (expense.status === 'paid' || expense.status === 'approved') {
+          group.spent += expense.amount;
+        } else if (expense.status === 'pending') {
+          group.pending += expense.amount;
+        }
+        group.total += expense.amount; 
+      }
     });
     
     // Process projections
     projections.forEach(projection => {
-      const groupName = getCategoryGroupForId(projection.categoryId);
-      const group = categoryMap.get(groupName);
-      group.projected += projection.amount;
-      group.total += projection.amount;
+      const detailedCategoryId = projection.categoryId || 'uncategorized'; 
+      const mainCategory = getParentCategory(detailedCategoryId) || getCategoryById(detailedCategoryId);
+      const mainCategoryId = mainCategory?.id || 'uncategorized';
+      const mainCategoryName = mainCategory?.name || 'Uncategorized';
+
+      if (!categoryMap.has(mainCategoryId)) {
+        categoryMap.set(mainCategoryId, {
+          name: mainCategoryName,
+          spent: 0,
+          pending: 0,
+          projected: 0,
+          total: 0,
+          items: []
+        });
+      }
+      
+      const group = categoryMap.get(mainCategoryId)!;
+      // Optionally add projection to items array if needed for display
+      // group.items.push(projection); 
+      if (projection.amount) {
+        group.projected += projection.amount;
+        group.total += projection.amount; 
+      }
     });
     
+    // Return the final grouped categories, sorted by total amount
     return Array.from(categoryMap.values())
-      .filter(category => category.total > 0)
-      .sort((a, b) => b.total - a.total);
-  }, [expenses, projections]);
+      .filter(category => category.total > 0) // Only include categories with some value
+      .sort((a, b) => b.total - a.total); // Sort descending by total
 
-  // Helper to determine category ID for an expense
-  function getCategoryIdForItem(item: any): string {
-    // Use our centralized category mapping utility
-    return mapItemToCategory(item);
-  }
+  }, [expenses, projections, categoryMappings]); // Depend on mappings
 
-  // Helper to find which group a category belongs to
-  function getCategoryGroupForId(categoryId: string): string {
-    // Use our centralized section lookup utility
-    return getCategorySectionById(categoryId);
-  }
-
-  // Prepare data for the category spending chart
+  // Prepare data for the category spending chart (using the refactored data)
   const categoryChartData = React.useMemo(() => {
+    // Map the new expensesByCategory structure
     return expensesByCategory
-      .slice(0, 8) // Only show top 8 categories
+      .slice(0, 8) // Keep showing top 8 main categories
       .map(category => ({
         name: category.name,
         spent: category.spent,
@@ -459,6 +527,11 @@ const BudgetReport: React.FC<BudgetReportProps> = ({
       // Fallback for browsers that don't support native sharing
       handleCopyLink();
     }
+  };
+
+  // Snackbar for feedback
+  const handleCloseSnackbar = () => {
+    setSnackbar({ ...snackbar, open: false });
   };
 
   return (
@@ -915,6 +988,17 @@ const BudgetReport: React.FC<BudgetReportProps> = ({
           <Button onClick={() => setShareDialogOpen(false)}>Close</Button>
         </DialogActions>
       </Dialog>
+
+      <Snackbar 
+        open={snackbar.open} 
+        autoHideDuration={4000} 
+        onClose={handleCloseSnackbar}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+      >
+        <Alert onClose={handleCloseSnackbar} severity={snackbar.severity} sx={{ width: '100%' }}>
+            {snackbar.message}
+        </Alert>
+      </Snackbar>
     </Box>
   );
 };

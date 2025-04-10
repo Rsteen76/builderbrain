@@ -5,6 +5,7 @@ import { BudgetItem, CategoryMappingPreferences } from '../types/budget.types';
 // export type CategoryMappingPreferences = Record<string, string>;
 
 /**
+ * @deprecated Use CategoryService.autoAssignCategory or mapSimpleToDetailedCategory from hierarchicalCategories.ts instead.
  * Maps a budget item to a construction category
  * This is the single source of truth for category mapping throughout the application
  */

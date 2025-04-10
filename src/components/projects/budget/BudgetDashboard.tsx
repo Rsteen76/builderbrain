@@ -1,4 +1,4 @@
-import React, { useMemo, useState, useEffect } from 'react';
+import React, { useMemo, useState, useEffect, useCallback } from "react";
 import {
   Box,
   Grid,
@@ -30,8 +30,9 @@ import {
   MenuItem,
   TextField,
   InputAdornment,
-  Alert
-} from '@mui/material';
+  Alert,
+  Snackbar,
+} from "@mui/material";
 import {
   TrendingUp as TrendingUpIcon,
   TrendingDown as TrendingDownIcon,
@@ -58,9 +59,10 @@ import {
   HelpOutline as HelpOutlineIcon,
   PriorityHigh as PriorityHighIcon,
   ReportProblem as ReportProblemIcon,
-  ThumbUp as ThumbUpIcon
-} from '@mui/icons-material';
-import { Timestamp } from 'firebase/firestore';
+  ThumbUp as ThumbUpIcon,
+  GroupWork as GroupWorkIcon,
+} from "@mui/icons-material";
+import { Timestamp } from "firebase/firestore";
 
 import {
   ResponsiveContainer,
@@ -79,23 +81,34 @@ import {
   Area,
   AreaChart,
   ComposedChart,
-  ReferenceLine
-} from 'recharts';
+  ReferenceLine,
+} from "recharts";
 
-import { useProjectDetail } from '../../../contexts/ProjectDetailContext';
-import { formatCurrency, formatPercentage, formatDate } from '../../../utils/formatters';
-import { Project, ProjectPhase, Bid, Expense, BudgetProjection } from '../../../types';
-import BudgetAllocationTracker from './BudgetAllocationTracker';
-import { CONSTRUCTION_CATEGORIES } from '../../../utils/constructionCategories';
-import BudgetReportButton from './BudgetReportButton';
+import { useProjectDetail } from "../../../contexts/ProjectDetailContext";
+import {
+  formatCurrency,
+  formatPercentage,
+  formatDate,
+} from "../../../utils/formatters";
+import {
+  Project,
+  ProjectPhase,
+  Bid,
+  Expense,
+  BudgetProjection,
+} from "../../../types";
+import BudgetAllocationTracker from "./BudgetAllocationTracker";
+import { CONSTRUCTION_CATEGORIES } from "../../../utils/constructionCategories";
+import BudgetReportButton from "./BudgetReportButton";
+import { getProjectById } from '../../../services/project';
+import { ExpenseService } from '../../../services/expense';
+import { useAuth } from '../../../contexts/AuthContext';
+import { getCategoryMappingsForProject } from '../../../services/category.service';
+import { MAIN_CATEGORIES, getCategoryById, getParentCategory, mapSimpleToDetailedCategory } from '../../../data/hierarchicalCategories';
+import { Category } from '../../../types/category.types';
 
 interface BudgetDashboardProps {
-  project?: Project | null;
-  phases?: ProjectPhase[];
-  expenses?: Expense[];
-  bids?: Bid[];
-  loading?: boolean;
-  error?: string;
+  // projectId: string; // No longer needed as prop, get from context
 }
 
 // Add type definition for budget summary
@@ -109,189 +122,244 @@ interface BudgetSummary {
   pendingTotal: number;
 }
 
-const BudgetDashboard: React.FC<BudgetDashboardProps> = ({
-  project: propProject,
-  phases: propPhases,
-  expenses: propExpenses,
-  bids: propBids,
-  loading: propLoading,
-  error: propError
-}) => {
-  const theme = useTheme();
-  // Use either props or context
-  const contextData = useProjectDetail();
-  
-  // Use props if provided, otherwise use context
-  const project = propProject ?? contextData.project;
-  const phases = propPhases ?? contextData.phases;
-  const expenses = propExpenses ?? contextData.expenses;
-  const bids = propBids ?? contextData.bids;
-  const loading = propLoading ?? contextData.loading;
-  const error = propError ?? contextData.error;
-  
-  const [expenseGroupBy, setExpenseGroupBy] = useState<'category' | 'contractor'>('category');
-  // Add state for projections
-  const [projections, setProjections] = useState<BudgetProjection[]>(project?.projections || []);
-  const [projectionTotal, setProjectionTotal] = useState<number>(0);
-  
-  // Effect to load projections from project data
-  useEffect(() => {
-    if (project?.projections) {
-      // Ensure createdAt is a Date object
-      const loadedProjections = project.projections.map(p => ({
-        ...p,
-        createdAt: p.createdAt instanceof Timestamp ? p.createdAt.toDate() : new Date(p.createdAt) 
-      }));
-      setProjections(loadedProjections);
-      
-      // Calculate total projected amount
-      const total = loadedProjections.reduce((sum, p) => sum + p.amount, 0);
-      setProjectionTotal(total);
-    } else {
-      setProjections([]);
-      setProjectionTotal(0);
-    }
-  }, [project?.projections]);
-  
-  // Handle adding new projections
-  const handleAddProjection = (projection: BudgetProjection) => {
-    setProjections(prev => [...prev, projection]);
-    setProjectionTotal(prev => prev + projection.amount);
-  };
+// Define structure for budget health
+interface BudgetHealth {
+  status: string;
+  color: string;
+  icon: React.ReactElement;
+  advice: string;
+}
 
-  // Update budget summary to include projections
+const BudgetDashboard: React.FC<BudgetDashboardProps> = (/*{ projectId }*/) => {
+  const theme = useTheme();
+  const { user } = useAuth();
+  
+  // GET DATA FROM CONTEXT
+  const { 
+      project: contextProject, 
+      phases: contextPhases, 
+      expenses: contextExpenses, 
+      bids: contextBids, 
+      loading: contextLoading, 
+      error: contextError, 
+      projectId // Get projectId from context
+  } = useProjectDetail();
+  
+  // Use context data directly instead of fetching via useEffect
+  const project = contextProject;
+  const phases = contextPhases;
+  const expenses = contextExpenses;
+  const bids = contextBids;
+  const loading = contextLoading; 
+  const error = contextError;
+  const projections = useMemo(() => (
+      project?.projections?.map(p => ({ 
+          ...p, 
+          createdAt: p.createdAt instanceof Timestamp ? p.createdAt.toDate() : new Date(p.createdAt)
+      })) || []
+  ), [project?.projections]);
+  
+  // State for category mappings & loading
+  const [categoryMappings, setCategoryMappings] = useState<Record<string, string>>({});
+  const [mappingsLoading, setMappingsLoading] = useState<boolean>(true);
+  const [snackbar, setSnackbar] = useState<{ open: boolean, message: string, severity: 'success' | 'error' }>({ open: false, message: '', severity: 'success' });
+
+  // State for expense grouping
+  const [expenseGrouping, setExpenseGrouping] = useState<'category' | 'contractor'>('category');
+
+  // REMOVE Fetch data useEffect
+  // useEffect(() => { ... }, [projectId, user]);
+  
+  // Load Category Mappings based on context projectId
+  useEffect(() => {
+    if (projectId) { // Use projectId from context
+      setMappingsLoading(true);
+      getCategoryMappingsForProject(projectId)
+        .then((mappings) => {
+          setCategoryMappings(mappings);
+        })
+        .catch((error) => {
+          console.error("Error loading category mappings for dashboard:", error);
+          setSnackbar({ open: true, message: 'Error loading category settings', severity: 'error' });
+        })
+        .finally(() => {
+          setMappingsLoading(false);
+        });
+    } else {
+      setCategoryMappings({});
+      setMappingsLoading(false);
+    }
+  }, [projectId]); // Depend on projectId from context
+
+  // REMOVE Handle adding new projections (should be handled by parent/context)
+  // const handleAddProjection = (projection: BudgetProjection) => { ... };
+
+  // Update budget summary calculation
   const budgetSummary = useMemo<BudgetSummary>(() => {
     if (!project) {
-      return { 
+       return { 
         totalBudget: 0, 
         totalSpent: 0, 
         remainingBudget: 0, 
         projectedTotal: 0, 
         projectedRemaining: 0,
-        projectedPercentage: 0,
-        pendingTotal: 0
-      };
+        projectedPercentage: 0, 
+        pendingTotal: 0 
+      }; 
     }
 
-    const totalBudget = typeof project.budget === 'number' 
-      ? project.budget 
-      : project.budget.total;
-    
+    const totalBudget =
+      typeof project.budget === "number"
+        ? project.budget
+        : project.budget?.total || 0; // Use optional chaining and default
+
     const totalSpent = expenses
-      .filter(expense => expense.status === 'paid' || expense.status === 'approved')
+      .filter((expense) => expense.status === "paid" || expense.status === "approved")
       .reduce((sum, expense) => sum + expense.amount, 0);
-    
-    // Calculate pending expenses (submitted but not approved/paid)
+
     const pendingTotal = expenses
-      .filter(expense => expense.status === 'pending')
+      .filter((expense) => expense.status === "pending")
       .reduce((sum, expense) => sum + expense.amount, 0);
-    
-    // Calculate remaining budget (without projections)
+      
     const remainingBudget = totalBudget - totalSpent;
-    
-    // Calculate projected total (remaining budget minus projections)
-    const projectedRemaining = remainingBudget - projectionTotal;
-    
-    // Avoid division by zero - use locally defined variables instead of self-reference
-    const spentPercentage = totalBudget > 0 
-      ? (totalSpent / totalBudget) * 100
-      : 0;
-    const projectedPercentage = totalBudget > 0
-      ? ((totalSpent + projectionTotal + pendingTotal) / totalBudget) * 100
-      : 0;
+    const currentProjections = project?.projections || [];
+    const calculatedProjectionTotal = currentProjections.reduce((sum, p) => sum + p.amount, 0);
+    const projectedRemaining = remainingBudget - calculatedProjectionTotal;
+    const projectedPercentage = totalBudget > 0 ? ((totalSpent + calculatedProjectionTotal + pendingTotal) / totalBudget) * 100 : 0;
     
     return {
       totalBudget,
       totalSpent,
       remainingBudget,
-      projectedTotal: projectionTotal,
+      projectedTotal: calculatedProjectionTotal, // Assign calculated value to the correct field name
       projectedRemaining,
       projectedPercentage,
-      pendingTotal
+      pendingTotal,
     };
-  }, [project, expenses, projectionTotal]);
+  }, [project, expenses]); // Depend on context data
 
-  // Group expenses by category
+  // REFACTORED: Group expenses by hierarchical main category
   const expensesByCategory = useMemo(() => {
-    if (!expenses) return [];
-    
-    const categories: Record<string, number> = {};
-    
-    expenses.forEach(expense => {
-      if (!categories[expense.category]) {
-        categories[expense.category] = 0;
-      }
-      categories[expense.category] += expense.amount;
-    });
-    
-    // Convert to array for chart
-    return Object.entries(categories).map(([category, amount], index) => {
-      const colors = [
-        theme.palette.primary.main,
-        theme.palette.secondary.main,
-        theme.palette.success.main,
-        theme.palette.warning.main,
-        theme.palette.error.main,
-        theme.palette.info.main,
-        theme.palette.grey[700],
-      ];
-      
-      return {
-        name: category.charAt(0).toUpperCase() + category.slice(1).replace('_', ' '),
-        value: amount,
-        color: colors[index % colors.length]
-      };
-    }).sort((a, b) => b.value - a.value);
-  }, [expenses, theme]);
+    // Define the structure for grouped data
+    const categoryMap = new Map<string, { 
+      id: string; 
+      name: string; 
+      value: number; 
+      count: number; 
+      items: Expense[]; 
+      color: string; // ADD color to type definition
+    }>();
 
-  // NEW: Group expenses by contractor
-  const expensesByContractor = useMemo(() => {
-    if (!expenses) return [];
-    
-    const contractors: Record<string, number> = {};
-    
+    // Helper function to get category ID for an expense
+    const getExpenseCategoryId = (expense: Expense): string => {
+        if (expense.id && categoryMappings[expense.id]) {
+          return categoryMappings[expense.id];
+        }
+        // Fallback using mapSimpleToDetailedCategory
+        try {
+            return mapSimpleToDetailedCategory(
+                expense.category || 'other',
+                expense.subcontractorName || expense.vendor || '',
+                expense.description || ''
+            );
+        } catch (e) { 
+            console.error("Mapping error in getExpenseCategoryId:", e);
+            return 'uncategorized';
+        }
+    };
+
     expenses.forEach(expense => {
-      // Use either subcontractorName, vendor, or "Direct Expense" as fallback
-      const contractorName = expense.subcontractorName || expense.vendor || "Direct Expense";
+      if (!expense.id || typeof expense.amount !== 'number') return; // Need ID and amount
       
-      if (!contractors[contractorName]) {
-        contractors[contractorName] = 0;
+      const detailedCategoryId = getExpenseCategoryId(expense);
+      const mainCategory = getParentCategory(detailedCategoryId) || getCategoryById(detailedCategoryId);
+      const mainCategoryId = mainCategory?.id || 'uncategorized';
+      const mainCategoryName = mainCategory?.name || 'Uncategorized';
+
+      if (!categoryMap.has(mainCategoryId)) {
+        // Assign color based on main category or index if no specific color defined
+        const categoryColor = mainCategory?.color || theme.palette.grey[500]; 
+
+        categoryMap.set(mainCategoryId, {
+          id: mainCategoryId,
+          name: mainCategoryName,
+          value: 0,
+          count: 0,
+          items: [],
+          color: categoryColor // Color is now part of the type
+        });
       }
-      contractors[contractorName] += expense.amount;
+      
+      const group = categoryMap.get(mainCategoryId)!;
+      group.items.push(expense);
+      // Include both spent and pending amounts in the total value for the dashboard breakdown
+      if (expense.status === 'paid' || expense.status === 'approved' || expense.status === 'pending') {
+           group.value += expense.amount;
+      }
+      group.count += 1;
     });
     
-    // Convert to array for chart
-    return Object.entries(contractors).map(([contractor, amount], index) => {
-      const colors = [
-        theme.palette.primary.main,
-        theme.palette.secondary.main,
-        theme.palette.success.main,
-        theme.palette.warning.main,
-        theme.palette.error.main,
-        theme.palette.info.main,
-        theme.palette.grey[700],
-      ];
-      
-      return {
-        name: contractor,
-        value: amount,
-        color: colors[index % colors.length]
-      };
-    }).sort((a, b) => b.value - a.value);
+    // Return as an array, sorted by value descending
+    return Array.from(categoryMap.values()).sort((a, b) => b.value - a.value);
+
+  }, [expenses, categoryMappings, theme]); // Add theme dependency for color fallback
+
+  // Group expenses by contractor/vendor
+  const expensesByContractor = useMemo(() => {
+      // ... (This logic remains the same, grouping by subcontractorName or vendor)
+     const contractorMap = new Map<string, { name: string, value: number, count: number, color: string }>();
+ 
+     expenses.forEach(expense => {
+       if (typeof expense.amount !== 'number') return;
+ 
+       const name = expense.subcontractorName || expense.vendor || 'Unknown Contractor/Vendor';
+ 
+       if (!contractorMap.has(name)) {
+         // Add colors based on index for contractors
+         const colors = [
+           theme.palette.primary.main,
+           theme.palette.secondary.main,
+           theme.palette.success.main,
+           theme.palette.warning.main,
+           theme.palette.error.main,
+           theme.palette.info.main,
+           theme.palette.grey[700],
+         ];
+         const color = colors[contractorMap.size % colors.length];
+         contractorMap.set(name, { name, value: 0, count: 0, color });
+       }
+ 
+       const group = contractorMap.get(name)!;
+       // Include both spent and pending
+       if (expense.status === 'paid' || expense.status === 'approved' || expense.status === 'pending') {
+            group.value += expense.amount;
+       }
+       group.count += 1;
+     });
+ 
+     return Array.from(contractorMap.values()).sort((a, b) => b.value - a.value);
   }, [expenses, theme]);
 
   // Get the current expense grouping data based on selected view
   const currentExpenseGroupingData = useMemo(() => {
-    return expenseGroupBy === 'category' ? expensesByCategory : expensesByContractor;
-  }, [expenseGroupBy, expensesByCategory, expensesByContractor]);
+    // Return type needs to match the structure used in the table
+    const data = expenseGrouping === "category"
+      ? expensesByCategory 
+      : expensesByContractor;
+      
+    // Ensure the returned structure matches what the table expects 
+    // (name, value, count - which it does now for both groupings)
+    return data;
+
+  }, [expenseGrouping, expensesByCategory, expensesByContractor]);
 
   // Handle toggle change for expense grouping
   const handleExpenseGroupingChange = (
     _event: React.MouseEvent<HTMLElement>,
-    newGrouping: 'category' | 'contractor' | null,
+    newGrouping: "category" | "contractor" | null,
   ) => {
     if (newGrouping !== null) {
-      setExpenseGroupBy(newGrouping);
+      setExpenseGrouping(newGrouping);
     }
   };
 
@@ -299,7 +367,8 @@ const BudgetDashboard: React.FC<BudgetDashboardProps> = ({
   const phaseAllocation = useMemo(() => {
     if (!phases || !expenses) return [];
     
-    return phases.map((phase, index) => {
+    return phases
+      .map((phase, index) => {
       const colors = [
         theme.palette.primary.main,
         theme.palette.secondary.main,
@@ -310,18 +379,27 @@ const BudgetDashboard: React.FC<BudgetDashboardProps> = ({
       ];
       
       // Calculate actual cost by summing expenses associated with this phase
-      const phaseExpenses = expenses.filter(expense => expense.phaseId === phase.id);
-      const actualCost = phaseExpenses.reduce((sum, expense) => sum + expense.amount, 0);
+        const phaseExpenses = expenses.filter(
+          (expense) => expense.phaseId === phase.id,
+        );
+        const actualCost = phaseExpenses.reduce(
+          (sum, expense) => sum + expense.amount,
+          0,
+        );
       
       return {
         name: phase.name,
         budget: phase.budget || 0,
         spent: actualCost,
         remaining: (phase.budget || 0) - actualCost,
-        percentUsed: phase.budget && phase.budget > 0 ? (actualCost / phase.budget) * 100 : 0,
-        color: colors[index % colors.length]
-      };
-    }).sort((a, b) => b.budget - a.budget); // Sort by budget size, largest first
+          percentUsed:
+            phase.budget && phase.budget > 0
+              ? (actualCost / phase.budget) * 100
+              : 0,
+          color: colors[index % colors.length],
+        };
+      })
+      .sort((a, b) => b.budget - a.budget); // Sort by budget size, largest first
   }, [phases, expenses, theme]);
 
   // Budget vs. Actual monthly data for trend visualization
@@ -329,23 +407,30 @@ const BudgetDashboard: React.FC<BudgetDashboardProps> = ({
     if (!expenses) return [];
     
     // Group expenses by month
-    const monthlyData: Record<string, {month: string, spent: number, projected: number}> = {};
+    const monthlyData: Record<
+      string,
+      { month: string; spent: number; projected: number }
+    > = {};
     
-    expenses.forEach(expense => {
-      const date = typeof expense.date === 'string' 
+    expenses.forEach((expense) => {
+      const date =
+        typeof expense.date === "string"
         ? new Date(expense.date) 
         : expense.date instanceof Date
           ? expense.date
           : new Date();
       
       const monthKey = `${date.getFullYear()}-${date.getMonth() + 1}`;
-      const monthName = date.toLocaleString('default', { month: 'short', year: '2-digit' });
+      const monthName = date.toLocaleString("default", {
+        month: "short",
+        year: "2-digit",
+      });
       
       if (!monthlyData[monthKey]) {
         monthlyData[monthKey] = {
           month: monthName,
           spent: 0,
-          projected: 0
+          projected: 0,
         };
       }
       
@@ -357,74 +442,98 @@ const BudgetDashboard: React.FC<BudgetDashboardProps> = ({
       .sort((a, b) => a.month.localeCompare(b.month))
       .map((item, index, arr) => ({
         ...item,
-        cumulative: arr.slice(0, index + 1).reduce((sum, curr) => sum + curr.spent, 0)
+        cumulative: arr
+          .slice(0, index + 1)
+          .reduce((sum, curr) => sum + curr.spent, 0),
       }));
 
     // Add projected expenses to future months
     if (projections.length > 0) {
       // Group projections by category
-      const projectionsByCategory = projections.reduce((acc, proj) => {
-        if (!acc[proj.categoryId]) {
-          acc[proj.categoryId] = 0;
-        }
-        acc[proj.categoryId] += proj.amount;
-        return acc;
-      }, {} as Record<string, number>);
-      
+      const projectionsByCategory = projections.reduce(
+        (acc, proj) => {
+          if (!acc[proj.categoryId]) {
+            acc[proj.categoryId] = 0;
+          }
+          acc[proj.categoryId] += proj.amount;
+          return acc;
+        },
+        {} as Record<string, number>,
+      );
+
       // Calculate total projection amount
-      const totalProjectionAmount = Object.values(projectionsByCategory).reduce((sum, amount) => sum + amount, 0);
-      
+      const totalProjectionAmount = Object.values(projectionsByCategory).reduce(
+        (sum, amount) => sum + amount,
+        0,
+      );
+
       // Get the current month and next three months
       const currentDate = new Date();
       const futureMonths = [];
-      
+
       // Add the current month if not already in trends
-      const currentMonthStr = `${currentDate.getFullYear()}-${String(currentDate.getMonth() + 1).padStart(2, '0')}`;
-      const currentMonthExists = monthData.some(m => m.month.startsWith(currentMonthStr));
-      
+      const currentMonthStr = `${currentDate.getFullYear()}-${String(currentDate.getMonth() + 1).padStart(2, "0")}`;
+      const currentMonthExists = monthData.some((m) =>
+        m.month.startsWith(currentMonthStr),
+      );
+
       if (!currentMonthExists) {
         futureMonths.push({
           month: currentMonthStr,
-          date: new Date(currentDate.getFullYear(), currentDate.getMonth(), 1)
+          date: new Date(currentDate.getFullYear(), currentDate.getMonth(), 1),
         });
       }
-      
+
       // Add next three months
       for (let i = 1; i <= 3; i++) {
-        const futureDate = new Date(currentDate.getFullYear(), currentDate.getMonth() + i, 1);
-        const monthStr = `${futureDate.getFullYear()}-${String(futureDate.getMonth() + 1).padStart(2, '0')}`;
+        const futureDate = new Date(
+          currentDate.getFullYear(),
+          currentDate.getMonth() + i,
+          1,
+        );
+        const monthStr = `${futureDate.getFullYear()}-${String(futureDate.getMonth() + 1).padStart(2, "0")}`;
         futureMonths.push({
           month: monthStr,
-          date: futureDate
+          date: futureDate,
         });
       }
-      
+
       // Distribute projections over future months
-      const projectionPerMonth = totalProjectionAmount / (futureMonths.length || 1);
-      
+      const projectionPerMonth =
+        totalProjectionAmount / (futureMonths.length || 1);
+
       // Add or update trend data with projections
       futureMonths.forEach((futureMonth, index) => {
-        const existingIndex = monthData.findIndex(m => m.month === futureMonth.month);
-        
+        const existingIndex = monthData.findIndex(
+          (m) => m.month === futureMonth.month,
+        );
+
         if (existingIndex >= 0) {
           // Update existing month
-          monthData[existingIndex].projected = (monthData[existingIndex].projected || 0) + 
-            projectionPerMonth * (index === 0 ? 0.2 : index === 1 ? 0.3 : index === 2 ? 0.3 : 0.2);
-        } else {
+          monthData[existingIndex].projected =
+            (monthData[existingIndex].projected || 0) +
+            projectionPerMonth *
+              (index === 0 ? 0.2 : index === 1 ? 0.3 : index === 2 ? 0.3 : 0.2);
+      } else {
           // Add new month with projection
           monthData.push({
             month: futureMonth.month,
             spent: 0,
-            cumulative: monthData.length > 0 ? monthData[monthData.length - 1].cumulative : 0,
-            projected: projectionPerMonth * (index === 0 ? 0.2 : index === 1 ? 0.3 : index === 2 ? 0.3 : 0.2)
+            cumulative:
+              monthData.length > 0
+                ? monthData[monthData.length - 1].cumulative
+                : 0,
+            projected:
+              projectionPerMonth *
+              (index === 0 ? 0.2 : index === 1 ? 0.3 : index === 2 ? 0.3 : 0.2),
           });
         }
       });
-      
+
       // Sort to ensure chronological order
       monthData.sort((a, b) => a.month.localeCompare(b.month));
     }
-    
+
     return monthData;
   }, [expenses, projections]);
 
@@ -432,66 +541,70 @@ const BudgetDashboard: React.FC<BudgetDashboardProps> = ({
   const budgetHealth = useMemo(() => {
     if (!project) {
       return {
-        status: 'Unknown',
+        status: "Unknown",
         color: theme.palette.grey[500],
-        icon: <HelpOutlineIcon />
+        icon: <HelpOutlineIcon />,
+        advice: "",
       };
     }
-    
+
     const { totalBudget, totalSpent, projectedTotal } = budgetSummary;
     
     // Avoid division by zero
     if (totalBudget === 0) {
       return {
-        status: 'No Budget',
+        status: "No Budget",
         color: theme.palette.grey[500],
-        icon: <HelpOutlineIcon />
+        icon: <HelpOutlineIcon />,
+        advice: "",
       };
     }
-    
-    const spentPercentage = totalBudget > 0 
-      ? (totalSpent / totalBudget) * 100
-      : 0;
-    const projectedPercentage = totalBudget > 0
-      ? ((totalSpent + projectedTotal) / totalBudget) * 100
-      : 0;
+
+    const spentPercentage = (totalSpent / totalBudget) * 100;
+    const projectedPercentage = ((totalSpent + projectedTotal) / totalBudget) * 100;
     
     // Determine health status based on both actual and projected spending
     if (projectedPercentage > 120) {
       return {
-        status: 'Critical',
+        status: "Critical",
         color: theme.palette.error.dark,
-        icon: <PriorityHighIcon />
+        icon: <PriorityHighIcon />,
+        advice: "Your project is significantly over budget or projected to greatly exceed budget. Comprehensive financial review and corrective actions are required urgently.",
       };
     } else if (projectedPercentage > 110) {
       return {
-        status: 'At Risk',
+        status: "At Risk",
         color: theme.palette.error.main,
-        icon: <WarningIcon />
+        icon: <WarningIcon />,
+        advice: "Your project is projected to exceed budget by more than 10%. Immediate cost control measures are recommended.",
       };
     } else if (projectedPercentage > 100) {
       return {
-        status: 'Caution',
+        status: "Caution",
         color: theme.palette.warning.main,
-        icon: <ReportProblemIcon />
+        icon: <ReportProblemIcon />,
+        advice: "Your project expenses plus projected costs are trending higher than expected. Review upcoming expenses and identify savings opportunities.",
       };
     } else if (projectedPercentage > 90) {
       return {
-        status: 'Near Limit',
+        status: "Near Limit",
         color: theme.palette.warning.light,
-        icon: <InfoIcon />
+        icon: <InfoIcon />,
+        advice: "Your project has utilized most of the allocated budget. Carefully manage remaining funds and review projections to prevent overruns.",
       };
     } else if (projectedPercentage > 60) {
       return {
-        status: 'On Track',
+        status: "On Track",
         color: theme.palette.success.main,
-        icon: <CheckCircleIcon />
+        icon: <CheckCircleIcon />,
+        advice: "Your project is progressing as expected financially. Continue monitoring expenses and upcoming projected costs to maintain budget compliance.",
       };
     } else {
       return {
-        status: 'Healthy',
+        status: "Healthy",
         color: theme.palette.success.dark,
-        icon: <ThumbUpIcon />
+        icon: <ThumbUpIcon />,
+        advice: "Your project is well under budget and on track. Current spending patterns and projections indicate you may finish below the allocated budget.",
       };
     }
   }, [budgetSummary, project, theme.palette]);
@@ -500,28 +613,45 @@ const BudgetDashboard: React.FC<BudgetDashboardProps> = ({
   const topExpenses = useMemo(() => {
     if (!expenses) return [];
     
-    return [...expenses]
-      .sort((a, b) => b.amount - a.amount)
-      .slice(0, 5);
+    return [...expenses].sort((a, b) => b.amount - a.amount).slice(0, 5);
   }, [expenses]);
 
-  if (loading) {
+  // Snackbar for feedback
+  const handleCloseSnackbar = () => {
+    setSnackbar({ ...snackbar, open: false });
+  };
+  
+  // Use context loading state
+  if (loading || mappingsLoading) {
     return (
-      <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '400px' }}>
-        <Typography variant="h5" sx={{ mb: 2 }}>Loading budget data...</Typography>
+      <Box
+        sx={{
+          display: "flex",
+          justifyContent: "center",
+          alignItems: "center",
+          height: "400px",
+        }}
+      >
+        <Typography variant="h5" sx={{ mb: 2 }}>
+          Loading budget data...
+        </Typography>
       </Box>
     );
   }
 
+  // Use context error state
   if (error) {
     return (
       <Box sx={{ p: 3 }}>
-        <Typography variant="h5" color="error">Error loading budget data</Typography>
+        <Typography variant="h5" color="error">
+          Error loading budget data
+        </Typography>
         <Typography variant="body1">{error}</Typography>
       </Box>
     );
   }
 
+  // Use context project state
   if (!project) {
     return (
       <Box sx={{ p: 3 }}>
@@ -533,16 +663,24 @@ const BudgetDashboard: React.FC<BudgetDashboardProps> = ({
   return (
     <Box sx={{ p: { xs: 2, md: 3 } }}>
       {/* Budget Overview Section */}
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
+      <Box
+        sx={{
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          mb: 3,
+        }}
+      >
         <Typography variant="h5" sx={{ fontWeight: 600 }}>
-          Budget Overview
-        </Typography>
-        <BudgetReportButton 
+        Budget Overview
+      </Typography>
+        {/* Pass context data to BudgetReportButton */}
+        <BudgetReportButton
           project={project}
           expenses={expenses}
           phases={phases}
           bids={bids}
-          projections={projections || []}
+          projections={projections} // Pass local projections state
           variant="outlined"
           color="primary"
           size="medium"
@@ -551,45 +689,46 @@ const BudgetDashboard: React.FC<BudgetDashboardProps> = ({
       
       {/* Budget Overview Cards */}
       <Grid container spacing={3} sx={{ mb: 4 }}>
-        {/* First Row - Key Budget Figures */}
+        {/* First Row - Key Budget Figures - Commented out as redundant */}
+        {/*
         <Grid item xs={12}>
           <Grid container spacing={3}>
-            <Grid item xs={12} sm={6} md={3}>
+        <Grid item xs={12} sm={6} md={3}>
               <Paper elevation={0} sx={{ 
                 p: 2.5, 
                 borderRadius: 2, 
                 height: '100%',
                 bgcolor: alpha(theme.palette.background.paper, 0.7) 
               }}>
-                <Typography variant="subtitle2" color="text.secondary">Total Budget</Typography>
-                <Typography variant="h4" fontWeight="bold" sx={{ mt: 1 }}>
-                  {formatCurrency(budgetSummary.totalBudget)}
-                </Typography>
-              </Paper>
-            </Grid>
-            
-            <Grid item xs={12} sm={6} md={3}>
+            <Typography variant="subtitle2" color="text.secondary">Total Budget</Typography>
+            <Typography variant="h4" fontWeight="bold" sx={{ mt: 1 }}>
+              {formatCurrency(budgetSummary.totalBudget)}
+            </Typography>
+          </Paper>
+        </Grid>
+        
+        <Grid item xs={12} sm={6} md={3}>
               <Paper elevation={0} sx={{ 
                 p: 2.5, 
                 borderRadius: 2, 
                 height: '100%',
                 bgcolor: alpha(theme.palette.background.paper, 0.7) 
               }}>
-                <Typography variant="subtitle2" color="text.secondary">Spent to Date</Typography>
-                <Typography variant="h4" fontWeight="bold" sx={{ mt: 1, color: theme.palette.primary.main }}>
-                  {formatCurrency(budgetSummary.totalSpent)}
-                </Typography>
-                <Box sx={{ display: 'flex', alignItems: 'center', mt: 1 }}>
-                  <Typography variant="body2" color="text.secondary">
+            <Typography variant="subtitle2" color="text.secondary">Spent to Date</Typography>
+            <Typography variant="h4" fontWeight="bold" sx={{ mt: 1, color: theme.palette.primary.main }}>
+              {formatCurrency(budgetSummary.totalSpent)}
+            </Typography>
+            <Box sx={{ display: 'flex', alignItems: 'center', mt: 1 }}>
+              <Typography variant="body2" color="text.secondary">
                     {budgetSummary.totalBudget > 0 
                       ? `${((budgetSummary.totalSpent / budgetSummary.totalBudget) * 100).toFixed(1)}% of budget used`
                       : '0.0% of budget used'}
-                  </Typography>
-                </Box>
-              </Paper>
-            </Grid>
-            
-            <Grid item xs={12} sm={6} md={3}>
+              </Typography>
+            </Box>
+          </Paper>
+        </Grid>
+        
+        <Grid item xs={12} sm={6} md={3}>
               <Paper elevation={0} sx={{ 
                 p: 2.5, 
                 borderRadius: 2, 
@@ -607,20 +746,20 @@ const BudgetDashboard: React.FC<BudgetDashboardProps> = ({
                 </Box>
                 <Typography variant="h4" fontWeight="bold" sx={{ mt: 1, color: theme.palette.warning.main }}>
                   {formatCurrency(budgetSummary.pendingTotal)}
-                </Typography>
+            </Typography>
                 {budgetSummary.pendingTotal > 0 && (
-                  <Box sx={{ display: 'flex', alignItems: 'center', mt: 1 }}>
-                    <Typography variant="body2" color="text.secondary">
+            <Box sx={{ display: 'flex', alignItems: 'center', mt: 1 }}>
+              <Typography variant="body2" color="text.secondary">
                       {budgetSummary.totalBudget > 0 
                         ? `${((budgetSummary.pendingTotal / budgetSummary.totalBudget) * 100).toFixed(1)}% of budget`
                         : '0.0% of budget'}
-                    </Typography>
-                  </Box>
+              </Typography>
+            </Box>
                 )}
-              </Paper>
-            </Grid>
-            
-            <Grid item xs={12} sm={6} md={3}>
+          </Paper>
+        </Grid>
+        
+        <Grid item xs={12} sm={6} md={3}>
               <Paper elevation={0} sx={{ 
                 p: 2.5, 
                 borderRadius: 2, 
@@ -652,105 +791,161 @@ const BudgetDashboard: React.FC<BudgetDashboardProps> = ({
             </Grid>
           </Grid>
         </Grid>
-        
+        */}
+
         {/* Second Row - Analysis Cards */}
         <Grid item xs={12}>
           <Grid container spacing={3}>
             {/* Estimated Total Cost Card */}
             <Grid item xs={12} sm={6}>
-              <Card 
+              <Card
                 elevation={0}
-                sx={{ 
-                  p: 2.5, 
+                sx={{
+                  p: 2.5,
                   borderRadius: 2,
-                  height: '100%',
+                  height: "100%",
                   boxShadow: `0 2px 12px ${alpha(theme.palette.primary.main, 0.08)}`,
-                  bgcolor: alpha(theme.palette.background.paper, 0.7)
+                  bgcolor: alpha(theme.palette.background.paper, 0.7),
                 }}
               >
-                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                  <Typography variant="subtitle2" color="text.secondary">Estimated Total Cost</Typography>
-                  <Tooltip 
-                    title="Current + Pending + Projected expenses" 
-                    arrow
-                  >
-                    <InfoIcon fontSize="small" color="action" sx={{ fontSize: '0.9rem' }} />
+                <Box
+                  sx={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    alignItems: "flex-start",
+                  }}
+                >
+                  <Typography variant="subtitle2" color="text.secondary">
+                    Estimated Total Cost
+                  </Typography>
+                  <Tooltip title="Current + Pending + Projected expenses" arrow>
+                    <InfoIcon
+                      fontSize="small"
+                      color="action"
+                      sx={{ fontSize: "0.9rem" }}
+                    />
                   </Tooltip>
                 </Box>
-                <Box sx={{ display: 'flex', alignItems: 'flex-end', mt: 1 }}>
-                  <Typography variant="h4" fontWeight="bold" sx={{ 
-                    color: budgetSummary.totalSpent + budgetSummary.pendingTotal + budgetSummary.projectedTotal > budgetSummary.totalBudget 
-                      ? theme.palette.error.main 
-                      : theme.palette.success.main
-                  }}>
-                    {formatCurrency(budgetSummary.totalSpent + budgetSummary.pendingTotal + budgetSummary.projectedTotal)}
-                  </Typography>
+                <Box sx={{ display: "flex", alignItems: "flex-end", mt: 1 }}>
+            <Typography 
+              variant="h4" 
+              fontWeight="bold" 
+              sx={{ 
+                      color:
+                        budgetSummary.totalSpent +
+                          budgetSummary.pendingTotal +
+                          budgetSummary.projectedTotal >
+                        budgetSummary.totalBudget
+                          ? theme.palette.error.main
+                          : theme.palette.success.main,
+                    }}
+                  >
+                    {formatCurrency(
+                      budgetSummary.totalSpent +
+                        budgetSummary.pendingTotal +
+                        budgetSummary.projectedTotal,
+                    )}
+            </Typography>
                 </Box>
-                
+
                 {/* Budget usage breakdown */}
                 <Box sx={{ mt: 2 }}>
-                  <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
-                    <Typography variant="caption" color="text.secondary">Budget Usage</Typography>
-                    <Typography variant="caption" fontWeight="medium" sx={{ 
-                      color: budgetSummary.projectedPercentage > 100 ? theme.palette.error.main : theme.palette.text.secondary 
-                    }}>
-                      {budgetSummary.totalBudget > 0
-                        ? `${((budgetSummary.totalSpent + budgetSummary.pendingTotal + budgetSummary.projectedTotal) / budgetSummary.totalBudget * 100).toFixed(1)}%`
-                        : '0.0%'}
+                  <Box
+                    sx={{
+                      display: "flex",
+                      justifyContent: "space-between",
+                      mb: 0.5,
+                    }}
+                  >
+                    <Typography variant="caption" color="text.secondary">
+                      Budget Usage
                     </Typography>
-                  </Box>
-                  <LinearProgress 
-                    variant="determinate" 
-                    value={Math.min(budgetSummary.projectedPercentage, 100)} 
-                    sx={{ 
-                      height: 8, 
+                    <Typography
+                      variant="caption"
+                      fontWeight="medium"
+                      sx={{
+                        color:
+                          budgetSummary.projectedPercentage > 100
+                            ? theme.palette.error.main
+                            : theme.palette.text.secondary,
+                      }}
+                    >
+                      {budgetSummary.totalBudget > 0
+                        ? `${(((budgetSummary.totalSpent + budgetSummary.pendingTotal + budgetSummary.projectedTotal) / budgetSummary.totalBudget) * 100).toFixed(1)}%`
+                        : "0.0%"}
+                  </Typography>
+                </Box>
+                  <LinearProgress
+                    variant="determinate"
+                    value={Math.min(budgetSummary.projectedPercentage, 100)}
+                    sx={{
+                      height: 8,
                       borderRadius: 1,
                       bgcolor: alpha(theme.palette.grey[500], 0.1),
-                      '& .MuiLinearProgress-bar': {
-                        bgcolor: budgetSummary.projectedPercentage > 100
-                          ? theme.palette.error.main
-                          : budgetSummary.projectedPercentage > 90
-                            ? theme.palette.warning.main
-                            : theme.palette.success.main
-                      }
+                      "& .MuiLinearProgress-bar": {
+                        bgcolor:
+                          budgetSummary.projectedPercentage > 100
+                            ? theme.palette.error.main
+                            : budgetSummary.projectedPercentage > 90
+                              ? theme.palette.warning.main
+                              : theme.palette.success.main,
+                      },
                     }}
                   />
                 </Box>
-                
+
                 {/* Detailed breakdown */}
                 <Box sx={{ mt: 3 }}>
-                  <Typography variant="body2" fontWeight="medium" sx={{ mb: 1.5 }}>Detailed Breakdown:</Typography>
-                  
-                  <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
-                    <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                      <Box 
-                        sx={{ 
-                          width: 10, 
-                          height: 10, 
-                          borderRadius: '50%', 
+                  <Typography
+                    variant="body2"
+                    fontWeight="medium"
+                    sx={{ mb: 1.5 }}
+                  >
+                    Detailed Breakdown:
+                  </Typography>
+
+                  <Box
+                    sx={{
+                      display: "flex",
+                      justifyContent: "space-between",
+                      mb: 1,
+                    }}
+                  >
+                    <Box sx={{ display: "flex", alignItems: "center" }}>
+                      <Box
+                        sx={{
+                          width: 10,
+                          height: 10,
+                          borderRadius: "50%",
                           bgcolor: theme.palette.primary.main,
-                          mr: 1 
-                        }} 
+                          mr: 1,
+                        }}
                       />
                       <Typography variant="body2" color="text.secondary">
                         Current Expenses
-                      </Typography>
-                    </Box>
+                  </Typography>
+                </Box>
                     <Typography variant="body2">
                       {formatCurrency(budgetSummary.totalSpent)}
                     </Typography>
                   </Box>
-                  
-                  <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
-                    <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                      <Box 
-                        sx={{ 
-                          width: 10, 
-                          height: 10, 
-                          borderRadius: '50%', 
+
+                  <Box
+                    sx={{
+                      display: "flex",
+                      justifyContent: "space-between",
+                      mb: 1,
+                    }}
+                  >
+                    <Box sx={{ display: "flex", alignItems: "center" }}>
+                      <Box
+                        sx={{
+                          width: 10,
+                          height: 10,
+                          borderRadius: "50%",
                           bgcolor: theme.palette.warning.main,
-                          mr: 1 
-                        }} 
+                          mr: 1,
+                        }}
                       />
                       <Typography variant="body2" color="text.secondary">
                         Pending Expenses
@@ -760,17 +955,23 @@ const BudgetDashboard: React.FC<BudgetDashboardProps> = ({
                       {formatCurrency(budgetSummary.pendingTotal)}
                     </Typography>
                   </Box>
-                  
-                  <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
-                    <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                      <Box 
-                        sx={{ 
-                          width: 10, 
-                          height: 10, 
-                          borderRadius: '50%', 
+
+                  <Box
+                    sx={{
+                      display: "flex",
+                      justifyContent: "space-between",
+                      mb: 1,
+                    }}
+                  >
+                    <Box sx={{ display: "flex", alignItems: "center" }}>
+                      <Box
+                        sx={{
+                          width: 10,
+                          height: 10,
+                          borderRadius: "50%",
                           bgcolor: theme.palette.info.main,
-                          mr: 1 
-                        }} 
+                          mr: 1,
+                        }}
                       />
                       <Typography variant="body2" color="text.secondary">
                         Projected Costs
@@ -780,176 +981,342 @@ const BudgetDashboard: React.FC<BudgetDashboardProps> = ({
                       {formatCurrency(budgetSummary.projectedTotal)}
                     </Typography>
                   </Box>
-                  
+
                   <Divider sx={{ my: 1 }} />
-                  
-                  <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+
+                  <Box
+                    sx={{ display: "flex", justifyContent: "space-between" }}
+                  >
                     <Typography variant="subtitle2">Total</Typography>
                     <Typography variant="subtitle2">
-                      {formatCurrency(budgetSummary.totalSpent + budgetSummary.pendingTotal + budgetSummary.projectedTotal)}
+                      {formatCurrency(
+                        budgetSummary.totalSpent +
+                          budgetSummary.pendingTotal +
+                          budgetSummary.projectedTotal,
+                      )}
                     </Typography>
-                  </Box>
+            </Box>
                 </Box>
               </Card>
             </Grid>
-            
+
             {/* Budget Status Card */}
             <Grid item xs={12} sm={6}>
-              <Card 
+              <Card
                 elevation={0}
-                sx={{ 
-                  p: 2.5, 
+                sx={{
+                  p: 2.5,
                   borderRadius: 2,
-                  height: '100%',
+                  height: "100%",
                   boxShadow: `0 2px 12px ${alpha(theme.palette.primary.main, 0.08)}`,
-                  bgcolor: alpha(theme.palette.background.paper, 0.7)
+                  bgcolor: alpha(theme.palette.background.paper, 0.7),
                 }}
               >
-                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                  <Typography variant="subtitle2" color="text.secondary">Overall Budget Status</Typography>
+                <Box
+                  sx={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    alignItems: "flex-start",
+                  }}
+                >
+                  <Typography variant="subtitle2" color="text.secondary">
+                    Overall Budget Status
+                  </Typography>
                 </Box>
-                <Box sx={{ display: 'flex', alignItems: 'center', mt: 1, mb: 2 }}>
-                  <Avatar 
-                    sx={{ 
-                      bgcolor: alpha(budgetHealth.color, 0.1), 
+                <Box
+                  sx={{ display: "flex", alignItems: "center", mt: 1, mb: 2 }}
+                >
+                  <Avatar
+                    sx={{
+                      bgcolor: alpha(budgetHealth.color, 0.1),
                       color: budgetHealth.color,
-                      width: 36, 
+                      width: 36,
                       height: 36,
-                      mr: 2
+                      mr: 2,
                     }}
                   >
                     {budgetHealth.icon}
                   </Avatar>
                   <Box>
-                    <Typography variant="h6" sx={{ color: budgetHealth.color, fontWeight: 'bold', lineHeight: 1.2 }}>
+                    <Typography
+                      variant="h6"
+                      sx={{
+                        color: budgetHealth.color,
+                        fontWeight: "bold",
+                        lineHeight: 1.2,
+                      }}
+                    >
                       {budgetHealth.status}
                     </Typography>
                     <Typography variant="body2" color="text.secondary">
                       {budgetSummary.totalBudget > 0
-                        ? budgetSummary.totalSpent + budgetSummary.pendingTotal + budgetSummary.projectedTotal <= budgetSummary.totalBudget
+                        ? budgetSummary.totalSpent +
+                            budgetSummary.pendingTotal +
+                            budgetSummary.projectedTotal <=
+                          budgetSummary.totalBudget
                           ? `Under budget by ${formatCurrency(budgetSummary.totalBudget - (budgetSummary.totalSpent + budgetSummary.pendingTotal + budgetSummary.projectedTotal))}`
-                          : `Over budget by ${formatCurrency((budgetSummary.totalSpent + budgetSummary.pendingTotal + budgetSummary.projectedTotal) - budgetSummary.totalBudget)}`
-                        : 'No budget set'}
+                          : `Over budget by ${formatCurrency(budgetSummary.totalSpent + budgetSummary.pendingTotal + budgetSummary.projectedTotal - budgetSummary.totalBudget)}`
+                        : "No budget set"}
                     </Typography>
                   </Box>
                 </Box>
-                
+
                 {/* Simple budget meter */}
-                <Box sx={{ mb: 3, px: 2, py: 2, bgcolor: alpha(theme.palette.background.default, 0.4), borderRadius: 1 }}>
-                  <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
-                    <Typography variant="caption" color="text.secondary">Budget Spent + Pending + Projected</Typography>
-                    <Typography variant="caption" fontWeight="medium" sx={{ 
-                      color: budgetSummary.projectedPercentage > 100 ? theme.palette.error.main : theme.palette.text.secondary 
-                    }}>
+                <Box
+                  sx={{
+                    mb: 3,
+                    px: 2,
+                    py: 2,
+                    bgcolor: alpha(theme.palette.background.default, 0.4),
+                    borderRadius: 1,
+                  }}
+                >
+                  <Box
+                    sx={{
+                      display: "flex",
+                      justifyContent: "space-between",
+                      mb: 0.5,
+                    }}
+                  >
+                    <Typography variant="caption" color="text.secondary">
+                      Budget Spent + Pending + Projected
+                    </Typography>
+                    <Typography
+                      variant="caption"
+                      fontWeight="medium"
+                      sx={{
+                        color:
+                          budgetSummary.projectedPercentage > 100
+                            ? theme.palette.error.main
+                            : theme.palette.text.secondary,
+                      }}
+                    >
                       {budgetSummary.totalBudget > 0
-                        ? `${((budgetSummary.totalSpent + budgetSummary.pendingTotal + budgetSummary.projectedTotal) / budgetSummary.totalBudget * 100).toFixed(1)}%`
-                        : '0.0%'}
+                        ? `${(((budgetSummary.totalSpent + budgetSummary.pendingTotal + budgetSummary.projectedTotal) / budgetSummary.totalBudget) * 100).toFixed(1)}%`
+                        : "0.0%"}
                     </Typography>
                   </Box>
-                
+
                   {/* Stacked progress bar */}
-                  <Box sx={{ position: 'relative', height: 12, bgcolor: alpha(theme.palette.grey[300], 0.3), borderRadius: 2, overflow: 'hidden' }}>
+                  <Box
+                    sx={{
+                      position: "relative",
+                      height: 12,
+                      bgcolor: alpha(theme.palette.grey[300], 0.3),
+                      borderRadius: 2,
+                      overflow: "hidden",
+                    }}
+                  >
                     {/* Current expenses */}
-                    <Box 
-                      sx={{ 
-                        position: 'absolute',
+                    <Box
+                      sx={{
+                        position: "absolute",
                         left: 0,
                         top: 0,
-                        height: '100%',
+                        height: "100%",
                         width: `${budgetSummary.totalBudget > 0 ? (budgetSummary.totalSpent / budgetSummary.totalBudget) * 100 : 0}%`,
                         bgcolor: theme.palette.primary.main,
-                        borderRadius: 2
+                        borderRadius: 2,
                       }}
                     />
-                    
+
                     {/* Pending expenses */}
-                    <Box 
-                      sx={{ 
-                        position: 'absolute',
+                    <Box
+                      sx={{
+                        position: "absolute",
                         left: `${budgetSummary.totalBudget > 0 ? (budgetSummary.totalSpent / budgetSummary.totalBudget) * 100 : 0}%`,
                         top: 0,
-                        height: '100%',
+                        height: "100%",
                         width: `${budgetSummary.totalBudget > 0 ? (budgetSummary.pendingTotal / budgetSummary.totalBudget) * 100 : 0}%`,
                         bgcolor: theme.palette.warning.main,
                         borderTopLeftRadius: 0,
-                        borderBottomLeftRadius: 0
+                        borderBottomLeftRadius: 0,
                       }}
                     />
-                    
+
                     {/* Projected expenses */}
-                    <Box 
-                      sx={{ 
-                        position: 'absolute',
+                    <Box
+                      sx={{
+                        position: "absolute",
                         left: `${budgetSummary.totalBudget > 0 ? ((budgetSummary.totalSpent + budgetSummary.pendingTotal) / budgetSummary.totalBudget) * 100 : 0}%`,
                         top: 0,
-                        height: '100%',
+                        height: "100%",
                         width: `${budgetSummary.totalBudget > 0 ? (budgetSummary.projectedTotal / budgetSummary.totalBudget) * 100 : 0}%`,
                         bgcolor: theme.palette.info.main,
                         borderTopLeftRadius: 0,
                         borderBottomLeftRadius: 0,
-                        backgroundImage: `repeating-linear-gradient(45deg, transparent, transparent 5px, ${alpha(theme.palette.info.dark, 0.5)} 5px, ${alpha(theme.palette.info.dark, 0.5)} 10px)`
+                        backgroundImage: `repeating-linear-gradient(45deg, transparent, transparent 5px, ${alpha(theme.palette.info.dark, 0.5)} 5px, ${alpha(theme.palette.info.dark, 0.5)} 10px)`,
                       }}
                     />
                   </Box>
-                    
+
                   {/* Legend for stacked bar */}
-                  <Box sx={{ display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', mt: 1.5 }}>
-                    <Box sx={{ display: 'flex', alignItems: 'center', mr: 2, mb: 0.5 }}>
-                      <Box sx={{ width: 10, height: 10, borderRadius: '50%', bgcolor: theme.palette.primary.main, mr: 0.5 }} />
+                  <Box
+                    sx={{
+                      display: "flex",
+                      justifyContent: "space-between",
+                      flexWrap: "wrap",
+                      mt: 1.5,
+                    }}
+                  >
+                    <Box
+                      sx={{
+                        display: "flex",
+                        alignItems: "center",
+                        mr: 2,
+                        mb: 0.5,
+                      }}
+                    >
+                      <Box
+                        sx={{
+                          width: 10,
+                          height: 10,
+                          borderRadius: "50%",
+                          bgcolor: theme.palette.primary.main,
+                          mr: 0.5,
+                        }}
+                      />
                       <Typography variant="caption">Current</Typography>
                     </Box>
-                    <Box sx={{ display: 'flex', alignItems: 'center', mr: 2, mb: 0.5 }}>
-                      <Box sx={{ width: 10, height: 10, borderRadius: '50%', bgcolor: theme.palette.warning.main, mr: 0.5 }} />
+                    <Box
+                      sx={{
+                        display: "flex",
+                        alignItems: "center",
+                        mr: 2,
+                        mb: 0.5,
+                      }}
+                    >
+                      <Box
+                        sx={{
+                          width: 10,
+                          height: 10,
+                          borderRadius: "50%",
+                          bgcolor: theme.palette.warning.main,
+                          mr: 0.5,
+                        }}
+                      />
                       <Typography variant="caption">Pending</Typography>
                     </Box>
-                    <Box sx={{ display: 'flex', alignItems: 'center', mb: 0.5 }}>
-                      <Box sx={{ width: 10, height: 10, borderRadius: '50%', bgcolor: theme.palette.info.main, mr: 0.5 }} />
+                    <Box
+                      sx={{ display: "flex", alignItems: "center", mb: 0.5 }}
+                    >
+                      <Box
+                        sx={{
+                          width: 10,
+                          height: 10,
+                          borderRadius: "50%",
+                          bgcolor: theme.palette.info.main,
+                          mr: 0.5,
+                        }}
+                      />
                       <Typography variant="caption">Projected</Typography>
                     </Box>
                   </Box>
                 </Box>
-                
+
                 {/* Recommendations section */}
-                <Typography variant="subtitle2" sx={{ mb: 1 }}>Key Recommendations:</Typography>
+                <Typography variant="subtitle2" sx={{ mb: 1 }}>
+                  Key Recommendations:
+                </Typography>
                 <Box sx={{ pl: 1.5 }}>
-                  {budgetSummary.projectedTotal > 0 && budgetHealth.status !== 'Healthy' && budgetHealth.status !== 'On Track' && (
-                    <Box sx={{ display: 'flex', mb: 1 }}>
-                      <Typography variant="body2" component="div" sx={{ display: 'flex', alignItems: 'flex-start' }}>
-                        <Box component="span" sx={{ mr: 1, mt: 0.5, color: theme.palette.info.main }}>•</Box>
-                        <Box component="span">Review projected costs of {formatCurrency(budgetSummary.projectedTotal)}</Box>
-                      </Typography>
-                    </Box>
-                  )}
-                  
-                  {budgetSummary.pendingTotal > 0 && (budgetHealth.status === 'At Risk' || budgetHealth.status === 'Critical') && (
-                    <Box sx={{ display: 'flex', mb: 1 }}>
-                      <Typography variant="body2" component="div" sx={{ display: 'flex', alignItems: 'flex-start' }}>
-                        <Box component="span" sx={{ mr: 1, mt: 0.5, color: theme.palette.warning.main }}>•</Box>
-                        <Box component="span">Review pending expenses of {formatCurrency(budgetSummary.pendingTotal)}</Box>
-                      </Typography>
-                    </Box>
-                  )}
-                  
-                  <Box sx={{ display: 'flex', mb: 1 }}>
-                    <Typography variant="body2" component="div" sx={{ display: 'flex', alignItems: 'flex-start' }}>
-                      <Box component="span" sx={{ mr: 1, mt: 0.5 }}>•</Box>
+                  {budgetSummary.projectedTotal > 0 &&
+                    budgetHealth.status !== "Healthy" &&
+                    budgetHealth.status !== "On Track" && (
+                      <Box sx={{ display: "flex", mb: 1 }}>
+                        <Typography
+                          variant="body2"
+                          component="div"
+                          sx={{ display: "flex", alignItems: "flex-start" }}
+                        >
+                          <Box
+                            component="span"
+                            sx={{
+                              mr: 1,
+                              mt: 0.5,
+                              color: theme.palette.info.main,
+                            }}
+                          >
+                            •
+                          </Box>
+                          <Box component="span">
+                            Review projected costs of{" "}
+                            {formatCurrency(budgetSummary.projectedTotal)}
+                          </Box>
+                        </Typography>
+                      </Box>
+                    )}
+
+                  {budgetSummary.pendingTotal > 0 &&
+                    (budgetHealth.status === "At Risk" ||
+                      budgetHealth.status === "Critical") && (
+                      <Box sx={{ display: "flex", mb: 1 }}>
+                        <Typography
+                          variant="body2"
+                          component="div"
+                          sx={{ display: "flex", alignItems: "flex-start" }}
+                        >
+                          <Box
+                            component="span"
+                            sx={{
+                              mr: 1,
+                              mt: 0.5,
+                              color: theme.palette.warning.main,
+                            }}
+                          >
+                            •
+                          </Box>
+                          <Box component="span">
+                            Review pending expenses of{" "}
+                            {formatCurrency(budgetSummary.pendingTotal)}
+                          </Box>
+                        </Typography>
+                      </Box>
+                    )}
+
+                  <Box sx={{ display: "flex", mb: 1 }}>
+                    <Typography
+                      variant="body2"
+                      component="div"
+                      sx={{ display: "flex", alignItems: "flex-start" }}
+                    >
+                      <Box component="span" sx={{ mr: 1, mt: 0.5 }}>
+                        •
+                      </Box>
                       <Box component="span">
-                        {budgetHealth.status === 'Healthy' && 'Document cost management practices'}
-                        {budgetHealth.status === 'On Track' && 'Monitor phases with higher spending'}
-                        {(budgetHealth.status === 'Near Limit' || budgetHealth.status === 'Caution') && 'Identify cost-saving opportunities'}
-                        {(budgetHealth.status === 'At Risk' || budgetHealth.status === 'Critical') && 'Conduct immediate financial review'}
+                        {budgetHealth.status === "Healthy" &&
+                          "Document cost management practices"}
+                        {budgetHealth.status === "On Track" &&
+                          "Monitor phases with higher spending"}
+                        {(budgetHealth.status === "Near Limit" ||
+                          budgetHealth.status === "Caution") &&
+                          "Identify cost-saving opportunities"}
+                        {(budgetHealth.status === "At Risk" ||
+                          budgetHealth.status === "Critical") &&
+                          "Conduct immediate financial review"}
                       </Box>
                     </Typography>
                   </Box>
-                  
-                  <Box sx={{ display: 'flex' }}>
-                    <Typography variant="body2" component="div" sx={{ display: 'flex', alignItems: 'flex-start' }}>
-                      <Box component="span" sx={{ mr: 1, mt: 0.5 }}>•</Box>
+
+                  <Box sx={{ display: "flex" }}>
+                    <Typography
+                      variant="body2"
+                      component="div"
+                      sx={{ display: "flex", alignItems: "flex-start" }}
+                    >
+                      <Box component="span" sx={{ mr: 1, mt: 0.5 }}>
+                        •
+                      </Box>
                       <Box component="span">
-                        {budgetHealth.status === 'Healthy' && 'Consider allocating surplus to enhance quality'}
-                        {budgetHealth.status === 'On Track' && 'Update projections based on actual spending'}
-                        {(budgetHealth.status === 'Near Limit' || budgetHealth.status === 'Caution') && 'Review all pending expenses for necessity'}
-                        {(budgetHealth.status === 'At Risk' || budgetHealth.status === 'Critical') && 'Consider budget increase or scope reduction'}
+                        {budgetHealth.status === "Healthy" &&
+                          "Consider allocating surplus to enhance quality"}
+                        {budgetHealth.status === "On Track" &&
+                          "Update projections based on actual spending"}
+                        {(budgetHealth.status === "Near Limit" ||
+                          budgetHealth.status === "Caution") &&
+                          "Review all pending expenses for necessity"}
+                        {(budgetHealth.status === "At Risk" ||
+                          budgetHealth.status === "Critical") &&
+                          "Consider budget increase or scope reduction"}
                       </Box>
                     </Typography>
                   </Box>
@@ -964,14 +1331,17 @@ const BudgetDashboard: React.FC<BudgetDashboardProps> = ({
       <Grid container spacing={3}>
         {/* Phase Budget Allocation */}
         <Grid item xs={12} md={7}>
-          <Card elevation={0} sx={{ 
+          <Card
+            elevation={0}
+            sx={{
             borderRadius: 2, 
-            height: '100%',
+              height: "100%",
             boxShadow: `0 2px 12px ${alpha(theme.palette.primary.main, 0.08)}`,
-          }}>
+            }}
+          >
             <CardHeader
               title="Phase Budget Allocation"
-              titleTypographyProps={{ variant: 'h6', fontWeight: 'bold' }}
+              titleTypographyProps={{ variant: "h6", fontWeight: "bold" }}
               action={
                 <Tooltip title="Add New Phase">
                   <IconButton>
@@ -986,43 +1356,64 @@ const BudgetDashboard: React.FC<BudgetDashboardProps> = ({
                 <Table size="small">
                   <TableHead>
                     <TableRow>
-                      <TableCell sx={{ fontWeight: 'bold' }}>Phase</TableCell>
-                      <TableCell align="right" sx={{ fontWeight: 'bold' }}>Budget</TableCell>
-                      <TableCell align="right" sx={{ fontWeight: 'bold' }}>Spent</TableCell>
-                      <TableCell align="right" sx={{ fontWeight: 'bold' }}>Remaining</TableCell>
-                      <TableCell align="right" sx={{ fontWeight: 'bold' }}>Usage</TableCell>
+                      <TableCell sx={{ fontWeight: "bold" }}>Phase</TableCell>
+                      <TableCell align="right" sx={{ fontWeight: "bold" }}>
+                        Budget
+                      </TableCell>
+                      <TableCell align="right" sx={{ fontWeight: "bold" }}>
+                        Spent
+                      </TableCell>
+                      <TableCell align="right" sx={{ fontWeight: "bold" }}>
+                        Remaining
+                      </TableCell>
+                      <TableCell align="right" sx={{ fontWeight: "bold" }}>
+                        Usage
+                      </TableCell>
                     </TableRow>
                   </TableHead>
                   <TableBody>
                     {phaseAllocation.map((phase) => (
-                      <TableRow key={phase.name} hover sx={{ '&:last-child td, &:last-child th': { border: 0 } }}>
+                      <TableRow
+                        key={phase.name}
+                        hover
+                        sx={{
+                          "&:last-child td, &:last-child th": { border: 0 },
+                        }}
+                      >
                         <TableCell sx={{ py: 1.5 }}>
-                          <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                          <Box sx={{ display: "flex", alignItems: "center" }}>
                             <Box 
                               sx={{ 
                                 width: 12, 
                                 height: 12, 
-                                borderRadius: '50%', 
+                                borderRadius: "50%",
                                 bgcolor: phase.color,
-                                mr: 1 
+                                mr: 1,
                               }} 
                             />
                             {phase.name}
                           </Box>
                         </TableCell>
-                        <TableCell align="right">{formatCurrency(phase.budget)}</TableCell>
-                        <TableCell align="right">{formatCurrency(phase.spent)}</TableCell>
+                        <TableCell align="right">
+                          {formatCurrency(phase.budget)}
+                        </TableCell>
+                        <TableCell align="right">
+                          {formatCurrency(phase.spent)}
+                        </TableCell>
                         <TableCell 
                           align="right"
                           sx={{ 
-                            color: phase.remaining >= 0 ? theme.palette.success.main : theme.palette.error.main,
-                            fontWeight: 'medium'
+                            color:
+                              phase.remaining >= 0
+                                ? theme.palette.success.main
+                                : theme.palette.error.main,
+                            fontWeight: "medium",
                           }}
                         >
                           {formatCurrency(phase.remaining)}
                         </TableCell>
-                        <TableCell align="right" sx={{ width: '20%' }}>
-                          <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                        <TableCell align="right" sx={{ width: "20%" }}>
+                          <Box sx={{ display: "flex", alignItems: "center" }}>
                             <LinearProgress
                               variant="determinate"
                               value={Math.min(phase.percentUsed, 100)}
@@ -1032,11 +1423,12 @@ const BudgetDashboard: React.FC<BudgetDashboardProps> = ({
                                 height: 6,
                                 borderRadius: 3,
                                 bgcolor: alpha(phase.color, 0.2),
-                                '.MuiLinearProgress-bar': {
-                                  bgcolor: phase.percentUsed > 100 
+                                ".MuiLinearProgress-bar": {
+                                  bgcolor:
+                                    phase.percentUsed > 100
                                     ? theme.palette.error.main 
                                     : phase.color,
-                                }
+                                },
                               }}
                             />
                             <Typography variant="body2" fontWeight="medium">
@@ -1048,8 +1440,13 @@ const BudgetDashboard: React.FC<BudgetDashboardProps> = ({
                     ))}
                     {phaseAllocation.length === 0 && (
                       <TableRow>
-                        <TableCell colSpan={5} sx={{ textAlign: 'center', py: 3 }}>
-                          <Typography color="text.secondary">No phases defined.</Typography>
+                        <TableCell
+                          colSpan={5}
+                          sx={{ textAlign: "center", py: 3 }}
+                        >
+                          <Typography color="text.secondary">
+                            No phases defined.
+                          </Typography>
                         </TableCell>
                       </TableRow>
                     )}
@@ -1062,18 +1459,21 @@ const BudgetDashboard: React.FC<BudgetDashboardProps> = ({
         
         {/* Expense Category Breakdown */}
         <Grid item xs={12} md={5}>
-          <Card elevation={0} sx={{ 
+          <Card
+            elevation={0}
+            sx={{
             borderRadius: 2, 
-            height: '100%',
+              height: "100%",
             boxShadow: `0 2px 12px ${alpha(theme.palette.primary.main, 0.08)}`,
-          }}>
+            }}
+          >
             <CardHeader
-              title={`Expense Breakdown by ${expenseGroupBy === 'category' ? 'Category' : 'Contractor'}`}
-              titleTypographyProps={{ variant: 'h6', fontWeight: 'bold' }}
+              title={`Expense Breakdown by ${expenseGrouping === "category" ? "Category" : "Contractor"}`}
+              titleTypographyProps={{ variant: "h6", fontWeight: "bold" }}
               action={
-                <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                <Box sx={{ display: "flex", alignItems: "center" }}>
                   <ToggleButtonGroup
-                    value={expenseGroupBy}
+                    value={expenseGrouping}
                     exclusive
                     onChange={handleExpenseGroupingChange}
                     size="small"
@@ -1086,7 +1486,7 @@ const BudgetDashboard: React.FC<BudgetDashboardProps> = ({
                     </ToggleButton>
                     <ToggleButton value="contractor" aria-label="contractor">
                       <Tooltip title="Group by Contractor">
-                        <BusinessIcon fontSize="small" />
+                        <GroupWorkIcon fontSize="small" />
                       </Tooltip>
                     </ToggleButton>
                   </ToggleButtonGroup>
@@ -1112,27 +1512,44 @@ const BudgetDashboard: React.FC<BudgetDashboardProps> = ({
                         outerRadius={90}
                         paddingAngle={1}
                         dataKey="value"
-                        label={({ name, percent }) => `${name} (${percent ? (percent * 100).toFixed(0) : '0'}%)`}
+                        label={({ name, percent }) =>
+                          `${name} (${percent ? (percent * 100).toFixed(0) : "0"}%)`
+                        }
                       >
                         {currentExpenseGroupingData.map((entry, index) => (
                           <Cell key={`cell-${index}`} fill={entry.color} />
                         ))}
                       </Pie>
                       <RechartsTooltip 
-                        formatter={(value: number) => [formatCurrency(value), 'Amount']}
+                        formatter={(value: number) => [
+                          formatCurrency(value),
+                          "Amount",
+                        ]}
                         contentStyle={{
-                          backgroundColor: alpha(theme.palette.background.paper, 0.9),
-                          border: 'none',
+                          backgroundColor: alpha(
+                            theme.palette.background.paper,
+                            0.9,
+                          ),
+                          border: "none",
                           borderRadius: 8,
-                          boxShadow: '0 4px 20px rgba(0,0,0,0.1)'
+                          boxShadow: "0 4px 20px rgba(0,0,0,0.1)",
                         }}
                       />
                     </PieChart>
                   </ResponsiveContainer>
                 </Box>
               ) : (
-                <Box sx={{ height: 300, display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
-                  <Typography color="text.secondary">No expense data available.</Typography>
+                <Box
+                  sx={{
+                    height: 300,
+                    display: "flex",
+                    justifyContent: "center",
+                    alignItems: "center",
+                  }}
+                >
+                  <Typography color="text.secondary">
+                    No expense data available.
+                  </Typography>
                 </Box>
               )}
             </CardContent>
@@ -1141,14 +1558,17 @@ const BudgetDashboard: React.FC<BudgetDashboardProps> = ({
         
         {/* NEW: Add a detailed expense breakdown table grouped by the selected option */}
         <Grid item xs={12}>
-          <Card elevation={0} sx={{ 
+          <Card
+            elevation={0}
+            sx={{
             borderRadius: 2,
             boxShadow: `0 2px 12px ${alpha(theme.palette.primary.main, 0.08)}`,
-            mb: 3
-          }}>
+              mb: 3,
+            }}
+          >
             <CardHeader
-              title={`Detailed Expense Breakdown by ${expenseGroupBy === 'category' ? 'Category' : 'Contractor'}`}
-              titleTypographyProps={{ variant: 'h6', fontWeight: 'bold' }}
+              title={`Detailed Expense Breakdown by ${expenseGrouping === "category" ? "Category" : "Contractor"}`}
+              titleTypographyProps={{ variant: "h6", fontWeight: "bold" }}
             />
             <Divider />
             <CardContent sx={{ p: 0 }}>
@@ -1156,26 +1576,43 @@ const BudgetDashboard: React.FC<BudgetDashboardProps> = ({
                 <Table size="small">
                   <TableHead>
                     <TableRow>
-                      <TableCell sx={{ fontWeight: 'bold' }}>{expenseGroupBy === 'category' ? 'Category' : 'Contractor'}</TableCell>
-                      <TableCell align="right" sx={{ fontWeight: 'bold' }}>Amount</TableCell>
-                      <TableCell align="right" sx={{ fontWeight: 'bold' }}>% of Total</TableCell>
-                      <TableCell align="right" sx={{ fontWeight: 'bold' }}>Items</TableCell>
+                      <TableCell sx={{ fontWeight: "bold" }}>
+                        {expenseGrouping === "category"
+                          ? "Category"
+                          : "Contractor"}
+                      </TableCell>
+                      <TableCell align="right" sx={{ fontWeight: "bold" }}>
+                        Amount
+                      </TableCell>
+                      <TableCell align="right" sx={{ fontWeight: "bold" }}>
+                        % of Total
+                      </TableCell>
+                      <TableCell align="right" sx={{ fontWeight: "bold" }}>
+                        Items
+                      </TableCell>
                     </TableRow>
                   </TableHead>
                   <TableBody>
                     {currentExpenseGroupingData.map((item) => {
-                      const percentOfTotal = budgetSummary.totalSpent > 0 
+                      const percentOfTotal =
+                        budgetSummary.totalSpent > 0
                         ? (item.value / budgetSummary.totalSpent) * 100 
                         : 0;
                       
                       // Count number of expenses for this group
-                      const itemCount = expenses.filter(exp => {
-                        if (expenseGroupBy === 'category') {
-                          return exp.category === item.name.toLowerCase() || 
-                                 exp.category === item.name.toLowerCase().replace(' ', '_');
+                      const itemCount = expenses.filter((exp) => {
+                        if (expenseGrouping === "category") {
+                          return (
+                            exp.category === item.name.toLowerCase() ||
+                            exp.category ===
+                              item.name.toLowerCase().replace(" ", "_")
+                          );
                         } else {
                           // For contractor view
-                          const contractorName = exp.subcontractorName || exp.vendor || "Direct Expense";
+                          const contractorName =
+                            exp.subcontractorName ||
+                            exp.vendor ||
+                            "Direct Expense";
                           return contractorName === item.name;
                         }
                       }).length;
@@ -1183,35 +1620,41 @@ const BudgetDashboard: React.FC<BudgetDashboardProps> = ({
                       return (
                         <TableRow key={item.name} hover>
                           <TableCell>
-                            <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                            <Box sx={{ display: "flex", alignItems: "center" }}>
                               <Box 
                                 sx={{ 
                                   width: 12, 
                                   height: 12, 
-                                  borderRadius: '50%', 
+                                  borderRadius: "50%",
                                   bgcolor: item.color,
-                                  mr: 1 
+                                  mr: 1,
                                 }} 
                               />
                               {item.name}
                             </Box>
                           </TableCell>
-                          <TableCell align="right" sx={{ fontWeight: 'medium' }}>
+                          <TableCell
+                            align="right"
+                            sx={{ fontWeight: "medium" }}
+                          >
                             {formatCurrency(item.value)}
                           </TableCell>
                           <TableCell align="right">
                             {percentOfTotal.toFixed(1)}%
                           </TableCell>
-                          <TableCell align="right">
-                            {itemCount}
-                          </TableCell>
+                          <TableCell align="right">{itemCount}</TableCell>
                         </TableRow>
                       );
                     })}
                     {currentExpenseGroupingData.length === 0 && (
                       <TableRow>
-                        <TableCell colSpan={4} sx={{ textAlign: 'center', py: 3 }}>
-                          <Typography color="text.secondary">No expense data available.</Typography>
+                        <TableCell
+                          colSpan={4}
+                          sx={{ textAlign: "center", py: 3 }}
+                        >
+                          <Typography color="text.secondary">
+                            No expense data available.
+                          </Typography>
                         </TableCell>
                       </TableRow>
                     )}
@@ -1222,7 +1665,8 @@ const BudgetDashboard: React.FC<BudgetDashboardProps> = ({
           </Card>
         </Grid>
         
-        {/* Expense Trend Chart */}
+        {/* Expense Trend Chart - Commented out as requested */}
+        {/* 
         <Grid item xs={12}>
           <Card elevation={0} sx={{ 
             borderRadius: 2,
@@ -1243,14 +1687,14 @@ const BudgetDashboard: React.FC<BudgetDashboardProps> = ({
                       sx={{ mr: 2 }}
                     />
                   )}
-                  <Button 
-                    variant="outlined" 
-                    startIcon={<AddIcon />}
-                    size="small"
-                    sx={{ mr: 1 }}
-                  >
-                    Add Expense
-                  </Button>
+                <Button 
+                  variant="outlined" 
+                  startIcon={<AddIcon />}
+                  size="small"
+                  sx={{ mr: 1 }}
+                >
+                  Add Expense
+                </Button>
                 </Box>
               }
             />
@@ -1306,7 +1750,6 @@ const BudgetDashboard: React.FC<BudgetDashboardProps> = ({
                         activeDot={{ r: 6 }}
                       />
                       
-                      {/* Modified projection display */}
                       <defs>
                         <linearGradient id="projectionGradient" x1="0" y1="0" x2="0" y2="1">
                           <stop offset="5%" stopColor={theme.palette.info.main} stopOpacity={0.2} />
@@ -1317,10 +1760,8 @@ const BudgetDashboard: React.FC<BudgetDashboardProps> = ({
                         </pattern>
                       </defs>
                       
-                      {/* Only show projections if they exist */}
                       {monthlyTrends.some(item => item.projected > 0) && (
                         <>
-                          {/* Add a light area under the projection line for visibility */}
                           <Area 
                             type="monotone" 
                             dataKey="projected" 
@@ -1330,22 +1771,20 @@ const BudgetDashboard: React.FC<BudgetDashboardProps> = ({
                             activeDot={false}
                             isAnimationActive={false}
                             fillOpacity={0.3}
-                          />
-                          {/* Add the dashed line on top */}
-                          <Line 
-                            type="monotone" 
-                            dataKey="projected" 
+                      />
+                      <Line 
+                        type="monotone" 
+                        dataKey="projected" 
                             name="Projected Expenses" 
                             stroke={theme.palette.info.main} 
                             strokeWidth={2}
-                            strokeDasharray="5 5"
+                        strokeDasharray="5 5"
                             activeDot={{ r: 6, stroke: theme.palette.info.dark, strokeWidth: 1 }}
                             dot={{ stroke: theme.palette.info.main, fill: theme.palette.background.paper, r: 3 }}
                           />
                         </>
                       )}
                       
-                      {/* Add a reference line for the total budget */}
                       <ReferenceLine 
                         y={budgetSummary.totalBudget} 
                         stroke={theme.palette.error.main}
@@ -1368,17 +1807,21 @@ const BudgetDashboard: React.FC<BudgetDashboardProps> = ({
             </CardContent>
           </Card>
         </Grid>
+        */}
         
         {/* Top Expenses */}
         <Grid item xs={12} md={6}>
-          <Card elevation={0} sx={{ 
+          <Card
+            elevation={0}
+            sx={{
             borderRadius: 2,
-            height: '100%',
+              height: "100%",
             boxShadow: `0 2px 12px ${alpha(theme.palette.primary.main, 0.08)}`,
-          }}>
+            }}
+          >
             <CardHeader
               title="Top Expenses"
-              titleTypographyProps={{ variant: 'h6', fontWeight: 'bold' }}
+              titleTypographyProps={{ variant: "h6", fontWeight: "bold" }}
               action={
                 <Tooltip title="View All Expenses">
                   <IconButton>
@@ -1393,42 +1836,60 @@ const BudgetDashboard: React.FC<BudgetDashboardProps> = ({
                 <Table size="small">
                   <TableHead>
                     <TableRow>
-                      <TableCell sx={{ fontWeight: 'bold' }}>Description</TableCell>
-                      <TableCell sx={{ fontWeight: 'bold' }}>Category</TableCell>
-                      <TableCell sx={{ fontWeight: 'bold' }}>Date</TableCell>
-                      <TableCell align="right" sx={{ fontWeight: 'bold' }}>Amount</TableCell>
+                      <TableCell sx={{ fontWeight: "bold" }}>
+                        Description
+                      </TableCell>
+                      <TableCell sx={{ fontWeight: "bold" }}>
+                        Category
+                      </TableCell>
+                      <TableCell sx={{ fontWeight: "bold" }}>Date</TableCell>
+                      <TableCell align="right" sx={{ fontWeight: "bold" }}>
+                        Amount
+                      </TableCell>
                     </TableRow>
                   </TableHead>
                   <TableBody>
                     {topExpenses.map((expense) => (
-                      <TableRow key={expense.id} hover sx={{ '&:last-child td, &:last-child th': { border: 0 } }}>
-                        <TableCell sx={{ py: 1.5 }}>{expense.description}</TableCell>
+                      <TableRow
+                        key={expense.id}
+                        hover
+                        sx={{
+                          "&:last-child td, &:last-child th": { border: 0 },
+                        }}
+                      >
+                        <TableCell sx={{ py: 1.5 }}>
+                          {expense.description}
+                        </TableCell>
                         <TableCell>
                           <Chip 
                             size="small" 
-                            label={expense.category.replace('_', ' ')} 
+                            label={expense.category.replace("_", " ")}
                             sx={{ 
-                              textTransform: 'capitalize',
+                              textTransform: "capitalize",
                               bgcolor: alpha(theme.palette.primary.main, 0.1),
                               color: theme.palette.primary.main,
                             }}
                           />
                         </TableCell>
                         <TableCell>
-                          {typeof expense.date === 'string' 
+                          {typeof expense.date === "string"
                             ? expense.date 
-                            : formatDate(expense.date)
-                          }
+                            : formatDate(expense.date)}
                         </TableCell>
-                        <TableCell align="right" sx={{ fontWeight: 'medium' }}>
+                        <TableCell align="right" sx={{ fontWeight: "medium" }}>
                           {formatCurrency(expense.amount)}
                         </TableCell>
                       </TableRow>
                     ))}
                     {topExpenses.length === 0 && (
                       <TableRow>
-                        <TableCell colSpan={4} sx={{ textAlign: 'center', py: 3 }}>
-                          <Typography color="text.secondary">No expenses recorded.</Typography>
+                        <TableCell
+                          colSpan={4}
+                          sx={{ textAlign: "center", py: 3 }}
+                        >
+                          <Typography color="text.secondary">
+                            No expenses recorded.
+                          </Typography>
                         </TableCell>
                       </TableRow>
                     )}
@@ -1441,14 +1902,17 @@ const BudgetDashboard: React.FC<BudgetDashboardProps> = ({
         
         {/* Budget Health & Recommendations */}
         <Grid item xs={12} md={6}>
-          <Card elevation={0} sx={{ 
+          <Card
+            elevation={0}
+            sx={{
             borderRadius: 2,
-            height: '100%',
+              height: "100%",
             boxShadow: `0 2px 12px ${alpha(theme.palette.primary.main, 0.08)}`,
-          }}>
+            }}
+          >
             <CardHeader
               title="Budget Health Analysis"
-              titleTypographyProps={{ variant: 'h6', fontWeight: 'bold' }}
+              titleTypographyProps={{ variant: "h6", fontWeight: "bold" }}
               avatar={
                 <Avatar sx={{ bgcolor: budgetHealth.color }}>
                   {budgetHealth.icon}
@@ -1457,49 +1921,94 @@ const BudgetDashboard: React.FC<BudgetDashboardProps> = ({
             />
             <Divider />
             <CardContent>
-              <Typography variant="h5" sx={{ mb: 2, color: budgetHealth.color, fontWeight: 'bold' }}>
+              <Typography
+                variant="h5"
+                sx={{ mb: 2, color: budgetHealth.color, fontWeight: "bold" }}
+              >
                 {budgetHealth.status}
               </Typography>
-              
+
               {/* Add projection indicator if we have projections */}
               {budgetSummary.projectedTotal > 0 && (
-                <Box sx={{ 
-                  mb: 3, 
-                  p: 2, 
-                  borderRadius: 1, 
-                  bgcolor: alpha(theme.palette.info.light, 0.1),
-                  border: `1px dashed ${theme.palette.info.main}`
-                }}>
-                  <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
-                    <Typography variant="caption" color="text.secondary">Current</Typography>
+                <Box
+                  sx={{
+                    mb: 3,
+                    p: 2,
+                    borderRadius: 1,
+                    bgcolor: alpha(theme.palette.info.light, 0.1),
+                    border: `1px dashed ${theme.palette.info.main}`,
+                  }}
+                >
+                  <Box
+                    sx={{
+                      display: "flex",
+                      justifyContent: "space-between",
+                      mb: 0.5,
+                    }}
+                  >
                     <Typography variant="caption" color="text.secondary">
-                      {budgetSummary.totalBudget > 0 ? ((budgetSummary.totalSpent / budgetSummary.totalBudget) * 100).toFixed(1) : '0.0'}%
+                      Current
                     </Typography>
-                  </Box>
-                  <LinearProgress 
-                    variant="determinate" 
-                    value={budgetSummary.totalBudget > 0 ? (budgetSummary.totalSpent / budgetSummary.totalBudget) * 100 : 0} 
-                    sx={{ height: 8, borderRadius: 1 }}
-                  />
-                  <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
-                    <Typography variant="caption" color="text.secondary">With Projections</Typography>
                     <Typography variant="caption" color="text.secondary">
                       {budgetSummary.totalBudget > 0
-                        ? (((budgetSummary.totalSpent + budgetSummary.projectedTotal) / budgetSummary.totalBudget) * 100).toFixed(1)
-                        : '0.0'}%
+                        ? (
+                            (budgetSummary.totalSpent /
+                              budgetSummary.totalBudget) *
+                            100
+                          ).toFixed(1)
+                        : "0.0"}
+                      %
                     </Typography>
                   </Box>
-                  <LinearProgress 
-                    variant="determinate" 
-                    value={budgetSummary.totalBudget > 0
-                      ? ((budgetSummary.totalSpent + budgetSummary.projectedTotal) / budgetSummary.totalBudget) * 100
-                      : 0} 
-                    sx={{ 
-                      height: 8, 
+                  <LinearProgress
+                    variant="determinate"
+                    value={
+                      budgetSummary.totalBudget > 0
+                        ? (budgetSummary.totalSpent /
+                            budgetSummary.totalBudget) *
+                          100
+                        : 0
+                    }
+                    sx={{ height: 8, borderRadius: 1 }}
+                  />
+                  <Box
+                    sx={{
+                      display: "flex",
+                      justifyContent: "space-between",
+                      mb: 0.5,
+                    }}
+                  >
+                    <Typography variant="caption" color="text.secondary">
+                      With Projections
+                    </Typography>
+                    <Typography variant="caption" color="text.secondary">
+                      {budgetSummary.totalBudget > 0
+                        ? (
+                            ((budgetSummary.totalSpent +
+                              budgetSummary.projectedTotal) /
+                              budgetSummary.totalBudget) *
+                            100
+                          ).toFixed(1)
+                        : "0.0"}
+                      %
+                    </Typography>
+                  </Box>
+                  <LinearProgress
+                    variant="determinate"
+                    value={
+                      budgetSummary.totalBudget > 0
+                        ? ((budgetSummary.totalSpent +
+                            budgetSummary.projectedTotal) /
+                            budgetSummary.totalBudget) *
+                          100
+                        : 0
+                    }
+                    sx={{
+                      height: 8,
                       borderRadius: 1,
-                      '& .MuiLinearProgress-bar': {
-                        backgroundImage: `repeating-linear-gradient(45deg, ${theme.palette.info.main} 0, ${theme.palette.info.main} 8px, ${alpha(theme.palette.info.main, 0.8)} 8px, ${alpha(theme.palette.info.main, 0.8)} 16px)`
-                      }
+                      "& .MuiLinearProgress-bar": {
+                        backgroundImage: `repeating-linear-gradient(45deg, ${theme.palette.info.main} 0, ${theme.palette.info.main} 8px, ${alpha(theme.palette.info.main, 0.8)} 8px, ${alpha(theme.palette.info.main, 0.8)} 16px)`,
+                      },
                     }}
                   />
                 </Box>
@@ -1507,12 +2016,18 @@ const BudgetDashboard: React.FC<BudgetDashboardProps> = ({
               
               <Box sx={{ mb: 3 }}>
                 <Typography variant="body1" paragraph>
-                  {budgetHealth.status === 'Healthy' && 'Your project is well under budget and on track. Current spending patterns and projections indicate you may finish below the allocated budget.'}
-                  {budgetHealth.status === 'On Track' && 'Your project is progressing as expected financially. Continue monitoring expenses and upcoming projected costs to maintain budget compliance.'}
-                  {budgetHealth.status === 'Near Limit' && 'Your project has utilized most of the allocated budget. Carefully manage remaining funds and review projections to prevent overruns.'}
-                  {budgetHealth.status === 'Caution' && 'Your project expenses plus projected costs are trending higher than expected. Review upcoming expenses and identify savings opportunities.'}
-                  {budgetHealth.status === 'At Risk' && 'Your project is projected to exceed budget by more than 10%. Immediate cost control measures are recommended.'}
-                  {budgetHealth.status === 'Critical' && 'Your project is significantly over budget or projected to greatly exceed budget. Comprehensive financial review and corrective actions are required urgently.'}
+                  {budgetHealth.status === "Healthy" &&
+                    "Your project is well under budget and on track. Current spending patterns and projections indicate you may finish below the allocated budget."}
+                  {budgetHealth.status === "On Track" &&
+                    "Your project is progressing as expected financially. Continue monitoring expenses and upcoming projected costs to maintain budget compliance."}
+                  {budgetHealth.status === "Near Limit" &&
+                    "Your project has utilized most of the allocated budget. Carefully manage remaining funds and review projections to prevent overruns."}
+                  {budgetHealth.status === "Caution" &&
+                    "Your project expenses plus projected costs are trending higher than expected. Review upcoming expenses and identify savings opportunities."}
+                  {budgetHealth.status === "At Risk" &&
+                    "Your project is projected to exceed budget by more than 10%. Immediate cost control measures are recommended."}
+                  {budgetHealth.status === "Critical" &&
+                    "Your project is significantly over budget or projected to greatly exceed budget. Comprehensive financial review and corrective actions are required urgently."}
                 </Typography>
               </Box>
               
@@ -1522,28 +2037,39 @@ const BudgetDashboard: React.FC<BudgetDashboardProps> = ({
               
               <Box component="ul" sx={{ pl: 2 }}>
                 {/* Projection-specific recommendations */}
-                {budgetSummary.projectedTotal > 0 && budgetHealth.status !== 'Healthy' && budgetHealth.status !== 'On Track' && (
-                  <Typography component="li" variant="body2" sx={{ mb: 1, color: theme.palette.info.main }}>
-                    Review projected costs of {formatCurrency(budgetSummary.projectedTotal)} for potential savings
-                  </Typography>
-                )}
-                
+                {budgetSummary.projectedTotal > 0 &&
+                  budgetHealth.status !== "Healthy" &&
+                  budgetHealth.status !== "On Track" && (
+                    <Typography
+                      component="li"
+                      variant="body2"
+                      sx={{ mb: 1, color: theme.palette.info.main }}
+                    >
+                      Review projected costs of{" "}
+                      {formatCurrency(budgetSummary.projectedTotal)} for
+                      potential savings
+                    </Typography>
+                  )}
+
                 {/* Standard recommendations based on health status */}
-                {budgetHealth.status === 'Healthy' && (
+                {budgetHealth.status === "Healthy" && (
                   <>
                     <Typography component="li" variant="body2" sx={{ mb: 1 }}>
-                      Consider allocating surplus to enhance project quality or features
+                      Consider allocating surplus to enhance project quality or
+                      features
                     </Typography>
                     <Typography component="li" variant="body2" sx={{ mb: 1 }}>
-                      Document effective cost management practices for future projects
+                      Document effective cost management practices for future
+                      projects
                     </Typography>
-                    <Typography component="li" variant="body2">
-                      Continue regular financial reviews to maintain budget health
+                    <Typography component="li" variant="body2" sx={{ mb: 1 }}>
+                      Continue regular financial reviews to maintain budget
+                      health
                     </Typography>
                   </>
                 )}
                 
-                {budgetHealth.status === 'On Track' && (
+                {budgetHealth.status === "On Track" && (
                   <>
                     <Typography component="li" variant="body2" sx={{ mb: 1 }}>
                       Monitor phases with higher spending percentages
@@ -1551,13 +2077,14 @@ const BudgetDashboard: React.FC<BudgetDashboardProps> = ({
                     <Typography component="li" variant="body2" sx={{ mb: 1 }}>
                       Review upcoming expenses for potential savings
                     </Typography>
-                    <Typography component="li" variant="body2">
+                    <Typography component="li" variant="body2" sx={{ mb: 1 }}>
                       Update cashflow projections based on actual spending
                     </Typography>
                   </>
                 )}
                 
-                {(budgetHealth.status === 'Near Limit' || budgetHealth.status === 'Caution') && (
+                {(budgetHealth.status === "Near Limit" ||
+                  budgetHealth.status === "Caution") && (
                   <>
                     <Typography component="li" variant="body2" sx={{ mb: 1 }}>
                       Review all pending expenses for necessity and timing
@@ -1565,24 +2092,26 @@ const BudgetDashboard: React.FC<BudgetDashboardProps> = ({
                     <Typography component="li" variant="body2" sx={{ mb: 1 }}>
                       Identify cost-saving opportunities in remaining work
                     </Typography>
-                    <Typography component="li" variant="body2">
+                    <Typography component="li" variant="body2" sx={{ mb: 1 }}>
                       Consider reallocating budget from under-spending phases
                     </Typography>
                   </>
                 )}
                 
-                {(budgetHealth.status === 'At Risk' || budgetHealth.status === 'Critical') && (
+                {(budgetHealth.status === "At Risk" ||
+                  budgetHealth.status === "Critical") && (
                   <>
                     <Typography component="li" variant="body2" sx={{ mb: 1 }}>
                       Conduct immediate comprehensive financial review
                     </Typography>
                     <Typography component="li" variant="body2" sx={{ mb: 1 }}>
-                      Pause non-essential expenses and renegotiate pending contracts
+                      Pause non-essential expenses and renegotiate pending
+                      contracts
                     </Typography>
                     <Typography component="li" variant="body2" sx={{ mb: 1 }}>
                       Prepare budget variance report for stakeholders
                     </Typography>
-                    <Typography component="li" variant="body2">
+                    <Typography component="li" variant="body2" sx={{ mb: 1 }}>
                       Consider requesting budget increase or scope reduction
                     </Typography>
                   </>
@@ -1592,33 +2121,54 @@ const BudgetDashboard: React.FC<BudgetDashboardProps> = ({
           </Card>
         </Grid>
       </Grid>
-      
+
       {/* Add a CTA card for projections when none exist */}
       {budgetSummary.projectedTotal === 0 && (
         <Grid item xs={12}>
-          <Card elevation={0} sx={{ 
-            borderRadius: 2,
-            boxShadow: `0 2px 12px ${alpha(theme.palette.primary.main, 0.08)}`,
-            mb: 3,
-            bgcolor: alpha(theme.palette.info.light, 0.05)
-          }}>
-            <CardContent sx={{ p: 3, display: 'flex', flexDirection: { xs: 'column', md: 'row' }, alignItems: 'center', justifyContent: 'space-between' }}>
+          <Card
+            elevation={0}
+            sx={{
+              borderRadius: 2,
+              boxShadow: `0 2px 12px ${alpha(theme.palette.primary.main, 0.08)}`,
+              mb: 3,
+            }}
+          >
+            <CardContent
+              sx={{
+                p: 3,
+                display: "flex",
+                flexDirection: { xs: "column", md: "row" },
+                alignItems: "center",
+                justifyContent: "space-between",
+              }}
+            >
               <Box sx={{ mb: { xs: 2, md: 0 } }}>
-                <Typography variant="h6" gutterBottom color="info.main" sx={{ display: 'flex', alignItems: 'center' }}>
+                <Typography
+                  variant="h6"
+                  gutterBottom
+                  color="info.main"
+                  sx={{ display: "flex", alignItems: "center" }}
+                >
                   <TimelineIcon sx={{ mr: 1 }} />
                   Enhance Your Budget with Projections
                 </Typography>
                 <Typography variant="body2" color="text.secondary">
-                  Add projected costs to categories to anticipate future expenses and improve budget planning.
-                  Projections help identify potential budget gaps and improve financial forecasting.
+                  Add projected costs to categories to anticipate future
+                  expenses and improve budget planning. Projections help
+                  identify potential budget gaps and improve financial
+                  forecasting.
                 </Typography>
               </Box>
-              <Button 
-                variant="contained" 
+              <Button
+                variant="contained"
                 color="info"
                 size="large"
                 startIcon={<AddIcon />}
-                onClick={() => document.getElementById('budget-allocation-tracker')?.scrollIntoView({ behavior: 'smooth' })}
+                onClick={() =>
+                  document
+                    .getElementById("budget-allocation-tracker")
+                    ?.scrollIntoView({ behavior: "smooth" })
+                }
                 sx={{ minWidth: 200 }}
               >
                 Add Projections
@@ -1627,25 +2177,32 @@ const BudgetDashboard: React.FC<BudgetDashboardProps> = ({
           </Card>
         </Grid>
       )}
-      
+
       {/* Add Projections Summary Section if projections exist */}
       {budgetSummary.projectedTotal > 0 && (
         <Grid item xs={12}>
-          <Card elevation={0} sx={{ 
-            borderRadius: 2,
-            boxShadow: `0 2px 12px ${alpha(theme.palette.primary.main, 0.08)}`,
-            mb: 3 
-          }}>
+          <Card
+            elevation={0}
+            sx={{
+              borderRadius: 2,
+              boxShadow: `0 2px 12px ${alpha(theme.palette.primary.main, 0.08)}`,
+              mb: 3,
+            }}
+          >
             <CardHeader
               title="Projected Costs Summary"
-              titleTypographyProps={{ variant: 'h6', fontWeight: 'bold' }}
+              titleTypographyProps={{ variant: "h6", fontWeight: "bold" }}
               action={
-                <Button 
-                  variant="outlined" 
+                <Button
+                  variant="outlined"
                   color="info"
                   size="small"
                   startIcon={<TimelineIcon />}
-                  onClick={() => document.getElementById('budget-allocation-tracker')?.scrollIntoView({ behavior: 'smooth' })}
+                  onClick={() =>
+                    document
+                      .getElementById("budget-allocation-tracker")
+                      ?.scrollIntoView({ behavior: "smooth" })
+                  }
                 >
                   Manage Projections
                 </Button>
@@ -1657,7 +2214,7 @@ const BudgetDashboard: React.FC<BudgetDashboardProps> = ({
                 <Typography variant="subtitle1" gutterBottom>
                   Projections By Category
                 </Typography>
-                
+
                 <TableContainer>
                   <Table size="small">
                     <TableHead>
@@ -1672,47 +2229,75 @@ const BudgetDashboard: React.FC<BudgetDashboardProps> = ({
                       {projections.map((projection) => {
                         // Find the category name by ID
                         let categoryName = "Unknown Category";
-                        
+
                         // Search through all phases to find matching category
-                        Object.entries(CONSTRUCTION_CATEGORIES).forEach(([sectionKey, categories]) => {
-                          const matchingCategory = categories.find(cat => cat.id === projection.categoryId);
-                          if (matchingCategory) {
-                            categoryName = matchingCategory.name;
-                          }
-                        });
-                        
+                        Object.entries(CONSTRUCTION_CATEGORIES).forEach(
+                          ([sectionKey, categories]) => {
+                            const matchingCategory = categories.find(
+                              (cat) => cat.id === projection.categoryId,
+                            );
+                            if (matchingCategory) {
+                              categoryName = matchingCategory.name;
+                            }
+                          },
+                        );
+
                         return (
                           <TableRow key={projection.id}>
                             <TableCell>
-                              <Typography variant="body2">{categoryName}</Typography>
+                              <Typography variant="body2">
+                                {categoryName}
+                              </Typography>
                             </TableCell>
                             <TableCell>
-                              <Typography variant="body2" color="text.secondary">
+                              <Typography
+                                variant="body2"
+                                color="text.secondary"
+                              >
                                 {projection.notes || "No notes provided"}
                               </Typography>
                             </TableCell>
                             <TableCell align="right">
-                              <Typography variant="body2" color="text.secondary">
+                              <Typography
+                                variant="body2"
+                                color="text.secondary"
+                              >
                                 {formatDate(projection.createdAt)}
                               </Typography>
                             </TableCell>
                             <TableCell align="right">
-                              <Typography variant="body2" sx={{ fontWeight: 'medium', color: 'info.main' }}>
+                              <Typography
+                                variant="body2"
+                                sx={{
+                                  fontWeight: "medium",
+                                  color: "info.main",
+                                }}
+                              >
                                 {formatCurrency(projection.amount)}
                               </Typography>
                             </TableCell>
                           </TableRow>
                         );
                       })}
-                      
+
                       {/* Total row */}
                       <TableRow>
-                        <TableCell sx={{ borderBottom: 'none' }}></TableCell>
-                        <TableCell sx={{ borderBottom: 'none' }}></TableCell>
-                        <TableCell align="right" sx={{ fontWeight: 'bold', borderBottom: 'none' }}>
+                        <TableCell sx={{ borderBottom: "none" }}></TableCell>
+                        <TableCell sx={{ borderBottom: "none" }}></TableCell>
+                        <TableCell
+                          align="right"
+                          sx={{ fontWeight: "bold", borderBottom: "none" }}
+                        >
                           Total Projected:
                         </TableCell>
-                        <TableCell align="right" sx={{ fontWeight: 'bold', color: 'info.main', borderBottom: 'none' }}>
+                        <TableCell
+                          align="right"
+                          sx={{
+                            fontWeight: "bold",
+                            color: "info.main",
+                            borderBottom: "none",
+                          }}
+                        >
                           {formatCurrency(budgetSummary.projectedTotal)}
                         </TableCell>
                       </TableRow>
@@ -1727,16 +2312,28 @@ const BudgetDashboard: React.FC<BudgetDashboardProps> = ({
       
       {/* Add Budget Allocation Tracker here, right before the final closing tag */}
       <div id="budget-allocation-tracker">
-        <BudgetAllocationTracker 
-          project={project}
-          phases={phases}
-          expenses={expenses}
-          bids={bids}
-          onAddProjection={handleAddProjection}
-        />
+      <BudgetAllocationTracker 
+        project={project}
+        phases={phases}
+        expenses={expenses}
+        bids={bids}
+          // onAddProjection={handleAddProjection} // REMOVE this prop
+      />
       </div>
+
+      {/* Snackbar for feedback */}
+      <Snackbar 
+        open={snackbar.open} 
+        autoHideDuration={4000} 
+        onClose={handleCloseSnackbar}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+      >
+        <Alert onClose={handleCloseSnackbar} severity={snackbar.severity} sx={{ width: '100%' }}>
+            {snackbar.message}
+        </Alert>
+      </Snackbar>
     </Box>
   );
 };
 
-export default BudgetDashboard;
+export default BudgetDashboard; 

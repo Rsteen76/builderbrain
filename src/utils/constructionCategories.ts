@@ -1,4 +1,5 @@
 /**
+ * @deprecated Use data/hierarchicalCategories.ts instead.
  * Standard construction categories for budget tracking and expense categorization.
  * This is the single source of truth for construction categories throughout the application.
  */
