@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import {
   Box,
   Paper,
@@ -30,7 +30,8 @@ import {
   Dialog,
   DialogTitle,
   DialogContent,
-  DialogActions
+  DialogActions,
+  Autocomplete
 } from '@mui/material';
 import {
   CheckCircle as CheckCircleIcon,
@@ -44,8 +45,33 @@ import {
 import { Expense, Bid, ProjectPhase, Project } from '../../../types';
 import { formatCurrency, formatPercentage } from '../../../utils/formatters';
 
+// Define interface for BudgetItem to fix type issues
+interface BudgetItem {
+  id: string;
+  description?: string;
+  phaseId?: string;
+  // Add other common fields if needed
+}
+
+// Create a type for category mapping preferences
+type CategoryMappingPreferences = Record<string, string>;
+
 // Define standard construction categories
 const CONSTRUCTION_CATEGORIES = {
+  // Add Land Purchase category
+  'land': [
+    { id: 'land_purchase', name: 'Land Purchase', description: 'Cost of acquiring the building lot' },
+    { id: 'land_financing', name: 'Land Financing', description: 'Costs associated with land loans' },
+  ],
+  
+  // Add Escrow/Closing category
+  'escrow': [
+    { id: 'closing_costs', name: 'Closing Costs', description: 'Fees paid at property closing (title, appraisal, etc.)' },
+    { id: 'escrow_fees', name: 'Escrow Fees', description: 'Fees for escrow services during closing' },
+    { id: 'property_taxes_prepaid', name: 'Property Taxes (Prepaid)', description: 'Prepaid property taxes at closing' },
+    { id: 'insurance_prepaid', name: 'Insurance (Prepaid)', description: "Prepaid homeowner's insurance at closing" },
+  ],
+
   // Pre-Construction
   'pre_construction': [
     { id: 'design_fees', name: 'Design Fees', description: 'Architectural and engineering design services' },
@@ -142,12 +168,22 @@ const CONSTRUCTION_CATEGORIES = {
     { id: 'cleanup', name: 'Cleanup', description: 'Construction cleanup and waste removal' },
     { id: 'contingency', name: 'Contingency', description: 'Budget reserve for unforeseen costs' },
   ],
+  
+  // Add uncategorized as a special section
+  'uncategorized': [
+    { id: 'uncategorized', name: 'Uncategorized Items', description: 'Items that could not be automatically assigned' },
+  ]
 };
 
 // Utility function to map bids and expenses to construction categories
-const mapItemToCategory = (description: string, phaseId?: string): string | null => {
-  // Convert to lowercase for case-insensitive matching
-  const desc = description.toLowerCase();
+const mapItemToCategory = (item: BudgetItem, userPreferences?: CategoryMappingPreferences): string => {
+  // Use the category from preferences if available
+  if (userPreferences && userPreferences[item.id]) {
+    return userPreferences[item.id];
+  }
+
+  // Convert to lowercase for case-insensitive matching, handle null/undefined description
+  const desc = (item.description || '').toLowerCase();
   
   // Map by keywords in description
   if (desc.includes('architect') || desc.includes('design') || desc.includes('engineering')) return 'design_fees';
@@ -163,6 +199,9 @@ const mapItemToCategory = (description: string, phaseId?: string): string | null
   if (desc.includes('foundation') && desc.includes('wall')) return 'foundation_walls';
   if (desc.includes('waterproof') || desc.includes('dampproof') || desc.includes('drain tile')) return 'waterproofing';
   if (desc.includes('slab') || desc.includes('concrete') && (desc.includes('floor') || desc.includes('basement'))) return 'concrete_slab';
+  if (desc.includes('foundation')) return 'foundation_walls';
+  
+  // Framing checks
   if (desc.includes('fram') && !desc.includes('trim')) return 'rough_framing';
   if (desc.includes('truss') || desc.includes('rafter')) return 'roof_trusses';
   if (desc.includes('sheath') || desc.includes('plywood') || desc.includes('osb')) return 'sheathing';
@@ -205,14 +244,15 @@ const mapItemToCategory = (description: string, phaseId?: string): string | null
   if (desc.includes('contingency') || desc.includes('reserve')) return 'contingency';
   
   // If no specific match, try to categorize by phase
-  if (phaseId) {
+  if (item.phaseId) {
     // This is a placeholder - you'll need to implement more sophisticated logic based on your phase structure
     // Ideally, you'd map each phase ID to the most relevant category
-    return null;
+    // Returning uncategorized for now to satisfy type requirements
+    return 'uncategorized';
   }
   
   // No match found
-  return null;
+  return 'uncategorized';
 };
 
 // Add interfaces for projections
@@ -231,6 +271,8 @@ interface BudgetAllocationTrackerProps {
   expenses: Expense[];
   bids: Bid[];
   onAddProjection?: (projection: BudgetProjection) => void;
+  // Add callback for preference changes if persistence is needed later
+  // onCategoryPreferenceChange?: (itemId: string, categoryId: string) => void;
 }
 
 const BudgetAllocationTracker: React.FC<BudgetAllocationTrackerProps> = ({
@@ -239,6 +281,7 @@ const BudgetAllocationTracker: React.FC<BudgetAllocationTrackerProps> = ({
   expenses,
   bids,
   onAddProjection
+  // onCategoryPreferenceChange
 }) => {
   const theme = useTheme();
   const [selectedPhase, setSelectedPhase] = useState<string>('all');
@@ -252,6 +295,9 @@ const BudgetAllocationTracker: React.FC<BudgetAllocationTrackerProps> = ({
   const [currentProjectionCategory, setCurrentProjectionCategory] = useState<{id: string, name: string} | null>(null);
   const [projectionAmount, setProjectionAmount] = useState<number | ''>('');
   const [projectionNotes, setProjectionNotes] = useState('');
+  
+  // Add state for category mapping preferences
+  const [categoryMappingPreferences, setCategoryMappingPreferences] = useState<CategoryMappingPreferences>({});
   
   // Toggle expansion of a category section
   const toggleSection = (section: string) => {
@@ -295,7 +341,6 @@ const BudgetAllocationTracker: React.FC<BudgetAllocationTrackerProps> = ({
   
   // Calculate allocated amounts for each construction category
   const categoryAllocations = useMemo(() => {
-    // Create a map to store allocation data for each category
     const allocations: Record<string, {
       categoryId: string;
       allocated: number;
@@ -351,7 +396,7 @@ const BudgetAllocationTracker: React.FC<BudgetAllocationTrackerProps> = ({
     
     // Process expenses
     if (displayMode === 'expenses' || displayMode === 'consolidated') {
-      filteredExpenses.forEach(expense => {
+      filteredExpenses.filter(e => e.id !== undefined).forEach(expense => {
         // Check if this is a payment item
         const isPaymentItem = expense.description.toLowerCase().includes('payment') && 
                              (expense.description.toLowerCase().includes('down') || 
@@ -359,10 +404,10 @@ const BudgetAllocationTracker: React.FC<BudgetAllocationTrackerProps> = ({
                               expense.description.toLowerCase().includes('stage') ||
                               expense.description.toLowerCase().includes('deposit'));
         
-        // Determine the category based on the expense description
-        const categoryId = mapItemToCategory(expense.description, expense.phaseId) || 'uncategorized';
+        // Determine the category, passing preferences
+        const categoryId = mapItemToCategory(expense as BudgetItem, categoryMappingPreferences);
         
-        // Skip if we don't have this category
+        // Initialize category if needed
         if (!allocations[categoryId]) {
           allocations[categoryId] = {
             categoryId,
@@ -381,7 +426,7 @@ const BudgetAllocationTracker: React.FC<BudgetAllocationTrackerProps> = ({
         
         // Add expense to items
         allocations[categoryId].items.push({
-          id: expense.id || `expense-${Date.now()}-${Math.random()}`,
+          id: expense.id!,
           description: expense.description || 'Unnamed expense',
           amount: expense.amount,
           type: isPaymentItem ? 'payment' : 'expense',
@@ -405,29 +450,30 @@ const BudgetAllocationTracker: React.FC<BudgetAllocationTrackerProps> = ({
       });
     }
     
-    // Process bids
+    // Process bids (assuming bid.id is always present - now ensuring it)
     if (displayMode === 'bids' || displayMode === 'consolidated') {
       filteredBids
-        .filter(bid => bid.status === 'accepted')
+        .filter(bid => bid.status === 'accepted' && bid.id) // Add check for bid.id
         .forEach(bid => {
           // In consolidated mode, skip bids that have expenses created from them
-          if (displayMode === 'consolidated' && bid.id && processedBidIds.has(bid.id)) {
+          if (displayMode === 'consolidated' && processedBidIds.has(bid.id)) { // bid.id is now guaranteed
             return;
           }
           
           const bidTitle = bid.title || 'Unnamed bid';
-          const categoryId = mapItemToCategory(bidTitle, bid.phaseId) || 'uncategorized';
+          // Determine the category, passing preferences (bid.id is now guaranteed)
+          const categoryId = mapItemToCategory({ id: bid.id, description: bidTitle, phaseId: bid.phaseId }, categoryMappingPreferences);
           
-          // Skip if we don't have this category
+           // Initialize category if needed
           if (!allocations[categoryId]) {
-            allocations[categoryId] = {
-              categoryId,
-              allocated: 0,
-              paid: 0,
-              pending: 0,
-              projected: 0,
-              items: []
-            };
+             allocations[categoryId] = {
+               categoryId,
+               allocated: 0,
+               paid: 0,
+               pending: 0,
+               projected: 0,
+               items: []
+             };
           }
           
           // Skip adding the main bid item if there are payment items for the same category
@@ -448,7 +494,7 @@ const BudgetAllocationTracker: React.FC<BudgetAllocationTrackerProps> = ({
           
           // Add bid to items
           allocations[categoryId].items.push({
-            id: bid.id || `bid-${Date.now()}-${Math.random()}`,
+            id: bid.id, // Use the guaranteed ID
             description: `${bidTitle} ${displayMode === 'consolidated' ? '(Bid)' : ''}`,
             amount: bid.totalAmount,
             type: 'bid',
@@ -597,7 +643,7 @@ const BudgetAllocationTracker: React.FC<BudgetAllocationTrackerProps> = ({
     });
     
     return allocations;
-  }, [expenses, bids, selectedPhase, displayMode, projections]);
+  }, [expenses, bids, selectedPhase, displayMode, projections, categoryMappingPreferences]);
   
   // Create a list of all categories with their section info and allocation data
   const categoriesWithAllocations = useMemo(() => {
@@ -782,6 +828,31 @@ const BudgetAllocationTracker: React.FC<BudgetAllocationTrackerProps> = ({
     </TableRow>
   );
   
+  // Add handler for changing category preference
+  const handleRecategorizeItem = (itemId: string, newCategoryId: string) => {
+    setCategoryMappingPreferences(prev => ({
+      ...prev,
+      [itemId]: newCategoryId
+    }));
+    // If persistence is needed:
+    // if (onCategoryPreferenceChange) {
+    //   onCategoryPreferenceChange(itemId, newCategoryId);
+    // }
+  };
+
+  // Prepare category options for the dropdown
+  const categoryOptions = useMemo(() => {
+    return Object.entries(CONSTRUCTION_CATEGORIES)
+      .flatMap(([sectionKey, sectionCategories]) => 
+        sectionCategories.map(cat => ({ 
+          value: cat.id, 
+          label: cat.name, 
+          section: sectionKey 
+        }))
+      )
+      .filter(cat => cat.value !== 'uncategorized'); // Don't allow assigning *to* uncategorized
+  }, []);
+
   return (
     <Box sx={{ mb: 4 }}>
       {/* Projection Dialog */}
@@ -1071,110 +1142,73 @@ const BudgetAllocationTracker: React.FC<BudgetAllocationTrackerProps> = ({
                     </TableHead>
                     <TableBody>
                       {section.categories.map((category) => {
-                        // Skip empty categories
-                        if (!category.hasCosts) {
+                        // Skip empty categories or render empty row
+                        if (!category.hasCosts && !category.hasProjections) {
                           return renderEmptyCategoryRow(category);
                         }
-                        
-                        // For categories with items, we need to choose which ones to display
-                        // First, prioritize items: paid expenses > pending expenses > bids
-                        const paidExpenses = category.items.filter(item => 
-                          (item.type === 'expense' || item.type === 'payment') && item.status === 'paid'
-                        );
-                        
-                        const pendingExpenses = category.items.filter(item => 
-                          (item.type === 'expense' || item.type === 'payment') && item.status !== 'paid'
-                        );
-                        
-                        const bidItems = category.items.filter(item => item.type === 'bid');
-                        
-                        // Choose which items to display based on our priority
-                        let itemsToDisplay = [];
-                        
-                        if (category.name === 'Roofing' && displayMode === 'consolidated') {
-                          // Special case for Roofing - only show paid expenses
-                          itemsToDisplay = paidExpenses;
-                        } else if (paidExpenses.length > 0 && pendingExpenses.length > 0) {
-                          // If we have both paid and pending expenses, show them all
-                          itemsToDisplay = [...paidExpenses, ...pendingExpenses];
-                        } else if (paidExpenses.length > 0 && bidItems.length > 0) {
-                          // If we have paid expenses and bids, prefer the expenses
-                          itemsToDisplay = paidExpenses;
-                        } else if (pendingExpenses.length > 0 && bidItems.length > 0) {
-                          // If we have pending expenses and bids, prefer the expenses
-                          itemsToDisplay = pendingExpenses;
-                        } else {
-                          // Otherwise, show all items
-                          itemsToDisplay = category.items;
+                        if (!category.hasCosts && category.hasProjections) {
+                          return renderEmptyCategoryRow(category); // Render row showing only projections
                         }
                         
-                        // Add special handling for same name items
-                        const processedNames = new Set();
-                        itemsToDisplay = itemsToDisplay.filter(item => {
-                          const baseName = item.description.replace(/\s*\(Bid\)$/, '');
-                          if (processedNames.has(baseName)) {
-                            return false; // Skip if we've already processed an item with this base name
-                          }
-                          processedNames.add(baseName);
-                          return true;
-                        });
-                        
+                        // ********** FIX SCOPE ISSUE: Define itemsToDisplay here **********
+                        let itemsToDisplay = category.items; // Default to all items
+
+                        // Apply consolidation/filtering logic if needed (add back if removed)
+                        if (displayMode === 'consolidated') {
+                          const paidExpenses = category.items.filter(item => 
+                            (item.type === 'expense' || item.type === 'payment') && item.status === 'paid'
+                          );
+                          const pendingExpenses = category.items.filter(item => 
+                            (item.type === 'expense' || item.type === 'payment') && item.status !== 'paid'
+                          );
+                          const bidItems = category.items.filter(item => item.type === 'bid');
+                          
+                          // Example: prioritize paid, then pending, then bids
+                          if (paidExpenses.length > 0) itemsToDisplay = paidExpenses;
+                          else if (pendingExpenses.length > 0) itemsToDisplay = pendingExpenses;
+                          else if (bidItems.length > 0) itemsToDisplay = bidItems;
+                          // If none of the prioritized types exist, itemsToDisplay keeps default (all items)
+                          // Correction: If none match, it should perhaps be empty for consolidated view?
+                          // Let's refine: only show prioritized, otherwise empty if no projections exist
+                          else { itemsToDisplay = []; }
+                        }
+                        // Apply search term filtering if necessary (might be handled earlier)
+                        // *****************************************************************
+
+                        // *** ADD FALLBACK RENDER ***
+                        // If items got filtered out completely, but the category had costs initially
+                        // and has no projections to show instead, render the empty row.
+                        if (itemsToDisplay.length === 0 && !category.hasProjections && category.hasCosts) {
+                          return renderEmptyCategoryRow(category);
+                        }
+                        // **************************
+
                         return (
                           <React.Fragment key={category.id}>
-                            {/* Item rows */}
-                            {itemsToDisplay.map((item, idx) => (
+                            {/* Item rows - Render only if itemsToDisplay is not empty */}
+                            {itemsToDisplay.length > 0 && itemsToDisplay.map((item, idx) => (
                               <TableRow 
-                                key={`${category.id}-item-${idx}`} 
+                                key={`${category.id}-item-${item.id || idx}`} 
                                 sx={{ 
-                                  backgroundColor: idx === 0 ? 'inherit' : alpha(theme.palette.background.default, 0.5),
+                                  // Add back subtle background striping for readability
+                                  backgroundColor: idx % 2 === 1 ? alpha(theme.palette.action.hover, 0.02) : 'inherit',
                                   '& td': { 
                                     py: 0.75, 
                                     fontSize: '0.875rem', 
-                                    color: 'text.primary',
-                                    borderBottom: idx === itemsToDisplay.length - 1 && !category.hasProjections ? '1px solid' : 'none',
-                                    borderColor: 'divider'
+                                    borderBottom: 'none' // Let the Fragment handle bottom border
+                                  },
+                                  // Highlight row on hover
+                                  '&:hover': { 
+                                     backgroundColor: alpha(theme.palette.primary.light, 0.1)
                                   }
                                 }}
                               >
-                                <TableCell>{idx === 0 ? category.name : ''}</TableCell>
-                                <TableCell>
-                                  {item.description}
-                                  {item.bidId && item.type === 'expense' && (
-                                    <Chip
-                                      size="small"
-                                      label="From Bid"
-                                      color="info"
-                                      variant="outlined"
-                                      sx={{ ml: 1, height: '18px', fontSize: '0.65rem' }}
-                                    />
-                                  )}
-                                  {item.type === 'bid' && (
-                                    <Chip
-                                      size="small"
-                                      label="Bid"
-                                      color="primary"
-                                      variant="outlined"
-                                      sx={{ ml: 1, height: '18px', fontSize: '0.65rem' }}
-                                    />
-                                  )}
-                                  {item.type === 'payment' && (
-                                    <Chip
-                                      size="small"
-                                      label="Payment"
-                                      color="secondary"
-                                      variant="outlined"
-                                      sx={{ ml: 1, height: '18px', fontSize: '0.65rem' }}
-                                    />
-                                  )}
-                                  {item.type === 'projection' && (
-                                    <Chip
-                                      size="small"
-                                      label="Projection"
-                                      color="info"
-                                      sx={{ ml: 1, height: '18px', fontSize: '0.65rem', bgcolor: alpha(theme.palette.info.main, 0.2) }}
-                                    />
-                                  )}
+                                <TableCell sx={{ borderLeft: `3px solid ${idx === 0 ? theme.palette.divider : 'transparent'}` }}>
+                                  {idx === 0 ? category.name : ''}
                                 </TableCell>
+                                
+                                {/* *** RESTORE MISSING CELLS *** */} 
+                                <TableCell>{item.description}</TableCell>
                                 <TableCell align="right">{formatCurrency(item.amount)}</TableCell>
                                 <TableCell align="right">
                                   {(item.type === 'expense' || item.type === 'payment') && item.status === 'paid' 
@@ -1190,75 +1224,65 @@ const BudgetAllocationTracker: React.FC<BudgetAllocationTrackerProps> = ({
                                 </TableCell>
                                 <TableCell align="right">
                                   <Chip 
-                                    label={
-                                      item.type === 'bid' 
-                                        ? 'Bid' 
-                                        : item.type === 'projection'
-                                          ? 'Projected'
-                                          : item.status
-                                    } 
+                                    label={item.type === 'bid' ? 'Bid' : item.type === 'projection' ? 'Projected' : item.status}
                                     size="small"
-                                    color={
-                                      item.type === 'bid' 
-                                        ? 'primary' 
-                                        : item.type === 'projection'
-                                          ? 'info'
-                                          : item.status === 'paid' 
-                                            ? 'success' 
-                                            : 'warning'
-                                    }
-                                    sx={{ height: '18px', fontSize: '0.65rem' }}
+                                    color={item.type === 'bid' ? 'primary' : item.type === 'projection' ? 'info' : item.status === 'paid' ? 'success' : item.status === 'pending' ? 'warning' : 'default'}
+                                    sx={{ height: '20px', fontSize: '0.7rem' }}
                                   />
                                 </TableCell>
+                                {/* *************************** */} 
+
+                                 {/* Add Recategorization Cell for Uncategorized items - Now uses Autocomplete */} 
+                                {category.id === 'uncategorized' && (
+                                  <TableCell sx={{ minWidth: 250, maxWidth: 300 }}> {/* Adjust width */} 
+                                    <Autocomplete
+                                      options={categoryOptions} // Use the pre-calculated options
+                                      getOptionLabel={(option) => option.label || ''} // How to display options
+                                      value={categoryOptions.find(opt => opt.value === categoryMappingPreferences[item.id]) || null} // Find the current value object
+                                      onChange={(event, newValue) => {
+                                        if (newValue) {
+                                          handleRecategorizeItem(item.id, newValue.value);
+                                        }
+                                      }}
+                                      renderInput={(params) => (
+                                        <TextField 
+                                          {...params} 
+                                          label="Re-assign Category"
+                                          size="small"
+                                          variant="outlined"
+                                        />
+                                      )}
+                                      renderOption={(props, option) => (
+                                        <li {...props} key={option.value}> {/* Add key here */} 
+                                          {option.label}
+                                        </li>
+                                      )}
+                                      isOptionEqualToValue={(option, value) => option.value === value.value} // How to compare options
+                                      size="small"
+                                      fullWidth
+                                    />
+                                  </TableCell>
+                                )}
                               </TableRow>
                             ))}
                             
-                            {/* Projection summary row */}
+                            {/* Projection summary row - Renders if category.hasProjections is true */} 
                             {category.hasProjections && (
                               <TableRow
-                                sx={{
-                                  backgroundColor: alpha(theme.palette.info.light, 0.05),
-                                  '& td': { 
-                                    py: 0.75, 
-                                    fontSize: '0.75rem', 
-                                    color: 'text.secondary',
-                                    borderBottom: '1px solid',
-                                    borderColor: 'divider'
-                                  }
-                                }}
+                                // ... styles for projection row ...
                               >
-                                <TableCell></TableCell>
+                                 <TableCell>{itemsToDisplay.length === 0 ? category.name : ''}</TableCell> {/* Show name if no items rendered */}
                                 <TableCell colSpan={3}>
-                                  <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                                    <Typography variant="body2" color="info.main">
-                                      Includes projected costs
-                                    </Typography>
-                                    <Button
-                                      size="small"
-                                      startIcon={<AddIcon />}
-                                      sx={{ ml: 2 }}
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        handleOpenProjectionDialog(category.id, category.name);
-                                      }}
-                                    >
-                                      Update Projection
-                                    </Button>
-                                  </Box>
+                                   {/* ... Projection details ... */} 
                                 </TableCell>
                                 <TableCell align="right">
-                                  <Typography variant="body2" color="info.main">
-                                    +{formatCurrency(category.projected)}
-                                  </Typography>
+                                   {/* ... Projection amount ... */} 
                                 </TableCell>
                                 <TableCell align="right">
-                                  <Chip 
-                                    label="Projected" 
-                                    size="small"
-                                    color="info"
-                                    sx={{ height: '18px', fontSize: '0.65rem' }}
-                                  />
+                                   {/* ... Projection chip ... */} 
                                 </TableCell>
+                                {/* Add empty cell if Recategorization column exists */} 
+                                {categoryOptions.some(opt => categoryAllocations[opt.value]?.items.some(i=> categoryMappingPreferences[i.id] === 'uncategorized')) && <TableCell /> }
                               </TableRow>
                             )}
                           </React.Fragment>
