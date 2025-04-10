@@ -163,6 +163,7 @@ export const CONSTRUCTION_CATEGORIES = {
     { id: 'stairs', name: 'Stairs', description: 'Interior and exterior stairs and railings' },
     { id: 'fireplace', name: 'Fireplace', description: 'Fireplaces and chimneys' },
     { id: 'deck_patio', name: 'Deck/Patio', description: 'Outdoor living spaces' },
+    { id: 'landscaping', name: 'Landscaping', description: 'Landscape design, plants, irrigation systems' },
     { id: 'pool_spa', name: 'Pool/Spa', description: 'Swimming pools, hot tubs, saunas' },
     { id: 'smart_home', name: 'Smart Home', description: 'Home automation and technology' },
     { id: 'solar', name: 'Solar/Renewable', description: 'Solar panels, renewable energy systems' },
@@ -201,7 +202,8 @@ const mapItemToCategory = (item: BudgetItem, userPreferences?: Record<string, st
   if (desc.includes('excav') || desc.includes('grad') || desc.includes('dirt') || desc.includes('earth')) return 'excavation_grading';
   if (desc.includes('utilit') || desc.includes('sewer') || desc.includes('water line')) return 'utilities';
   if (desc.includes('erosion') || desc.includes('silt') || desc.includes('fence') && desc.includes('control')) return 'erosion_control';
-  if (desc.includes('driveway') || desc.includes('walkway') || desc.includes('landscape')) return 'site_improvements';
+  if (desc.includes('driveway') || desc.includes('walkway')) return 'site_improvements';
+  if (desc.includes('landscape') || desc.includes('garden') || desc.includes('plant') || desc.includes('lawn') || desc.includes('irrigation')) return 'landscaping';
   if (desc.includes('foot') && (desc.includes('foundation') || desc.includes('concrete'))) return 'footings';
   if (desc.includes('foundation') && desc.includes('wall')) return 'foundation_walls';
   if (desc.includes('waterproof') || desc.includes('dampproof') || desc.includes('drain tile')) return 'waterproofing';
