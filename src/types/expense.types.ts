@@ -16,7 +16,12 @@ export interface Expense {
   projectId: string;
   phaseId?: string;
   phaseName?: string;
+  /** 
+   * @deprecated Use detailedCategoryId instead. 
+   * Simple category for basic expense type. 
+   */
   category: ExpenseCategory;
+  detailedCategoryId?: string;
   description: string;
   amount: number;
   date: Date | string;
