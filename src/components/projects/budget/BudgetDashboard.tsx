@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import {
   Box,
   Grid,
@@ -23,7 +23,14 @@ import {
   TableRow,
   Avatar,
   ToggleButtonGroup,
-  ToggleButton
+  ToggleButton,
+  FormControl,
+  InputLabel,
+  Select,
+  MenuItem,
+  TextField,
+  InputAdornment,
+  Alert
 } from '@mui/material';
 import {
   TrendingUp as TrendingUpIcon,
@@ -47,8 +54,13 @@ import {
   CheckCircle as CheckCircleIcon,
   Category as CategoryIcon,
   Person as PersonIcon,
-  Business as BusinessIcon
+  Business as BusinessIcon,
+  HelpOutline as HelpOutlineIcon,
+  PriorityHigh as PriorityHighIcon,
+  ReportProblem as ReportProblemIcon,
+  ThumbUp as ThumbUpIcon
 } from '@mui/icons-material';
+import { Timestamp } from 'firebase/firestore';
 
 import {
   ResponsiveContainer,
@@ -65,64 +77,137 @@ import {
   LineChart,
   Line,
   Area,
-  AreaChart
+  AreaChart,
+  ComposedChart,
+  ReferenceLine
 } from 'recharts';
 
 import { useProjectDetail } from '../../../contexts/ProjectDetailContext';
 import { formatCurrency, formatPercentage, formatDate } from '../../../utils/formatters';
-import { Project, ProjectPhase, Bid, Expense } from '../../../types';
-import BudgetAllocationTracker from './BudgetAllocationTracker';
+import { Project, ProjectPhase, Bid, Expense, BudgetProjection } from '../../../types';
+import BudgetAllocationTracker, { CONSTRUCTION_CATEGORIES } from './BudgetAllocationTracker';
 
-const BudgetDashboard: React.FC = () => {
+interface BudgetDashboardProps {
+  project?: Project | null;
+  phases?: ProjectPhase[];
+  expenses?: Expense[];
+  bids?: Bid[];
+  loading?: boolean;
+  error?: string;
+}
+
+// Add type definition for budget summary
+interface BudgetSummary {
+  totalBudget: number;
+  totalSpent: number;
+  remainingBudget: number;
+  projectedTotal: number;
+  projectedRemaining: number;
+  projectedPercentage: number;
+  pendingTotal: number;
+}
+
+const BudgetDashboard: React.FC<BudgetDashboardProps> = ({
+  project: propProject,
+  phases: propPhases,
+  expenses: propExpenses,
+  bids: propBids,
+  loading: propLoading,
+  error: propError
+}) => {
   const theme = useTheme();
-  const { project, phases, bids, expenses, loading, error } = useProjectDetail();
-  const [expenseGroupBy, setExpenseGroupBy] = useState<'category'|'contractor'>('category');
+  // Use either props or context
+  const contextData = useProjectDetail();
+  
+  // Use props if provided, otherwise use context
+  const project = propProject ?? contextData.project;
+  const phases = propPhases ?? contextData.phases;
+  const expenses = propExpenses ?? contextData.expenses;
+  const bids = propBids ?? contextData.bids;
+  const loading = propLoading ?? contextData.loading;
+  const error = propError ?? contextData.error;
+  
+  const [expenseGroupBy, setExpenseGroupBy] = useState<'category' | 'contractor'>('category');
+  // Add state for projections
+  const [projections, setProjections] = useState<BudgetProjection[]>(project?.projections || []);
+  const [projectionTotal, setProjectionTotal] = useState<number>(0);
+  
+  // Effect to load projections from project data
+  useEffect(() => {
+    if (project?.projections) {
+      // Ensure createdAt is a Date object
+      const loadedProjections = project.projections.map(p => ({
+        ...p,
+        createdAt: p.createdAt instanceof Timestamp ? p.createdAt.toDate() : new Date(p.createdAt) 
+      }));
+      setProjections(loadedProjections);
+      
+      // Calculate total projected amount
+      const total = loadedProjections.reduce((sum, p) => sum + p.amount, 0);
+      setProjectionTotal(total);
+    } else {
+      setProjections([]);
+      setProjectionTotal(0);
+    }
+  }, [project?.projections]);
+  
+  // Handle adding new projections
+  const handleAddProjection = (projection: BudgetProjection) => {
+    setProjections(prev => [...prev, projection]);
+    setProjectionTotal(prev => prev + projection.amount);
+  };
 
-  // Calculate budget summary data
-  const budgetSummary = useMemo(() => {
-    if (!project || !phases || !expenses) {
-      return {
-        totalBudget: 0,
-        totalAllocated: 0,
-        totalSpent: 0,
-        totalCommitted: 0,
-        totalProjected: 0,
-        remaining: 0,
-        variance: 0,
-        percentSpent: 0
+  // Update budget summary to include projections
+  const budgetSummary = useMemo<BudgetSummary>(() => {
+    if (!project) {
+      return { 
+        totalBudget: 0, 
+        totalSpent: 0, 
+        remainingBudget: 0, 
+        projectedTotal: 0, 
+        projectedRemaining: 0,
+        projectedPercentage: 0,
+        pendingTotal: 0
       };
     }
 
-    // Sum up phase budgets to get total allocated budget
-    const totalAllocated = phases.reduce((sum, phase) => sum + (phase.budget || 0), 0);
-    
-    // Sum up all expenses
-    const totalSpent = expenses.reduce((sum, exp) => sum + exp.amount, 0);
-    
-    // Sum up accepted bids
-    const totalCommitted = bids
-      .filter(bid => bid.status === 'accepted')
-      .reduce((sum, bid) => sum + bid.totalAmount, 0);
-    
-    // Projected total combines spent and committed amounts
-    const totalProjected = totalSpent + (totalCommitted - totalSpent > 0 ? totalCommitted - totalSpent : 0);
-    
-    // Get total budget value
     const totalBudget = typeof project.budget === 'number' 
       ? project.budget 
-      : project.budget?.total || 0;
+      : project.budget.total;
+    
+    const totalSpent = expenses
+      .filter(expense => expense.status === 'paid' || expense.status === 'approved')
+      .reduce((sum, expense) => sum + expense.amount, 0);
+    
+    // Calculate pending expenses (submitted but not approved/paid)
+    const pendingTotal = expenses
+      .filter(expense => expense.status === 'pending')
+      .reduce((sum, expense) => sum + expense.amount, 0);
+    
+    // Calculate remaining budget (without projections)
+    const remainingBudget = totalBudget - totalSpent;
+    
+    // Calculate projected total (remaining budget minus projections)
+    const projectedRemaining = remainingBudget - projectionTotal;
+    
+    // Avoid division by zero - use locally defined variables instead of self-reference
+    const spentPercentage = totalBudget > 0 
+      ? (totalSpent / totalBudget) * 100
+      : 0;
+    const projectedPercentage = totalBudget > 0
+      ? ((totalSpent + projectionTotal + pendingTotal) / totalBudget) * 100
+      : 0;
     
     return {
       totalBudget,
-      totalAllocated,
       totalSpent,
-      totalCommitted,
-      totalProjected,
-      remaining: totalBudget - totalSpent,
-      variance: totalBudget - totalProjected,
-      percentSpent: (totalSpent / totalBudget) * 100
+      remainingBudget,
+      projectedTotal: projectionTotal,
+      projectedRemaining,
+      projectedPercentage,
+      pendingTotal
     };
-  }, [project, phases, expenses, bids]);
+  }, [project, expenses, projectionTotal]);
 
   // Group expenses by category
   const expensesByCategory = useMemo(() => {
@@ -231,7 +316,7 @@ const BudgetDashboard: React.FC = () => {
         budget: phase.budget || 0,
         spent: actualCost,
         remaining: (phase.budget || 0) - actualCost,
-        percentUsed: phase.budget ? (actualCost / phase.budget) * 100 : 0,
+        percentUsed: phase.budget && phase.budget > 0 ? (actualCost / phase.budget) * 100 : 0,
         color: colors[index % colors.length]
       };
     }).sort((a, b) => b.budget - a.budget); // Sort by budget size, largest first
@@ -266,38 +351,148 @@ const BudgetDashboard: React.FC = () => {
     });
     
     // Convert to array and sort by date
-    return Object.values(monthlyData)
+    const monthData = Object.values(monthlyData)
       .sort((a, b) => a.month.localeCompare(b.month))
       .map((item, index, arr) => ({
         ...item,
         cumulative: arr.slice(0, index + 1).reduce((sum, curr) => sum + curr.spent, 0)
       }));
-  }, [expenses]);
 
-  // Calculate budget health status
-  const budgetHealth = useMemo(() => {
-    if (budgetSummary.variance < 0) {
-      // Over budget
-      const percentOver = (Math.abs(budgetSummary.variance) / budgetSummary.totalBudget) * 100;
+    // Add projected expenses to future months
+    if (projections.length > 0) {
+      // Group projections by category
+      const projectionsByCategory = projections.reduce((acc, proj) => {
+        if (!acc[proj.categoryId]) {
+          acc[proj.categoryId] = 0;
+        }
+        acc[proj.categoryId] += proj.amount;
+        return acc;
+      }, {} as Record<string, number>);
       
-      if (percentOver > 20) {
-        return { status: 'Critical', color: theme.palette.error.dark, icon: <WarningIcon /> };
-      } else if (percentOver > 10) {
-        return { status: 'At Risk', color: theme.palette.error.main, icon: <WarningIcon /> };  
-      } else {
-        return { status: 'Caution', color: theme.palette.warning.main, icon: <FlagIcon /> };
+      // Calculate total projection amount
+      const totalProjectionAmount = Object.values(projectionsByCategory).reduce((sum, amount) => sum + amount, 0);
+      
+      // Get the current month and next three months
+      const currentDate = new Date();
+      const futureMonths = [];
+      
+      // Add the current month if not already in trends
+      const currentMonthStr = `${currentDate.getFullYear()}-${String(currentDate.getMonth() + 1).padStart(2, '0')}`;
+      const currentMonthExists = monthData.some(m => m.month.startsWith(currentMonthStr));
+      
+      if (!currentMonthExists) {
+        futureMonths.push({
+          month: currentMonthStr,
+          date: new Date(currentDate.getFullYear(), currentDate.getMonth(), 1)
+        });
       }
-    } else if (budgetSummary.percentSpent > 90) {
-      // Nearly depleted
-      return { status: 'Near Limit', color: theme.palette.warning.main, icon: <FlagIcon /> };
-    } else if (budgetSummary.percentSpent < 70 && (budgetSummary.totalProjected || 0) < budgetSummary.totalBudget) {
-      // Healthy
-      return { status: 'Healthy', color: theme.palette.success.main, icon: <CheckCircleIcon /> };
-    } else {
-      // On track
-      return { status: 'On Track', color: theme.palette.info.main, icon: <TimelineIcon /> };
+      
+      // Add next three months
+      for (let i = 1; i <= 3; i++) {
+        const futureDate = new Date(currentDate.getFullYear(), currentDate.getMonth() + i, 1);
+        const monthStr = `${futureDate.getFullYear()}-${String(futureDate.getMonth() + 1).padStart(2, '0')}`;
+        futureMonths.push({
+          month: monthStr,
+          date: futureDate
+        });
+      }
+      
+      // Distribute projections over future months
+      const projectionPerMonth = totalProjectionAmount / (futureMonths.length || 1);
+      
+      // Add or update trend data with projections
+      futureMonths.forEach((futureMonth, index) => {
+        const existingIndex = monthData.findIndex(m => m.month === futureMonth.month);
+        
+        if (existingIndex >= 0) {
+          // Update existing month
+          monthData[existingIndex].projected = (monthData[existingIndex].projected || 0) + 
+            projectionPerMonth * (index === 0 ? 0.2 : index === 1 ? 0.3 : index === 2 ? 0.3 : 0.2);
+        } else {
+          // Add new month with projection
+          monthData.push({
+            month: futureMonth.month,
+            spent: 0,
+            cumulative: monthData.length > 0 ? monthData[monthData.length - 1].cumulative : 0,
+            projected: projectionPerMonth * (index === 0 ? 0.2 : index === 1 ? 0.3 : index === 2 ? 0.3 : 0.2)
+          });
+        }
+      });
+      
+      // Sort to ensure chronological order
+      monthData.sort((a, b) => a.month.localeCompare(b.month));
     }
-  }, [budgetSummary, theme]);
+    
+    return monthData;
+  }, [expenses, projections]);
+
+  // Update budget health calculation to include projections
+  const budgetHealth = useMemo(() => {
+    if (!project) {
+      return {
+        status: 'Unknown',
+        color: theme.palette.grey[500],
+        icon: <HelpOutlineIcon />
+      };
+    }
+    
+    const { totalBudget, totalSpent, projectedTotal } = budgetSummary;
+    
+    // Avoid division by zero
+    if (totalBudget === 0) {
+      return {
+        status: 'No Budget',
+        color: theme.palette.grey[500],
+        icon: <HelpOutlineIcon />
+      };
+    }
+    
+    const spentPercentage = totalBudget > 0 
+      ? (totalSpent / totalBudget) * 100
+      : 0;
+    const projectedPercentage = totalBudget > 0
+      ? ((totalSpent + projectedTotal) / totalBudget) * 100
+      : 0;
+    
+    // Determine health status based on both actual and projected spending
+    if (projectedPercentage > 120) {
+      return {
+        status: 'Critical',
+        color: theme.palette.error.dark,
+        icon: <PriorityHighIcon />
+      };
+    } else if (projectedPercentage > 110) {
+      return {
+        status: 'At Risk',
+        color: theme.palette.error.main,
+        icon: <WarningIcon />
+      };
+    } else if (projectedPercentage > 100) {
+      return {
+        status: 'Caution',
+        color: theme.palette.warning.main,
+        icon: <ReportProblemIcon />
+      };
+    } else if (projectedPercentage > 90) {
+      return {
+        status: 'Near Limit',
+        color: theme.palette.warning.light,
+        icon: <InfoIcon />
+      };
+    } else if (projectedPercentage > 60) {
+      return {
+        status: 'On Track',
+        color: theme.palette.success.main,
+        icon: <CheckCircleIcon />
+      };
+    } else {
+      return {
+        status: 'Healthy',
+        color: theme.palette.success.dark,
+        icon: <ThumbUpIcon />
+      };
+    }
+  }, [budgetSummary, project, theme.palette]);
 
   // Top expense items
   const topExpenses = useMemo(() => {
@@ -342,81 +537,412 @@ const BudgetDashboard: React.FC = () => {
       
       {/* Budget Overview Cards */}
       <Grid container spacing={3} sx={{ mb: 4 }}>
-        <Grid item xs={12} sm={6} md={3}>
-          <Paper elevation={0} sx={{ p: 2, borderRadius: 2, bgcolor: alpha(theme.palette.background.paper, 0.7) }}>
-            <Typography variant="subtitle2" color="text.secondary">Total Budget</Typography>
-            <Typography variant="h4" fontWeight="bold" sx={{ mt: 1 }}>
-              {formatCurrency(budgetSummary.totalBudget)}
-            </Typography>
-          </Paper>
-        </Grid>
-        
-        <Grid item xs={12} sm={6} md={3}>
-          <Paper elevation={0} sx={{ p: 2, borderRadius: 2, bgcolor: alpha(theme.palette.background.paper, 0.7) }}>
-            <Typography variant="subtitle2" color="text.secondary">Spent to Date</Typography>
-            <Typography variant="h4" fontWeight="bold" sx={{ mt: 1, color: theme.palette.primary.main }}>
-              {formatCurrency(budgetSummary.totalSpent)}
-            </Typography>
-            <Box sx={{ display: 'flex', alignItems: 'center', mt: 1 }}>
-              <Typography variant="body2" color="text.secondary">
-                {formatPercentage(budgetSummary.percentSpent/100)} of budget used
-              </Typography>
-            </Box>
-          </Paper>
-        </Grid>
-        
-        <Grid item xs={12} sm={6} md={3}>
-          <Paper elevation={0} sx={{ p: 2, borderRadius: 2, bgcolor: alpha(theme.palette.background.paper, 0.7) }}>
-            <Typography variant="subtitle2" color="text.secondary">Remaining Budget</Typography>
-            <Typography 
-              variant="h4" 
-              fontWeight="bold" 
-              sx={{ 
-                mt: 1, 
-                color: budgetSummary.remaining >= 0 ? theme.palette.success.main : theme.palette.error.main 
-              }}
-            >
-              {formatCurrency(budgetSummary.remaining)}
-            </Typography>
-            <Box sx={{ display: 'flex', alignItems: 'center', mt: 1 }}>
-              <Typography variant="body2" color="text.secondary">
-                {budgetSummary.remaining >= 0 ? 'Available' : 'Overrun'}
-              </Typography>
-            </Box>
-          </Paper>
-        </Grid>
-        
-        <Grid item xs={12} sm={6} md={3}>
-          <Paper elevation={0} sx={{ p: 2, borderRadius: 2, bgcolor: alpha(theme.palette.background.paper, 0.7) }}>
-            <Typography variant="subtitle2" color="text.secondary">Projected Total</Typography>
-            <Typography 
-              variant="h4" 
-              fontWeight="bold" 
-              sx={{ 
-                mt: 1,
-                color: budgetSummary.variance >= 0 ? theme.palette.success.main : theme.palette.error.main 
-              }}
-            >
-              {formatCurrency(budgetSummary.totalProjected || 0)}
-            </Typography>
-            <Box sx={{ display: 'flex', alignItems: 'center', mt: 1 }}>
-              {budgetSummary.variance >= 0 ? (
-                <Box sx={{ display: 'flex', alignItems: 'center', color: theme.palette.success.main }}>
-                  <ArrowDownwardIcon fontSize="small" sx={{ mr: 0.5 }} />
-                  <Typography variant="body2" fontWeight="medium" color="inherit">
-                    {formatCurrency(budgetSummary.variance)} under budget
+        {/* First Row - Key Budget Figures */}
+        <Grid item xs={12}>
+          <Grid container spacing={3}>
+            <Grid item xs={12} sm={6} md={3}>
+              <Paper elevation={0} sx={{ 
+                p: 2.5, 
+                borderRadius: 2, 
+                height: '100%',
+                bgcolor: alpha(theme.palette.background.paper, 0.7) 
+              }}>
+                <Typography variant="subtitle2" color="text.secondary">Total Budget</Typography>
+                <Typography variant="h4" fontWeight="bold" sx={{ mt: 1 }}>
+                  {formatCurrency(budgetSummary.totalBudget)}
+                </Typography>
+              </Paper>
+            </Grid>
+            
+            <Grid item xs={12} sm={6} md={3}>
+              <Paper elevation={0} sx={{ 
+                p: 2.5, 
+                borderRadius: 2, 
+                height: '100%',
+                bgcolor: alpha(theme.palette.background.paper, 0.7) 
+              }}>
+                <Typography variant="subtitle2" color="text.secondary">Spent to Date</Typography>
+                <Typography variant="h4" fontWeight="bold" sx={{ mt: 1, color: theme.palette.primary.main }}>
+                  {formatCurrency(budgetSummary.totalSpent)}
+                </Typography>
+                <Box sx={{ display: 'flex', alignItems: 'center', mt: 1 }}>
+                  <Typography variant="body2" color="text.secondary">
+                    {budgetSummary.totalBudget > 0 
+                      ? `${((budgetSummary.totalSpent / budgetSummary.totalBudget) * 100).toFixed(1)}% of budget used`
+                      : '0.0% of budget used'}
                   </Typography>
                 </Box>
-              ) : (
-                <Box sx={{ display: 'flex', alignItems: 'center', color: theme.palette.error.main }}>
-                  <ArrowUpwardIcon fontSize="small" sx={{ mr: 0.5 }} />
-                  <Typography variant="body2" fontWeight="medium" color="inherit">
-                    {formatCurrency(Math.abs(budgetSummary.variance))} over budget
+              </Paper>
+            </Grid>
+            
+            <Grid item xs={12} sm={6} md={3}>
+              <Paper elevation={0} sx={{ 
+                p: 2.5, 
+                borderRadius: 2, 
+                height: '100%',
+                bgcolor: alpha(theme.palette.background.paper, 0.7) 
+              }}>
+                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                  <Typography variant="subtitle2" color="text.secondary">Pending Expenses</Typography>
+                  <Tooltip 
+                    title="Expenses submitted but not yet approved/paid" 
+                    arrow
+                  >
+                    <InfoIcon fontSize="small" color="action" sx={{ fontSize: '0.9rem' }} />
+                  </Tooltip>
+                </Box>
+                <Typography variant="h4" fontWeight="bold" sx={{ mt: 1, color: theme.palette.warning.main }}>
+                  {formatCurrency(budgetSummary.pendingTotal)}
+                </Typography>
+                {budgetSummary.pendingTotal > 0 && (
+                  <Box sx={{ display: 'flex', alignItems: 'center', mt: 1 }}>
+                    <Typography variant="body2" color="text.secondary">
+                      {budgetSummary.totalBudget > 0 
+                        ? `${((budgetSummary.pendingTotal / budgetSummary.totalBudget) * 100).toFixed(1)}% of budget`
+                        : '0.0% of budget'}
+                    </Typography>
+                  </Box>
+                )}
+              </Paper>
+            </Grid>
+            
+            <Grid item xs={12} sm={6} md={3}>
+              <Paper elevation={0} sx={{ 
+                p: 2.5, 
+                borderRadius: 2, 
+                height: '100%',
+                bgcolor: alpha(theme.palette.background.paper, 0.7) 
+              }}>
+                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                  <Typography variant="subtitle2" color="text.secondary">Projected Costs</Typography>
+                  <Tooltip 
+                    title="Estimated future costs that haven't been recorded as expenses yet" 
+                    arrow
+                  >
+                    <InfoIcon fontSize="small" color="action" sx={{ fontSize: '0.9rem' }} />
+                  </Tooltip>
+                </Box>
+                <Typography variant="h4" fontWeight="bold" sx={{ mt: 1, color: theme.palette.info.main }}>
+                  {formatCurrency(budgetSummary.projectedTotal)}
+                </Typography>
+                {budgetSummary.projectedTotal > 0 && (
+                  <Box sx={{ display: 'flex', alignItems: 'center', mt: 1 }}>
+                    <Typography variant="body2" color="text.secondary">
+                      {budgetSummary.totalBudget > 0 
+                        ? `${((budgetSummary.projectedTotal / budgetSummary.totalBudget) * 100).toFixed(1)}% of budget`
+                        : '0.0% of budget'}
+                    </Typography>
+                  </Box>
+                )}
+              </Paper>
+            </Grid>
+          </Grid>
+        </Grid>
+        
+        {/* Second Row - Analysis Cards */}
+        <Grid item xs={12}>
+          <Grid container spacing={3}>
+            {/* Estimated Total Cost Card */}
+            <Grid item xs={12} sm={6}>
+              <Card 
+                elevation={0}
+                sx={{ 
+                  p: 2.5, 
+                  borderRadius: 2,
+                  height: '100%',
+                  boxShadow: `0 2px 12px ${alpha(theme.palette.primary.main, 0.08)}`,
+                  bgcolor: alpha(theme.palette.background.paper, 0.7)
+                }}
+              >
+                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                  <Typography variant="subtitle2" color="text.secondary">Estimated Total Cost</Typography>
+                  <Tooltip 
+                    title="Current + Pending + Projected expenses" 
+                    arrow
+                  >
+                    <InfoIcon fontSize="small" color="action" sx={{ fontSize: '0.9rem' }} />
+                  </Tooltip>
+                </Box>
+                <Box sx={{ display: 'flex', alignItems: 'flex-end', mt: 1 }}>
+                  <Typography variant="h4" fontWeight="bold" sx={{ 
+                    color: budgetSummary.totalSpent + budgetSummary.pendingTotal + budgetSummary.projectedTotal > budgetSummary.totalBudget 
+                      ? theme.palette.error.main 
+                      : theme.palette.success.main
+                  }}>
+                    {formatCurrency(budgetSummary.totalSpent + budgetSummary.pendingTotal + budgetSummary.projectedTotal)}
                   </Typography>
                 </Box>
-              )}
-            </Box>
-          </Paper>
+                
+                {/* Budget usage breakdown */}
+                <Box sx={{ mt: 2 }}>
+                  <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
+                    <Typography variant="caption" color="text.secondary">Budget Usage</Typography>
+                    <Typography variant="caption" fontWeight="medium" sx={{ 
+                      color: budgetSummary.projectedPercentage > 100 ? theme.palette.error.main : theme.palette.text.secondary 
+                    }}>
+                      {budgetSummary.totalBudget > 0
+                        ? `${((budgetSummary.totalSpent + budgetSummary.pendingTotal + budgetSummary.projectedTotal) / budgetSummary.totalBudget * 100).toFixed(1)}%`
+                        : '0.0%'}
+                    </Typography>
+                  </Box>
+                  <LinearProgress 
+                    variant="determinate" 
+                    value={Math.min(budgetSummary.projectedPercentage, 100)} 
+                    sx={{ 
+                      height: 8, 
+                      borderRadius: 1,
+                      bgcolor: alpha(theme.palette.grey[500], 0.1),
+                      '& .MuiLinearProgress-bar': {
+                        bgcolor: budgetSummary.projectedPercentage > 100
+                          ? theme.palette.error.main
+                          : budgetSummary.projectedPercentage > 90
+                            ? theme.palette.warning.main
+                            : theme.palette.success.main
+                      }
+                    }}
+                  />
+                </Box>
+                
+                {/* Detailed breakdown */}
+                <Box sx={{ mt: 3 }}>
+                  <Typography variant="body2" fontWeight="medium" sx={{ mb: 1.5 }}>Detailed Breakdown:</Typography>
+                  
+                  <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
+                    <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                      <Box 
+                        sx={{ 
+                          width: 10, 
+                          height: 10, 
+                          borderRadius: '50%', 
+                          bgcolor: theme.palette.primary.main,
+                          mr: 1 
+                        }} 
+                      />
+                      <Typography variant="body2" color="text.secondary">
+                        Current Expenses
+                      </Typography>
+                    </Box>
+                    <Typography variant="body2">
+                      {formatCurrency(budgetSummary.totalSpent)}
+                    </Typography>
+                  </Box>
+                  
+                  <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
+                    <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                      <Box 
+                        sx={{ 
+                          width: 10, 
+                          height: 10, 
+                          borderRadius: '50%', 
+                          bgcolor: theme.palette.warning.main,
+                          mr: 1 
+                        }} 
+                      />
+                      <Typography variant="body2" color="text.secondary">
+                        Pending Expenses
+                      </Typography>
+                    </Box>
+                    <Typography variant="body2">
+                      {formatCurrency(budgetSummary.pendingTotal)}
+                    </Typography>
+                  </Box>
+                  
+                  <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
+                    <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                      <Box 
+                        sx={{ 
+                          width: 10, 
+                          height: 10, 
+                          borderRadius: '50%', 
+                          bgcolor: theme.palette.info.main,
+                          mr: 1 
+                        }} 
+                      />
+                      <Typography variant="body2" color="text.secondary">
+                        Projected Costs
+                      </Typography>
+                    </Box>
+                    <Typography variant="body2">
+                      {formatCurrency(budgetSummary.projectedTotal)}
+                    </Typography>
+                  </Box>
+                  
+                  <Divider sx={{ my: 1 }} />
+                  
+                  <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                    <Typography variant="subtitle2">Total</Typography>
+                    <Typography variant="subtitle2">
+                      {formatCurrency(budgetSummary.totalSpent + budgetSummary.pendingTotal + budgetSummary.projectedTotal)}
+                    </Typography>
+                  </Box>
+                </Box>
+              </Card>
+            </Grid>
+            
+            {/* Budget Status Card */}
+            <Grid item xs={12} sm={6}>
+              <Card 
+                elevation={0}
+                sx={{ 
+                  p: 2.5, 
+                  borderRadius: 2,
+                  height: '100%',
+                  boxShadow: `0 2px 12px ${alpha(theme.palette.primary.main, 0.08)}`,
+                  bgcolor: alpha(theme.palette.background.paper, 0.7)
+                }}
+              >
+                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                  <Typography variant="subtitle2" color="text.secondary">Overall Budget Status</Typography>
+                </Box>
+                <Box sx={{ display: 'flex', alignItems: 'center', mt: 1, mb: 2 }}>
+                  <Avatar 
+                    sx={{ 
+                      bgcolor: alpha(budgetHealth.color, 0.1), 
+                      color: budgetHealth.color,
+                      width: 36, 
+                      height: 36,
+                      mr: 2
+                    }}
+                  >
+                    {budgetHealth.icon}
+                  </Avatar>
+                  <Box>
+                    <Typography variant="h6" sx={{ color: budgetHealth.color, fontWeight: 'bold', lineHeight: 1.2 }}>
+                      {budgetHealth.status}
+                    </Typography>
+                    <Typography variant="body2" color="text.secondary">
+                      {budgetSummary.totalBudget > 0
+                        ? budgetSummary.totalSpent + budgetSummary.pendingTotal + budgetSummary.projectedTotal <= budgetSummary.totalBudget
+                          ? `Under budget by ${formatCurrency(budgetSummary.totalBudget - (budgetSummary.totalSpent + budgetSummary.pendingTotal + budgetSummary.projectedTotal))}`
+                          : `Over budget by ${formatCurrency((budgetSummary.totalSpent + budgetSummary.pendingTotal + budgetSummary.projectedTotal) - budgetSummary.totalBudget)}`
+                        : 'No budget set'}
+                    </Typography>
+                  </Box>
+                </Box>
+                
+                {/* Simple budget meter */}
+                <Box sx={{ mb: 3, px: 2, py: 2, bgcolor: alpha(theme.palette.background.default, 0.4), borderRadius: 1 }}>
+                  <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
+                    <Typography variant="caption" color="text.secondary">Budget Spent + Pending + Projected</Typography>
+                    <Typography variant="caption" fontWeight="medium" sx={{ 
+                      color: budgetSummary.projectedPercentage > 100 ? theme.palette.error.main : theme.palette.text.secondary 
+                    }}>
+                      {budgetSummary.totalBudget > 0
+                        ? `${((budgetSummary.totalSpent + budgetSummary.pendingTotal + budgetSummary.projectedTotal) / budgetSummary.totalBudget * 100).toFixed(1)}%`
+                        : '0.0%'}
+                    </Typography>
+                  </Box>
+                
+                  {/* Stacked progress bar */}
+                  <Box sx={{ position: 'relative', height: 12, bgcolor: alpha(theme.palette.grey[300], 0.3), borderRadius: 2, overflow: 'hidden' }}>
+                    {/* Current expenses */}
+                    <Box 
+                      sx={{ 
+                        position: 'absolute',
+                        left: 0,
+                        top: 0,
+                        height: '100%',
+                        width: `${budgetSummary.totalBudget > 0 ? (budgetSummary.totalSpent / budgetSummary.totalBudget) * 100 : 0}%`,
+                        bgcolor: theme.palette.primary.main,
+                        borderRadius: 2
+                      }}
+                    />
+                    
+                    {/* Pending expenses */}
+                    <Box 
+                      sx={{ 
+                        position: 'absolute',
+                        left: `${budgetSummary.totalBudget > 0 ? (budgetSummary.totalSpent / budgetSummary.totalBudget) * 100 : 0}%`,
+                        top: 0,
+                        height: '100%',
+                        width: `${budgetSummary.totalBudget > 0 ? (budgetSummary.pendingTotal / budgetSummary.totalBudget) * 100 : 0}%`,
+                        bgcolor: theme.palette.warning.main,
+                        borderTopLeftRadius: 0,
+                        borderBottomLeftRadius: 0
+                      }}
+                    />
+                    
+                    {/* Projected expenses */}
+                    <Box 
+                      sx={{ 
+                        position: 'absolute',
+                        left: `${budgetSummary.totalBudget > 0 ? ((budgetSummary.totalSpent + budgetSummary.pendingTotal) / budgetSummary.totalBudget) * 100 : 0}%`,
+                        top: 0,
+                        height: '100%',
+                        width: `${budgetSummary.totalBudget > 0 ? (budgetSummary.projectedTotal / budgetSummary.totalBudget) * 100 : 0}%`,
+                        bgcolor: theme.palette.info.main,
+                        borderTopLeftRadius: 0,
+                        borderBottomLeftRadius: 0,
+                        backgroundImage: `repeating-linear-gradient(45deg, transparent, transparent 5px, ${alpha(theme.palette.info.dark, 0.5)} 5px, ${alpha(theme.palette.info.dark, 0.5)} 10px)`
+                      }}
+                    />
+                  </Box>
+                    
+                  {/* Legend for stacked bar */}
+                  <Box sx={{ display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', mt: 1.5 }}>
+                    <Box sx={{ display: 'flex', alignItems: 'center', mr: 2, mb: 0.5 }}>
+                      <Box sx={{ width: 10, height: 10, borderRadius: '50%', bgcolor: theme.palette.primary.main, mr: 0.5 }} />
+                      <Typography variant="caption">Current</Typography>
+                    </Box>
+                    <Box sx={{ display: 'flex', alignItems: 'center', mr: 2, mb: 0.5 }}>
+                      <Box sx={{ width: 10, height: 10, borderRadius: '50%', bgcolor: theme.palette.warning.main, mr: 0.5 }} />
+                      <Typography variant="caption">Pending</Typography>
+                    </Box>
+                    <Box sx={{ display: 'flex', alignItems: 'center', mb: 0.5 }}>
+                      <Box sx={{ width: 10, height: 10, borderRadius: '50%', bgcolor: theme.palette.info.main, mr: 0.5 }} />
+                      <Typography variant="caption">Projected</Typography>
+                    </Box>
+                  </Box>
+                </Box>
+                
+                {/* Recommendations section */}
+                <Typography variant="subtitle2" sx={{ mb: 1 }}>Key Recommendations:</Typography>
+                <Box sx={{ pl: 1.5 }}>
+                  {budgetSummary.projectedTotal > 0 && budgetHealth.status !== 'Healthy' && budgetHealth.status !== 'On Track' && (
+                    <Box sx={{ display: 'flex', mb: 1 }}>
+                      <Typography variant="body2" component="div" sx={{ display: 'flex', alignItems: 'flex-start' }}>
+                        <Box component="span" sx={{ mr: 1, mt: 0.5, color: theme.palette.info.main }}>•</Box>
+                        <Box component="span">Review projected costs of {formatCurrency(budgetSummary.projectedTotal)}</Box>
+                      </Typography>
+                    </Box>
+                  )}
+                  
+                  {budgetSummary.pendingTotal > 0 && (budgetHealth.status === 'At Risk' || budgetHealth.status === 'Critical') && (
+                    <Box sx={{ display: 'flex', mb: 1 }}>
+                      <Typography variant="body2" component="div" sx={{ display: 'flex', alignItems: 'flex-start' }}>
+                        <Box component="span" sx={{ mr: 1, mt: 0.5, color: theme.palette.warning.main }}>•</Box>
+                        <Box component="span">Review pending expenses of {formatCurrency(budgetSummary.pendingTotal)}</Box>
+                      </Typography>
+                    </Box>
+                  )}
+                  
+                  <Box sx={{ display: 'flex', mb: 1 }}>
+                    <Typography variant="body2" component="div" sx={{ display: 'flex', alignItems: 'flex-start' }}>
+                      <Box component="span" sx={{ mr: 1, mt: 0.5 }}>•</Box>
+                      <Box component="span">
+                        {budgetHealth.status === 'Healthy' && 'Document cost management practices'}
+                        {budgetHealth.status === 'On Track' && 'Monitor phases with higher spending'}
+                        {(budgetHealth.status === 'Near Limit' || budgetHealth.status === 'Caution') && 'Identify cost-saving opportunities'}
+                        {(budgetHealth.status === 'At Risk' || budgetHealth.status === 'Critical') && 'Conduct immediate financial review'}
+                      </Box>
+                    </Typography>
+                  </Box>
+                  
+                  <Box sx={{ display: 'flex' }}>
+                    <Typography variant="body2" component="div" sx={{ display: 'flex', alignItems: 'flex-start' }}>
+                      <Box component="span" sx={{ mr: 1, mt: 0.5 }}>•</Box>
+                      <Box component="span">
+                        {budgetHealth.status === 'Healthy' && 'Consider allocating surplus to enhance quality'}
+                        {budgetHealth.status === 'On Track' && 'Update projections based on actual spending'}
+                        {(budgetHealth.status === 'Near Limit' || budgetHealth.status === 'Caution') && 'Review all pending expenses for necessity'}
+                        {(budgetHealth.status === 'At Risk' || budgetHealth.status === 'Critical') && 'Consider budget increase or scope reduction'}
+                      </Box>
+                    </Typography>
+                  </Box>
+                </Box>
+              </Card>
+            </Grid>
+          </Grid>
         </Grid>
       </Grid>
       
@@ -572,7 +1098,7 @@ const BudgetDashboard: React.FC = () => {
                         outerRadius={90}
                         paddingAngle={1}
                         dataKey="value"
-                        label={({ name, percent }) => `${name} (${(percent * 100).toFixed(0)}%)`}
+                        label={({ name, percent }) => `${name} (${percent ? (percent * 100).toFixed(0) : '0'}%)`}
                       >
                         {currentExpenseGroupingData.map((entry, index) => (
                           <Cell key={`cell-${index}`} fill={entry.color} />
@@ -692,14 +1218,26 @@ const BudgetDashboard: React.FC = () => {
               title="Budget & Expense Trends"
               titleTypographyProps={{ variant: 'h6', fontWeight: 'bold' }}
               action={
-                <Button 
-                  variant="outlined" 
-                  startIcon={<AddIcon />}
-                  size="small"
-                  sx={{ mr: 1 }}
-                >
-                  Add Expense
-                </Button>
+                <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                  {budgetSummary.projectedTotal > 0 && (
+                    <Chip 
+                      icon={<TimelineIcon fontSize="small" />} 
+                      label="Includes Projections" 
+                      size="small" 
+                      color="info"
+                      variant="outlined"
+                      sx={{ mr: 2 }}
+                    />
+                  )}
+                  <Button 
+                    variant="outlined" 
+                    startIcon={<AddIcon />}
+                    size="small"
+                    sx={{ mr: 1 }}
+                  >
+                    Add Expense
+                  </Button>
+                </Box>
               }
             />
             <Divider />
@@ -707,7 +1245,7 @@ const BudgetDashboard: React.FC = () => {
               {monthlyTrends.length > 0 ? (
                 <Box sx={{ height: 350 }}>
                   <ResponsiveContainer width="100%" height="100%">
-                    <AreaChart
+                    <ComposedChart
                       data={monthlyTrends}
                       margin={{ top: 20, right: 30, left: 20, bottom: 20 }}
                     >
@@ -715,12 +1253,25 @@ const BudgetDashboard: React.FC = () => {
                       <XAxis dataKey="month" />
                       <YAxis tickFormatter={(value) => `$${value/1000}k`} />
                       <RechartsTooltip 
-                        formatter={(value: number) => [formatCurrency(value), 'Amount']}
+                        formatter={(value: number, name: string) => {
+                          // Format the value and customize the series name
+                          return [
+                            formatCurrency(value), 
+                            name === 'projected' ? 'Projected Expenses' : 
+                            name === 'spent' ? 'Monthly Expenses' : 
+                            name === 'cumulative' ? 'Cumulative Expenses' : name
+                          ];
+                        }}
                         contentStyle={{
                           backgroundColor: alpha(theme.palette.background.paper, 0.9),
                           border: 'none',
                           borderRadius: 8,
                           boxShadow: '0 4px 20px rgba(0,0,0,0.1)'
+                        }}
+                        labelFormatter={(label) => {
+                          // Convert the month string to a more readable format
+                          const [year, month] = label.split('-');
+                          return `${new Date(parseInt(year), parseInt(month) - 1).toLocaleString('default', { month: 'long' })} ${year}`;
                         }}
                       />
                       <Legend />
@@ -740,15 +1291,59 @@ const BudgetDashboard: React.FC = () => {
                         stroke={theme.palette.secondary.main} 
                         activeDot={{ r: 6 }}
                       />
-                      <Line 
-                        type="monotone" 
-                        dataKey="projected" 
-                        name="Projected Expense" 
-                        stroke={theme.palette.warning.main} 
-                        strokeDasharray="5 5"
-                        activeDot={{ r: 6 }}
+                      
+                      {/* Modified projection display */}
+                      <defs>
+                        <linearGradient id="projectionGradient" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="5%" stopColor={theme.palette.info.main} stopOpacity={0.2} />
+                          <stop offset="95%" stopColor={theme.palette.info.main} stopOpacity={0} />
+                        </linearGradient>
+                        <pattern id="projectionPattern" patternUnits="userSpaceOnUse" width="8" height="8" patternTransform="rotate(45)">
+                          <line x1="0" y1="0" x2="0" y2="8" stroke={theme.palette.info.main} strokeWidth="1" />
+                        </pattern>
+                      </defs>
+                      
+                      {/* Only show projections if they exist */}
+                      {monthlyTrends.some(item => item.projected > 0) && (
+                        <>
+                          {/* Add a light area under the projection line for visibility */}
+                          <Area 
+                            type="monotone" 
+                            dataKey="projected" 
+                            name="Projected Expenses" 
+                            fill="url(#projectionGradient)"
+                            stroke="none"
+                            activeDot={false}
+                            isAnimationActive={false}
+                            fillOpacity={0.3}
+                          />
+                          {/* Add the dashed line on top */}
+                          <Line 
+                            type="monotone" 
+                            dataKey="projected" 
+                            name="Projected Expenses" 
+                            stroke={theme.palette.info.main} 
+                            strokeWidth={2}
+                            strokeDasharray="5 5"
+                            activeDot={{ r: 6, stroke: theme.palette.info.dark, strokeWidth: 1 }}
+                            dot={{ stroke: theme.palette.info.main, fill: theme.palette.background.paper, r: 3 }}
+                          />
+                        </>
+                      )}
+                      
+                      {/* Add a reference line for the total budget */}
+                      <ReferenceLine 
+                        y={budgetSummary.totalBudget} 
+                        stroke={theme.palette.error.main}
+                        strokeDasharray="3 3"
+                        label={{ 
+                          value: 'Total Budget', 
+                          position: 'right',
+                          fill: theme.palette.error.main,
+                          fontSize: 12
+                        }}
                       />
-                    </AreaChart>
+                    </ComposedChart>
                   </ResponsiveContainer>
                 </Box>
               ) : (
@@ -852,14 +1447,58 @@ const BudgetDashboard: React.FC = () => {
                 {budgetHealth.status}
               </Typography>
               
+              {/* Add projection indicator if we have projections */}
+              {budgetSummary.projectedTotal > 0 && (
+                <Box sx={{ 
+                  mb: 3, 
+                  p: 2, 
+                  borderRadius: 1, 
+                  bgcolor: alpha(theme.palette.info.light, 0.1),
+                  border: `1px dashed ${theme.palette.info.main}`
+                }}>
+                  <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
+                    <Typography variant="caption" color="text.secondary">Current</Typography>
+                    <Typography variant="caption" color="text.secondary">
+                      {budgetSummary.totalBudget > 0 ? ((budgetSummary.totalSpent / budgetSummary.totalBudget) * 100).toFixed(1) : '0.0'}%
+                    </Typography>
+                  </Box>
+                  <LinearProgress 
+                    variant="determinate" 
+                    value={budgetSummary.totalBudget > 0 ? (budgetSummary.totalSpent / budgetSummary.totalBudget) * 100 : 0} 
+                    sx={{ height: 8, borderRadius: 1 }}
+                  />
+                  <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
+                    <Typography variant="caption" color="text.secondary">With Projections</Typography>
+                    <Typography variant="caption" color="text.secondary">
+                      {budgetSummary.totalBudget > 0
+                        ? (((budgetSummary.totalSpent + budgetSummary.projectedTotal) / budgetSummary.totalBudget) * 100).toFixed(1)
+                        : '0.0'}%
+                    </Typography>
+                  </Box>
+                  <LinearProgress 
+                    variant="determinate" 
+                    value={budgetSummary.totalBudget > 0
+                      ? ((budgetSummary.totalSpent + budgetSummary.projectedTotal) / budgetSummary.totalBudget) * 100
+                      : 0} 
+                    sx={{ 
+                      height: 8, 
+                      borderRadius: 1,
+                      '& .MuiLinearProgress-bar': {
+                        backgroundImage: `repeating-linear-gradient(45deg, ${theme.palette.info.main} 0, ${theme.palette.info.main} 8px, ${alpha(theme.palette.info.main, 0.8)} 8px, ${alpha(theme.palette.info.main, 0.8)} 16px)`
+                      }
+                    }}
+                  />
+                </Box>
+              )}
+              
               <Box sx={{ mb: 3 }}>
                 <Typography variant="body1" paragraph>
-                  {budgetHealth.status === 'Healthy' && 'Your project is under budget and on track. Current spending patterns indicate you may finish below the allocated budget.'}
-                  {budgetHealth.status === 'On Track' && 'Your project is progressing as expected financially. Continue monitoring expenses to maintain budget compliance.'}
-                  {budgetHealth.status === 'Near Limit' && 'Your project has utilized most of the allocated budget. Carefully manage remaining funds to prevent overruns.'}
-                  {budgetHealth.status === 'Caution' && 'Your project expenses are trending higher than expected. Review upcoming expenses and identify savings opportunities.'}
+                  {budgetHealth.status === 'Healthy' && 'Your project is well under budget and on track. Current spending patterns and projections indicate you may finish below the allocated budget.'}
+                  {budgetHealth.status === 'On Track' && 'Your project is progressing as expected financially. Continue monitoring expenses and upcoming projected costs to maintain budget compliance.'}
+                  {budgetHealth.status === 'Near Limit' && 'Your project has utilized most of the allocated budget. Carefully manage remaining funds and review projections to prevent overruns.'}
+                  {budgetHealth.status === 'Caution' && 'Your project expenses plus projected costs are trending higher than expected. Review upcoming expenses and identify savings opportunities.'}
                   {budgetHealth.status === 'At Risk' && 'Your project is projected to exceed budget by more than 10%. Immediate cost control measures are recommended.'}
-                  {budgetHealth.status === 'Critical' && 'Your project is significantly over budget. Comprehensive financial review and corrective actions are required urgently.'}
+                  {budgetHealth.status === 'Critical' && 'Your project is significantly over budget or projected to greatly exceed budget. Comprehensive financial review and corrective actions are required urgently.'}
                 </Typography>
               </Box>
               
@@ -868,6 +1507,14 @@ const BudgetDashboard: React.FC = () => {
               </Typography>
               
               <Box component="ul" sx={{ pl: 2 }}>
+                {/* Projection-specific recommendations */}
+                {budgetSummary.projectedTotal > 0 && budgetHealth.status !== 'Healthy' && budgetHealth.status !== 'On Track' && (
+                  <Typography component="li" variant="body2" sx={{ mb: 1, color: theme.palette.info.main }}>
+                    Review projected costs of {formatCurrency(budgetSummary.projectedTotal)} for potential savings
+                  </Typography>
+                )}
+                
+                {/* Standard recommendations based on health status */}
                 {budgetHealth.status === 'Healthy' && (
                   <>
                     <Typography component="li" variant="body2" sx={{ mb: 1 }}>
@@ -932,15 +1579,150 @@ const BudgetDashboard: React.FC = () => {
         </Grid>
       </Grid>
       
+      {/* Add a CTA card for projections when none exist */}
+      {budgetSummary.projectedTotal === 0 && (
+        <Grid item xs={12}>
+          <Card elevation={0} sx={{ 
+            borderRadius: 2,
+            boxShadow: `0 2px 12px ${alpha(theme.palette.primary.main, 0.08)}`,
+            mb: 3,
+            bgcolor: alpha(theme.palette.info.light, 0.05)
+          }}>
+            <CardContent sx={{ p: 3, display: 'flex', flexDirection: { xs: 'column', md: 'row' }, alignItems: 'center', justifyContent: 'space-between' }}>
+              <Box sx={{ mb: { xs: 2, md: 0 } }}>
+                <Typography variant="h6" gutterBottom color="info.main" sx={{ display: 'flex', alignItems: 'center' }}>
+                  <TimelineIcon sx={{ mr: 1 }} />
+                  Enhance Your Budget with Projections
+                </Typography>
+                <Typography variant="body2" color="text.secondary">
+                  Add projected costs to categories to anticipate future expenses and improve budget planning.
+                  Projections help identify potential budget gaps and improve financial forecasting.
+                </Typography>
+              </Box>
+              <Button 
+                variant="contained" 
+                color="info"
+                size="large"
+                startIcon={<AddIcon />}
+                onClick={() => document.getElementById('budget-allocation-tracker')?.scrollIntoView({ behavior: 'smooth' })}
+                sx={{ minWidth: 200 }}
+              >
+                Add Projections
+              </Button>
+            </CardContent>
+          </Card>
+        </Grid>
+      )}
+      
+      {/* Add Projections Summary Section if projections exist */}
+      {budgetSummary.projectedTotal > 0 && (
+        <Grid item xs={12}>
+          <Card elevation={0} sx={{ 
+            borderRadius: 2,
+            boxShadow: `0 2px 12px ${alpha(theme.palette.primary.main, 0.08)}`,
+            mb: 3 
+          }}>
+            <CardHeader
+              title="Projected Costs Summary"
+              titleTypographyProps={{ variant: 'h6', fontWeight: 'bold' }}
+              action={
+                <Button 
+                  variant="outlined" 
+                  color="info"
+                  size="small"
+                  startIcon={<TimelineIcon />}
+                  onClick={() => document.getElementById('budget-allocation-tracker')?.scrollIntoView({ behavior: 'smooth' })}
+                >
+                  Manage Projections
+                </Button>
+              }
+            />
+            <Divider />
+            <CardContent>
+              <Box sx={{ py: 1 }}>
+                <Typography variant="subtitle1" gutterBottom>
+                  Projections By Category
+                </Typography>
+                
+                <TableContainer>
+                  <Table size="small">
+                    <TableHead>
+                      <TableRow>
+                        <TableCell>Category</TableCell>
+                        <TableCell>Notes</TableCell>
+                        <TableCell align="right">Date Added</TableCell>
+                        <TableCell align="right">Amount</TableCell>
+                      </TableRow>
+                    </TableHead>
+                    <TableBody>
+                      {projections.map((projection) => {
+                        // Find the category name by ID
+                        let categoryName = "Unknown Category";
+                        
+                        // Search through all phases to find matching category
+                        Object.entries(CONSTRUCTION_CATEGORIES).forEach(([sectionKey, categories]) => {
+                          const matchingCategory = categories.find(cat => cat.id === projection.categoryId);
+                          if (matchingCategory) {
+                            categoryName = matchingCategory.name;
+                          }
+                        });
+                        
+                        return (
+                          <TableRow key={projection.id}>
+                            <TableCell>
+                              <Typography variant="body2">{categoryName}</Typography>
+                            </TableCell>
+                            <TableCell>
+                              <Typography variant="body2" color="text.secondary">
+                                {projection.notes || "No notes provided"}
+                              </Typography>
+                            </TableCell>
+                            <TableCell align="right">
+                              <Typography variant="body2" color="text.secondary">
+                                {formatDate(projection.createdAt)}
+                              </Typography>
+                            </TableCell>
+                            <TableCell align="right">
+                              <Typography variant="body2" sx={{ fontWeight: 'medium', color: 'info.main' }}>
+                                {formatCurrency(projection.amount)}
+                              </Typography>
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })}
+                      
+                      {/* Total row */}
+                      <TableRow>
+                        <TableCell sx={{ borderBottom: 'none' }}></TableCell>
+                        <TableCell sx={{ borderBottom: 'none' }}></TableCell>
+                        <TableCell align="right" sx={{ fontWeight: 'bold', borderBottom: 'none' }}>
+                          Total Projected:
+                        </TableCell>
+                        <TableCell align="right" sx={{ fontWeight: 'bold', color: 'info.main', borderBottom: 'none' }}>
+                          {formatCurrency(budgetSummary.projectedTotal)}
+                        </TableCell>
+                      </TableRow>
+                    </TableBody>
+                  </Table>
+                </TableContainer>
+              </Box>
+            </CardContent>
+          </Card>
+        </Grid>
+      )}
+      
       {/* Add Budget Allocation Tracker here, right before the final closing tag */}
-      <BudgetAllocationTracker 
-        project={project}
-        phases={phases}
-        expenses={expenses}
-        bids={bids}
-      />
+      <div id="budget-allocation-tracker">
+        <BudgetAllocationTracker 
+          project={project}
+          phases={phases}
+          expenses={expenses}
+          bids={bids}
+          onAddProjection={handleAddProjection}
+        />
+      </div>
     </Box>
   );
 };
 
-export default BudgetDashboard; 
+export default BudgetDashboard;

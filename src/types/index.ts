@@ -63,6 +63,7 @@ export interface Project {
   tasks?: Task[];
   expenses?: Expense[];
   budgetPreferences?: CategoryMappingPreferences;
+  projections?: BudgetProjection[];
 }
 
 export interface Bid {
@@ -337,6 +338,18 @@ export interface ExpenseBreakdown {
   rejected: number;
 }
 
+// Preferences for manual budget item categorization
+export type CategoryMappingPreferences = Record<string, string>;
+
+// Interface for Budget Projections
+export interface BudgetProjection {
+  id: string;
+  categoryId: string;
+  amount: number;
+  notes?: string | null; // Allow null for notes
+  createdAt: Date; // Consider Timestamp for Firestore consistency if preferred
+}
+
 // Ensure all relevant types are exported
 export type {
   // ... existing exports ...
@@ -347,6 +360,3 @@ export type {
 };
 
 // Add more common types as needed
-
-// Preferences for manual budget item categorization
-export type CategoryMappingPreferences = Record<string, string>;

@@ -45,10 +45,11 @@ import {
   ExpandLess as ExpandLessIcon,
   Edit as EditIcon
 } from '@mui/icons-material';
-import { Expense, Bid, ProjectPhase, Project, CategoryMappingPreferences } from '../../../types';
+import { Expense, Bid, ProjectPhase, Project, CategoryMappingPreferences, BudgetProjection } from '../../../types';
 import { formatCurrency, formatPercentage } from '../../../utils/formatters';
 import { getProjectById, updateProject } from '../../../services/project';
 import { useAuth } from '../../../contexts/AuthContext';
+import { Timestamp } from 'firebase/firestore';
 
 // Define interface for BudgetItem to fix type issues
 interface BudgetItem {
@@ -63,7 +64,7 @@ interface BudgetItem {
 // type CategoryMappingPreferences = Record<string, string>;
 
 // Define standard construction categories
-const CONSTRUCTION_CATEGORIES = {
+export const CONSTRUCTION_CATEGORIES = {
   // Add Land Purchase category
   'land': [
     { id: 'land_purchase', name: 'Land Purchase', description: 'Cost of acquiring the building lot' },
@@ -261,15 +262,6 @@ const mapItemToCategory = (item: BudgetItem, userPreferences?: Record<string, st
   return 'uncategorized';
 };
 
-// Add interfaces for projections
-interface BudgetProjection {
-  id: string;
-  categoryId: string;
-  amount: number;
-  notes?: string;
-  createdAt: Date;
-}
-
 // Update interface to include projections
 interface BudgetAllocationTrackerProps {
   project: Project | null;
@@ -319,8 +311,20 @@ const BudgetAllocationTracker: React.FC<BudgetAllocationTrackerProps> = ({
       // Explicitly pass projectId and userId
       getProjectById(project.id as string, user.uid as string) 
         .then((fetchedProject: Project | null) => {
-          if (fetchedProject && fetchedProject.budgetPreferences) {
-            setCategoryMappingPreferences(fetchedProject.budgetPreferences as CategoryMappingPreferences);
+          if (fetchedProject) {
+            // Load preferences
+            if (fetchedProject.budgetPreferences) {
+              setCategoryMappingPreferences(fetchedProject.budgetPreferences as CategoryMappingPreferences);
+            }
+            // Load projections
+            if (fetchedProject.projections) {
+              // Ensure createdAt is a Date object (Firestore might return Timestamp)
+              const loadedProjections = fetchedProject.projections.map(p => ({
+                ...p,
+                createdAt: p.createdAt instanceof Timestamp ? p.createdAt.toDate() : new Date(p.createdAt) 
+              }));
+              setProjections(loadedProjections);
+            }
           }
         })
         .catch((error: Error) => {
@@ -353,26 +357,56 @@ const BudgetAllocationTracker: React.FC<BudgetAllocationTrackerProps> = ({
   };
   
   // Function to add a projection
-  const handleAddProjection = () => {
-    if (!currentProjectionCategory || projectionAmount === '') return;
+  const handleAddProjection = async () => {
+    if (!currentProjectionCategory || projectionAmount === '' || !project?.id) {
+      console.error("Missing category, amount, or project ID. Cannot add projection.");
+      return;
+    }
     
     const newProjection: BudgetProjection = {
       id: `projection-${Date.now()}`,
       categoryId: currentProjectionCategory.id,
       amount: typeof projectionAmount === 'number' ? projectionAmount : Number(projectionAmount),
       notes: projectionNotes || undefined,
-      createdAt: new Date()
+      createdAt: new Date() 
     };
     
-    // Add to local state
-    setProjections([...projections, newProjection]);
+    // Create the updated array of projections
+    const updatedProjections = [...projections, newProjection];
+
+    // Optimistically update local state
+    setProjections(updatedProjections);
     
-    // Call callback if provided
-    if (onAddProjection) {
-      onAddProjection(newProjection);
+    try {
+      // Clean the projections array to remove undefined values before saving
+      const projectionsToSave = updatedProjections.map(p => {
+        const cleaned: Partial<BudgetProjection> = { ...p };
+        if (cleaned.notes === undefined) {
+          cleaned.notes = null; // Use null instead of undefined
+        }
+        // Ensure dates are handled correctly if needed (using Date based on type def)
+        return cleaned as BudgetProjection;
+      });
+
+      // Save the cleaned array to Firebase
+      await updateProject(project.id, { projections: projectionsToSave });
+      console.log('Projection saved successfully.');
+      
+      // Close dialog ONLY on successful save
+      setProjectionDialogOpen(false); 
+
+      // Call original callback if provided 
+      if (onAddProjection) {
+        onAddProjection(newProjection);
+      }
+    } catch (error) { 
+      console.error('Error saving projection:', error);
+      // Revert local state
+      setProjections(projections); 
+      // Keep dialog open on error
+      // TODO: Show error message to the user (e.g., using a Snackbar)
+      alert('Error saving projection. Please try again.'); // Generic message
     }
-    
-    setProjectionDialogOpen(false);
   };
   
   // Calculate allocated amounts for each construction category
@@ -883,18 +917,16 @@ const BudgetAllocationTracker: React.FC<BudgetAllocationTrackerProps> = ({
       // Call Firebase service to update the project document
       await updateProject(project.id, { budgetPreferences: updatedPrefs });
       console.log(`Budget preference saved for item ${itemId}`);
-    } catch (error) { 
+    } catch (error) {
       console.error("Error saving budget preferences:", error);
-      // Optionally: Revert local state change if save fails
+      // Revert state or provide feedback
       setCategoryMappingPreferences(prev => {
         const reverted = { ...prev };
-        // How to revert depends on whether the item previously had a preference
-        // For simplicity, just removing the failed key might be okay 
-        // or you might need to store the previous state temporarily
-        // delete reverted[itemId]; 
-        return reverted; // For now, just log error, don't revert UI optimistically
+        // Simplest revert: remove the key that failed
+        delete reverted[itemId]; 
+        return reverted;
       });
-      // Optionally: Show error to user
+      alert('Error saving category preference. Please try again.'); // Generic message
     }
   };
 
