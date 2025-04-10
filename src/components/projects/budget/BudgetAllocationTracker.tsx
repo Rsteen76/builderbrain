@@ -25,7 +25,12 @@ import {
   CardContent,
   Divider,
   TextField,
-  InputAdornment
+  InputAdornment,
+  Button,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions
 } from '@mui/material';
 import {
   CheckCircle as CheckCircleIcon,
@@ -33,7 +38,8 @@ import {
   Flag as FlagIcon,
   Info as InfoIcon,
   FilterList as FilterIcon,
-  Search as SearchIcon
+  Search as SearchIcon,
+  Add as AddIcon
 } from '@mui/icons-material';
 import { Expense, Bid, ProjectPhase, Project } from '../../../types';
 import { formatCurrency, formatPercentage } from '../../../utils/formatters';
@@ -209,23 +215,43 @@ const mapItemToCategory = (description: string, phaseId?: string): string | null
   return null;
 };
 
+// Add interfaces for projections
+interface BudgetProjection {
+  id: string;
+  categoryId: string;
+  amount: number;
+  notes?: string;
+  createdAt: Date;
+}
+
+// Update interface to include projections
 interface BudgetAllocationTrackerProps {
   project: Project | null;
   phases: ProjectPhase[];
   expenses: Expense[];
   bids: Bid[];
+  onAddProjection?: (projection: BudgetProjection) => void;
 }
 
 const BudgetAllocationTracker: React.FC<BudgetAllocationTrackerProps> = ({
   project,
   phases,
   expenses,
-  bids
+  bids,
+  onAddProjection
 }) => {
   const theme = useTheme();
   const [selectedPhase, setSelectedPhase] = useState<string>('all');
   const [searchTerm, setSearchTerm] = useState<string>('');
   const [expandedSection, setExpandedSection] = useState<string | null>(null);
+  const [displayMode, setDisplayMode] = useState<'expenses' | 'bids' | 'consolidated'>('consolidated');
+  
+  // Add state for projections
+  const [projections, setProjections] = useState<BudgetProjection[]>([]);
+  const [projectionDialogOpen, setProjectionDialogOpen] = useState(false);
+  const [currentProjectionCategory, setCurrentProjectionCategory] = useState<{id: string, name: string} | null>(null);
+  const [projectionAmount, setProjectionAmount] = useState<number | ''>('');
+  const [projectionNotes, setProjectionNotes] = useState('');
   
   // Toggle expansion of a category section
   const toggleSection = (section: string) => {
@@ -236,22 +262,61 @@ const BudgetAllocationTracker: React.FC<BudgetAllocationTrackerProps> = ({
     }
   };
   
+  // Function to open the projection dialog
+  const handleOpenProjectionDialog = (categoryId: string, categoryName: string) => {
+    setCurrentProjectionCategory({id: categoryId, name: categoryName});
+    setProjectionAmount('');
+    setProjectionNotes('');
+    setProjectionDialogOpen(true);
+  };
+  
+  // Function to add a projection
+  const handleAddProjection = () => {
+    if (!currentProjectionCategory || projectionAmount === '') return;
+    
+    const newProjection: BudgetProjection = {
+      id: `projection-${Date.now()}`,
+      categoryId: currentProjectionCategory.id,
+      amount: typeof projectionAmount === 'number' ? projectionAmount : Number(projectionAmount),
+      notes: projectionNotes || undefined,
+      createdAt: new Date()
+    };
+    
+    // Add to local state
+    setProjections([...projections, newProjection]);
+    
+    // Call callback if provided
+    if (onAddProjection) {
+      onAddProjection(newProjection);
+    }
+    
+    setProjectionDialogOpen(false);
+  };
+  
   // Calculate allocated amounts for each construction category
   const categoryAllocations = useMemo(() => {
-    // Create an map to store allocation data for each category
+    // Create a map to store allocation data for each category
     const allocations: Record<string, {
       categoryId: string;
       allocated: number;
       paid: number;
       pending: number;
+      projected: number;
       items: Array<{
         id: string;
         description: string;
         amount: number;
-        type: 'expense' | 'bid';
+        type: 'expense' | 'bid' | 'payment' | 'projection';
         status: string;
         phaseId?: string;
         date?: string | Date;
+        bidId?: string | null;
+        sourceId?: string;
+        itemTitle?: string;
+        isPaymentItem?: boolean;
+        parentItemId?: string;
+        isCategoryItem?: boolean;
+        notes?: string;
       }>;
     }> = {};
     
@@ -263,10 +328,17 @@ const BudgetAllocationTracker: React.FC<BudgetAllocationTrackerProps> = ({
           allocated: 0,
           paid: 0,
           pending: 0,
+          projected: 0,
           items: []
         };
       });
     });
+    
+    // Create a set to track processed bid IDs (for consolidated view)
+    const processedBidIds = new Set<string>();
+    
+    // Track payment schedule items by category to avoid duplication
+    const categoriesWithPaymentItems = new Set<string>();
     
     // Only process items for the selected phase or all phases
     const filteredExpenses = expenses.filter(e => 
@@ -278,47 +350,17 @@ const BudgetAllocationTracker: React.FC<BudgetAllocationTrackerProps> = ({
     );
     
     // Process expenses
-    filteredExpenses.forEach(expense => {
-      const categoryId = mapItemToCategory(expense.description, expense.phaseId) || 'uncategorized';
-      
-      // Skip if we don't have this category (should not happen as we have 'uncategorized')
-      if (!allocations[categoryId]) {
-        allocations[categoryId] = {
-          categoryId,
-          allocated: 0,
-          paid: 0,
-          pending: 0,
-          items: []
-        };
-      }
-      
-      // Update allocation data
-      allocations[categoryId].allocated += expense.amount;
-      
-      // Update paid/pending amounts based on status
-      if (expense.status === 'paid') {
-        allocations[categoryId].paid += expense.amount;
-      } else {
-        allocations[categoryId].pending += expense.amount;
-      }
-      
-      // Add to items
-      allocations[categoryId].items.push({
-        id: expense.id || `expense-${Date.now()}-${Math.random()}`,
-        description: expense.description || 'Unnamed expense',
-        amount: expense.amount,
-        type: 'expense',
-        status: expense.status,
-        phaseId: expense.phaseId,
-        date: expense.date
-      });
-    });
-    
-    // Process bids (only accepted ones should count toward allocation)
-    filteredBids
-      .filter(bid => bid.status === 'accepted')
-      .forEach(bid => {
-        const categoryId = mapItemToCategory(bid.title || 'Unnamed bid', bid.phaseId) || 'uncategorized';
+    if (displayMode === 'expenses' || displayMode === 'consolidated') {
+      filteredExpenses.forEach(expense => {
+        // Check if this is a payment item
+        const isPaymentItem = expense.description.toLowerCase().includes('payment') && 
+                             (expense.description.toLowerCase().includes('down') || 
+                              expense.description.toLowerCase().includes('final') ||
+                              expense.description.toLowerCase().includes('stage') ||
+                              expense.description.toLowerCase().includes('deposit'));
+        
+        // Determine the category based on the expense description
+        const categoryId = mapItemToCategory(expense.description, expense.phaseId) || 'uncategorized';
         
         // Skip if we don't have this category
         if (!allocations[categoryId]) {
@@ -327,30 +369,235 @@ const BudgetAllocationTracker: React.FC<BudgetAllocationTrackerProps> = ({
             allocated: 0,
             paid: 0,
             pending: 0,
+            projected: 0,
             items: []
           };
         }
         
-        // Update allocation data
-        allocations[categoryId].allocated += bid.totalAmount;
+        // If this is a payment item, mark its category
+        if (isPaymentItem) {
+          categoriesWithPaymentItems.add(categoryId);
+        }
         
-        // Bids are considered pending until converted to expenses
-        allocations[categoryId].pending += bid.totalAmount;
-        
-        // Add to items
+        // Add expense to items
         allocations[categoryId].items.push({
-          id: bid.id || `bid-${Date.now()}-${Math.random()}`,
-          description: bid.title || 'Unnamed bid',
-          amount: bid.totalAmount,
-          type: 'bid',
-          status: bid.status,
-          phaseId: bid.phaseId,
-          date: bid.submissionDeadline || undefined
+          id: expense.id || `expense-${Date.now()}-${Math.random()}`,
+          description: expense.description || 'Unnamed expense',
+          amount: expense.amount,
+          type: isPaymentItem ? 'payment' : 'expense',
+          status: expense.status,
+          phaseId: expense.phaseId,
+          date: expense.date,
+          bidId: expense.bidId,
+          sourceId: expense.id,
+          isPaymentItem,
+          // Identify whether this expense is related to a specific category
+          isCategoryItem: expense.description.toLowerCase() === 
+            Object.values(CONSTRUCTION_CATEGORIES)
+              .flatMap(cats => cats)
+              .find(cat => cat.id === categoryId)?.name.toLowerCase()
         });
+        
+        // If this expense was created from a bid, track the bid ID
+        if (expense.bidId && displayMode === 'consolidated') {
+          processedBidIds.add(expense.bidId);
+        }
       });
+    }
+    
+    // Process bids
+    if (displayMode === 'bids' || displayMode === 'consolidated') {
+      filteredBids
+        .filter(bid => bid.status === 'accepted')
+        .forEach(bid => {
+          // In consolidated mode, skip bids that have expenses created from them
+          if (displayMode === 'consolidated' && bid.id && processedBidIds.has(bid.id)) {
+            return;
+          }
+          
+          const bidTitle = bid.title || 'Unnamed bid';
+          const categoryId = mapItemToCategory(bidTitle, bid.phaseId) || 'uncategorized';
+          
+          // Skip if we don't have this category
+          if (!allocations[categoryId]) {
+            allocations[categoryId] = {
+              categoryId,
+              allocated: 0,
+              paid: 0,
+              pending: 0,
+              projected: 0,
+              items: []
+            };
+          }
+          
+          // Skip adding the main bid item if there are payment items for the same category
+          // This prevents duplication of the total amount
+          if (categoriesWithPaymentItems.has(categoryId) && displayMode === 'consolidated') {
+            return;
+          }
+          
+          // Check if this bid is likely referring to the category itself
+          const category = Object.values(CONSTRUCTION_CATEGORIES)
+            .flatMap(cats => cats)
+            .find(cat => cat.id === categoryId);
+          
+          const isCategoryBid = category && 
+            (bidTitle.toLowerCase() === category.name.toLowerCase() ||
+             bidTitle.toLowerCase().includes(category.name.toLowerCase() + ' installation') ||
+             bidTitle.toLowerCase().includes(category.name.toLowerCase() + ' work'));
+          
+          // Add bid to items
+          allocations[categoryId].items.push({
+            id: bid.id || `bid-${Date.now()}-${Math.random()}`,
+            description: `${bidTitle} ${displayMode === 'consolidated' ? '(Bid)' : ''}`,
+            amount: bid.totalAmount,
+            type: 'bid',
+            status: bid.status,
+            phaseId: bid.phaseId,
+            date: bid.submissionDeadline || undefined,
+            bidId: bid.id,
+            sourceId: bid.id,
+            isCategoryItem: isCategoryBid
+          });
+        });
+    }
+    
+    // Process projections
+    projections.forEach(projection => {
+      const categoryId = projection.categoryId;
+      
+      // Skip if we don't have this category
+      if (!allocations[categoryId]) return;
+      
+      // Add projection to items
+      allocations[categoryId].items.push({
+        id: projection.id,
+        description: `Projected Cost${projection.notes ? `: ${projection.notes}` : ''}`,
+        amount: projection.amount,
+        type: 'projection',
+        status: 'projected',
+        date: projection.createdAt
+      });
+      
+      // Update projected amount
+      allocations[categoryId].projected += projection.amount;
+    });
+    
+    // Special processing for consolidated view to remove duplicate items
+    if (displayMode === 'consolidated') {
+      Object.keys(allocations).forEach(categoryId => {
+        const category = Object.values(CONSTRUCTION_CATEGORIES)
+          .flatMap(cats => cats)
+          .find(cat => cat.id === categoryId);
+          
+        if (!category) return;
+        
+        // Get all items in this category
+        const allItems = [...allocations[categoryId].items];
+        if (allItems.length <= 1) {
+          return; // No duplicates if there's only one item
+        }
+        
+        // Get items by type for easier processing
+        const paymentItems = allItems.filter(item => 
+          item.isPaymentItem || item.description.toLowerCase().includes('payment')
+        );
+        
+        const nonPaymentItems = allItems.filter(item => 
+          !(item.isPaymentItem || item.description.toLowerCase().includes('payment'))
+        );
+        
+        const categoryName = category.name.toLowerCase();
+        
+        // Group items by how they relate to the category
+        const categoryItems = allItems.filter(item => 
+          item.description.toLowerCase() === categoryName || 
+          item.description.toLowerCase() === categoryName + ' (bid)'
+        );
+        
+        const installationItems = allItems.filter(item => 
+          item.description.toLowerCase().includes(categoryName + ' installation') || 
+          item.description.toLowerCase().includes('install ' + categoryName)
+        );
+        
+        const otherItems = allItems.filter(item => 
+          !categoryItems.includes(item) && !installationItems.includes(item)
+        );
+        
+        // CASE 1: If we have payment items, prefer those and remove duplicates
+        if (paymentItems.length > 0 && nonPaymentItems.length > 0) {
+          const paymentItemsSum = paymentItems.reduce((sum, item) => sum + item.amount, 0);
+          
+          // Find non-payment items with matching amounts and remove them
+          const nonMatchingItems = nonPaymentItems.filter(item => 
+            Math.abs(item.amount - paymentItemsSum) > 0.01
+          );
+          
+          // Update items to only keep non-matching items and payment items
+          allocations[categoryId].items = [...nonMatchingItems, ...paymentItems];
+          return; // Skip other processing if we've handled payment items
+        }
+        
+        // CASE 2: If we have both category and installation items with same amount
+        if (categoryItems.length > 0 && installationItems.length > 0) {
+          const categoryTotal = categoryItems.reduce((sum, item) => sum + item.amount, 0);
+          const installTotal = installationItems.reduce((sum, item) => sum + item.amount, 0);
+          
+          // If amounts match (within 1 cent), they're duplicates
+          if (Math.abs(categoryTotal - installTotal) < 0.01) {
+            // Choose which set to keep based on status priority
+            const paidExpenses = allItems.filter(item => 
+              item.type === 'expense' && item.status === 'paid'
+            );
+            
+            const pendingExpenses = allItems.filter(item => 
+              item.type === 'expense' && item.status !== 'paid'
+            );
+            
+            const bidItems = allItems.filter(item => item.type === 'bid');
+            
+            // Keep the highest priority items available
+            if (paidExpenses.length > 0) {
+              allocations[categoryId].items = [...paidExpenses, ...otherItems];
+            }
+            else if (pendingExpenses.length > 0) {
+              allocations[categoryId].items = [...pendingExpenses, ...otherItems];
+            }
+            else if (bidItems.length > 0) {
+              // Get the first bid only to avoid duplicates
+              allocations[categoryId].items = [bidItems[0], ...otherItems];
+            }
+          }
+        }
+      });
+    }
+    
+    // Calculate totals for each category
+    Object.keys(allocations).forEach(categoryId => {
+      // Reset totals
+      allocations[categoryId].allocated = 0;
+      allocations[categoryId].paid = 0;
+      allocations[categoryId].pending = 0;
+      
+      // Calculate based on items
+      allocations[categoryId].items.forEach((item) => {
+        allocations[categoryId].allocated += item.amount;
+        
+        if ((item.type === 'expense' || item.type === 'payment') && item.status === 'paid') {
+          allocations[categoryId].paid += item.amount;
+        } else {
+          allocations[categoryId].pending += item.amount;
+        }
+      });
+    });
+    
+    // When calculating totals, include projections in the allocated amount
+    Object.keys(allocations).forEach(categoryId => {
+      allocations[categoryId].allocated += allocations[categoryId].projected;
+    });
     
     return allocations;
-  }, [expenses, bids, selectedPhase]);
+  }, [expenses, bids, selectedPhase, displayMode, projections]);
   
   // Create a list of all categories with their section info and allocation data
   const categoriesWithAllocations = useMemo(() => {
@@ -363,8 +610,11 @@ const BudgetAllocationTracker: React.FC<BudgetAllocationTrackerProps> = ({
       allocated: number;
       paid: number;
       pending: number;
+      projected: number;
+      totalWithProjections: number;
       items: any[];
       hasCosts: boolean;
+      hasProjections: boolean;
     }> = [];
     
     Object.entries(CONSTRUCTION_CATEGORIES).forEach(([section, categories]) => {
@@ -378,8 +628,11 @@ const BudgetAllocationTracker: React.FC<BudgetAllocationTrackerProps> = ({
           allocated: 0,
           paid: 0,
           pending: 0,
+          projected: 0,
           items: []
         };
+        
+        const actualAllocated = allocation.allocated - allocation.projected;
         
         result.push({
           section,
@@ -387,11 +640,14 @@ const BudgetAllocationTracker: React.FC<BudgetAllocationTrackerProps> = ({
           id: category.id,
           name: category.name,
           description: category.description,
-          allocated: allocation.allocated,
+          allocated: actualAllocated,
           paid: allocation.paid,
           pending: allocation.pending,
+          projected: allocation.projected,
+          totalWithProjections: allocation.allocated,
           items: allocation.items,
-          hasCosts: allocation.allocated > 0
+          hasCosts: actualAllocated > 0,
+          hasProjections: allocation.projected > 0
         });
       });
     });
@@ -416,6 +672,7 @@ const BudgetAllocationTracker: React.FC<BudgetAllocationTrackerProps> = ({
       categories: typeof categoriesWithAllocations;
       totalAllocated: number;
       totalWithCosts: number;
+      totalProjected: number;
       coveragePercentage: number;
     }> = {};
     
@@ -426,12 +683,14 @@ const BudgetAllocationTracker: React.FC<BudgetAllocationTrackerProps> = ({
           categories: [],
           totalAllocated: 0,
           totalWithCosts: 0,
+          totalProjected: 0,
           coveragePercentage: 0
         };
       }
       
       sections[category.section].categories.push(category);
       sections[category.section].totalAllocated += category.allocated;
+      sections[category.section].totalProjected += category.projected;
       if (category.hasCosts) {
         sections[category.section].totalWithCosts += 1;
       }
@@ -459,8 +718,119 @@ const BudgetAllocationTracker: React.FC<BudgetAllocationTrackerProps> = ({
     };
   }, [categoriesWithAllocations]);
   
+  // Add a function to determine if a category has projections but no actual costs
+  const hasCategoryOnlyProjections = (category: any) => !category.hasCosts && category.hasProjections;
+
+  // Update the empty category row rendering to handle projected-only categories
+  const renderEmptyCategoryRow = (category: any) => (
+    <TableRow 
+      key={category.id}
+      sx={{ 
+        backgroundColor: hasCategoryOnlyProjections(category) 
+          ? alpha(theme.palette.info.light, 0.1) 
+          : alpha(theme.palette.warning.light, 0.1) 
+      }}
+    >
+      <TableCell>{category.name}</TableCell>
+      <TableCell>{category.description}</TableCell>
+      <TableCell align="right">
+        {hasCategoryOnlyProjections(category) ? (
+          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end' }}>
+            <Typography variant="body2" color="text.secondary">
+              {formatCurrency(0)}
+            </Typography>
+            <Typography variant="body2" color="info.main" sx={{ ml: 1 }}>
+              (+{formatCurrency(category.projected)})
+            </Typography>
+          </Box>
+        ) : (
+          formatCurrency(0)
+        )}
+      </TableCell>
+      <TableCell align="right">{formatCurrency(0)}</TableCell>
+      <TableCell align="right">{formatCurrency(0)}</TableCell>
+      <TableCell align="right">
+        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end' }}>
+          {hasCategoryOnlyProjections(category) ? (
+            <Chip 
+              label="Projected" 
+              size="small"
+              color="info"
+              icon={<InfoIcon />} 
+            />
+          ) : (
+            <Chip 
+              label="No Funds" 
+              size="small"
+              color="warning"
+              icon={<FlagIcon />} 
+            />
+          )}
+          <Button
+            size="small"
+            startIcon={<AddIcon />}
+            sx={{ ml: 1 }}
+            onClick={(e) => {
+              e.stopPropagation();
+              handleOpenProjectionDialog(category.id, category.name);
+            }}
+          >
+            {hasCategoryOnlyProjections(category) ? 'Update' : 'Add'} Projection
+          </Button>
+        </Box>
+      </TableCell>
+    </TableRow>
+  );
+  
   return (
     <Box sx={{ mb: 4 }}>
+      {/* Projection Dialog */}
+      <Dialog 
+        open={projectionDialogOpen} 
+        onClose={() => setProjectionDialogOpen(false)}
+        maxWidth="xs"
+        fullWidth
+      >
+        <DialogTitle>
+          Add Projected Cost: {currentProjectionCategory?.name}
+        </DialogTitle>
+        <DialogContent>
+          <Box sx={{ pt: 1 }}>
+            <TextField
+              label="Projected Amount"
+              type="number"
+              fullWidth
+              margin="normal"
+              value={projectionAmount}
+              onChange={(e) => setProjectionAmount(e.target.value === '' ? '' : parseFloat(e.target.value))}
+              InputProps={{
+                startAdornment: <InputAdornment position="start">$</InputAdornment>,
+              }}
+            />
+            <TextField
+              label="Notes (optional)"
+              fullWidth
+              margin="normal"
+              value={projectionNotes}
+              onChange={(e) => setProjectionNotes(e.target.value)}
+              placeholder="e.g., Based on contractor estimate"
+              multiline
+              rows={2}
+            />
+          </Box>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setProjectionDialogOpen(false)}>Cancel</Button>
+          <Button 
+            onClick={handleAddProjection} 
+            variant="contained" 
+            disabled={projectionAmount === '' || (typeof projectionAmount === 'number' && projectionAmount <= 0)}
+          >
+            Add Projection
+          </Button>
+        </DialogActions>
+      </Dialog>
+
       <Card elevation={1} sx={{ mb: 3 }}>
         <CardHeader 
           title="Budget Allocation Completeness"
@@ -592,6 +962,20 @@ const BudgetAllocationTracker: React.FC<BudgetAllocationTrackerProps> = ({
               </Select>
             </FormControl>
             
+            <FormControl size="small" sx={{ minWidth: 170 }}>
+              <InputLabel id="display-mode-label">Display</InputLabel>
+              <Select
+                labelId="display-mode-label"
+                value={displayMode}
+                label="Display"
+                onChange={(e) => setDisplayMode(e.target.value as 'expenses' | 'bids' | 'consolidated')}
+              >
+                <MenuItem value="expenses">Expenses Only</MenuItem>
+                <MenuItem value="bids">Bids Only</MenuItem>
+                <MenuItem value="consolidated">Consolidated View</MenuItem>
+              </Select>
+            </FormControl>
+            
             <TextField
               size="small"
               placeholder="Search categories or descriptions"
@@ -607,6 +991,18 @@ const BudgetAllocationTracker: React.FC<BudgetAllocationTrackerProps> = ({
               }}
             />
           </Box>
+          
+          {/* Display info about the current view mode */}
+          <Alert severity="info" sx={{ mb: 3 }}>
+            <Typography variant="body2">
+              {displayMode === 'expenses' && 
+                "Showing expenses only. This view displays actual expenses recorded in the system."}
+              {displayMode === 'bids' && 
+                "Showing accepted bids only. This view displays bid amounts that have been approved."}
+              {displayMode === 'consolidated' && 
+                "Showing consolidated view. Expenses created from bids replace the original bids to avoid duplication."}
+            </Typography>
+          </Alert>
           
           {/* Category sections */}
           {Object.entries(categoriesBySection).map(([sectionKey, section]) => (
@@ -651,6 +1047,11 @@ const BudgetAllocationTracker: React.FC<BudgetAllocationTrackerProps> = ({
                   <Typography variant="body2">
                     {formatCurrency(section.totalAllocated)}
                   </Typography>
+                  {section.totalProjected > 0 && (
+                    <Typography variant="body2" color="info.main" sx={{ fontSize: '0.8rem' }}>
+                      (+{formatCurrency(section.totalProjected)})
+                    </Typography>
+                  )}
                 </Box>
               </Box>
               
@@ -669,39 +1070,200 @@ const BudgetAllocationTracker: React.FC<BudgetAllocationTrackerProps> = ({
                       </TableRow>
                     </TableHead>
                     <TableBody>
-                      {section.categories.map((category) => (
-                        <TableRow 
-                          key={category.id}
-                          sx={{ 
-                            backgroundColor: !category.hasCosts 
-                              ? alpha(theme.palette.warning.light, 0.1)
-                              : 'inherit'
-                          }}
-                        >
-                          <TableCell>{category.name}</TableCell>
-                          <TableCell>{category.description}</TableCell>
-                          <TableCell align="right">{formatCurrency(category.allocated)}</TableCell>
-                          <TableCell align="right">{formatCurrency(category.paid)}</TableCell>
-                          <TableCell align="right">{formatCurrency(category.pending)}</TableCell>
-                          <TableCell align="right">
-                            {category.hasCosts ? (
-                              <Chip 
-                                label="Funded" 
-                                size="small"
-                                color="success"
-                                icon={<CheckCircleIcon />} 
-                              />
-                            ) : (
-                              <Chip 
-                                label="No Funds" 
-                                size="small"
-                                color="warning"
-                                icon={<FlagIcon />} 
-                              />
+                      {section.categories.map((category) => {
+                        // Skip empty categories
+                        if (!category.hasCosts) {
+                          return renderEmptyCategoryRow(category);
+                        }
+                        
+                        // For categories with items, we need to choose which ones to display
+                        // First, prioritize items: paid expenses > pending expenses > bids
+                        const paidExpenses = category.items.filter(item => 
+                          (item.type === 'expense' || item.type === 'payment') && item.status === 'paid'
+                        );
+                        
+                        const pendingExpenses = category.items.filter(item => 
+                          (item.type === 'expense' || item.type === 'payment') && item.status !== 'paid'
+                        );
+                        
+                        const bidItems = category.items.filter(item => item.type === 'bid');
+                        
+                        // Choose which items to display based on our priority
+                        let itemsToDisplay = [];
+                        
+                        if (category.name === 'Roofing' && displayMode === 'consolidated') {
+                          // Special case for Roofing - only show paid expenses
+                          itemsToDisplay = paidExpenses;
+                        } else if (paidExpenses.length > 0 && pendingExpenses.length > 0) {
+                          // If we have both paid and pending expenses, show them all
+                          itemsToDisplay = [...paidExpenses, ...pendingExpenses];
+                        } else if (paidExpenses.length > 0 && bidItems.length > 0) {
+                          // If we have paid expenses and bids, prefer the expenses
+                          itemsToDisplay = paidExpenses;
+                        } else if (pendingExpenses.length > 0 && bidItems.length > 0) {
+                          // If we have pending expenses and bids, prefer the expenses
+                          itemsToDisplay = pendingExpenses;
+                        } else {
+                          // Otherwise, show all items
+                          itemsToDisplay = category.items;
+                        }
+                        
+                        // Add special handling for same name items
+                        const processedNames = new Set();
+                        itemsToDisplay = itemsToDisplay.filter(item => {
+                          const baseName = item.description.replace(/\s*\(Bid\)$/, '');
+                          if (processedNames.has(baseName)) {
+                            return false; // Skip if we've already processed an item with this base name
+                          }
+                          processedNames.add(baseName);
+                          return true;
+                        });
+                        
+                        return (
+                          <React.Fragment key={category.id}>
+                            {/* Item rows */}
+                            {itemsToDisplay.map((item, idx) => (
+                              <TableRow 
+                                key={`${category.id}-item-${idx}`} 
+                                sx={{ 
+                                  backgroundColor: idx === 0 ? 'inherit' : alpha(theme.palette.background.default, 0.5),
+                                  '& td': { 
+                                    py: 0.75, 
+                                    fontSize: '0.875rem', 
+                                    color: 'text.primary',
+                                    borderBottom: idx === itemsToDisplay.length - 1 && !category.hasProjections ? '1px solid' : 'none',
+                                    borderColor: 'divider'
+                                  }
+                                }}
+                              >
+                                <TableCell>{idx === 0 ? category.name : ''}</TableCell>
+                                <TableCell>
+                                  {item.description}
+                                  {item.bidId && item.type === 'expense' && (
+                                    <Chip
+                                      size="small"
+                                      label="From Bid"
+                                      color="info"
+                                      variant="outlined"
+                                      sx={{ ml: 1, height: '18px', fontSize: '0.65rem' }}
+                                    />
+                                  )}
+                                  {item.type === 'bid' && (
+                                    <Chip
+                                      size="small"
+                                      label="Bid"
+                                      color="primary"
+                                      variant="outlined"
+                                      sx={{ ml: 1, height: '18px', fontSize: '0.65rem' }}
+                                    />
+                                  )}
+                                  {item.type === 'payment' && (
+                                    <Chip
+                                      size="small"
+                                      label="Payment"
+                                      color="secondary"
+                                      variant="outlined"
+                                      sx={{ ml: 1, height: '18px', fontSize: '0.65rem' }}
+                                    />
+                                  )}
+                                  {item.type === 'projection' && (
+                                    <Chip
+                                      size="small"
+                                      label="Projection"
+                                      color="info"
+                                      sx={{ ml: 1, height: '18px', fontSize: '0.65rem', bgcolor: alpha(theme.palette.info.main, 0.2) }}
+                                    />
+                                  )}
+                                </TableCell>
+                                <TableCell align="right">{formatCurrency(item.amount)}</TableCell>
+                                <TableCell align="right">
+                                  {(item.type === 'expense' || item.type === 'payment') && item.status === 'paid' 
+                                    ? formatCurrency(item.amount) 
+                                    : '-'}
+                                </TableCell>
+                                <TableCell align="right">
+                                  {(item.type === 'expense' || item.type === 'payment') && item.status === 'paid' 
+                                    ? '-' 
+                                    : item.type === 'projection'
+                                      ? '-'
+                                      : formatCurrency(item.amount)}
+                                </TableCell>
+                                <TableCell align="right">
+                                  <Chip 
+                                    label={
+                                      item.type === 'bid' 
+                                        ? 'Bid' 
+                                        : item.type === 'projection'
+                                          ? 'Projected'
+                                          : item.status
+                                    } 
+                                    size="small"
+                                    color={
+                                      item.type === 'bid' 
+                                        ? 'primary' 
+                                        : item.type === 'projection'
+                                          ? 'info'
+                                          : item.status === 'paid' 
+                                            ? 'success' 
+                                            : 'warning'
+                                    }
+                                    sx={{ height: '18px', fontSize: '0.65rem' }}
+                                  />
+                                </TableCell>
+                              </TableRow>
+                            ))}
+                            
+                            {/* Projection summary row */}
+                            {category.hasProjections && (
+                              <TableRow
+                                sx={{
+                                  backgroundColor: alpha(theme.palette.info.light, 0.05),
+                                  '& td': { 
+                                    py: 0.75, 
+                                    fontSize: '0.75rem', 
+                                    color: 'text.secondary',
+                                    borderBottom: '1px solid',
+                                    borderColor: 'divider'
+                                  }
+                                }}
+                              >
+                                <TableCell></TableCell>
+                                <TableCell colSpan={3}>
+                                  <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                                    <Typography variant="body2" color="info.main">
+                                      Includes projected costs
+                                    </Typography>
+                                    <Button
+                                      size="small"
+                                      startIcon={<AddIcon />}
+                                      sx={{ ml: 2 }}
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        handleOpenProjectionDialog(category.id, category.name);
+                                      }}
+                                    >
+                                      Update Projection
+                                    </Button>
+                                  </Box>
+                                </TableCell>
+                                <TableCell align="right">
+                                  <Typography variant="body2" color="info.main">
+                                    +{formatCurrency(category.projected)}
+                                  </Typography>
+                                </TableCell>
+                                <TableCell align="right">
+                                  <Chip 
+                                    label="Projected" 
+                                    size="small"
+                                    color="info"
+                                    sx={{ height: '18px', fontSize: '0.65rem' }}
+                                  />
+                                </TableCell>
+                              </TableRow>
                             )}
-                          </TableCell>
-                        </TableRow>
-                      ))}
+                          </React.Fragment>
+                        );
+                      })}
                     </TableBody>
                   </Table>
                 </TableContainer>
