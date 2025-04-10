@@ -40,10 +40,15 @@ import {
   Info as InfoIcon,
   FilterList as FilterIcon,
   Search as SearchIcon,
-  Add as AddIcon
+  Add as AddIcon,
+  ExpandMore as ExpandMoreIcon,
+  ExpandLess as ExpandLessIcon,
+  Edit as EditIcon
 } from '@mui/icons-material';
-import { Expense, Bid, ProjectPhase, Project } from '../../../types';
+import { Expense, Bid, ProjectPhase, Project, CategoryMappingPreferences } from '../../../types';
 import { formatCurrency, formatPercentage } from '../../../utils/formatters';
+import { getProjectById, updateProject } from '../../../services/project';
+import { useAuth } from '../../../contexts/AuthContext';
 
 // Define interface for BudgetItem to fix type issues
 interface BudgetItem {
@@ -54,7 +59,8 @@ interface BudgetItem {
 }
 
 // Create a type for category mapping preferences
-type CategoryMappingPreferences = Record<string, string>;
+// REMOVED from here
+// type CategoryMappingPreferences = Record<string, string>;
 
 // Define standard construction categories
 const CONSTRUCTION_CATEGORIES = {
@@ -176,7 +182,7 @@ const CONSTRUCTION_CATEGORIES = {
 };
 
 // Utility function to map bids and expenses to construction categories
-const mapItemToCategory = (item: BudgetItem, userPreferences?: CategoryMappingPreferences): string => {
+const mapItemToCategory = (item: BudgetItem, userPreferences?: Record<string, string>): string => {
   // Use the category from preferences if available
   if (userPreferences && userPreferences[item.id]) {
     return userPreferences[item.id];
@@ -297,7 +303,37 @@ const BudgetAllocationTracker: React.FC<BudgetAllocationTrackerProps> = ({
   const [projectionNotes, setProjectionNotes] = useState('');
   
   // Add state for category mapping preferences
-  const [categoryMappingPreferences, setCategoryMappingPreferences] = useState<CategoryMappingPreferences>({});
+  const [categoryMappingPreferences, setCategoryMappingPreferences] = useState<Record<string, string>>({});
+  // Add state to track which item is being edited
+  const [editingItemId, setEditingItemId] = useState<string | null>(null);
+  // Add loading state for preferences
+  const [prefsLoading, setPrefsLoading] = useState<boolean>(true);
+  
+  const { user } = useAuth(); // Get user from auth context
+  
+  // Effect to load preferences
+  useEffect(() => {
+    // Ensure we have both project ID and user ID
+    if (project?.id && user?.uid) {
+      setPrefsLoading(true);
+      // Explicitly pass projectId and userId
+      getProjectById(project.id as string, user.uid as string) 
+        .then((fetchedProject: Project | null) => {
+          if (fetchedProject && fetchedProject.budgetPreferences) {
+            setCategoryMappingPreferences(fetchedProject.budgetPreferences as CategoryMappingPreferences);
+          }
+        })
+        .catch((error: Error) => {
+          console.error("Error loading project data for budget preferences:", error);
+        })
+        .finally(() => {
+          setPrefsLoading(false);
+        });
+    } else {
+      setCategoryMappingPreferences({});
+      setPrefsLoading(false);
+    }
+  }, [project?.id, user?.uid]); // Add user.uid to dependency array
   
   // Toggle expansion of a category section
   const toggleSection = (section: string) => {
@@ -829,15 +865,37 @@ const BudgetAllocationTracker: React.FC<BudgetAllocationTrackerProps> = ({
   );
   
   // Add handler for changing category preference
-  const handleRecategorizeItem = (itemId: string, newCategoryId: string) => {
-    setCategoryMappingPreferences(prev => ({
-      ...prev,
+  const handleRecategorizeItem = async (itemId: string, newCategoryId: string) => {
+    if (!project?.id) {
+      console.error("Project ID is missing, cannot save preferences.");
+      return; // Exit if no project ID
+    }
+
+    const updatedPrefs = {
+      ...categoryMappingPreferences,
       [itemId]: newCategoryId
-    }));
-    // If persistence is needed:
-    // if (onCategoryPreferenceChange) {
-    //   onCategoryPreferenceChange(itemId, newCategoryId);
-    // }
+    };
+    
+    // Optimistically update local state
+    setCategoryMappingPreferences(updatedPrefs);
+
+    try {
+      // Call Firebase service to update the project document
+      await updateProject(project.id, { budgetPreferences: updatedPrefs });
+      console.log(`Budget preference saved for item ${itemId}`);
+    } catch (error) { 
+      console.error("Error saving budget preferences:", error);
+      // Optionally: Revert local state change if save fails
+      setCategoryMappingPreferences(prev => {
+        const reverted = { ...prev };
+        // How to revert depends on whether the item previously had a preference
+        // For simplicity, just removing the failed key might be okay 
+        // or you might need to store the previous state temporarily
+        // delete reverted[itemId]; 
+        return reverted; // For now, just log error, don't revert UI optimistically
+      });
+      // Optionally: Show error to user
+    }
   };
 
   // Prepare category options for the dropdown
@@ -1105,14 +1163,26 @@ const BudgetAllocationTracker: React.FC<BudgetAllocationTrackerProps> = ({
               >
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                   <Typography variant="subtitle1">{section.sectionName}</Typography>
-                  <Chip 
-                    label={`${section.totalWithCosts}/${section.categories.length}`}
-                    size="small"
-                    color={
-                      section.coveragePercentage === 100 ? 'success' :
-                      section.coveragePercentage >= 50 ? 'info' : 'warning'
-                    }
-                  />
+                  
+                  {/* Special badge for Uncategorized section showing item count */} 
+                  {sectionKey === 'uncategorized' ? (
+                    <Chip 
+                      label={`${section.categories[0]?.items?.length || 0} items`} // Show item count
+                      size="small"
+                      color={section.categories[0]?.items?.length > 0 ? 'warning' : 'default'} // Warning if items exist
+                      icon={section.categories[0]?.items?.length > 0 ? <WarningIcon fontSize="inherit" /> : undefined}
+                    />
+                  ) : (
+                    // Original badge for other sections
+                    <Chip 
+                      label={`${section.totalWithCosts}/${section.categories.length}`}
+                      size="small"
+                      color={
+                        section.coveragePercentage === 100 ? 'success' :
+                        section.coveragePercentage >= 50 ? 'info' : 'warning'
+                      }
+                    />
+                  )}
                 </Box>
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                   <Typography variant="body2">
@@ -1188,101 +1258,97 @@ const BudgetAllocationTracker: React.FC<BudgetAllocationTrackerProps> = ({
                             {/* Item rows - Render only if itemsToDisplay is not empty */}
                             {itemsToDisplay.length > 0 && itemsToDisplay.map((item, idx) => (
                               <TableRow 
-                                key={`${category.id}-item-${item.id || idx}`} 
-                                sx={{ 
-                                  // Add back subtle background striping for readability
+                                key={`${category.id}-item-${item.id || idx}`}
+                                sx={{
                                   backgroundColor: idx % 2 === 1 ? alpha(theme.palette.action.hover, 0.02) : 'inherit',
-                                  '& td': { 
-                                    py: 0.75, 
-                                    fontSize: '0.875rem', 
-                                    borderBottom: 'none' // Let the Fragment handle bottom border
-                                  },
-                                  // Highlight row on hover
-                                  '&:hover': { 
-                                     backgroundColor: alpha(theme.palette.primary.light, 0.1)
-                                  }
+                                  '& td': { py: 0.75, fontSize: '0.875rem', borderBottom: 'none' },
+                                  '&:hover': { backgroundColor: alpha(theme.palette.primary.light, 0.1) }
                                 }}
                               >
+                                {/* Standard Cells */} 
                                 <TableCell sx={{ borderLeft: `3px solid ${idx === 0 ? theme.palette.divider : 'transparent'}` }}>
                                   {idx === 0 ? category.name : ''}
                                 </TableCell>
-                                
-                                {/* *** RESTORE MISSING CELLS *** */} 
                                 <TableCell>{item.description}</TableCell>
                                 <TableCell align="right">{formatCurrency(item.amount)}</TableCell>
                                 <TableCell align="right">
-                                  {(item.type === 'expense' || item.type === 'payment') && item.status === 'paid' 
-                                    ? formatCurrency(item.amount) 
-                                    : '-'}
+                                  {(item.type === 'expense' || item.type === 'payment') && item.status === 'paid' ? formatCurrency(item.amount) : '-'}
                                 </TableCell>
                                 <TableCell align="right">
-                                  {(item.type === 'expense' || item.type === 'payment') && item.status === 'paid' 
-                                    ? '-' 
-                                    : item.type === 'projection'
-                                      ? '-'
-                                      : formatCurrency(item.amount)}
+                                  {/* Pending Amount Logic */}
+                                  {(item.type === 'expense' || item.type === 'payment') && item.status === 'paid' ? '-' : item.type === 'projection' ? '-' : formatCurrency(item.amount)}
                                 </TableCell>
                                 <TableCell align="right">
-                                  <Chip 
-                                    label={item.type === 'bid' ? 'Bid' : item.type === 'projection' ? 'Projected' : item.status}
-                                    size="small"
-                                    color={item.type === 'bid' ? 'primary' : item.type === 'projection' ? 'info' : item.status === 'paid' ? 'success' : item.status === 'pending' ? 'warning' : 'default'}
-                                    sx={{ height: '20px', fontSize: '0.7rem' }}
-                                  />
+                                  <Chip /* Status Chip */ 
+                                     label={item.type === 'bid' ? 'Bid' : item.type === 'projection' ? 'Projected' : item.status}
+                                     size="small"
+                                     color={item.type === 'bid' ? 'primary' : item.type === 'projection' ? 'info' : item.status === 'paid' ? 'success' : item.status === 'pending' ? 'warning' : 'default'}
+                                     sx={{ height: '20px', fontSize: '0.7rem' }}
+                                   />
                                 </TableCell>
-                                {/* *************************** */} 
-
-                                 {/* Add Recategorization Cell for Uncategorized items - Now uses Autocomplete */} 
-                                {category.id === 'uncategorized' && (
-                                  <TableCell sx={{ minWidth: 250, maxWidth: 300 }}> {/* Adjust width */} 
+                                
+                                {/* NEW Edit Category Cell (Applies to all items) */} 
+                                <TableCell align="center" sx={{ width: '50px', padding: '0 4px' }}>
+                                  {editingItemId === item.id ? (
+                                    // Show Autocomplete when editing this item
                                     <Autocomplete
-                                      options={categoryOptions} // Use the pre-calculated options
-                                      getOptionLabel={(option) => option.label || ''} // How to display options
-                                      value={categoryOptions.find(opt => opt.value === categoryMappingPreferences[item.id]) || null} // Find the current value object
+                                      options={categoryOptions} 
+                                      getOptionLabel={(option) => option.label || ''}
+                                      value={categoryOptions.find(opt => opt.value === categoryMappingPreferences[item.id]) || null} 
                                       onChange={(event, newValue) => {
                                         if (newValue) {
                                           handleRecategorizeItem(item.id, newValue.value);
                                         }
+                                        setEditingItemId(null); // Close autocomplete after selection or if cleared
                                       }}
+                                      onBlur={() => setTimeout(() => setEditingItemId(null), 150)} // Delay blur slightly to allow selection
                                       renderInput={(params) => (
-                                        <TextField 
-                                          {...params} 
-                                          label="Re-assign Category"
-                                          size="small"
-                                          variant="outlined"
-                                        />
+                                        <TextField {...params} label="Category" size="small" variant="standard" autoFocus />
                                       )}
                                       renderOption={(props, option) => (
-                                        <li {...props} key={option.value}> {/* Add key here */} 
+                                        <li {...props} key={option.value}>
                                           {option.label}
                                         </li>
                                       )}
-                                      isOptionEqualToValue={(option, value) => option.value === value.value} // How to compare options
+                                      isOptionEqualToValue={(option, value) => option.value === value.value}
                                       size="small"
-                                      fullWidth
+                                      sx={{ minWidth: 220 }} // Ensure dropdown has enough width
+                                      open // Keep dropdown open immediately
                                     />
-                                  </TableCell>
-                                )}
+                                  ) : (
+                                    // Show Edit button when not editing
+                                    <Tooltip title="Change Category">
+                                      <IconButton size="small" onClick={() => setEditingItemId(item.id)}>
+                                        <EditIcon fontSize="inherit" />
+                                      </IconButton>
+                                    </Tooltip>
+                                  )}
+                                </TableCell>
                               </TableRow>
                             ))}
                             
                             {/* Projection summary row - Renders if category.hasProjections is true */} 
                             {category.hasProjections && (
                               <TableRow
-                                // ... styles for projection row ...
+                                sx={{ 
+                                  backgroundColor: alpha(theme.palette.info.light, 0.05),
+                                  '& td': { py: 0.75, fontSize: '0.75rem', color: 'text.secondary', borderBottom: '1px solid', borderColor: 'divider' }
+                                }}
                               >
-                                 <TableCell>{itemsToDisplay.length === 0 ? category.name : ''}</TableCell> {/* Show name if no items rendered */}
-                                <TableCell colSpan={3}>
-                                   {/* ... Projection details ... */} 
+                                 <TableCell sx={{ borderLeft: `3px solid ${theme.palette.divider}` }}>{itemsToDisplay.length === 0 ? category.name : ''}</TableCell> 
+                                <TableCell colSpan={3}> {/* Spans Desc, Alloc, Paid */}
+                                   <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                                    <Typography variant="body2" color="info.main">Includes projected costs</Typography>
+                                    <Button size="small" startIcon={<AddIcon />} sx={{ ml: 2 }} onClick={(e) => { e.stopPropagation(); handleOpenProjectionDialog(category.id, category.name); }}>Update Projection</Button>
+                                   </Box>
                                 </TableCell>
-                                <TableCell align="right">
-                                   {/* ... Projection amount ... */} 
+                                <TableCell align="right">{/* Spans Pending */}
+                                   <Typography variant="body2" color="info.main">+{formatCurrency(category.projected)}</Typography>
                                 </TableCell>
-                                <TableCell align="right">
-                                   {/* ... Projection chip ... */} 
+                                <TableCell align="right">{/* Spans Status */}
+                                   <Chip label="Projected" size="small" color="info" sx={{ height: '18px', fontSize: '0.65rem' }}/>
                                 </TableCell>
-                                {/* Add empty cell if Recategorization column exists */} 
-                                {categoryOptions.some(opt => categoryAllocations[opt.value]?.items.some(i=> categoryMappingPreferences[i.id] === 'uncategorized')) && <TableCell /> }
+                                <TableCell /> {/* Add empty cell for the Edit column */} 
                               </TableRow>
                             )}
                           </React.Fragment>

@@ -62,6 +62,7 @@ export interface Project {
   bids?: Bid[];
   tasks?: Task[];
   expenses?: Expense[];
+  budgetPreferences?: CategoryMappingPreferences;
 }
 
 export interface Bid {
@@ -346,3 +347,6 @@ export type {
 };
 
 // Add more common types as needed
+
+// Preferences for manual budget item categorization
+export type CategoryMappingPreferences = Record<string, string>;
