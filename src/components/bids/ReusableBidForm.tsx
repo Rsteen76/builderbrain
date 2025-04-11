@@ -25,6 +25,8 @@ import {
   DialogActions,
   InputAdornment,
   SelectChangeEvent,
+  FormControlLabel,
+  Checkbox,
 } from '@mui/material';
 import { DatePicker } from '@mui/x-date-pickers/DatePicker';
 import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
@@ -34,12 +36,14 @@ import {
   Delete as DeleteIcon,
   CloudUpload as UploadIcon,
   Business as BusinessIcon,
+  Info as InfoIcon,
 } from '@mui/icons-material';
 import { v4 as uuidv4 } from 'uuid';
 import { formatCurrency } from '../../utils/formatters';
 import { Bid, BidPaymentStage, Project, Subcontractor, Phase, BidFormData } from '../../types';
 import { ProjectService } from '../../services/project';
 import { useAuth } from '../../contexts/AuthContext';
+import { getProject } from '../../services/project';
 
 // Define common bid categories (Copied from BidFormShared.tsx for now)
 const COMMON_BID_CATEGORIES: string[] = [
@@ -393,10 +397,22 @@ const ReusableBidForm: React.FC<ReusableBidFormProps> = ({
     scope: '',
     timeline: 30,
     paymentTerms: {
-      downPaymentPercent: 50,
+      downPaymentPercent: 20,
+      isDownPaymentFixed: false,
+      downPaymentAmount: 0,
       installments: [
-        {id: uuidv4(), name: 'Final Payment', percent: 50, milestoneDescription: 'Upon completion'}
-      ]
+        {
+          id: uuidv4(),
+          name: 'Final Payment',
+          percent: 80,
+          isFixedAmount: false,
+          fixedAmount: 0,
+          milestoneDescription: 'Upon completion of work',
+          phaseId: '',
+          phaseName: ''
+        }
+      ],
+      syncInstallmentPhases: true
     },
     notes: '',
     status: 'submitted',
@@ -543,12 +559,41 @@ const ReusableBidForm: React.FC<ReusableBidFormProps> = ({
     console.log("[Effect Update Phases] Props -> availableProjects:", availableProjects?.map(p => p.name)); // Log names for readability
     console.log("[Effect Update Phases] State -> bidForm.projectId:", bidForm.projectId);
 
+    const fetchProjectPhases = async (id: string) => {
+      try {
+        console.log("[Effect Update Phases] Fetching phases for project:", id);
+        // Check if user is available before fetching
+        if (!user?.uid) {
+          console.warn("[Effect Update Phases] User not available, cannot fetch phases");
+          return;
+        }
+        
+        // Use the exported getProject function which takes userId as a second parameter
+        const project = await getProject(id, user.uid);
+        if (project && project.phases) {
+          console.log("[Effect Update Phases] Fetched project phases:", project.phases);
+          setCurrentProjectPhases(project.phases);
+        } else {
+          console.log("[Effect Update Phases] Project has no phases or could not be fetched");
+          setCurrentProjectPhases([]);
+        }
+      } catch (error) {
+        console.error("[Effect Update Phases] Error fetching project:", error);
+        setCurrentProjectPhases([]);
+      }
+    };
+
     // If projectId prop is provided, use the directly passed phases
     if (projectId && phases) {
       console.log("[Effect Update Phases] Mode: Using phases passed via props for projectId:", projectId);
       setCurrentProjectPhases(phases);
       console.log("[Effect Update Phases] Set currentProjectPhases to (from props):", phases);
     } 
+    // If projectId is provided but phases aren't, fetch the phases
+    else if (projectId && !phases) {
+      console.log("[Effect Update Phases] Mode: ProjectId provided but no phases, fetching from API");
+      fetchProjectPhases(projectId);
+    }
     // Else if we are in standalone mode (no projectId prop) and have availableProjects
     else if (!projectId && availableProjects && bidForm.projectId) {
       console.log("[Effect Update Phases] Mode: Standalone form, project selected.");
@@ -578,7 +623,7 @@ const ReusableBidForm: React.FC<ReusableBidFormProps> = ({
       // setBidForm(prev => ({ ...prev, phaseId: '', phaseName: '' }));
     }
   // Make sure all dependencies that influence the logic are included
-  }, [bidForm.projectId, bidForm.phaseId, projectId, phases, availableProjects]); 
+  }, [bidForm.projectId, bidForm.phaseId, projectId, phases, availableProjects, user?.uid]);
 
   // Form change handlers
   const handleChangeBidForm = (field: string, value: any) => {
@@ -592,10 +637,33 @@ const ReusableBidForm: React.FC<ReusableBidFormProps> = ({
     }
     
     setBidForm(prev => {
-      const newState = {
+      let newState = {
         ...prev,
         [field]: value
       };
+      
+      // Special handling for phaseId, also update phaseName
+      if (field === 'phaseId') {
+        const phaseName = currentProjectPhases.find(p => p.id === value)?.name || '';
+        newState.phaseName = phaseName;
+        
+        // Update all installment phases that haven't been manually configured
+        newState = {
+          ...newState,
+          paymentTerms: {
+            ...newState.paymentTerms,
+            installments: newState.paymentTerms.installments.map(inst => 
+              // Only update phases that haven't been manually configured
+              inst.manuallyConfigured ? inst : {
+                ...inst,
+                phaseId: value,
+                phaseName: phaseName
+              }
+            )
+          }
+        };
+      }
+      
       console.log(`ReusableBidForm - New form state after updating ${field}:`, newState);
       return newState;
     });
@@ -612,29 +680,89 @@ const ReusableBidForm: React.FC<ReusableBidFormProps> = ({
   };
 
   const handleAddInstallment = () => {
-    setBidForm(prev => ({
-      ...prev,
-      paymentTerms: {
-        ...prev.paymentTerms,
-        installments: [
-          ...prev.paymentTerms.installments,
-          {id: uuidv4(), name: `Installment ${prev.paymentTerms.installments.length + 1}`, percent: 0, milestoneDescription: ''}
-        ]
+    setBidForm(prev => {
+      const currentInstallments = prev.paymentTerms.installments;
+      const numInstallments = currentInstallments.length;
+      
+      // Check if we're using fixed amounts (based on down payment setting)
+      const useFixedAmounts = prev.paymentTerms.isDownPaymentFixed;
+      
+      // Create new array of installments with updated names
+      let updatedInstallments = [];
+      
+      if (numInstallments === 0) {
+        // If this is the first installment, name it "Final Payment"
+        updatedInstallments = [
+          {
+            id: uuidv4(), 
+            name: 'Final Payment', 
+            percent: 0, 
+            isFixedAmount: useFixedAmounts, // Match down payment type
+            fixedAmount: 0,
+            milestoneDescription: '',
+            phaseId: prev.phaseId || '',
+            phaseName: prev.phaseName || '',
+            manuallyConfigured: false
+          }
+        ];
+      } else {
+        // Rename existing installments
+        updatedInstallments = currentInstallments.map((item, index) => {
+          // All items except the last one are named "Installment N"
+          if (index < numInstallments - 1) {
+            return { ...item, name: `Installment ${index + 1}` };
+          } else {
+            // The previously last item becomes an installment
+            return { ...item, name: `Installment ${numInstallments}` };
+          }
+        });
+        
+        // Add the new item as "Final Payment"
+        updatedInstallments.push({
+          id: uuidv4(), 
+          name: 'Final Payment', 
+          percent: 0, 
+          isFixedAmount: useFixedAmounts, // Match down payment type
+          fixedAmount: 0,
+          milestoneDescription: '',
+          phaseId: prev.phaseId || '',
+          phaseName: prev.phaseName || '',
+          manuallyConfigured: false
+        });
       }
-    }));
+      
+      // Return the updated state
+      return {
+        ...prev,
+        paymentTerms: {
+          ...prev.paymentTerms,
+          installments: updatedInstallments
+        }
+      };
+    });
     setPaymentTemplate('custom');
   };
 
   const handleChangeInstallment = (id: string, field: string, value: any) => {
-    setBidForm(prev => ({
-      ...prev,
-      paymentTerms: {
-        ...prev.paymentTerms,
-        installments: prev.paymentTerms.installments.map(item => 
-          item.id === id ? {...item, [field]: value} : item
-        )
-      }
-    }));
+    setBidForm(prev => {
+      // Track if this is a phase-related change
+      const isPhaseChange = field === 'phaseId' || field === 'phaseName';
+      
+      return {
+        ...prev,
+        paymentTerms: {
+          ...prev.paymentTerms,
+          installments: prev.paymentTerms.installments.map(item => 
+            item.id === id ? {
+              ...item, 
+              [field]: value,
+              // If changing phase, mark it as manually configured
+              manuallyConfigured: isPhaseChange ? true : item.manuallyConfigured
+            } : item
+          )
+        }
+      };
+    });
     setPaymentTemplate('custom');
   };
 
@@ -656,6 +784,9 @@ const ReusableBidForm: React.FC<ReusableBidFormProps> = ({
     // Safely access phases
     const defaultPhase = (phases && phases.length > 0) ? phases[0] : null;
     
+    // Keep the current fixed amount setting for consistency
+    const useFixedAmounts = bidForm.paymentTerms.isDownPaymentFixed;
+    
     // Update payment terms based on template
     switch(template) {
       case 'one-time':
@@ -663,7 +794,10 @@ const ReusableBidForm: React.FC<ReusableBidFormProps> = ({
           ...prev,
           paymentTerms: {
             downPaymentPercent: 100,
-            installments: []
+            isDownPaymentFixed: useFixedAmounts,
+            downPaymentAmount: prev.totalAmount,
+            installments: [],
+            syncInstallmentPhases: prev.paymentTerms.syncInstallmentPhases
           }
         }));
         break;
@@ -672,42 +806,62 @@ const ReusableBidForm: React.FC<ReusableBidFormProps> = ({
           ...prev,
           paymentTerms: {
             downPaymentPercent: 50,
+            isDownPaymentFixed: useFixedAmounts,
+            downPaymentAmount: prev.totalAmount * 0.5,
             installments: [
               {
                 id: uuidv4(), 
                 name: 'Final Payment', 
-                percent: 50, 
+                percent: 50,
+                isFixedAmount: useFixedAmounts,
+                fixedAmount: prev.totalAmount * 0.5,
                 milestoneDescription: 'Upon completion',
                 phaseId: defaultPhase?.id,
-                phaseName: defaultPhase?.name
+                phaseName: defaultPhase?.name,
+                manuallyConfigured: false
               }
-            ]
+            ],
+            syncInstallmentPhases: prev.paymentTerms.syncInstallmentPhases
           }
         }));
         break;
       case 'trades':
+        // Using parseFloat(x.toFixed(1)) to round to 1 decimal place
+        const downPercent = parseFloat((30).toFixed(1));
+        const roughInPercent = parseFloat((40).toFixed(1));
+        const finalPercent = parseFloat((30).toFixed(1));
+        
         setBidForm(prev => ({
           ...prev,
           paymentTerms: {
-            downPaymentPercent: 30,
+            downPaymentPercent: downPercent,
+            isDownPaymentFixed: useFixedAmounts,
+            downPaymentAmount: prev.totalAmount * (downPercent / 100),
             installments: [
               {
                 id: uuidv4(), 
                 name: 'Rough-In', 
-                percent: 40, 
+                percent: roughInPercent,
+                isFixedAmount: useFixedAmounts,
+                fixedAmount: prev.totalAmount * (roughInPercent / 100),
                 milestoneDescription: 'After rough-in inspection',
                 phaseId: defaultPhase?.id,
-                phaseName: defaultPhase?.name
+                phaseName: defaultPhase?.name,
+                manuallyConfigured: false
               },
               {
                 id: uuidv4(), 
                 name: 'Final/Top-Out', 
-                percent: 30, 
+                percent: finalPercent,
+                isFixedAmount: useFixedAmounts,
+                fixedAmount: prev.totalAmount * (finalPercent / 100),
                 milestoneDescription: 'After final inspection',
                 phaseId: defaultPhase?.id,
-                phaseName: defaultPhase?.name
+                phaseName: defaultPhase?.name,
+                manuallyConfigured: false
               }
-            ]
+            ],
+            syncInstallmentPhases: prev.paymentTerms.syncInstallmentPhases
           }
         }));
         break;
@@ -1211,25 +1365,96 @@ const ReusableBidForm: React.FC<ReusableBidFormProps> = ({
           {/* Down Payment & Add Installment Button */}
           <Grid container spacing={2} sx={{ mb: 2 }}>
              <Grid item xs={12} sm={6}>
-                <TextField
-                  fullWidth
-                  label="Initial Payment (%)"
-                  type="number"
-                  size="small"
-                  InputProps={{
-                    endAdornment: <InputAdornment position="end">%</InputAdornment>,
-                    sx: { borderRadius: 1 }
-                  }}
-                  value={bidForm.paymentTerms.downPaymentPercent}
-                  onChange={(e) => {
-                    const val = Math.max(0, Math.min(100, Number(e.target.value)));
-                    handleChangePaymentTerms('downPaymentPercent', val);
-                    setPaymentTemplate('custom');
-                  }}
-                  variant="outlined"
-                />
+                <Grid container spacing={2} alignItems="center">
+                  <Grid item xs={6}>
+                    <FormControl fullWidth size="small">
+                      <InputLabel>Initial Payment Type</InputLabel>
+                      <Select
+                        value={bidForm.paymentTerms.isDownPaymentFixed ? 'amount' : 'percent'}
+                        label="Initial Payment Type"
+                        onChange={(e) => {
+                          const isAmount = e.target.value === 'amount';
+                          handleChangePaymentTerms('isDownPaymentFixed', isAmount);
+                          
+                          // When switching to amount, calculate from percentage
+                          if (isAmount && !bidForm.paymentTerms.isDownPaymentFixed) {
+                            const amount = bidForm.totalAmount * (bidForm.paymentTerms.downPaymentPercent / 100);
+                            handleChangePaymentTerms('downPaymentAmount', amount);
+                          }
+                          // When switching to percentage, calculate from amount
+                          else if (!isAmount && bidForm.paymentTerms.isDownPaymentFixed) {
+                            const percent = bidForm.totalAmount > 0 ? 
+                              (bidForm.paymentTerms.downPaymentAmount || 0) / bidForm.totalAmount * 100 : 0;
+                            handleChangePaymentTerms('downPaymentPercent', percent);
+                          }
+                          
+                          setPaymentTemplate('custom');
+                        }}
+                      >
+                        <MenuItem value="percent">Percentage (%)</MenuItem>
+                        <MenuItem value="amount">Fixed Amount ($)</MenuItem>
+                      </Select>
+                    </FormControl>
+                  </Grid>
+                  <Grid item xs={6}>
+                    {bidForm.paymentTerms.isDownPaymentFixed ? (
+                      <TextField
+                        fullWidth
+                        label="Initial Payment"
+                        type="number"
+                        size="small"
+                        InputProps={{
+                          startAdornment: <InputAdornment position="start">$</InputAdornment>,
+                          sx: { borderRadius: 1 }
+                        }}
+                        value={bidForm.paymentTerms.downPaymentAmount || 0}
+                        onChange={(e) => {
+                          const val = Math.max(0, Number(e.target.value));
+                          handleChangePaymentTerms('downPaymentAmount', val);
+                          
+                          // Also update percentage for consistency
+                          if (bidForm.totalAmount > 0) {
+                            const percent = (val / bidForm.totalAmount) * 100;
+                            handleChangePaymentTerms('downPaymentPercent', percent);
+                          }
+                          
+                          setPaymentTemplate('custom');
+                        }}
+                        variant="outlined"
+                      />
+                    ) : (
+                      <TextField
+                        fullWidth
+                        label="Initial Payment"
+                        type="number"
+                        size="small"
+                        InputProps={{
+                          endAdornment: <InputAdornment position="end">%</InputAdornment>,
+                          sx: { borderRadius: 1 }
+                        }}
+                        value={bidForm.paymentTerms.downPaymentPercent}
+                        onChange={(e) => {
+                          const val = Math.max(0, Math.min(100, Number(e.target.value)));
+                          // Round to 1 decimal place
+                          const roundedVal = parseFloat(val.toFixed(1));
+                          handleChangePaymentTerms('downPaymentPercent', roundedVal);
+                          
+                          // Also update amount for consistency
+                          const amount = bidForm.totalAmount * (roundedVal / 100);
+                          handleChangePaymentTerms('downPaymentAmount', amount);
+                          
+                          setPaymentTemplate('custom');
+                        }}
+                        variant="outlined"
+                      />
+                    )}
+                  </Grid>
+                </Grid>
                 <FormHelperText sx={{ textAlign: 'right', mt: 0.5 }}>
-                  Amount: {formatCurrency(bidForm.totalAmount * bidForm.paymentTerms.downPaymentPercent / 100)}
+                  {bidForm.paymentTerms.isDownPaymentFixed ? 
+                    `Equivalent: ${(bidForm.totalAmount > 0 ? 
+                      (bidForm.paymentTerms.downPaymentAmount || 0) / bidForm.totalAmount * 100 : 0).toFixed(1)}%` : 
+                    `Amount: ${formatCurrency(bidForm.totalAmount * bidForm.paymentTerms.downPaymentPercent / 100)}`}
                 </FormHelperText>
               </Grid>
               <Grid item xs={12} sm={6}> 
@@ -1286,41 +1511,109 @@ const ReusableBidForm: React.FC<ReusableBidFormProps> = ({
                     InputProps={{ sx: { borderRadius: 1 } }}
                   />
                 </Grid>
-
-                <Grid item xs={6} sm={3} md={2}> {/* Tighter grid */}
-                  <TextField
-                    fullWidth
-                    required
-                    label="Percent"
-                    type="number"
-                    size="small"
-                    value={installment.percent}
-                    InputProps={{ 
-                      endAdornment: <InputAdornment position="end">%</InputAdornment>,
-                      sx: { borderRadius: 1 } 
-                    }}
-                    onChange={(e) => {
-                      const val = Math.max(0, Number(e.target.value));
-                      handleChangeInstallment(installment.id, 'percent', val);
-                      setPaymentTemplate('custom');
-                    }}
-                    variant="outlined"
-                  />
-                </Grid>
                 
-                <Grid item xs={6} sm={3} md={2}> {/* Amount display (read-only) */}
-                   <TextField
-                     fullWidth
-                     disabled
-                     label="Amount"
-                     size="small"
-                     value={formatCurrency(bidForm.totalAmount * installment.percent / 100)}
-                     variant="outlined"
-                     InputProps={{ 
+                {/* Input Type Selector */}
+                <Grid item xs={6} sm={3} md={2}>
+                  <FormControl fullWidth size="small">
+                    <InputLabel>Input Type</InputLabel>
+                    <Select
+                      value={installment.isFixedAmount ? 'amount' : 'percent'}
+                      label="Input Type"
+                      onChange={(e) => {
+                        const isAmount = e.target.value === 'amount';
+                        handleChangeInstallment(installment.id, 'isFixedAmount', isAmount);
+                        
+                        // When switching to amount, calculate from percentage
+                        if (isAmount && !installment.isFixedAmount) {
+                          const amount = bidForm.totalAmount * (installment.percent / 100);
+                          handleChangeInstallment(installment.id, 'fixedAmount', amount);
+                        }
+                        // When switching to percentage, calculate from amount
+                        else if (!isAmount && installment.isFixedAmount) {
+                          const percent = bidForm.totalAmount > 0 ? 
+                            (installment.fixedAmount || 0) / bidForm.totalAmount * 100 : 0;
+                          // Round to 1 decimal place
+                          const roundedPercent = parseFloat(percent.toFixed(1));
+                          handleChangeInstallment(installment.id, 'percent', roundedPercent);
+                        }
+                      }}
+                    >
+                      <MenuItem value="percent">Percentage (%)</MenuItem>
+                      <MenuItem value="amount">Fixed Amount ($)</MenuItem>
+                    </Select>
+                  </FormControl>
+                </Grid>
+
+                {/* Dynamic Input Field (Amount OR Percentage) */}
+                <Grid item xs={6} sm={3} md={2}>
+                  {installment.isFixedAmount ? (
+                    <TextField
+                      fullWidth
+                      required
+                      label="Amount"
+                      type="number"
+                      size="small"
+                      value={installment.fixedAmount || 0}
+                      InputProps={{ 
                         startAdornment: <InputAdornment position="start">$</InputAdornment>,
                         sx: { borderRadius: 1 } 
                       }}
-                   />
+                      onChange={(e) => {
+                        const val = Math.max(0, Number(e.target.value));
+                        handleChangeInstallment(installment.id, 'fixedAmount', val);
+                        
+                        // Also update percentage for consistency
+                        if (bidForm.totalAmount > 0) {
+                          const percent = (val / bidForm.totalAmount) * 100;
+                          handleChangeInstallment(installment.id, 'percent', percent);
+                        }
+                        
+                        setPaymentTemplate('custom');
+                      }}
+                      variant="outlined"
+                    />
+                  ) : (
+                    <TextField
+                      fullWidth
+                      required
+                      label="Percent"
+                      type="number"
+                      size="small"
+                      value={installment.percent}
+                      InputProps={{ 
+                        endAdornment: <InputAdornment position="end">%</InputAdornment>,
+                        sx: { borderRadius: 1 } 
+                      }}
+                      onChange={(e) => {
+                        const val = Math.max(0, Number(e.target.value));
+                        // Round to 1 decimal place
+                        const roundedVal = parseFloat(val.toFixed(1));
+                        handleChangeInstallment(installment.id, 'percent', roundedVal);
+                        
+                        // Also update fixed amount for consistency
+                        const amount = bidForm.totalAmount * (roundedVal / 100);
+                        handleChangeInstallment(installment.id, 'fixedAmount', amount);
+                        
+                        setPaymentTemplate('custom');
+                      }}
+                      variant="outlined"
+                    />
+                  )}
+                </Grid>
+                
+                {/* Calculated Value (read-only) - shows the other format */}
+                <Grid item xs={6} sm={3} md={2}>
+                  <TextField
+                    fullWidth
+                    disabled
+                    label={installment.isFixedAmount ? "Equivalent %" : "Equivalent $"}
+                    size="small"
+                    value={installment.isFixedAmount ? 
+                      `${(bidForm.totalAmount > 0 ? (installment.fixedAmount || 0) / bidForm.totalAmount * 100 : 0).toFixed(1)}%` : 
+                      formatCurrency(bidForm.totalAmount * installment.percent / 100)}
+                    variant="outlined"
+                    InputProps={{ sx: { borderRadius: 1 } }}
+                  />
                 </Grid>
 
                 <Grid item xs={12} sm={6} md={4}> {/* Tighter grid */}
@@ -1338,10 +1631,31 @@ const ReusableBidForm: React.FC<ReusableBidFormProps> = ({
                       sx={{ borderRadius: 1 }}
                     >
                       <MenuItem value=""><em>None</em></MenuItem> 
-                      {currentProjectPhases.map((p) => (
-                        <MenuItem key={p.id} value={p.id}>{p.name}</MenuItem>
-                      ))}
+                      {currentProjectPhases && currentProjectPhases.length > 0 ? (
+                        currentProjectPhases.map((p) => (
+                          <MenuItem key={p.id} value={p.id}>
+                            {p.name} {p.id === bidForm.phaseId ? ' (Default)' : ''}
+                          </MenuItem>
+                        ))
+                      ) : (
+                        <MenuItem disabled>
+                          <Typography variant="caption" color="textSecondary">
+                            No phases available for this project
+                          </Typography>
+                        </MenuItem>
+                      )}
                     </Select>
+                    {installment.phaseId && installment.phaseId === bidForm.phaseId && (
+                      <FormHelperText>Using default bid phase</FormHelperText>
+                    )}
+                    {installment.phaseId && installment.phaseId !== bidForm.phaseId && (
+                      <FormHelperText>Custom phase selection</FormHelperText>
+                    )}
+                    {(!currentProjectPhases || currentProjectPhases.length === 0) && (
+                      <FormHelperText>
+                        This project has no phases defined
+                      </FormHelperText>
+                    )}
                   </FormControl>
                 </Grid>
 
@@ -1361,15 +1675,160 @@ const ReusableBidForm: React.FC<ReusableBidFormProps> = ({
             </Paper>
           ))}
 
-          {bidForm.paymentTerms.downPaymentPercent + bidForm.paymentTerms.installments.reduce((s, i) => s + i.percent, 0) !== 100 && (
-            <Alert 
-              severity="warning" 
-              variant="outlined" 
-              sx={{ mt: 1, mb: 3, borderRadius: 1, py: 0.5, fontSize: '0.875rem' }} // Compact Alert
-            >
-              Payments must total 100%. Current: {bidForm.paymentTerms.downPaymentPercent + bidForm.paymentTerms.installments.reduce((s, i) => s + i.percent, 0)}%
-            </Alert>
-          )}
+          {/* Payment Total Summary and Warning */}
+          {(() => {
+            // Calculate total percentage and amount in real-time
+            const downPaymentPercent = bidForm.paymentTerms.downPaymentPercent;
+            const installmentPercentTotal = bidForm.paymentTerms.installments.reduce((sum, i) => sum + i.percent, 0);
+            const totalPercentage = downPaymentPercent + installmentPercentTotal;
+            
+            // Calculate actual dollar amounts
+            const downPaymentAmount = bidForm.paymentTerms.isDownPaymentFixed 
+              ? (bidForm.paymentTerms.downPaymentAmount || 0)
+              : (bidForm.totalAmount * downPaymentPercent / 100);
+            
+            const installmentAmountTotal = bidForm.paymentTerms.installments.reduce((sum, i) => 
+              sum + (i.isFixedAmount ? (i.fixedAmount || 0) : (bidForm.totalAmount * i.percent / 100)), 0);
+            
+            const totalAmount = downPaymentAmount + installmentAmountTotal;
+            
+            // Create informative message based on calculations
+            const exactlyOneHundred = Math.abs(totalPercentage - 100) < 0.01; // Allow tiny floating point errors
+            const matchesTotalBid = Math.abs(totalAmount - bidForm.totalAmount) < 0.01;
+            
+            // Get final payment if exists
+            const hasFinalPayment = bidForm.paymentTerms.installments.length > 0;
+            const finalPayment = hasFinalPayment ? bidForm.paymentTerms.installments[bidForm.paymentTerms.installments.length - 1] : null;
+            const finalPaymentAmount = finalPayment ? 
+              (finalPayment.isFixedAmount ? 
+                (finalPayment.fixedAmount || 0) : 
+                bidForm.totalAmount * (finalPayment.percent || 0) / 100) : 0;
+            const finalPaymentPercent = finalPayment ? (finalPayment.percent || 0) : 0;
+            
+            // Calculate what final payment should be to reach 100%
+            const remainingPercent = 100 - downPaymentPercent - (hasFinalPayment ? 
+              bidForm.paymentTerms.installments.slice(0, -1).reduce((sum, inst) => sum + (inst.percent || 0), 0) : 0);
+            const suggestedFinalAmount = bidForm.totalAmount * (remainingPercent / 100);
+            
+            if (!exactlyOneHundred || !matchesTotalBid) {
+              return (
+                <Alert 
+                  severity="warning" 
+                  variant="outlined" 
+                  sx={{ mt: 1, mb: 3, borderRadius: 1, py: 1 }}
+                >
+                  <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
+                    <Typography variant="subtitle2" fontWeight="bold" sx={{ mr: 1 }}>
+                      Payment Schedule Incomplete
+                    </Typography>
+                    <Typography variant="body2" color="text.secondary">
+                      {!exactlyOneHundred ? 
+                        `Total: ${totalPercentage.toFixed(1)}% (needs to be 100%)` : 
+                        `Total: ${formatCurrency(totalAmount)} (should be ${formatCurrency(bidForm.totalAmount)})`}
+                    </Typography>
+                  </Box>
+                  
+                  <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 2 }}>
+                    <Box sx={{ minWidth: 120 }}>
+                      <Typography variant="caption" color="text.secondary">Initial Payment</Typography>
+                      <Typography variant="body2" fontWeight="medium">
+                        {formatCurrency(downPaymentAmount)} ({downPaymentPercent.toFixed(1)}%)
+                      </Typography>
+                    </Box>
+                    
+                    {bidForm.paymentTerms.installments.length > 1 && (
+                      <Box sx={{ minWidth: 120 }}>
+                        <Typography variant="caption" color="text.secondary">Intermediate</Typography>
+                        <Typography variant="body2" fontWeight="medium">
+                          {formatCurrency(bidForm.paymentTerms.installments.slice(0, -1).reduce((sum, inst) => {
+                            return sum + (inst.isFixedAmount 
+                              ? (inst.fixedAmount || 0) 
+                              : (bidForm.totalAmount * inst.percent / 100));
+                          }, 0))} ({bidForm.paymentTerms.installments.slice(0, -1).reduce((sum, inst) => sum + inst.percent, 0).toFixed(1)}%)
+                        </Typography>
+                      </Box>
+                    )}
+                    
+                    {hasFinalPayment && (
+                      <Box sx={{ minWidth: 120 }}>
+                        <Typography variant="caption" color="text.secondary" sx={{ display: 'flex', alignItems: 'center' }}>
+                          Final Payment
+                          {!exactlyOneHundred && (
+                            <Tooltip title="Needs adjustment to reach 100%">
+                              <InfoIcon fontSize="small" color="warning" sx={{ ml: 0.5, opacity: 0.7, width: 16, height: 16 }} />
+                            </Tooltip>
+                          )}
+                        </Typography>
+                        <Typography variant="body2" fontWeight="medium">
+                          {formatCurrency(finalPaymentAmount)} ({finalPaymentPercent.toFixed(1)}%)
+                        </Typography>
+                        {!exactlyOneHundred && finalPaymentPercent !== remainingPercent && (
+                          <Typography variant="caption" color="warning.main">
+                            Should be: {formatCurrency(suggestedFinalAmount)} ({remainingPercent.toFixed(1)}%)
+                          </Typography>
+                        )}
+                      </Box>
+                    )}
+                  </Box>
+                  
+                  <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 1 }}>
+                    {!exactlyOneHundred ? 
+                      `To complete the schedule, the final payment should be ${formatCurrency(suggestedFinalAmount)} (${remainingPercent.toFixed(1)}%).` :
+                      "Please adjust the payment amounts to match the total bid amount."}
+                  </Typography>
+                </Alert>
+              );
+            }
+            
+            // If both amounts and percentages match, show a success message
+            return (
+              <Alert 
+                severity="success" 
+                variant="outlined" 
+                sx={{ mt: 1, mb: 3, borderRadius: 1, py: 1 }}
+              >
+                <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
+                  <Typography variant="subtitle2" fontWeight="bold" sx={{ mr: 1 }}>
+                    Payment Schedule Complete
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    Total: {formatCurrency(totalAmount)} (100%)
+                  </Typography>
+                </Box>
+                
+                <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 2 }}>
+                  <Box sx={{ minWidth: 120 }}>
+                    <Typography variant="caption" color="text.secondary">Initial Payment</Typography>
+                    <Typography variant="body2" fontWeight="medium">
+                      {formatCurrency(downPaymentAmount)} ({downPaymentPercent.toFixed(1)}%)
+                    </Typography>
+                  </Box>
+                  
+                  {bidForm.paymentTerms.installments.length > 1 && (
+                    <Box sx={{ minWidth: 120 }}>
+                      <Typography variant="caption" color="text.secondary">Intermediate</Typography>
+                      <Typography variant="body2" fontWeight="medium">
+                        {formatCurrency(bidForm.paymentTerms.installments.slice(0, -1).reduce((sum, inst) => {
+                          return sum + (inst.isFixedAmount 
+                            ? (inst.fixedAmount || 0) 
+                            : (bidForm.totalAmount * inst.percent / 100));
+                        }, 0))} ({bidForm.paymentTerms.installments.slice(0, -1).reduce((sum, inst) => sum + inst.percent, 0).toFixed(1)}%)
+                      </Typography>
+                    </Box>
+                  )}
+                  
+                  {hasFinalPayment && (
+                    <Box sx={{ minWidth: 120 }}>
+                      <Typography variant="caption" color="text.secondary">Final Payment</Typography>
+                      <Typography variant="body2" fontWeight="medium">
+                        {formatCurrency(finalPaymentAmount)} ({finalPaymentPercent.toFixed(1)}%)
+                      </Typography>
+                    </Box>
+                  )}
+                </Box>
+              </Alert>
+            );
+          })()}
         </Box>
 
         {/* Notes Section */}

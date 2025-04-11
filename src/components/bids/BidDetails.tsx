@@ -382,7 +382,8 @@ const BidDetails: React.FC = () => {
           milestoneDescription: payment.description || '',
           phaseId: payment.phaseId || '',
           phaseName: payment.phaseName || '',
-        })) || []
+        })) || [],
+        syncInstallmentPhases: true
       },
       notes: bid.notes || '',
       attachments: convertAttachments(bid.attachments),

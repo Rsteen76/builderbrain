@@ -158,7 +158,8 @@ const QuickBidDialog: React.FC<QuickBidDialogProps> = ({
             downPaymentPercent: 50,
             installments: [
               {id: 'final', name: 'Final Payment', percent: 50, milestoneDescription: 'Upon completion'}
-            ]
+            ],
+            syncInstallmentPhases: true
           },
           notes: '',
           status: 'submitted',

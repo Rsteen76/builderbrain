@@ -58,6 +58,7 @@ export function useBidFormDialog(userId: string | undefined, options: UseBidForm
       paymentTerms: {
         downPaymentPercent: downPaymentPercent,
         installments: installments,
+        syncInstallmentPhases: true
       },
       notes: bid.notes || '',
       status: bid.status || 'draft',

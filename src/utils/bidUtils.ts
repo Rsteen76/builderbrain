@@ -44,6 +44,7 @@ export const formatBidForDialog = (bid: Bid): Partial<BidFormData> => {
     paymentTerms: {
       downPaymentPercent: downPaymentPercent,
       installments: installments,
+      syncInstallmentPhases: true
     },
     notes: bid.notes || '',
     status: bid.status || 'draft', // Usually handled separately, but might be needed

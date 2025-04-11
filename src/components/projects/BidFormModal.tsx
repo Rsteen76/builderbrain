@@ -108,8 +108,8 @@ const BidFormModal: React.FC<BidFormModalProps> = ({
           {
             id: uuidv4(),
             name: 'Down Payment',
-            percentage: bidFormData.paymentTerms.downPaymentPercent,
-            amount: (bidFormData.totalAmount * bidFormData.paymentTerms.downPaymentPercent) / 100,
+            percentage: Math.round(bidFormData.paymentTerms.downPaymentPercent * 10) / 10,
+            amount: (bidFormData.totalAmount * Math.round(bidFormData.paymentTerms.downPaymentPercent * 10) / 10) / 100,
             status: 'pending',
             phaseId: bidFormData.phaseId,
             phaseName: bidFormData.phaseName,
@@ -121,8 +121,8 @@ const BidFormModal: React.FC<BidFormModalProps> = ({
           ...bidFormData.paymentTerms.installments.map((installment: any) => ({
             id: uuidv4(),
             name: installment.name,
-            percentage: installment.percent,
-            amount: (bidFormData.totalAmount * installment.percent) / 100,
+            percentage: Math.round(installment.percent * 10) / 10,
+            amount: (bidFormData.totalAmount * Math.round(installment.percent * 10) / 10) / 100,
             status: 'pending',
             phaseId: installment.phaseId || bidFormData.phaseId,
             phaseName: installment.phaseName || bidFormData.phaseName,
@@ -196,7 +196,8 @@ const BidFormModal: React.FC<BidFormModalProps> = ({
                   milestoneDescription: payment.description || '',
                   phaseId: payment.phaseId || '',
                   phaseName: payment.phaseName || ''
-                })) || [{id: uuidv4(), name: 'Final Payment', percent: 80, milestoneDescription: 'Upon completion'}]
+                })) || [{id: uuidv4(), name: 'Final Payment', percent: 80, milestoneDescription: 'Upon completion'}],
+                syncInstallmentPhases: true
               }
             } : undefined}
             isDialog={true}

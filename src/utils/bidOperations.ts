@@ -96,8 +96,8 @@ export const submitBid = async (
       {
         id: uuidv4(),
         name: 'Down Payment',
-        percentage: bidData.paymentTerms.downPaymentPercent,
-        amount: (bidData.totalAmount * bidData.paymentTerms.downPaymentPercent) / 100,
+        percentage: Math.round(bidData.paymentTerms.downPaymentPercent * 10) / 10,
+        amount: (bidData.totalAmount * Math.round(bidData.paymentTerms.downPaymentPercent * 10) / 10) / 100,
         status: 'pending' as const,
         phaseId: bidData.phaseId,
         phaseName: bidData.phaseName,
@@ -109,8 +109,8 @@ export const submitBid = async (
       ...bidData.paymentTerms.installments.map(installment => ({
         id: installment.id || uuidv4(),
         name: installment.name,
-        percentage: installment.percent,
-        amount: (bidData.totalAmount * installment.percent) / 100,
+        percentage: Math.round(installment.percent * 10) / 10,
+        amount: (bidData.totalAmount * Math.round(installment.percent * 10) / 10) / 100,
         status: 'pending' as const,
         phaseId: installment.phaseId || bidData.phaseId,
         phaseName: installment.phaseName || bidData.phaseName,

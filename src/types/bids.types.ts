@@ -15,14 +15,20 @@ export interface BidFormData {
   submissionDeadline?: Date;
   paymentTerms: {
     downPaymentPercent: number;
+    isDownPaymentFixed?: boolean;
+    downPaymentAmount?: number;
     installments: {
       id: string;
       name: string;
       percent: number;
+      isFixedAmount?: boolean;
+      fixedAmount?: number;
       milestoneDescription: string;
       phaseId?: string;
       phaseName?: string;
+      manuallyConfigured?: boolean;
     }[];
+    syncInstallmentPhases: boolean;
   };
   notes: string;
   status: 'draft' | 'submitted' | 'accepted' | 'rejected' | 'expired' | 'withdrawn' | 'revision_requested';
