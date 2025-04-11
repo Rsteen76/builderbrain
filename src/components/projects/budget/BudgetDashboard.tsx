@@ -63,6 +63,8 @@ import {
   GroupWork as GroupWorkIcon,
 } from "@mui/icons-material";
 import { Timestamp } from "firebase/firestore";
+import { doc, updateDoc } from 'firebase/firestore'; // <--- Import Firestore update functions
+import { db } from '../../../config/firebase'; // <--- Import db instance
 
 import {
   ResponsiveContainer,
@@ -131,10 +133,13 @@ interface BudgetHealth {
 }
 
 const BudgetDashboard: React.FC<BudgetDashboardProps> = (/*{ projectId }*/) => {
+  // REMOVE component start log
+  // console.log("--- BudgetDashboard Rendering Start ---");
+
   const theme = useTheme();
   const { user } = useAuth();
   
-  // GET DATA FROM CONTEXT
+  // GET DATA FROM CONTEXT, including the refresh function
   const { 
       project: contextProject, 
       phases: contextPhases, 
@@ -142,8 +147,12 @@ const BudgetDashboard: React.FC<BudgetDashboardProps> = (/*{ projectId }*/) => {
       bids: contextBids, 
       loading: contextLoading, 
       error: contextError, 
-      projectId // Get projectId from context
+      projectId,
+      refreshAllProjectData // **** Get the EXISTING refresh function ****
   } = useProjectDetail();
+
+  // REMOVE context values log
+  // console.log("Context Values:", { ... });
   
   // Use context data directly instead of fetching via useEffect
   const project = contextProject;
@@ -153,19 +162,42 @@ const BudgetDashboard: React.FC<BudgetDashboardProps> = (/*{ projectId }*/) => {
   const loading = contextLoading; 
   const error = contextError;
   const projections = useMemo(() => (
-      project?.projections?.map(p => ({ 
+      contextProject?.projections?.map(p => ({ 
           ...p, 
           createdAt: p.createdAt instanceof Timestamp ? p.createdAt.toDate() : new Date(p.createdAt)
       })) || []
-  ), [project?.projections]);
+  ), [contextProject?.projections]);
   
   // State for category mappings & loading
   const [categoryMappings, setCategoryMappings] = useState<Record<string, string>>({});
   const [mappingsLoading, setMappingsLoading] = useState<boolean>(true);
-  const [snackbar, setSnackbar] = useState<{ open: boolean, message: string, severity: 'success' | 'error' }>({ open: false, message: '', severity: 'success' });
+  const [snackbar, setSnackbar] = useState<{ open: boolean, message: string, severity: 'success' | 'error' | 'info' }>({ open: false, message: '', severity: 'success' });
 
   // State for expense grouping
   const [expenseGrouping, setExpenseGrouping] = useState<'category' | 'contractor'>('category');
+
+  // Moved this hook *before* the early return for !project
+  const projectionsByMainCategory = useMemo(() => {
+    if (!projections || projections.length === 0) {
+      // REMOVE log
+      // console.log("Skipping projectionsByMainCategory: No projections");
+      return [];
+    }
+    // REMOVE log
+    // console.log("Calculating projectionsByMainCategory...");
+    const grouped = new Map<string, { name: string; totalAmount: number }>();
+    projections.forEach(projection => {
+      const detailedCategoryId = projection.categoryId || 'uncategorized';
+      const mainCategory = getParentCategory(detailedCategoryId) || getCategoryById(detailedCategoryId);
+      const mainCategoryId = mainCategory?.id || 'uncategorized';
+      const mainCategoryName = mainCategory?.name || 'Uncategorized';
+      if (!grouped.has(mainCategoryId)) {
+        grouped.set(mainCategoryId, { name: mainCategoryName, totalAmount: 0 });
+      }
+      grouped.get(mainCategoryId)!.totalAmount += projection.amount;
+    });
+    return Array.from(grouped.values()).sort((a, b) => b.totalAmount - a.totalAmount);
+  }, [projections]);
 
   // REMOVE Fetch data useEffect
   // useEffect(() => { ... }, [projectId, user]);
@@ -365,8 +397,17 @@ const BudgetDashboard: React.FC<BudgetDashboardProps> = (/*{ projectId }*/) => {
 
   // Budget allocation by phase for visualization
   const phaseAllocation = useMemo(() => {
-    if (!phases || !expenses) return [];
+    // REMOVE hook start log
+    // console.log("ENTERING phaseAllocation useMemo... ");
+    if (!phases || !expenses) {
+      // REMOVE log
+      // console.log("phaseAllocation: Phases or expenses not available...");
+      return [];
+    }
     
+    // REMOVE raw phase data log
+    // console.log("RAW PHASES FOR KEY CHECK (inside useMemo):", ...);
+
     return phases
       .map((phase, index) => {
       const colors = [
@@ -388,6 +429,7 @@ const BudgetDashboard: React.FC<BudgetDashboardProps> = (/*{ projectId }*/) => {
         );
       
       return {
+        id: phase.id, // Keep id property
         name: phase.name,
         budget: phase.budget || 0,
         spent: actualCost,
@@ -623,6 +665,8 @@ const BudgetDashboard: React.FC<BudgetDashboardProps> = (/*{ projectId }*/) => {
   
   // Use context loading state
   if (loading || mappingsLoading) {
+    // REMOVE log
+    // console.log("Rendering Loading state");
     return (
       <Box
         sx={{
@@ -641,6 +685,8 @@ const BudgetDashboard: React.FC<BudgetDashboardProps> = (/*{ projectId }*/) => {
 
   // Use context error state
   if (error) {
+    // REMOVE log
+    // console.log("Rendering Error state:", error);
     return (
       <Box sx={{ p: 3 }}>
         <Typography variant="h5" color="error">
@@ -652,13 +698,113 @@ const BudgetDashboard: React.FC<BudgetDashboardProps> = (/*{ projectId }*/) => {
   }
 
   // Use context project state
-  if (!project) {
+  if (!contextProject) { 
+    // REMOVE log
+    // console.log("Rendering Project Not Found state");
+    // Early return ONLY after all hooks have been called
     return (
       <Box sx={{ p: 3 }}>
         <Typography variant="h5">Project not found</Typography>
       </Box>
     );
   }
+
+  // REMOVE log before final return
+  // console.log("Rendering BudgetDashboard main content");
+
+  // **** ADD THE HANDLER FUNCTION ****
+  const handleUpdateProjectionCategory = async (projectionId: string, newCategoryId: string) => {
+    if (!contextProject || !contextProject.id) {
+      console.error("Cannot update projection: Project context data missing.");
+      setSnackbar({ open: true, message: 'Cannot update: Project data missing.', severity: 'error' });
+      throw new Error("Project context data missing");
+    }
+    
+    const currentRawProjections = contextProject.projections || [];
+    const updatedRawProjections = currentRawProjections.map(p =>
+      p.id === projectionId ? { ...p, categoryId: newCategoryId } : p
+    );
+
+    try {
+      const projectRef = doc(db, 'projects', contextProject.id);
+      const projectionsToSave = updatedRawProjections.map(p => ({
+        id: p.id,
+        categoryId: p.categoryId,
+        amount: p.amount,
+        notes: p.notes || null,
+        createdAt: p.createdAt instanceof Date ? Timestamp.fromDate(p.createdAt) : p.createdAt 
+      }));
+
+      await updateDoc(projectRef, { 
+        projections: projectionsToSave
+      });
+
+      setSnackbar({ open: true, message: 'Projection category updated successfully!', severity: 'success' });
+
+      // **** TRIGGER CONTEXT REFRESH using existing function ****
+      if (refreshAllProjectData) {
+         console.log("Triggering context refreshAllProjectData after update...");
+         await refreshAllProjectData(); // Tell the context to get fresh data
+      } else {
+         // This case should ideally not happen if context is set up correctly
+         console.warn("ProjectDetailContext did not provide refreshAllProjectData! UI might be stale.");
+      }
+
+    } catch (err) {
+      console.error("Error saving updated projections:", err);
+      setSnackbar({ open: true, message: 'Failed to save projection update.', severity: 'error' });
+      throw err; // Re-throw error to allow child component to potentially handle it
+    }
+  };
+
+  // **** Restore handleAddProjection ****
+  const handleAddProjection = async (newProjectionData: Omit<BudgetProjection, 'id' | 'createdAt'>) => {
+    if (!contextProject || !contextProject.id) {
+      console.error("Cannot add projection: Project context data missing.");
+      setSnackbar({ open: true, message: 'Cannot add: Project data missing.', severity: 'error' });
+      throw new Error("Project context data missing");
+    }
+
+    const newProjection: BudgetProjection = {
+      ...newProjectionData,
+      id: `projection-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+      createdAt: new Date(), // Use current date
+    };
+
+    const currentRawProjections = contextProject.projections || [];
+    const updatedRawProjections = [...currentRawProjections, newProjection];
+
+    try {
+      const projectRef = doc(db, 'projects', contextProject.id);
+      const projectionsToSave = updatedRawProjections.map(p => ({
+        id: p.id,
+        categoryId: p.categoryId,
+        amount: p.amount,
+        notes: p.notes || null,
+        createdAt: p.createdAt instanceof Date ? Timestamp.fromDate(p.createdAt) : p.createdAt 
+      }));
+
+      await updateDoc(projectRef, { 
+        projections: projectionsToSave
+      });
+      
+      setSnackbar({ open: true, message: 'Projection added successfully!', severity: 'success' });
+
+      // **** TRIGGER CONTEXT REFRESH using existing function ****
+      if (refreshAllProjectData) {
+         console.log("Triggering context refreshAllProjectData after add...");
+         await refreshAllProjectData(); // Tell the context to get fresh data
+      } else {
+         // This case should ideally not happen if context is set up correctly
+         console.warn("ProjectDetailContext did not provide refreshAllProjectData! UI might be stale.");
+      }
+
+    } catch (err) {
+      console.error("Error adding projection:", err);
+      setSnackbar({ open: true, message: 'Failed to add projection.', severity: 'error' });
+      throw err; 
+    }
+  };
 
   return (
     <Box sx={{ p: { xs: 2, md: 3 } }}>
@@ -674,17 +820,19 @@ const BudgetDashboard: React.FC<BudgetDashboardProps> = (/*{ projectId }*/) => {
         <Typography variant="h5" sx={{ fontWeight: 600 }}>
         Budget Overview
       </Typography>
-        {/* Pass context data to BudgetReportButton */}
-        <BudgetReportButton
-          project={project}
-          expenses={expenses}
-          phases={phases}
-          bids={bids}
-          projections={projections} // Pass local projections state
-          variant="outlined"
-          color="primary"
-          size="medium"
-        />
+        {/* **** FIX TS ERROR: Conditionally render button **** */}
+        {contextProject && (
+          <BudgetReportButton
+            project={contextProject} // Now guaranteed to be non-null here
+            expenses={expenses}
+            phases={phases}
+            bids={bids}
+            projections={projections} 
+            variant="outlined"
+            color="primary"
+            size="medium"
+          />
+        )}
       </Box>
       
       {/* Budget Overview Cards */}
@@ -1372,9 +1520,10 @@ const BudgetDashboard: React.FC<BudgetDashboardProps> = (/*{ projectId }*/) => {
                     </TableRow>
                   </TableHead>
                   <TableBody>
+                    {/* **** FINAL FIX: Revert key back to phase.id **** */}
                     {phaseAllocation.map((phase) => (
                       <TableRow
-                        key={phase.name}
+                        key={phase.id} // **** USE STABLE UNIQUE ID ****
                         hover
                         sx={{
                           "&:last-child td, &:last-child th": { border: 0 },
@@ -2310,14 +2459,91 @@ const BudgetDashboard: React.FC<BudgetDashboardProps> = (/*{ projectId }*/) => {
         </Grid>
       )}
       
+      {/* --- Projections Section --- */}
+      {projections && projections.length > 0 && (
+        <Grid item xs={12} md={6}>
+          <Card elevation={2}>
+            <Divider />
+            <CardContent>
+              <Box sx={{ py: 1 }}>
+                <Typography variant="subtitle1" gutterBottom>
+                  Projections By Main Category {/* Updated Title */}
+                </Typography>
+                <TableContainer>
+                  <Table size="small">
+                    <TableHead>
+                      <TableRow>
+                        <TableCell>Main Category</TableCell> {/* Updated Header */}
+                        {/* Remove Notes and Date Added? */}
+                        {/* <TableCell>Notes</TableCell> */}
+                        {/* <TableCell align="right">Date Added</TableCell> */}
+                        <TableCell align="right">Total Projected</TableCell> {/* Updated Header */}
+                      </TableRow>
+                    </TableHead>
+                    <TableBody>
+                      {/* Map over the new grouped data */}
+                      {projectionsByMainCategory.map((group, index) => (
+                        <TableRow key={`${group.name}-${index}`}> 
+                          <TableCell>
+                            <Typography variant="body2">
+                              {group.name} {/* Display main category name */}
+                            </Typography>
+                          </TableCell>
+                          {/* Removed Notes/Date cells */}
+                          <TableCell align="right">
+                            <Typography
+                              variant="body2"
+                              sx={{
+                                fontWeight: "medium",
+                                color: "info.main",
+                              }}
+                            >
+                              {formatCurrency(group.totalAmount)} {/* Display grouped amount */}
+                            </Typography>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+
+                      {/* Total row - Remains the same */}
+                      <TableRow>
+                        <TableCell
+                          align="right"
+                          sx={{ fontWeight: "bold", borderBottom: "none" }}
+                          // colSpan={2} // Adjust colSpan if columns removed
+                        >
+                          Total Projected:
+                        </TableCell>
+                        <TableCell
+                          align="right"
+                          sx={{
+                            fontWeight: "bold",
+                            color: "info.main",
+                            borderBottom: "none",
+                          }}
+                        >
+                          {formatCurrency(budgetSummary.projectedTotal)}
+                        </TableCell>
+                      </TableRow>
+                    </TableBody>
+                  </Table>
+                </TableContainer>
+              </Box>
+            </CardContent>
+          </Card>
+        </Grid>
+      )}
+      {/* --- End Projections Section --- */}
+
       {/* Add Budget Allocation Tracker here, right before the final closing tag */}
       <div id="budget-allocation-tracker">
       <BudgetAllocationTracker 
-        project={project}
+        project={contextProject} 
         phases={phases}
         expenses={expenses}
         bids={bids}
-          // onAddProjection={handleAddProjection} // REMOVE this prop
+        projections={projections} 
+        onAddProjection={handleAddProjection} // **** PASS ADD HANDLER ****
+        onUpdateProjectionCategory={handleUpdateProjectionCategory} 
       />
       </div>
 

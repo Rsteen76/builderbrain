@@ -2,6 +2,7 @@ import { Category, CategoryWithChildren } from '../types/category.types';
 
 /**
  * Hierarchical construction categories for detailed expense tracking and reporting
+ * Enhanced with more comprehensive subcategories for better budget allocation
  */
 export const MAIN_CATEGORIES: CategoryWithChildren[] = [
   {
@@ -21,7 +22,7 @@ export const MAIN_CATEGORIES: CategoryWithChildren[] = [
         parentId: 'acquisition',
         order: 1,
         isActive: true,
-        keywords: ['buy', 'property', 'land', 'purchase'],
+        keywords: ['buy', 'property', 'land', 'purchase', 'acquisition'],
         children: []
       },
       {
@@ -45,6 +46,28 @@ export const MAIN_CATEGORIES: CategoryWithChildren[] = [
         isActive: true,
         keywords: ['attorney', 'lawyer', 'contract', 'legal'],
         children: []
+      },
+      {
+        id: 'acquisition-financing',
+        name: 'Financing Costs',
+        description: 'Loan origination fees, points, and other financing costs',
+        level: 'sub',
+        parentId: 'acquisition',
+        order: 4,
+        isActive: true,
+        keywords: ['loan', 'mortgage', 'financing', 'bank', 'interest', 'points'],
+        children: []
+      },
+      {
+        id: 'acquisition-insurance',
+        name: 'Insurance (Prepaid)',
+        description: 'Prepaid insurance at closing',
+        level: 'sub',
+        parentId: 'acquisition',
+        order: 5,
+        isActive: true,
+        keywords: ['insurance', 'prepaid', 'policy'],
+        children: []
       }
     ]
   },
@@ -65,7 +88,7 @@ export const MAIN_CATEGORIES: CategoryWithChildren[] = [
         parentId: 'pre-construction',
         order: 1,
         isActive: true,
-        keywords: ['architect', 'plans', 'drawings', 'blueprints'],
+        keywords: ['architect', 'plans', 'drawings', 'blueprints', 'design'],
         children: []
       },
       {
@@ -76,7 +99,7 @@ export const MAIN_CATEGORIES: CategoryWithChildren[] = [
         parentId: 'pre-construction',
         order: 2,
         isActive: true,
-        keywords: ['structural', 'civil', 'mechanical', 'electrical'],
+        keywords: ['structural', 'civil', 'mechanical', 'electrical', 'engineering'],
         children: []
       },
       {
@@ -87,7 +110,7 @@ export const MAIN_CATEGORIES: CategoryWithChildren[] = [
         parentId: 'pre-construction',
         order: 3,
         isActive: true,
-        keywords: ['building permit', 'inspection', 'city', 'county', 'fees'],
+        keywords: ['building permit', 'inspection', 'city', 'county', 'fees', 'permit'],
         children: []
       },
       {
@@ -98,7 +121,18 @@ export const MAIN_CATEGORIES: CategoryWithChildren[] = [
         parentId: 'pre-construction',
         order: 4,
         isActive: true,
-        keywords: ['land survey', 'soil', 'environmental', 'testing'],
+        keywords: ['land survey', 'soil', 'environmental', 'testing', 'survey'],
+        children: []
+      },
+      {
+        id: 'pre-construction-insurance',
+        name: 'Construction Insurance',
+        description: 'Builder\'s risk and liability insurance',
+        level: 'sub',
+        parentId: 'pre-construction',
+        order: 5,
+        isActive: true,
+        keywords: ['insurance', 'builders risk', 'liability', 'policy'],
         children: []
       }
     ]
@@ -120,7 +154,7 @@ export const MAIN_CATEGORIES: CategoryWithChildren[] = [
         parentId: 'site-work',
         order: 1,
         isActive: true,
-        keywords: ['demo', 'demolish', 'tear down', 'removal'],
+        keywords: ['demo', 'demolish', 'tear down', 'removal', 'demolition'],
         children: []
       },
       {
@@ -131,7 +165,7 @@ export const MAIN_CATEGORIES: CategoryWithChildren[] = [
         parentId: 'site-work',
         order: 2,
         isActive: true,
-        keywords: ['digging', 'grading', 'earthwork', 'leveling'],
+        keywords: ['digging', 'grading', 'earthwork', 'leveling', 'excavation'],
         children: []
       },
       {
@@ -142,7 +176,29 @@ export const MAIN_CATEGORIES: CategoryWithChildren[] = [
         parentId: 'site-work',
         order: 3,
         isActive: true,
-        keywords: ['water', 'sewer', 'electric', 'gas', 'connections'],
+        keywords: ['water', 'sewer', 'electric', 'gas', 'connections', 'utility'],
+        children: []
+      },
+      {
+        id: 'site-work-erosion',
+        name: 'Erosion Control',
+        description: 'Silt fencing, erosion mats, drainage systems',
+        level: 'sub',
+        parentId: 'site-work',
+        order: 4,
+        isActive: true,
+        keywords: ['erosion', 'silt fence', 'drainage', 'runoff', 'control'],
+        children: []
+      },
+      {
+        id: 'site-work-improvements',
+        name: 'Site Improvements',
+        description: 'Driveways, walkways, retaining walls',
+        level: 'sub',
+        parentId: 'site-work',
+        order: 5,
+        isActive: true,
+        keywords: ['driveway', 'walkway', 'retaining wall', 'landscape', 'improvement'],
         children: []
       }
     ]
@@ -177,6 +233,28 @@ export const MAIN_CATEGORIES: CategoryWithChildren[] = [
         isActive: true,
         keywords: ['seal', 'waterproof', 'drainage', 'moisture'],
         children: []
+      },
+      {
+        id: 'foundation-footings',
+        name: 'Footings',
+        description: 'Structural footings and foundation support',
+        level: 'sub',
+        parentId: 'foundation',
+        order: 3,
+        isActive: true,
+        keywords: ['footings', 'base', 'structural', 'support'],
+        children: []
+      },
+      {
+        id: 'foundation-walls',
+        name: 'Foundation Walls',
+        description: 'Block or poured foundation walls',
+        level: 'sub',
+        parentId: 'foundation',
+        order: 4,
+        isActive: true,
+        keywords: ['foundation walls', 'block', 'poured walls', 'block walls'],
+        children: []
       }
     ]
   },
@@ -197,7 +275,7 @@ export const MAIN_CATEGORIES: CategoryWithChildren[] = [
         parentId: 'framing',
         order: 1,
         isActive: true,
-        keywords: ['lumber', 'wood', 'beams', 'joists', 'studs'],
+        keywords: ['lumber', 'wood', 'beams', 'joists', 'studs', 'materials'],
         children: []
       },
       {
@@ -208,7 +286,7 @@ export const MAIN_CATEGORIES: CategoryWithChildren[] = [
         parentId: 'framing',
         order: 2,
         isActive: true,
-        keywords: ['labor', 'carpenter', 'crew', 'installation'],
+        keywords: ['labor', 'carpenter', 'crew', 'installation', 'framing labor'],
         children: []
       },
       {
@@ -219,7 +297,29 @@ export const MAIN_CATEGORIES: CategoryWithChildren[] = [
         parentId: 'framing',
         order: 3,
         isActive: true,
-        keywords: ['trusses', 'rafters', 'roof', 'structure'],
+        keywords: ['trusses', 'rafters', 'roof', 'structure', 'roof framing'],
+        children: []
+      },
+      {
+        id: 'framing-steel',
+        name: 'Steel Framing',
+        description: 'Structural steel and metal framing components',
+        level: 'sub',
+        parentId: 'framing',
+        order: 4,
+        isActive: true,
+        keywords: ['steel', 'metal', 'structural steel', 'steel beam', 'steel column'],
+        children: []
+      },
+      {
+        id: 'framing-sheathing',
+        name: 'Sheathing',
+        description: 'Wall and roof sheathing materials',
+        level: 'sub',
+        parentId: 'framing',
+        order: 5,
+        isActive: true,
+        keywords: ['sheathing', 'plywood', 'osb', 'zip system', 'wall board'],
         children: []
       }
     ]
@@ -241,7 +341,7 @@ export const MAIN_CATEGORIES: CategoryWithChildren[] = [
         parentId: 'exterior',
         order: 1,
         isActive: true,
-        keywords: ['roof', 'shingles', 'tiles', 'membrane'],
+        keywords: ['roof', 'shingles', 'tiles', 'membrane', 'roofing'],
         children: []
       },
       {
@@ -252,128 +352,128 @@ export const MAIN_CATEGORIES: CategoryWithChildren[] = [
         parentId: 'exterior',
         order: 2,
         isActive: true,
-        keywords: ['siding', 'cladding', 'facade', 'stucco', 'brick'],
+        keywords: ['siding', 'facade', 'cladding', 'stucco', 'exterior finish'],
         children: []
       },
       {
         id: 'exterior-windows',
-        name: 'Windows & Doors',
-        description: 'Exterior doors and windows',
+        name: 'Windows',
+        description: 'Window materials and installation',
         level: 'sub',
         parentId: 'exterior',
         order: 3,
         isActive: true,
-        keywords: ['window', 'door', 'glass', 'entry'],
+        keywords: ['windows', 'glass', 'glazing', 'window installation'],
+        children: []
+      },
+      {
+        id: 'exterior-doors',
+        name: 'Exterior Doors',
+        description: 'Entry, patio, and garage doors',
+        level: 'sub',
+        parentId: 'exterior',
+        order: 4,
+        isActive: true,
+        keywords: ['doors', 'entry door', 'garage door', 'patio door', 'french doors'],
+        children: []
+      },
+      {
+        id: 'exterior-masonry',
+        name: 'Masonry & Stone',
+        description: 'Brick, stone, and blockwork',
+        level: 'sub',
+        parentId: 'exterior',
+        order: 5,
+        isActive: true,
+        keywords: ['masonry', 'brick', 'stone', 'block', 'veneer'],
+        children: []
+      },
+      {
+        id: 'exterior-gutters',
+        name: 'Gutters & Downspouts',
+        description: 'Rainwater management systems',
+        level: 'sub',
+        parentId: 'exterior',
+        order: 6,
+        isActive: true,
+        keywords: ['gutters', 'downspouts', 'rain', 'drainage', 'water management'],
         children: []
       }
     ]
   },
   {
-    id: 'plumbing',
-    name: 'Plumbing',
-    description: 'All plumbing work and fixtures',
+    id: 'mechanical',
+    name: 'Mechanical Systems',
+    description: 'HVAC, plumbing, and electrical systems',
     level: 'main',
     order: 7,
-    isActive: true,
-    color: '#42a5f5',
-    children: [
-      {
-        id: 'plumbing-rough',
-        name: 'Rough Plumbing',
-        description: 'Initial plumbing infrastructure',
-        level: 'sub',
-        parentId: 'plumbing',
-        order: 1,
-        isActive: true,
-        keywords: ['pipes', 'drains', 'vents', 'rough-in'],
-        children: []
-      },
-      {
-        id: 'plumbing-fixtures',
-        name: 'Fixtures & Finishes',
-        description: 'Sinks, toilets, and visible elements',
-        level: 'sub',
-        parentId: 'plumbing',
-        order: 2,
-        isActive: true,
-        keywords: ['sink', 'toilet', 'faucet', 'tub', 'shower'],
-        children: []
-      }
-    ]
-  },
-  {
-    id: 'electrical',
-    name: 'Electrical',
-    description: 'All electrical work and systems',
-    level: 'main',
-    order: 8,
-    isActive: true,
-    color: '#fdd835',
-    children: [
-      {
-        id: 'electrical-rough',
-        name: 'Rough Electrical',
-        description: 'Wiring and electrical infrastructure',
-        level: 'sub',
-        parentId: 'electrical',
-        order: 1,
-        isActive: true,
-        keywords: ['wiring', 'panel', 'circuits', 'rough-in'],
-        children: []
-      },
-      {
-        id: 'electrical-fixtures',
-        name: 'Fixtures & Finishes',
-        description: 'Lights, switches, and outlets',
-        level: 'sub',
-        parentId: 'electrical',
-        order: 2,
-        isActive: true,
-        keywords: ['lighting', 'switches', 'outlets', 'fixtures'],
-        children: []
-      },
-      {
-        id: 'electrical-systems',
-        name: 'Systems & Technology',
-        description: 'Smart home, security, and specialty systems',
-        level: 'sub',
-        parentId: 'electrical',
-        order: 3,
-        isActive: true,
-        keywords: ['smart', 'security', 'automation', 'technology'],
-        children: []
-      }
-    ]
-  },
-  {
-    id: 'hvac',
-    name: 'HVAC',
-    description: 'Heating, ventilation, and air conditioning',
-    level: 'main',
-    order: 9,
     isActive: true,
     color: '#26a69a',
     children: [
       {
-        id: 'hvac-equipment',
-        name: 'Equipment',
-        description: 'HVAC units and major components',
+        id: 'mechanical-hvac',
+        name: 'HVAC',
+        description: 'Heating, ventilation, and air conditioning',
         level: 'sub',
-        parentId: 'hvac',
+        parentId: 'mechanical',
         order: 1,
         isActive: true,
-        keywords: ['furnace', 'AC', 'heat pump', 'equipment'],
+        keywords: ['hvac', 'heating', 'cooling', 'ventilation', 'air conditioning', 'furnace', 'ac'],
         children: []
       },
       {
-        id: 'hvac-ductwork',
-        name: 'Ductwork & Ventilation',
-        description: 'Air distribution systems',
+        id: 'mechanical-plumbing',
+        name: 'Plumbing',
+        description: 'Water supply and drainage systems',
         level: 'sub',
-        parentId: 'hvac',
+        parentId: 'mechanical',
         order: 2,
         isActive: true,
-        keywords: ['ducts', 'vents', 'airflow', 'distribution'],
+        keywords: ['plumbing', 'pipe', 'water', 'drain', 'sewer', 'plumber'],
+        children: []
+      },
+      {
+        id: 'mechanical-electrical',
+        name: 'Electrical',
+        description: 'Electrical wiring and systems',
+        level: 'sub',
+        parentId: 'mechanical',
+        order: 3,
+        isActive: true,
+        keywords: ['electrical', 'wiring', 'panel', 'breaker', 'outlet', 'switch', 'electrician'],
+        children: []
+      },
+      {
+        id: 'mechanical-low-voltage',
+        name: 'Low Voltage & Smart Home',
+        description: 'Data, audio/video, security, and home automation',
+        level: 'sub',
+        parentId: 'mechanical',
+        order: 4,
+        isActive: true,
+        keywords: ['low voltage', 'smart home', 'automation', 'data', 'network', 'security', 'audio', 'video'],
+        children: []
+      },
+      {
+        id: 'mechanical-fire-protection',
+        name: 'Fire Protection',
+        description: 'Sprinkler systems and fire alarms',
+        level: 'sub',
+        parentId: 'mechanical',
+        order: 5,
+        isActive: true,
+        keywords: ['fire', 'sprinkler', 'alarm', 'smoke detector', 'suppression'],
+        children: []
+      },
+      {
+        id: 'mechanical-plumbing-fixtures',
+        name: 'Plumbing Fixtures',
+        description: 'Sinks, faucets, toilets, tubs, and showers',
+        level: 'sub',
+        parentId: 'mechanical',
+        order: 6,
+        isActive: true,
+        keywords: ['sink', 'faucet', 'toilet', 'tub', 'shower', 'plumbing fixture', 'bathroom fixture', 'kitchen fixture'],
         children: []
       }
     ]
@@ -441,38 +541,236 @@ export const MAIN_CATEGORIES: CategoryWithChildren[] = [
         isActive: true,
         keywords: ['cabinets', 'countertops', 'vanity', 'kitchen', 'bathroom'],
         children: []
+      },
+      {
+        id: 'interior-lighting-fixtures',
+        name: 'Lighting Fixtures',
+        description: 'Interior and exterior lighting fixtures and installation',
+        level: 'sub',
+        parentId: 'interior',
+        order: 6,
+        isActive: true,
+        keywords: ['light fixture', 'lighting', 'chandelier', 'sconce', 'pendant', 'ceiling fan', 'recessed light', 'lamp'],
+        children: []
+      }
+    ]
+  },
+  {
+    id: 'interior-rough',
+    name: 'Interior Rough-in',
+    description: 'Interior work before finishing',
+    level: 'main',
+    order: 8,
+    isActive: true,
+    color: '#7e57c2',
+    children: [
+      {
+        id: 'interior-rough-insulation',
+        name: 'Insulation',
+        description: 'Thermal and acoustic insulation',
+        level: 'sub',
+        parentId: 'interior-rough',
+        order: 1,
+        isActive: true,
+        keywords: ['insulation', 'thermal', 'acoustic', 'fiberglass', 'spray foam', 'blown in'],
+        children: []
+      },
+      {
+        id: 'interior-rough-drywall',
+        name: 'Drywall & Plaster',
+        description: 'Wall and ceiling board installation',
+        level: 'sub',
+        parentId: 'interior-rough',
+        order: 2,
+        isActive: true,
+        keywords: ['drywall', 'gypsum', 'sheetrock', 'plaster', 'mud', 'tape', 'hang', 'finish'],
+        children: []
+      },
+      {
+        id: 'interior-rough-framing',
+        name: 'Interior Framing',
+        description: 'Non-load bearing walls and ceilings',
+        level: 'sub',
+        parentId: 'interior-rough',
+        order: 3,
+        isActive: true,
+        keywords: ['framing', 'partition', 'wall', 'soffit', 'ceiling', 'metal studs'],
+        children: []
+      },
+      {
+        id: 'interior-rough-soundproofing',
+        name: 'Soundproofing',
+        description: 'Sound isolation and acoustic treatments',
+        level: 'sub',
+        parentId: 'interior-rough',
+        order: 4,
+        isActive: true,
+        keywords: ['soundproof', 'acoustic', 'sound barrier', 'sound insulation', 'resilient channel'],
+        children: []
+      }
+    ]
+  },
+  {
+    id: 'interior-finishes',
+    name: 'Interior Finishes',
+    description: 'Final interior finishes and trim',
+    level: 'main',
+    order: 9,
+    isActive: true,
+    color: '#5c6bc0',
+    children: [
+      {
+        id: 'interior-finishes-flooring',
+        name: 'Flooring',
+        description: 'All flooring materials and installation',
+        level: 'sub',
+        parentId: 'interior-finishes',
+        order: 1,
+        isActive: true,
+        keywords: ['flooring', 'carpet', 'tile', 'hardwood', 'laminate', 'vinyl', 'floor'],
+        children: []
+      },
+      {
+        id: 'interior-finishes-paint',
+        name: 'Painting & Wallcovering',
+        description: 'Interior painting and wall finishes',
+        level: 'sub',
+        parentId: 'interior-finishes',
+        order: 2,
+        isActive: true,
+        keywords: ['paint', 'primer', 'wallpaper', 'texture', 'finish', 'wall covering'],
+        children: []
+      },
+      {
+        id: 'interior-finishes-trim',
+        name: 'Trim & Carpentry',
+        description: 'Baseboards, crown molding, and finish carpentry',
+        level: 'sub',
+        parentId: 'interior-finishes',
+        order: 3,
+        isActive: true,
+        keywords: ['trim', 'baseboard', 'crown molding', 'casing', 'millwork', 'carpentry'],
+        children: []
+      },
+      {
+        id: 'interior-finishes-cabinets',
+        name: 'Cabinets & Countertops',
+        description: 'Kitchen and bathroom cabinetry and counters',
+        level: 'sub',
+        parentId: 'interior-finishes',
+        order: 4,
+        isActive: true,
+        keywords: ['cabinet', 'counter', 'countertop', 'vanity', 'granite', 'quartz', 'kitchen'],
+        children: []
+      },
+      {
+        id: 'interior-finishes-tile',
+        name: 'Tile Work',
+        description: 'Ceramic, porcelain, and stone tile installation',
+        level: 'sub',
+        parentId: 'interior-finishes',
+        order: 5,
+        isActive: true,
+        keywords: ['tile', 'ceramic', 'porcelain', 'stone', 'shower', 'backsplash', 'grout'],
+        children: []
+      },
+      {
+        id: 'interior-finishes-doors',
+        name: 'Interior Doors',
+        description: 'Interior passage and closet doors',
+        level: 'sub',
+        parentId: 'interior-finishes',
+        order: 6,
+        isActive: true,
+        keywords: ['door', 'interior door', 'pocket door', 'barn door', 'closet door', 'passage'],
+        children: []
       }
     ]
   },
   {
     id: 'specialty',
     name: 'Specialty Items',
-    description: 'Unique or custom features',
+    description: 'Special features and custom elements',
     level: 'main',
-    order: 11,
+    order: 10,
     isActive: true,
     color: '#ec407a',
     children: [
       {
         id: 'specialty-appliances',
         name: 'Appliances',
-        description: 'Kitchen and household appliances',
+        description: 'Kitchen and laundry appliances',
         level: 'sub',
         parentId: 'specialty',
         order: 1,
         isActive: true,
-        keywords: ['appliance', 'refrigerator', 'oven', 'dishwasher'],
+        keywords: ['appliance', 'refrigerator', 'range', 'oven', 'dishwasher', 'washer', 'dryer', 'microwave'],
         children: []
       },
       {
-        id: 'specialty-custom',
-        name: 'Custom Features',
-        description: 'Special or custom elements',
+        id: 'specialty-stairs',
+        name: 'Stairs & Railings',
+        description: 'Stairways, railings, and balustrades',
         level: 'sub',
         parentId: 'specialty',
         order: 2,
         isActive: true,
-        keywords: ['custom', 'special', 'unique', 'bespoke'],
+        keywords: ['stairs', 'staircase', 'railing', 'handrail', 'baluster', 'banister'],
+        children: []
+      },
+      {
+        id: 'specialty-fireplace',
+        name: 'Fireplace & Chimney',
+        description: 'Fireplace construction and finishing',
+        level: 'sub',
+        parentId: 'specialty',
+        order: 3,
+        isActive: true,
+        keywords: ['fireplace', 'chimney', 'hearth', 'mantel', 'fire', 'wood burning'],
+        children: []
+      },
+      {
+        id: 'specialty-deck',
+        name: 'Deck & Patio',
+        description: 'Outdoor living spaces',
+        level: 'sub',
+        parentId: 'specialty',
+        order: 4,
+        isActive: true,
+        keywords: ['deck', 'patio', 'porch', 'balcony', 'outdoor', 'terrace'],
+        children: []
+      },
+      {
+        id: 'specialty-landscaping',
+        name: 'Landscaping',
+        description: 'Landscape design and installation',
+        level: 'sub',
+        parentId: 'specialty',
+        order: 5,
+        isActive: true,
+        keywords: ['landscape', 'garden', 'plants', 'irrigation', 'lawn', 'tree', 'shrub'],
+        children: []
+      },
+      {
+        id: 'specialty-pool',
+        name: 'Pool & Spa',
+        description: 'Swimming pools, hot tubs, and water features',
+        level: 'sub',
+        parentId: 'specialty',
+        order: 6,
+        isActive: true,
+        keywords: ['pool', 'spa', 'hot tub', 'sauna', 'water feature', 'fountain'],
+        children: []
+      },
+      {
+        id: 'specialty-accessible',
+        name: 'Accessibility Features',
+        description: 'ADA compliant and accessibility modifications',
+        level: 'sub',
+        parentId: 'specialty',
+        order: 7,
+        isActive: true,
+        keywords: ['accessible', 'ada', 'handicap', 'ramp', 'elevator', 'lift'],
         children: []
       }
     ]
@@ -555,45 +853,67 @@ export const MAIN_CATEGORIES: CategoryWithChildren[] = [
     ]
   },
   {
-    id: 'management',
+    id: 'project-management',
     name: 'Project Management',
-    description: 'Management and administrative costs',
+    description: 'Project management and oversight',
     level: 'main',
-    order: 14,
+    order: 11,
     isActive: true,
-    color: '#7986cb',
+    color: '#78909c',
     children: [
       {
-        id: 'management-supervision',
-        name: 'Supervision',
-        description: 'Onsite management and oversight',
+        id: 'project-management-general',
+        name: 'General Conditions',
+        description: 'Site supervision, temporary utilities, and facilities',
         level: 'sub',
-        parentId: 'management',
+        parentId: 'project-management',
         order: 1,
         isActive: true,
-        keywords: ['supervisor', 'foreman', 'oversight', 'management'],
+        keywords: ['general conditions', 'supervision', 'job site', 'temporary', 'facilities'],
         children: []
       },
       {
-        id: 'management-insurance',
-        name: 'Insurance & Bonds',
-        description: 'Project insurance and bonding',
+        id: 'project-management-fees',
+        name: 'Management Fees',
+        description: 'Contractor and project management fees',
         level: 'sub',
-        parentId: 'management',
+        parentId: 'project-management',
         order: 2,
         isActive: true,
-        keywords: ['insurance', 'bond', 'liability', 'coverage'],
+        keywords: ['management fee', 'overhead', 'profit', 'supervision', 'admin'],
         children: []
       },
       {
-        id: 'management-fees',
-        name: 'Administrative Fees',
-        description: 'General overhead and administrative costs',
+        id: 'project-management-cleanup',
+        name: 'Cleanup & Disposal',
+        description: 'Construction cleanup and waste removal',
         level: 'sub',
-        parentId: 'management',
+        parentId: 'project-management',
         order: 3,
         isActive: true,
-        keywords: ['overhead', 'administration', 'fee', 'general'],
+        keywords: ['cleanup', 'waste', 'disposal', 'dumpster', 'trash', 'debris'],
+        children: []
+      },
+      {
+        id: 'project-management-inspection',
+        name: 'Inspections & Testing',
+        description: 'Building inspections and quality testing',
+        level: 'sub',
+        parentId: 'project-management',
+        order: 4,
+        isActive: true,
+        keywords: ['inspection', 'testing', 'quality control', 'code', 'approval'],
+        children: []
+      },
+      {
+        id: 'project-management-contingency',
+        name: 'Contingency',
+        description: 'Budget reserve for unforeseen costs',
+        level: 'sub',
+        parentId: 'project-management',
+        order: 5,
+        isActive: true,
+        keywords: ['contingency', 'reserve', 'budget', 'unforeseen', 'allowance'],
         children: []
       }
     ]
@@ -823,8 +1143,40 @@ export const mapSimpleToDetailedCategory = (
     return 'exterior-windows';
   }
   
+  // Plumbing Fixtures
+  if (desc.includes('sink') || desc.includes('faucet') || desc.includes('toilet') || 
+      desc.includes('tub') || desc.includes('shower') || desc.includes('plumbing fixture')) {
+    return 'mechanical-plumbing-fixtures';
+  }
+  
+  // Lighting Fixtures
+  if (desc.includes('light fixture') || desc.includes('lighting') || desc.includes('chandelier') || 
+      desc.includes('sconce') || desc.includes('pendant') || desc.includes('ceiling fan') || 
+      desc.includes('recessed light')) {
+    return 'interior-lighting-fixtures';
+  }
+  
+  // Appliances
+  if (desc.includes('appliance') || desc.includes('refrigerator') || desc.includes('dishwasher') || 
+      desc.includes('oven') || desc.includes('range') || desc.includes('microwave') || 
+      desc.includes('washer') || desc.includes('dryer')) {
+    return 'specialty-appliances';
+  }
+  
+  // Landscaping
+  if (desc.includes('landscape') || desc.includes('garden') || desc.includes('plants') || 
+      desc.includes('tree') || desc.includes('shrub') || desc.includes('lawn') || 
+      vendor.includes('landscape')) {
+    return 'landscape-softscape';
+  }
+  
+  if (desc.includes('irrigation') || desc.includes('sprinkler') || desc.includes('drainage') && 
+      (desc.includes('landscape') || desc.includes('lawn') || desc.includes('garden'))) {
+    return 'landscape-irrigation';
+  }
+  
   // If no specific match is found, default to 'other'
   return 'uncategorized';
 };
 
-export default MAIN_CATEGORIES; 
+export default MAIN_CATEGORIES;

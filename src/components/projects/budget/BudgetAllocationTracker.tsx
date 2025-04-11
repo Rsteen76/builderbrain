@@ -32,7 +32,8 @@ import {
   DialogContent,
   DialogActions,
   Autocomplete,
-  Snackbar
+  Snackbar,
+  CircularProgress
 } from '@mui/material';
 import {
   CheckCircle as CheckCircleIcon,
@@ -69,7 +70,7 @@ import {
   getAllCategories as getAllHierarchicalCategories
 } from '../../../data/hierarchicalCategories';
 import CategorySelector from '../../common/CategorySelector';
-import { Category } from '../../../types/category.types';
+import { Category, CategoryWithChildren } from '../../../types/category.types';
 
 import { BudgetItem } from '../../../types/budget.types';
 
@@ -78,12 +79,14 @@ interface BudgetAllocationTrackerProps {
   phases: ProjectPhase[];
   expenses: Expense[];
   bids: Bid[];
-  onAddProjection?: (projection: BudgetProjection) => void;
+  projections: BudgetProjection[];
+  onAddProjection?: (projectionData: Omit<BudgetProjection, 'id' | 'createdAt'>) => Promise<void>;
+  onUpdateProjectionCategory?: (projectionId: string, newCategoryId: string) => Promise<void>;
 }
 
 // Define a common structure for items displayed in the tracker
 interface DisplayableBudgetItem {
-    id: string; // Make ID non-optional for display items
+    id: string;
     description: string;
     amount: number;
     type: 'expense' | 'bid' | 'projection'; 
@@ -93,7 +96,8 @@ interface DisplayableBudgetItem {
     subcontractorName?: string | null;
     vendor?: string | null;
     phaseId?: string;
-    // Add other common fields if needed for display/logic
+    categoryId?: string; // Used for projection categories
+    notes?: string; // Additional information
 }
 
 const BudgetAllocationTracker: React.FC<BudgetAllocationTrackerProps> = ({
@@ -101,7 +105,9 @@ const BudgetAllocationTracker: React.FC<BudgetAllocationTrackerProps> = ({
   phases,
   expenses,
   bids,
-  onAddProjection
+  projections,
+  onAddProjection,
+  onUpdateProjectionCategory
 }) => {
   const theme = useTheme();
   const [selectedPhase, setSelectedPhase] = useState<string>('all');
@@ -109,33 +115,30 @@ const BudgetAllocationTracker: React.FC<BudgetAllocationTrackerProps> = ({
   const [expandedSection, setExpandedSection] = useState<string | null>(null);
   const [displayMode, setDisplayMode] = useState<'expenses' | 'bids' | 'consolidated'>('consolidated');
   
-  const [projections, setProjections] = useState<BudgetProjection[]>([]);
-  const [projectionDialogOpen, setProjectionDialogOpen] = useState(false);
-  const [currentProjectionCategory, setCurrentProjectionCategory] = useState<{id: string, name: string} | null>(null);
-  const [projectionAmount, setProjectionAmount] = useState<number | ''>('');
-  const [projectionNotes, setProjectionNotes] = useState('');
-  
   const [categoryMappings, setCategoryMappings] = useState<Record<string, string>>({});
   const [editingItemId, setEditingItemId] = useState<string | null>(null);
+  const [updatingItemId, setUpdatingItemId] = useState<string | null>(null);
   const [prefsLoading, setPrefsLoading] = useState<boolean>(true);
   const [showOrphanedExpenses, setShowOrphanedExpenses] = useState(false);
-  const [snackbar, setSnackbar] = useState<{ open: boolean, message: string, severity: 'success' | 'error' }>({ open: false, message: '', severity: 'success' });
+  const [snackbar, setSnackbar] = useState<{ open: boolean, message: string, severity: 'success' | 'error' | 'info' }>({ open: false, message: '', severity: 'success' });
 
   const { user } = useAuth(); 
   
+  // Re-add state variables needed for the Add Projection Dialog
+  const [projectionDialogOpen, setProjectionDialogOpen] = useState(false);
+  const [currentProjectionCategory, setCurrentProjectionCategory] = useState<{ id: string; name: string } | null>(null);
+  const [projectionAmount, setProjectionAmount] = useState<number | string>('');
+  const [projectionNotes, setProjectionNotes] = useState<string>('');
+
+  // Add a new state to track expanded subcategories
+  const [expandedSubcategories, setExpandedSubcategories] = useState<Set<string>>(new Set());
+
   useEffect(() => {
     if (project?.id) {
       setPrefsLoading(true);
       getCategoryMappingsForProject(project.id)
         .then((mappings) => {
           setCategoryMappings(mappings);
-          if (project.projections) {
-            const loadedProjections = project.projections.map(p => ({
-              ...p,
-              createdAt: p.createdAt instanceof Timestamp ? p.createdAt.toDate() : new Date(p.createdAt) 
-            }));
-            setProjections(loadedProjections);
-          }
         })
         .catch((error: Error) => {
           console.error("Error loading category mappings:", error);
@@ -146,47 +149,46 @@ const BudgetAllocationTracker: React.FC<BudgetAllocationTrackerProps> = ({
         });
     } else {
       setCategoryMappings({});
-      setProjections([]);
       setPrefsLoading(false);
     }
   }, [project?.id]);
 
-  useEffect(() => {
-    if (project?.projections) {
-      const loadedProjections = project.projections.map(p => ({
-        ...p,
-        createdAt: p.createdAt instanceof Timestamp ? p.createdAt.toDate() : new Date(p.createdAt)
-      }));
-      if (JSON.stringify(loadedProjections) !== JSON.stringify(projections)) {
-        setProjections(loadedProjections);
-      }
-    }
-  }, [project?.projections]);
-  
   // Function to get category ID for an item (handles potential undefined IDs)
   const getCategoryIdForItem = (item: Partial<Expense | Bid>): string => {
     if (!item.id) return 'uncategorized';
 
+    // First check if we have a manual mapping for this item
     if (categoryMappings[item.id]) {
       return categoryMappings[item.id];
     }
 
     try {
+      // Determine the type of item to help with categorization
       let itemTypeHint = 'other';
       if ('category' in item && item.category) {
+        // For expenses, use the category as a hint (materials, labor, etc.)
         itemTypeHint = item.category;
       } else if ('status' in item && !('category' in item)) {
-         itemTypeHint = 'bid'; // Likely a Bid
+        // Most likely a bid
+        itemTypeHint = 'bid';
       }
       
-      const itemDescription = ('description' in item ? item.description : ('title' in item ? item.title : ('scope' in item ? item.scope : ''))) || '';
-      const vendorOrSub = ('subcontractorName' in item ? item.subcontractorName : undefined) || ('vendor' in item ? item.vendor : '') || '';
+      // Get description from appropriate field
+      const itemDescription = ('description' in item ? item.description : 
+                            ('title' in item ? item.title : 
+                            ('scope' in item ? item.scope : ''))) || '';
       
+      // Get vendor or subcontractor name
+      const vendorOrSub = ('subcontractorName' in item ? item.subcontractorName : undefined) || 
+                         ('vendor' in item ? item.vendor : '') || '';
+      
+      // Try to map using the detailed mapping function
       const categoryId = mapSimpleToDetailedCategory(
         itemTypeHint,
         vendorOrSub,
         itemDescription
       );
+      
       return categoryId;
     } catch (error) {
       console.error("Error in mapSimpleToDetailedCategory:", error);
@@ -220,134 +222,340 @@ const BudgetAllocationTracker: React.FC<BudgetAllocationTrackerProps> = ({
     }
   };
 
-  // Calculate costs per category, using the new hierarchical categories
-  const costsByCategory = useMemo(() => {
-    const categoryCosts: Record<string, { 
-      name: string;
-      id: string; 
-      mainCategoryId: string;
-      spent: number;
-      pending: number;
-      bidTotal: number;
-      projected: number;
-      items: DisplayableBudgetItem[]; // Use the common display type
-      hasCosts: boolean;
-      hasProjections: boolean;
-    }> = {};
-
-    // Helper to get category details and ensure entry exists
-    const ensureCategory = (categoryId: string): string => {
-      if (!categoryCosts[categoryId]) {
-        const category = getCategoryById(categoryId);
-        const parentCategory = category?.parentId ? getParentCategory(categoryId) : category;
-        categoryCosts[categoryId] = {
-          id: categoryId,
-          name: category?.name || categoryId.replace(/-/g, ' ').replace(/\b\w/g, l => l.toUpperCase()),
-          mainCategoryId: parentCategory?.id || 'uncategorized',
-          spent: 0,
-          pending: 0,
-          bidTotal: 0,
-          projected: 0,
-          items: [],
-          hasCosts: false,
-          hasProjections: false,
-        };
+  // Function to toggle subcategory expansion
+  const toggleSubcategory = (subcategoryId: string, event: React.MouseEvent) => {
+    event.stopPropagation(); // Prevent triggering the main category toggle
+    setExpandedSubcategories(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(subcategoryId)) {
+        newSet.delete(subcategoryId);
+      } else {
+        newSet.add(subcategoryId);
       }
-      return categoryId;
+      return newSet;
+    });
+  };
+
+  // Function to get status chip based on item type and status
+  const getStatusChip = (item: DisplayableBudgetItem) => {
+    if (item.type === 'expense') {
+      const status = item.status as ExpenseStatus;
+      if (status === 'paid') {
+        return <Chip size="small" label="Paid" color="success" sx={{ fontSize: '0.7rem' }} />;
+      } else if (status === 'approved') {
+        return <Chip size="small" label="Approved" color="info" sx={{ fontSize: '0.7rem' }} />;
+      } else if (status === 'pending') {
+        return <Chip size="small" label="Pending" color="warning" sx={{ fontSize: '0.7rem' }} />;
+      } else if (status === 'rejected') {
+        return <Chip size="small" label="Rejected" color="error" sx={{ fontSize: '0.7rem' }} />;
+      }
+    } else if (item.type === 'bid') {
+      return <Chip size="small" label="Bid" color="secondary" sx={{ fontSize: '0.7rem' }} />;
+    } else if (item.type === 'projection') {
+      return <Chip size="small" label="Projected" color="info" variant="outlined" sx={{ fontSize: '0.7rem' }} />;
+    }
+    return null;
+  };
+
+  // Calculate costs per category, building from the standard hierarchical structure
+  const costsByCategory = useMemo(() => {
+    console.log("Recalculating costsByCategory..."); // Log entry
+    const hierarchicalData = new Map<string, {
+      mainCategoryDetails: CategoryWithChildren | { id: string; name: string; order: number; color?: string }; // Allow basic object for uncategorized
+      subCategories: Map<string, {
+        id: string;
+        name: string;
+        description?: string;
+        paid: number;
+        pending: number;
+        total: number;
+        items: DisplayableBudgetItem[];
+        needsReview: boolean;
+      }>;
+    }>();
+
+    // Add standard categories
+    MAIN_CATEGORIES.forEach(mainCat => {
+      const subCatMap = new Map<string, {
+        id: string;
+        name: string;
+        description?: string;
+        paid: number;
+        pending: number;
+        total: number;
+        items: DisplayableBudgetItem[];
+        needsReview: boolean;
+      }>();
+      const children = Array.isArray(mainCat.children) ? mainCat.children : [];
+      children.forEach(subCat => {
+        subCatMap.set(subCat.id, {
+          id: subCat.id,
+          name: subCat.name,
+          description: subCat.description,
+          paid: 0, 
+          pending: 0, 
+          total: 0,
+          items: [],
+          needsReview: false 
+        });
+      });
+      hierarchicalData.set(mainCat.id, {
+        mainCategoryDetails: mainCat,
+        subCategories: subCatMap,
+      });
+    });
+
+    // Define the structure for subcategory data explicitly
+    type SubCategoryData = {
+      id: string;
+      name: string;
+      description?: string;
+      paid: number;
+      pending: number;
+      total: number;
+      items: DisplayableBudgetItem[];
+      needsReview: boolean;
     };
 
-    // Process expenses
-    expenses.forEach((expense) => {
-      if (!expense.id) return; 
-      const categoryId = ensureCategory(getCategoryIdForItem(expense)); 
+    // Add a dedicated entry for 'uncategorized' items/projections
+    const uncategorizedSubMap = new Map<string, SubCategoryData>();
+    
+    // Add a placeholder subcategory to hold items that need review
+    uncategorizedSubMap.set('needs-review', {
+        id: 'needs-review',
+        name: 'Items Needing Review',
+        description: 'Items that could not be automatically categorized', 
+        paid: 0,
+        pending: 0,
+        total: 0,
+        items: [],
+        needsReview: true
+    });
+    
+    hierarchicalData.set('uncategorized', {
+      mainCategoryDetails: { id: 'uncategorized', name: 'Uncategorized', order: 999, color: theme.palette.grey[500] },
+      subCategories: uncategorizedSubMap,
+    });
+
+    // 2. Process existing expenses, bids, projections and merge data
+    const processItem = (item: Partial<Expense | Bid | BudgetProjection>, type: 'expense' | 'bid' | 'projection') => {
+      if (!item || !item.id) {
+        console.warn('Invalid item', item);
+        return;
+      }
+
+      let detailedCategoryId = type === 'projection' 
+        ? ((item as BudgetProjection).categoryId || 'needs-review') 
+        : getCategoryIdForItem(item as Partial<Expense | Bid>);
       
-      // Map expense to DisplayableBudgetItem
-      const displayItem: DisplayableBudgetItem = {
-          id: expense.id,
-          description: expense.description,
-          amount: expense.amount,
-          type: 'expense',
-          status: expense.status,
+      // **** Log the determined category ID ****
+      console.log(`Processing Item: Type=${type}, ID=${item.id}, Desc/Notes=${(item as any).description || (item as any).notes || (item as any).title || 'N/A'}, Determined Category=${detailedCategoryId}`); 
+
+      // Find main category
+      const parentCategory = getParentCategory(detailedCategoryId);
+      // Check if ID is a main category itself
+      const categoryDetails = getCategoryById(detailedCategoryId);
+      const categoryIsMain = !parentCategory && categoryDetails;
+      const mainCategory = parentCategory || (categoryIsMain ? categoryDetails : undefined);
+      let mainCategoryId = mainCategory?.id || 'uncategorized';
+      
+      // Default target categories
+      let targetMainCategoryId = mainCategoryId;
+      let targetSubCategoryId = detailedCategoryId;
+      let isStandardMapping = false;
+      let needsReview = false;
+
+      // Check if it maps to a standard sub-category
+      if (mainCategoryId !== 'uncategorized' && hierarchicalData.has(mainCategoryId)) {
+         const mainData = hierarchicalData.get(mainCategoryId)!;
+         if (mainData.subCategories.has(detailedCategoryId)) {
+            isStandardMapping = true;
+         } else if (categoryIsMain) {
+            // If it's mapped to a main category but not a specific subcategory
+            // Put it in a "General" subcategory under that main category
+            const generalSubCatId = `${mainCategoryId}-general`;
+            
+            // Create the General subcategory if it doesn't exist
+            if (!mainData.subCategories.has(generalSubCatId)) {
+              mainData.subCategories.set(generalSubCatId, {
+                id: generalSubCatId,
+                name: 'General',
+                description: `General ${mainCategory?.name} expenses`, 
+                paid: 0,
+                pending: 0, 
+                total: 0,
+                items: [],
+                needsReview: true // Mark these for review since they're not specifically categorized
+              });
+            }
+            
+            // Update target subcategory
+            targetSubCategoryId = generalSubCatId;
+            isStandardMapping = true;
+            needsReview = true; // Mark for review since we're guessing at the subcategory
+         }
+      }
+
+      // If didn't map to a standard category, mark for review
+      if (!isStandardMapping) {
+         targetMainCategoryId = 'uncategorized';
+         targetSubCategoryId = 'needs-review';
+         needsReview = true;
+      }
+
+      // Get the target bucket (main category data)
+      const mainCategoryData = hierarchicalData.get(targetMainCategoryId);
+      if (!mainCategoryData) {
+         console.warn(`Target Main Category bucket not found: ${targetMainCategoryId}`);
+         return; 
+      }
+
+      // Ensure targetSubCategoryId exists in the map
+      if (!mainCategoryData.subCategories.has(targetSubCategoryId)) {
+         // If the target subcategory doesn't exist, put in needs-review
+         targetMainCategoryId = 'uncategorized';
+         targetSubCategoryId = 'needs-review';
+         
+         if (!hierarchicalData.get('uncategorized')?.subCategories.has('needs-review')) {
+            hierarchicalData.get('uncategorized')!.subCategories.set('needs-review', {
+              id: 'needs-review',
+              name: 'Items Needing Review',
+              description: 'Items that could not be categorized automatically',
+              paid: 0,
+              pending: 0,
+              total: 0,
+              items: [],
+              needsReview: true
+            });
+         }
+      }
+
+      // Get the specific sub-category data object
+      const subCategoryData = hierarchicalData.get(targetMainCategoryId)!
+        .subCategories.get(targetSubCategoryId)!;
+
+      // Set review flag if needed
+      if (needsReview) {
+        subCategoryData.needsReview = true;
+      }
+
+      // Now add the item to the appropriate collection
+      let amount = 0;
+      let isPaid = false;
+      let isPending = true;
+
+      if (type === 'expense') {
+        const expense = item as Expense;
+        amount = expense.amount || 0;
+        isPaid = expense.status === 'paid';
+        isPending = expense.status === 'pending' || expense.status === 'approved';
+
+        subCategoryData.items.push({
+          id: expense.id || `temp-expense-${Date.now()}`,
+          description: expense.description || expense.vendor || 'Unknown Expense',
+          amount: amount,
           date: expense.date,
-          category: expense.category, // Keep original for potential re-mapping hint
-          subcontractorName: expense.subcontractorName,
+          status: expense.status,
+          type: 'expense',
+          category: expense.category,
           vendor: expense.vendor,
           phaseId: expense.phaseId
-      };
-      categoryCosts[categoryId].items.push(displayItem);
+        });
+      } else if (type === 'bid') {
+        const bid = item as Bid;
+        amount = bid.totalAmount || 0;
+        isPaid = false; // Bids are never "paid"
+        isPending = bid.status === 'accepted'; // Only count accepted bids
 
-      if (expense.status === 'paid' || expense.status === 'approved') {
-        categoryCosts[categoryId].spent += expense.amount;
-      } else if (expense.status === 'pending') {
-        categoryCosts[categoryId].pending += expense.amount;
-      }
-      categoryCosts[categoryId].hasCosts = true;
-    });
+        if (isPending) {
+          subCategoryData.items.push({
+            id: bid.id || `temp-bid-${Date.now()}`,
+            description: bid.title || bid.scope || 'Bid',
+            amount: amount,
+            date: bid.submissionDeadline || bid.createdAt,
+            status: bid.status,  
+            type: 'bid',
+            subcontractorName: bid.subcontractorName || null,
+            phaseId: bid.phaseId
+          });
+        }
+      } else if (type === 'projection') {
+        const projection = item as BudgetProjection;
+        amount = projection.amount || 0;
+        isPaid = false; // Projections are never "paid"
+        isPending = true; // Projections are always "pending"
 
-    // Process bids
-    bids.forEach((bid) => {
-      if (!bid.id) return; 
-      const categoryId = ensureCategory(getCategoryIdForItem(bid)); 
-
-      // Map bid to DisplayableBudgetItem
-      const displayItem: DisplayableBudgetItem = {
-          id: bid.id,
-          description: bid.title || bid.scope || 'Bid Item', // Use title or scope
-          amount: bid.totalAmount, // Use totalAmount from Bid type
-          type: 'bid',
-          status: bid.status,
-          date: bid.submissionDeadline || bid.createdAt,
-          subcontractorName: bid.subcontractorName,
-          phaseId: bid.phaseId
-      };
-      categoryCosts[categoryId].items.push(displayItem);
-
-      if (bid.status === 'accepted') { 
-         categoryCosts[categoryId].bidTotal += bid.totalAmount || 0; 
-      }
-      categoryCosts[categoryId].hasCosts = true;
-    });
-
-    // Process projections
-    projections.forEach((projection) => {
-      const categoryId = ensureCategory(projection.categoryId); 
-      categoryCosts[categoryId].projected += projection.amount;
-      categoryCosts[categoryId].hasProjections = true;
-      // Add projection as a displayable item
-      const displayItem: DisplayableBudgetItem = {
-          id: projection.id,
+        subCategoryData.items.push({
+          id: projection.id || `temp-projection-${Date.now()}`,
           description: projection.notes || 'Manual Projection',
-          amount: projection.amount,
-          type: 'projection',
+          amount: amount,
+          date: projection.createdAt || new Date(),
           status: 'projected',
-          date: projection.createdAt
-      };
-      categoryCosts[categoryId].items.push(displayItem);
-    });
-
-    // Convert to array and sort 
-    return Object.values(categoryCosts).sort((a, b) => {
-      if (a.mainCategoryId !== b.mainCategoryId) {
-        if (a.mainCategoryId === 'uncategorized') return 1;
-        if (b.mainCategoryId === 'uncategorized') return -1;
-        return a.mainCategoryId.localeCompare(b.mainCategoryId);
+          type: 'projection',
+          categoryId: projection.categoryId || '',
+          notes: projection.notes || ''
+        });
       }
-      return a.name.localeCompare(b.name);
-    });
+      
+      // Update the category totals
+      if (isPaid) {
+        subCategoryData.paid += amount;
+      } else if (isPending) {
+        subCategoryData.pending += amount;
+      }
+      
+      // Update total regardless
+      subCategoryData.total += amount;
+    };
 
-  }, [expenses, bids, projections, categoryMappings]);
+    // Process all items
+    console.log("Processing all items for costsByCategory...");
+    expenses.forEach(expense => processItem(expense, 'expense'));
+    bids.filter(bid => bid.status === 'accepted')
+        .forEach(bid => processItem(bid, 'bid'));
+    projections.forEach(projection => processItem(projection, 'projection'));
+    console.log("Finished processing items for costsByCategory.");
 
+    // Return the processed data, sorted by main category order
+    const finalData = Array.from(hierarchicalData.values()); // Keep all, including empty/uncategorized
+    return finalData.sort((a, b) => 
+      (a.mainCategoryDetails.order || 999) - (b.mainCategoryDetails.order || 999)
+    );
+
+  }, [expenses, bids, projections, categoryMappings, theme]);
+
+  // filteredCategories might need adjustment if filtering logic changes based on new structure
   const filteredCategories = useMemo(() => {
-    return costsByCategory.filter(category => {
-      const phaseMatch = selectedPhase === 'all' || 
-        category.items.some(item => 'phaseId' in item && item.phaseId === selectedPhase);
+    // Current filtering logic operates on a flat list of categories.
+    // We need to adapt it for the hierarchicalData structure.
+    // Option 1: Filter sub-categories within each main category
+    // Option 2: Filter main categories based on whether *any* subcategory matches
+    
+    // Let's try Option 1: Filter subcategories, keep main category if any subs match
+    const filteredData = Array.from(costsByCategory.values()).map(mainData => {
+        const filteredSubCategories = new Map<string, any>(); // Using 'any' temporarily
+        mainData.subCategories.forEach((subCatData, subCatId) => {
+             // Apply phase and search filters to subCatData or its items
+             const phaseMatch = selectedPhase === 'all' || subCatData.items.some(item => item.phaseId === selectedPhase);
+             const searchMatch = searchTerm === '' || 
+                subCatData.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                subCatData.items.some(item => item.description?.toLowerCase().includes(searchTerm.toLowerCase()));
+                
+             if (phaseMatch && searchMatch) {
+                filteredSubCategories.set(subCatId, subCatData);
+             }
+        });
         
-      const searchMatch = searchTerm === '' || 
-        category.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        category.items.some(item => item.description?.toLowerCase().includes(searchTerm.toLowerCase()));
+        // Return main category data only if it has matching subcategories
+        if (filteredSubCategories.size > 0) {
+           return { ...mainData, subCategories: filteredSubCategories };
+        }
+        return null; // Exclude this main category entirely if no subs match
+    }).filter(Boolean); // Remove null entries
+    
+    // Return the filtered hierarchical data
+    return filteredData as typeof costsByCategory;
 
-      return phaseMatch && searchMatch;
-    });
   }, [costsByCategory, selectedPhase, searchTerm]);
 
   const toggleSection = (sectionId: string) => {
@@ -361,35 +569,28 @@ const BudgetAllocationTracker: React.FC<BudgetAllocationTrackerProps> = ({
     setProjectionDialogOpen(true);
   };
   
-  const handleAddProjection = async () => {
-    if (!currentProjectionCategory || projectionAmount === '' || !project?.id) {
-      console.error("Missing category, amount, or project ID. Cannot add projection.");
-      setSnackbar({ open: true, message: 'Missing required fields for projection', severity: 'error' });
+  const handleAddProjectionClick = async () => {
+    if (!currentProjectionCategory || projectionAmount === '' || !project?.id || !onAddProjection) {
+      console.error("Missing category, amount, project ID, or handler. Cannot add projection.");
+      setSnackbar({ open: true, message: 'Missing required fields or handler.', severity: 'error' });
       return;
     }
     
-    const newProjection: BudgetProjection = {
-      id: `projection-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+    const newProjectionData: Omit<BudgetProjection, 'id' | 'createdAt'> = {
       categoryId: currentProjectionCategory.id,
       amount: typeof projectionAmount === 'number' ? projectionAmount : Number(projectionAmount),
       notes: projectionNotes || null,
-      createdAt: new Date() 
     };
     
-    const updatedProjections = [...projections, newProjection];
-    setProjections(updatedProjections);
     setProjectionDialogOpen(false);
     
     try {
-      await updateProject(project.id, { projections: updatedProjections });
-      setSnackbar({ open: true, message: 'Projection added successfully', severity: 'success' });
-      if (onAddProjection) {
-          onAddProjection(newProjection);
-      }
+      setSnackbar({ open: true, message: 'Adding projection...', severity: 'info' });
+      await onAddProjection(newProjectionData);
+      // Success snackbar should be handled by the parent
     } catch (error) {
-      console.error("Error saving projection:", error);
-      setSnackbar({ open: true, message: 'Error saving projection', severity: 'error' });
-      setProjections(projections);
+      console.error("Error delegating projection add:", error);
+      // Error snackbar should be handled by the parent
     }
   };
 
@@ -420,17 +621,37 @@ const BudgetAllocationTracker: React.FC<BudgetAllocationTrackerProps> = ({
     }
   };
   
-  // Get orphaned items (both expenses and bids)
-  const orphanedItems = useMemo(() => {
-    const allHierarchicalIds = new Set(getAllHierarchicalCategories().map(c => c.id));
-    const combinedItems: Array<Partial<Expense | Bid>> = [...expenses, ...bids];
+  // **** Calculate orphanedItems directly on each render (remove useMemo) ****
+  const allHierarchicalIds = new Set(getAllHierarchicalCategories().map(c => c.id));
     
-    return combinedItems.filter(item => {
-        if (!item.id) return false; 
-        const mappedCategory = getCategoryIdForItem(item);
-        return mappedCategory === 'uncategorized' || !allHierarchicalIds.has(mappedCategory);
-    });
-  }, [expenses, bids, categoryMappings]); 
+  type ItemWithType = 
+    | (Expense & { itemType: 'expense' })
+    | (Bid & { itemType: 'bid' })
+    | (BudgetProjection & { itemType: 'projection' });
+  
+  const expenseItems: (Expense & { itemType: 'expense' })[] = expenses.map(expense => ({ ...expense, itemType: 'expense' as const }));
+  const bidItems: (Bid & { itemType: 'bid' })[] = bids.map(bid => ({ ...bid, itemType: 'bid' as const }));
+  const projectionItems: (BudgetProjection & { itemType: 'projection' })[] = projections.map(projection => ({ ...projection, itemType: 'projection' as const }));
+    
+  const combinedItems: ItemWithType[] = [...expenseItems, ...bidItems, ...projectionItems];
+    
+  const orphanedItems = combinedItems.filter(item => {
+    if (!item.id) return false;
+      
+    if (item.itemType === 'projection') {
+      const projection = item as BudgetProjection & { itemType: 'projection' };
+      // Use the latest 'projection.categoryId' from the props
+      return !projection.categoryId || !allHierarchicalIds.has(projection.categoryId);
+    }
+      
+    const expenseBidItem = item as (Expense | Bid) & { itemType: 'expense' | 'bid' };
+    const mappedCategory = getCategoryIdForItem(expenseBidItem); // Uses local categoryMappings state
+      
+    const isUncategorized = mappedCategory === 'uncategorized';
+    const isNotValidCategory = !allHierarchicalIds.has(mappedCategory);
+    return isUncategorized || isNotValidCategory;
+  });
+  // **** End of direct calculation ****
 
   const handleCloseSnackbar = () => {
       setSnackbar({ ...snackbar, open: false });
@@ -473,7 +694,7 @@ const BudgetAllocationTracker: React.FC<BudgetAllocationTrackerProps> = ({
             size="small"
             onClick={() => setShowOrphanedExpenses(!showOrphanedExpenses)}
             startIcon={orphanedItems.length > 0 ? <WarningIcon /> : <CheckCircleIcon />}
-            color={orphanedItems.length > 0 && !showOrphanedExpenses ? "warning" : "inherit"} // Use inherit for default color
+            color={orphanedItems.length > 0 && !showOrphanedExpenses ? "warning" : "inherit"}
         >
             {showOrphanedExpenses ? "Hide Uncategorized" : `Show Uncategorized (${orphanedItems.length})`}
         </Button>
@@ -482,7 +703,7 @@ const BudgetAllocationTracker: React.FC<BudgetAllocationTrackerProps> = ({
       {showOrphanedExpenses && (
           <Card sx={{ mb: 3, bgcolor: alpha(theme.palette.warning.light, 0.1) }}>
               <CardHeader 
-                title="Uncategorized Items"
+                title="Items Needing Review"
                 subheader={`These ${orphanedItems.length} items need categorization review.`}
                 avatar={<WarningIcon color="warning" />}
               />
@@ -491,6 +712,7 @@ const BudgetAllocationTracker: React.FC<BudgetAllocationTrackerProps> = ({
                       <Table size="small">
                           <TableHead>
                               <TableRow>
+                                  <TableCell>Type</TableCell>
                                   <TableCell>Description</TableCell>
                                   <TableCell>Amount</TableCell>
                                   <TableCell>Date</TableCell>
@@ -500,31 +722,84 @@ const BudgetAllocationTracker: React.FC<BudgetAllocationTrackerProps> = ({
                           </TableHead>
                           <TableBody>
                               {orphanedItems.length === 0 ? (
-                                  <TableRow><TableCell colSpan={5} align="center">No uncategorized items found.</TableCell></TableRow>
+                                  <TableRow><TableCell colSpan={6} align="center">No uncategorized items found.</TableCell></TableRow>
                               ) : (
                                   orphanedItems.map(item => {
+                                    const itemType = 'itemType' in item ? item.itemType : ('category' in item ? 'expense' : ('totalAmount' in item ? 'bid' : 'projection'));
                                     const amount = 'amount' in item ? item.amount : ('totalAmount' in item ? item.totalAmount : 0);
                                     const date = 'date' in item ? item.date : ('submissionDeadline' in item ? item.submissionDeadline : ('createdAt' in item ? item.createdAt : null));
-                                    const description = 'description' in item ? item.description : ('title' in item ? item.title : ('scope' in item ? item.scope : 'N/A'));
+                                    const description = 'description' in item ? item.description : ('title' in item ? item.title : ('scope' in item ? item.scope : ('notes' in item ? item.notes : 'N/A')));
                                     
+                                    const detectedCategory = itemType === 'projection' && 'categoryId' in item ? 
+                                      item.categoryId : 
+                                      (itemType === 'expense' || itemType === 'bid' ? getCategoryIdForItem(item as Expense | Bid) : 'uncategorized');
+                                    
+                                    const categoryName = detectedCategory ? (getCategoryById(detectedCategory)?.name || detectedCategory) : 'Uncategorized';
+                                    
+                                    const isCurrentlyUpdating = updatingItemId === item.id;
+
                                     return (
-                                      <TableRow key={item.id} hover>
+                                      <TableRow 
+                                        key={item.id} 
+                                        hover
+                                        sx={{ opacity: isCurrentlyUpdating ? 0.5 : 1 }}
+                                      >
+                                          <TableCell>
+                                            <Chip 
+                                              size="small" 
+                                              label={itemType === 'expense' ? 'Expense' : 
+                                                    itemType === 'bid' ? 'Bid' : 'Projection'} 
+                                              color={itemType === 'expense' ? 'primary' : 
+                                                    itemType === 'bid' ? 'secondary' : 'success'}
+                                              sx={{ fontSize: '0.7rem' }}
+                                            />
+                                          </TableCell>
                                           <TableCell>{description}</TableCell>
                                           <TableCell>{typeof amount === 'number' ? formatCurrency(amount) : 'N/A'}</TableCell> 
                                           <TableCell>{formatDisplayDate(date)}</TableCell>
-                                          <TableCell><i>{getCategoryIdForItem(item)}</i></TableCell>
+                                          <TableCell>
+                                            <Tooltip title={detectedCategory}>
+                                              <span>{categoryName}</span>
+                                            </Tooltip>
+                                          </TableCell>
                                           <TableCell align="right">
-                                              {editingItemId === item.id ? (
+                                              {isCurrentlyUpdating ? (
+                                                <Box sx={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', height: '100%' }}>
+                                                   <CircularProgress size={20} />
+                                                </Box>
+                                              ) : editingItemId === item.id ? (
                                                   <CategorySelector 
-                                                      value={categoryMappings[item.id!] || ''} 
-                                                      onChange={(newCatId) => { if (item.id) handleRecategorizeItem(item.id, newCatId); }}
+                                                      value={itemType === 'projection' && 'categoryId' in item ? (item.categoryId || '') : (categoryMappings[item.id!] || '')}
+                                                      onChange={async (newCatId) => {
+                                                        if (!item.id || !newCatId || isCurrentlyUpdating) return;
+                                                        
+                                                        const currentItemId = item.id; 
+                                                        setEditingItemId(null); 
+                                                        setUpdatingItemId(currentItemId);
+                                                        
+                                                        try {
+                                                          if (itemType === 'projection' && onUpdateProjectionCategory) {
+                                                              setSnackbar({ open: true, message: 'Updating category...', severity: 'info' });
+                                                              await onUpdateProjectionCategory(currentItemId, newCatId); 
+                                                          } else if (itemType !== 'projection'){
+                                                              await handleRecategorizeItem(currentItemId, newCatId);
+                                                          }
+                                                          // Success message now handled by parent/handleRecategorizeItem
+                                                        } catch (error) {
+                                                            console.error("Error during category update delegation/handling:", error);
+                                                            setSnackbar({ open: true, message: 'Failed to update category.', severity: 'error' });
+                                                        } finally {
+                                                            setUpdatingItemId(null);
+                                                        }
+                                                      }}
                                                       size="small"
                                                       fullWidth={false}
                                                       variant="standard"
+                                                      disabled={isCurrentlyUpdating}
                                                   />
                                               ) : (
                                                   <Tooltip title="Assign Category">
-                                                      <IconButton size="small" onClick={() => setEditingItemId(item.id!)} disabled={!item.id}>
+                                                      <IconButton size="small" onClick={() => setEditingItemId(item.id!)} disabled={!item.id || !!updatingItemId}>
                                                           <EditIcon fontSize="inherit" />
                                                       </IconButton>
                                                   </Tooltip>
@@ -545,142 +820,290 @@ const BudgetAllocationTracker: React.FC<BudgetAllocationTrackerProps> = ({
         <Table stickyHeader aria-label="budget allocation table">
           <TableHead>
             <TableRow sx={{ '& th': { fontWeight: 'bold', bgcolor: 'background.default' } }}>
-              <TableCell>Category</TableCell>
-              <TableCell align="right">Spent</TableCell>
-              <TableCell align="right">Pending</TableCell>
-              <TableCell align="right">Bids (Accepted)</TableCell>
-              <TableCell align="right">Projected</TableCell>
+              <TableCell>Category / Item</TableCell>
+              <TableCell align="right">Paid</TableCell>
+              <TableCell align="right">Pending/Projected</TableCell>
               <TableCell align="right">Total</TableCell>
-              <TableCell align="center">Actions</TableCell>
+              <TableCell align="right">Actions</TableCell>
             </TableRow>
           </TableHead>
           <TableBody>
             {prefsLoading ? (
               <TableRow>
-                <TableCell colSpan={7} align="center">Loading categories...</TableCell>
+                <TableCell colSpan={5} align="center">Loading categories...</TableCell>
               </TableRow>
             ) : filteredCategories.length === 0 ? (
                  <TableRow>
-                    <TableCell colSpan={7} align="center">
-                        {searchTerm ? 'No categories match your search.' : 'No budget items found for the selected phase.'}
+                    <TableCell colSpan={5} align="center">
+                        {searchTerm ? 'No categories match your search.' : 'No budget items found.'}
                     </TableCell>
                  </TableRow>
              ) : (
-              filteredCategories.map((category) => {
-                const categoryDetails = getCategoryById(category.id);
-                const mainCategory = categoryDetails?.parentId ? getParentCategory(categoryDetails.id) : categoryDetails;
-                const isExpanded = expandedSection === category.id;
-                const totalCost = category.spent + category.pending + category.bidTotal + category.projected;
+              filteredCategories.map((mainCategoryData) => {
+                const { mainCategoryDetails, subCategories } = mainCategoryData;
+                
+                // Calculate totals for the main category
+                let totalMainPaid = 0, totalMainPending = 0, totalMainTotal = 0;
+                let hasItemsNeedingReview = false;
+                
+                subCategories.forEach(sub => {
+                  totalMainPaid += sub.paid;
+                  totalMainPending += sub.pending;
+                  totalMainTotal += sub.total;
+                  if (sub.needsReview) hasItemsNeedingReview = true;
+                });
+                
+                const isMainExpanded = expandedSection === mainCategoryDetails.id;
 
                 return (
-                  <React.Fragment key={category.id}>
+                  <React.Fragment key={mainCategoryDetails.id}>
+                    {/* Main Category Row - Access via mainCategoryDetails */}
                     <TableRow 
                       hover 
-                      onClick={() => toggleSection(category.id)}
+                      onClick={() => toggleSection(mainCategoryDetails.id)}
                       sx={{ 
                         cursor: 'pointer',
-                        bgcolor: mainCategory ? alpha(mainCategory.color || theme.palette.grey[500], 0.05) : undefined,
+                        bgcolor: alpha(mainCategoryDetails.color || theme.palette.grey[500], 0.08),
+                        borderBottom: isMainExpanded ? 'none' : `1px solid ${theme.palette.divider}`,
                         '&:hover': {
-                          bgcolor: mainCategory ? alpha(mainCategory.color || theme.palette.grey[500], 0.1) : undefined,
+                          bgcolor: alpha(mainCategoryDetails.color || theme.palette.grey[500], 0.15),
                         }
                       }}
                     >
                       <TableCell component="th" scope="row">
                         <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                          <IconButton size="small" sx={{ mr: 1 }} aria-label={isExpanded ? 'Collapse section' : 'Expand section'}>
-                            {isExpanded ? <ExpandLessIcon /> : <ExpandMoreIcon />}
+                          <IconButton size="small" sx={{ mr: 1 }} aria-label={isMainExpanded ? 'Collapse section' : 'Expand section'}>
+                            {isMainExpanded ? <ExpandLessIcon /> : <ExpandMoreIcon />}
                           </IconButton>
-                          <Box>
-                            <Typography variant="subtitle2">{category.name}</Typography>
-                            {mainCategory && category.id !== mainCategory.id && (
-                              <Typography variant="caption" color="text.secondary">{mainCategory.name}</Typography>
-                            )}
-                          </Box>
+                          <Box 
+                            component="span" 
+                            sx={{ 
+                              width: 12, 
+                              height: 12, 
+                              borderRadius: '50%', 
+                              bgcolor: mainCategoryDetails.color || theme.palette.grey[500], 
+                              mr: 1,
+                              display: 'inline-block'
+                            }} 
+                          />
+                          <Typography variant="subtitle1" fontWeight="bold">{mainCategoryDetails.name}</Typography>
+                          {hasItemsNeedingReview && (
+                            <Tooltip title="Contains items needing category review">
+                              <WarningIcon 
+                                fontSize="small" 
+                                color="warning" 
+                                sx={{ ml: 1, opacity: 0.7 }} 
+                              />
+                            </Tooltip>
+                          )}
                         </Box>
                       </TableCell>
-                      <TableCell align="right">{formatCurrency(category.spent)}</TableCell>
-                      <TableCell align="right">{formatCurrency(category.pending)}</TableCell>
-                      <TableCell align="right">{formatCurrency(category.bidTotal)}</TableCell>
-                      <TableCell align="right">{formatCurrency(category.projected)}</TableCell>
+                      <TableCell align="right" sx={{ fontWeight: 'medium' }}>{formatCurrency(totalMainPaid)}</TableCell>
+                      <TableCell align="right" sx={{ fontWeight: 'medium' }}>{formatCurrency(totalMainPending)}</TableCell>
                       <TableCell align="right">
-                        <Typography variant="subtitle2" fontWeight="medium">{formatCurrency(totalCost)}</Typography>
+                        <Typography variant="subtitle1" fontWeight="bold">{formatCurrency(totalMainTotal)}</Typography>
                       </TableCell>
-                      <TableCell align="center">
-                         <Tooltip title="Add Manual Projection">
-                           <IconButton size="small" onClick={(e) => { e.stopPropagation(); handleOpenProjectionDialog(category.id, category.name); }}>
-                             <AddIcon fontSize="small" color="primary"/>
-                           </IconButton>
-                         </Tooltip>
-                       </TableCell>
+                      <TableCell align="right">
+                        <Tooltip title="Add Projection">
+                          <IconButton 
+                            size="small" 
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleOpenProjectionDialog(mainCategoryDetails.id, mainCategoryDetails.name);
+                            }}
+                          >
+                            <AddIcon fontSize="small" />
+                          </IconButton>
+                        </Tooltip>
+                      </TableCell>
                     </TableRow>
 
-                    {isExpanded && (
-                      <TableRow sx={{ '& > td': { borderBottom: 0, p: 0 } }}>
-                        <TableCell colSpan={7} sx={{ p: 0 }}>
-                          <Box sx={{ margin: 1, p: 2, bgcolor: alpha(theme.palette.background.paper, 0.5), borderRadius: 1 }}>
-                            <Typography variant="overline" color="text.secondary" gutterBottom>
-                              Items in {category.name}
-                            </Typography>
-                            <Table size="small" aria-label="item details">
-                              <TableHead>
-                                <TableRow>
-                                  <TableCell>Description</TableCell>
-                                  <TableCell align="right">Amount</TableCell>
-                                  <TableCell>Type</TableCell>
-                                  <TableCell>Status/Date</TableCell>
-                                  <TableCell align="right">Re-categorize</TableCell>
-                                </TableRow>
-                              </TableHead>
-                              <TableBody>
-                                {category.items.length === 0 ? (
-                                  <TableRow><TableCell colSpan={5} align="center">No items in this category yet.</TableCell></TableRow>
-                                ) : (
-                                  category.items.map((item) => (
-                                    <TableRow key={item.id} hover>
-                                      <TableCell component="th" scope="row">
-                                        {item.description || 'No Description'}
-                                      </TableCell>
-                                      <TableCell align="right">{formatCurrency(item.amount)}</TableCell>
-                                      <TableCell>
-                                        <Chip label={item.type || 'unknown'} size="small" variant="outlined" />
-                                      </TableCell>
-                                      <TableCell>
-                                        {item.status}
-                                        {item.date && ` on ${formatDisplayDate(item.date)}`}
-                                      </TableCell>
-                                      <TableCell align="right">
-                                        {editingItemId === item.id ? (
-                                          <CategorySelector 
-                                            value={getCategoryIdForItem({id: item.id} as Partial<Expense | Bid>)} 
-                                            onChange={(newCatId) => {
-                                                if (item.id) {
-                                                    handleRecategorizeItem(item.id, newCatId);
-                                                } else {
-                                                    console.error("Cannot recategorize item without ID");
-                                                    setSnackbar({ open: true, message: 'Error: Item ID missing', severity: 'error' });
-                                                }
-                                            }}
-                                            size="small"
-                                            fullWidth={false} 
-                                            variant='standard' 
-                                          />
-                                        ) : (
-                                          <Tooltip title="Edit Category">
-                                            <IconButton size="small" onClick={() => setEditingItemId(item.id!)} disabled={!item.id}>
-                                              <EditIcon fontSize="small" />
-                                            </IconButton>
-                                          </Tooltip>
-                                        )}
-                                      </TableCell>
-                                    </TableRow>
-                                  ))
-                                )}
-                              </TableBody>
-                            </Table>
-                          </Box>
-                        </TableCell>
-                      </TableRow>
-                    )}
+                    {/* Subcategory Rows (Expanded) - Iterate over subCategories map */}
+                    {isMainExpanded && Array.from(subCategories.values()).map(subCategoryData => {
+                       const hasItems = subCategoryData.items.length > 0;
+                       const isSubExpanded = expandedSubcategories.has(subCategoryData.id);
+                       
+                       return (
+                         <React.Fragment key={subCategoryData.id}>
+                           <TableRow 
+                             hover
+                             sx={{ 
+                               bgcolor: alpha(theme.palette.background.paper, 0.5),
+                               '& > td': { borderBottom: '1px solid rgba(224, 224, 224, 0.5)'},
+                               '&:hover': { bgcolor: alpha(mainCategoryDetails.color || theme.palette.grey[500], 0.05) }
+                             }}
+                           >
+                             <TableCell sx={{ pl: 6 }}> {/* Indent */}
+                               <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                                 <IconButton 
+                                   size="small" 
+                                   sx={{ mr: 1 }} 
+                                   aria-label={isSubExpanded ? 'Collapse subcategory' : 'Expand subcategory'}
+                                   onClick={(e) => toggleSubcategory(subCategoryData.id, e)}
+                                 >
+                                   {isSubExpanded ? <ExpandLessIcon /> : <ExpandMoreIcon />}
+                                 </IconButton>
+                                 <Box 
+                                   component="span"
+                                   sx={{ 
+                                     width: 4, 
+                                     height: 16, 
+                                     bgcolor: mainCategoryDetails.color || theme.palette.grey[500], 
+                                     mr: 2,
+                                     display: 'inline-block' 
+                                   }} 
+                                 />
+                                 <Typography 
+                                   variant="body2" 
+                                   fontWeight={hasItems ? 'medium' : 'normal'}
+                                   sx={{ display: 'flex', alignItems: 'center' }}
+                                 >
+                                   {subCategoryData.name} 
+                                   {hasItems && (
+                                     <Chip 
+                                       size="small" 
+                                       label={`${subCategoryData.items.length}`} 
+                                       sx={{ ml: 1, height: 20, fontSize: '0.7rem' }} 
+                                     />
+                                   )}
+                                   {subCategoryData.needsReview && (
+                                     <Tooltip title="Items need category review">
+                                       <WarningIcon 
+                                         fontSize="small" 
+                                         color="warning" 
+                                         sx={{ ml: 1, opacity: 0.7, width: 18, height: 18 }} 
+                                       />
+                                     </Tooltip>
+                                   )}
+                                 </Typography>
+                               </Box>
+                               {subCategoryData.description && (
+                                 <Typography variant="caption" color="text.secondary" sx={{ display: 'block', ml: 6 }}>
+                                   {subCategoryData.description}
+                                 </Typography>
+                               )}
+                             </TableCell>
+                             <TableCell align="right">{formatCurrency(subCategoryData.paid)}</TableCell>
+                             <TableCell align="right">{formatCurrency(subCategoryData.pending)}</TableCell>
+                             <TableCell align="right" sx={{ fontWeight: 'medium' }}>{formatCurrency(subCategoryData.total)}</TableCell>
+                             <TableCell align="right">
+                               {subCategoryData.items.length > 0 && (
+                                 <Tooltip title={subCategoryData.needsReview ? "Review Categories" : "View Items"}>
+                                   <IconButton 
+                                     size="small" 
+                                     onClick={(e) => toggleSubcategory(subCategoryData.id, e)}
+                                   >
+                                     {subCategoryData.needsReview ? (
+                                       <EditIcon fontSize="small" />
+                                     ) : (
+                                       <InfoIcon fontSize="small" />
+                                     )}
+                                   </IconButton>
+                                 </Tooltip>
+                               )}
+                             </TableCell>
+                           </TableRow>
+
+                           {/* Subcategory Items (Expanded) */}
+                           {isSubExpanded && subCategoryData.items.length > 0 && (
+                             <>
+                               {/* Items header row */}
+                               <TableRow sx={{ bgcolor: alpha(theme.palette.grey[100], 0.5) }}>
+                                 <TableCell colSpan={5} sx={{ py: 1 }}>
+                                   <Typography variant="caption" fontWeight="medium" color="text.secondary">
+                                     {subCategoryData.items.length} ITEM{subCategoryData.items.length !== 1 ? 'S' : ''} IN {subCategoryData.name.toUpperCase()}
+                                   </Typography>
+                                 </TableCell>
+                               </TableRow>
+                               
+                               {/* Individual items */}
+                               {subCategoryData.items.map(item => (
+                                 <TableRow 
+                                   key={item.id} 
+                                   hover
+                                   sx={{ 
+                                     bgcolor: 'background.paper',
+                                     '&:hover': { bgcolor: alpha(theme.palette.grey[100], 0.7) },
+                                     '& > td': { 
+                                       py: 1,
+                                       borderBottom: `1px dashed ${alpha(theme.palette.divider, 0.3)}` 
+                                     }
+                                   }}
+                                 >
+                                   <TableCell sx={{ pl: 10 }}>
+                                     <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                                       <Chip 
+                                         size="small" 
+                                         label={item.type === 'expense' ? 'Expense' : 
+                                                item.type === 'bid' ? 'Bid' : 'Projection'} 
+                                         color={item.type === 'expense' ? 'primary' : 
+                                                item.type === 'bid' ? 'secondary' : 'info'}
+                                         variant={item.type === 'projection' ? 'outlined' : 'filled'}
+                                         sx={{ fontSize: '0.7rem', mr: 1 }}
+                                       />
+                                       <Box>
+                                         <Typography variant="body2">{item.description}</Typography>
+                                         {item.vendor && (
+                                           <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
+                                             Vendor: {item.vendor}
+                                           </Typography>
+                                         )}
+                                         {item.subcontractorName && (
+                                           <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
+                                             Subcontractor: {item.subcontractorName}
+                                           </Typography>
+                                         )}
+                                         {item.date && (
+                                           <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
+                                             Date: {formatDisplayDate(item.date)}
+                                           </Typography>
+                                         )}
+                                         {item.notes && (
+                                           <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
+                                             Notes: {item.notes}
+                                           </Typography>
+                                         )}
+                                         {item.phaseId && (
+                                           <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
+                                             Phase: {phases.find(p => p.id === item.phaseId)?.name || 'Unknown'}
+                                           </Typography>
+                                         )}
+                                       </Box>
+                                     </Box>
+                                   </TableCell>
+                                   <TableCell align="right">
+                                     {item.type === 'expense' && (item.status === 'paid') ? 
+                                       formatCurrency(item.amount) : '-'}
+                                   </TableCell>
+                                   <TableCell align="right">
+                                     {(item.type === 'expense' && item.status !== 'paid') || 
+                                      item.type === 'bid' || 
+                                      item.type === 'projection' ? 
+                                       formatCurrency(item.amount) : '-'}
+                                   </TableCell>
+                                   <TableCell align="right">{formatCurrency(item.amount)}</TableCell>
+                                   <TableCell align="right">
+                                     {getStatusChip(item)}
+                                     {item.type === 'expense' && item.id && (
+                                       <Tooltip title="Recategorize Item">
+                                         <IconButton 
+                                           size="small" 
+                                           onClick={() => setEditingItemId(item.id)}
+                                           sx={{ ml: 1, opacity: 0.6 }}
+                                         >
+                                           <CategoryIcon fontSize="small" sx={{ fontSize: '1rem' }} />
+                                         </IconButton>
+                                       </Tooltip>
+                                     )}
+                                   </TableCell>
+                                 </TableRow>
+                               ))}
+                             </>
+                           )}
+                         </React.Fragment>
+                       );
+                     })
+                    }
                   </React.Fragment>
                 );
               })
@@ -717,17 +1140,17 @@ const BudgetAllocationTracker: React.FC<BudgetAllocationTrackerProps> = ({
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setProjectionDialogOpen(false)}>Cancel</Button>
-          <Button onClick={handleAddProjection} variant="contained" disabled={projectionAmount === ''}>
+          <Button onClick={handleAddProjectionClick} variant="contained" disabled={projectionAmount === '' || !onAddProjection}>
             Add Projection
           </Button>
         </DialogActions>
       </Dialog>
 
       <Snackbar 
-          open={snackbar.open} 
-          autoHideDuration={4000} 
-          onClose={handleCloseSnackbar}
-          anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+        open={snackbar.open} 
+        autoHideDuration={4000} 
+        onClose={handleCloseSnackbar}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
       >
           <Alert onClose={handleCloseSnackbar} severity={snackbar.severity} sx={{ width: '100%' }}>
               {snackbar.message}
@@ -742,4 +1165,4 @@ export default BudgetAllocationTracker;
 
 // Define BidStatus and ExpenseStatus if not globally available
 type ExpenseStatus = 'pending' | 'approved' | 'rejected' | 'paid';
-type BidStatus = 'draft' | 'submitted' | 'accepted' | 'rejected' | 'expired' | 'withdrawn' | 'revision_requested'; 
+type BidStatus = 'draft' | 'submitted' | 'accepted' | 'rejected' | 'expired' | 'withdrawn' | 'revision_requested';

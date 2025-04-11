@@ -29,11 +29,6 @@ interface CategorySelectorProps {
   required?: boolean;
 }
 
-// Extended category option with group property
-interface CategoryOption extends Category {
-  group: string;
-}
-
 const CategorySelector: React.FC<CategorySelectorProps> = ({
   value,
   onChange,
@@ -71,24 +66,40 @@ const CategorySelector: React.FC<CategorySelectorProps> = ({
     }
   };
 
-  // Group options by main category
-  const options: CategoryOption[] = MAIN_CATEGORIES.map(mainCategory => {
-    const subcategories = mainCategory.children || [];
-    return [
-      { ...mainCategory, group: 'main' },
-      ...subcategories.map(subcat => ({ ...subcat, group: mainCategory.id }))
-    ];
-  }).flat() as CategoryOption[];
+  // Helper function to determine the group for a category
+  const getCategoryGroup = (option: Category): string => {
+    // Find the parent category for this subcategory
+    const parentCategory = MAIN_CATEGORIES.find(cat => 
+      cat.children?.some(child => child.id === option.id)
+    );
+    
+    return parentCategory?.name || 'Other';
+  };
+
+  // Prepare options for the autocomplete - ONLY use subcategories
+  const subcategoryOptions = getAllCategories()
+    .filter(cat => cat.level === 'sub')
+    .sort((a, b) => {
+      // Sort first by group name
+      const groupA = getCategoryGroup(a);
+      const groupB = getCategoryGroup(b);
+      
+      // If groups are different, sort by group
+      if (groupA !== groupB) {
+        return groupA.localeCompare(groupB);
+      }
+      
+      // If in same group, sort alphabetically by name
+      return a.name.localeCompare(b.name);
+    });
 
   return (
     <FormControl fullWidth={fullWidth} error={!!error} variant={variant} size={size} required={required}>
       <Autocomplete
-        value={selectedCategory as CategoryOption | null}
+        value={selectedCategory}
         onChange={handleChange}
         disabled={disabled}
-        options={options}
-        groupBy={(option) => option.group === 'main' ? 'Main Categories' : 
-          options.find(cat => cat.id === option.group)?.name || ''}
+        options={subcategoryOptions}
         getOptionLabel={(option) => option.name}
         renderInput={(params) => (
           <TextField
@@ -114,27 +125,16 @@ const CategorySelector: React.FC<CategorySelectorProps> = ({
             {...props}
             key={option.id}
             sx={{
-              pl: option.level === 'sub' ? 4 : 2,
-              borderLeft: option.level === 'sub' ? `4px solid ${option.color || '#ccc'}` : 'none'
+              pl: 4,
+              borderLeft: `4px solid ${option.color || '#ccc'}`
             }}
           >
             <Box display="flex" alignItems="center">
-              {option.level === 'main' && (
-                <Box 
-                  component="span" 
-                  sx={{ 
-                    width: 12, 
-                    height: 12, 
-                    borderRadius: '50%', 
-                    bgcolor: option.color || '#ccc', 
-                    mr: 1 
-                  }} 
-                />
-              )}
               {option.name}
             </Box>
           </MenuItem>
         )}
+        groupBy={getCategoryGroup}
       />
     </FormControl>
   );

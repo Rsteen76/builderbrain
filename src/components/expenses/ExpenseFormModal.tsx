@@ -69,6 +69,7 @@ import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
 import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns';
 import SubcontractorSelector from '../common/SubcontractorSelector';
 import VendorSelector from '../common/VendorSelector';
+import CategorySelector from '../common/CategorySelector';
 import { addCategoryMapping } from '../../services/category.service';
 import { mapSimpleToDetailedCategory } from '../../data/hierarchicalCategories';
 
@@ -136,6 +137,11 @@ const availableExpenseCategories: ExpenseCategory[] = [
   'other'
 ];
 
+// Helper function to format category names for display
+const formatCategoryName = (category: string): string => {
+  return category.charAt(0).toUpperCase() + category.slice(1);
+};
+
 // Add this utility function at the top of the file, outside of component
 const cleanForFirestore = (data: any): any => {
   // If null or primitive, return as is
@@ -200,422 +206,251 @@ const PHASE_EXPENSE_DESCRIPTIONS: Record<string, string[]> = {
   ],
   
   "site_work": [
-    // Permits & Surveys
-    "Building Permit Fee",
-    "Impact Fees",
-    "Water/Sewer Connection Fee",
-    "Utility Connection Fee",
-    "Land Survey Fee",
-    "Environmental Permit",
-    "Soil Testing Services",
+    // Demolition
+    "Demolition Labor",
+    "Structure Demolition",
+    "Interior Demolition",
+    "Concrete Removal",
+    "Debris Hauling",
     
-    // Site Preparation
-    "Lot Clearing/Tree Removal",
+    // Excavation
+    "Site Clearing Labor",
+    "Tree Removal",
     "Stump Removal",
-    "Erosion Control Materials",
-    "Silt Fence Installation",
-    "Demolition Services",
-    "Asbestos/Hazardous Removal",
-    "Construction Entrance Materials",
-    
-    // Excavation & Grading
-    "Excavation Services",
-    "Grading/Site Leveling",
-    "Topsoil Removal/Storage",
-    "Fill Dirt/Gravel Delivery",
+    "Excavation Equipment Rental",
+    "Excavation Labor",
+    "Soil Testing",
+    "Backfill Material",
     "Compaction Equipment Rental",
-    "Trenching Services",
-    "Backfill Materials",
-    "Drainage System Materials",
-    "Site Retaining Wall Materials",
-    "Earth Moving Equipment Rental",
-    "Dump Truck Services",
+    "Grading Equipment Rental",
     
     // Utilities
     "Water Line Installation",
-    "Sewer Line Connection",
+    "Sewer Line Installation",
+    "Electric Service Installation",
     "Gas Line Installation",
-    "Electrical Service Connection",
-    "Underground Conduit Materials",
-    "Septic System Installation",
-    "Well Drilling Services",
+    "Utility Locate Service",
+    "Utility Connection Fees",
+    "Storm Drain Installation",
+    
+    // Other Site Work
+    "Erosion Control Materials",
+    "Silt Fence Installation",
+    "Retaining Wall Materials",
+    "Retaining Wall Labor",
+    "Driveway Gravel/Base",
   ],
   
   "foundation": [
-    // Layout & Forms
-    "Batter Board Materials",
-    "Form Materials/Plywood",
-    "Form Rental",
-    "Snap Ties/Spreader Clamps",
-    "Form Oil/Release Agent",
-    "Foundation Layout Labor",
-    
-    // Materials
-    "Concrete Materials",
+    // Concrete Work
+    "Concrete Forms Rental",
+    "Concrete Forming Labor",
     "Rebar/Steel Reinforcement",
-    "Wire Mesh/WWF",
-    "Foundation Bolts/Hardware",
-    "Concrete Pump Service",
-    "Concrete Delivery",
-    "Ready-Mix Concrete",
-    "Vapor Barrier Materials",
-    "Foundation Waterproofing",
-    "Concrete Additives",
-    "Termite Treatment/Barrier",
-    
-    // Equipment & Labor
+    "Concrete Material",
+    "Concrete Pumping",
     "Concrete Finishing Labor",
-    "Concrete Vibrator Rental",
-    "Concrete Testing Services",
-    "Power Trowel Rental",
-    "Concrete Hammer Drill Rental",
-    
-    // Footings & Specialty
-    "Footing Drain Materials",
-    "Pier Installation",
-    "Caisson Drilling",
-    "Slab Preparation Materials",
-    "Slab Insulation",
-    "ICF Block Materials",
+    "Footings Excavation",
+    "Foundation Waterproofing",
     "Foundation Drainage System",
+    "Termite Treatment",
+    "Vapor Barrier",
+    "Concrete Testing",
     "Foundation Insulation",
-    "Foundation Coating/Sealant",
+    "Concrete Sealer",
+    "Anchor Bolts/Fasteners",
   ],
   
   "framing": [
-    // Framing Materials
-    "Dimensional Lumber Package",
-    "Treated Lumber Materials",
-    "Engineered Floor Joists",
-    "LVL/Engineered Beams",
-    "Roof Truss Package",
-    "Wall Sheathing/OSB",
-    "Roof Decking Materials",
-    "Metal Connectors/Joist Hangers",
-    "Framing Hardware/Nails",
-    "Framing Gun Rental",
-    "Scaffold Rental",
-    "Pneumatic Tool Rental",
-    "Crane Services for Trusses",
-    "Weather Barrier/House Wrap",
-    "Flashing Materials",
-    
-    // Steel & Specialty
-    "Structural Steel Beams",
-    "Steel Columns",
-    "Steel Connectors/Plates",
-    "Steel Fabrication",
-    "Timber Frame Materials",
-    "Timber Frame Connectors",
-    "SIP Panel Materials",
-    "Fastener Systems",
+    // Lumber and Materials
+    "Dimensional Lumber",
+    "Engineered Wood Products",
+    "Wall Sheathing",
+    "Roof Sheathing",
+    "Hurricane Ties/Fasteners",
+    "Joist Hangers/Connectors",
+    "Framing Hardware",
     
     // Labor
     "Framing Labor - Walls",
     "Framing Labor - Floors",
     "Framing Labor - Roof",
-    "Framing Labor - Stairs",
-    "Temporary Bracing Materials",
-    "Safety Harness Rental",
+    "Framing Inspection Fee",
+    
+    // Trusses/Roof
+    "Roof Truss Package",
+    "Floor Truss Package",
+    "Roof Framing Labor",
+    "Beam Installation",
   ],
   
   "rough_ins": [
-    // Electrical
-    "Electrical Rough Materials",
-    "Electrical Wire/Romex",
-    "Conduit/Cable Tray Materials",
-    "Electrical Boxes",
-    "Recessed Light Cans",
-    "Electrical Panel/Breakers",
-    "Low Voltage Wiring",
-    "Generator Installation Materials",
-    "Solar Pre-Wire Materials",
-    "Electrical Permit Fee",
-    
     // Plumbing
-    "Plumbing Rough Materials",
-    "PEX/Copper/PVC Pipe",
-    "Pipe Fittings",
-    "Pipe Insulation",
-    "Plumbing Fixtures Rough-in",
+    "Plumbing Rough-in Labor",
+    "Plumbing Pipes/Fittings",
+    "Shower/Tub Rough-in",
     "Water Heater Installation",
-    "Gas Line Materials",
-    "Sewer & Drain Materials",
-    "Tub/Shower Pan Install",
-    "Plumbing Permit Fee",
+    "Plumbing Fixtures",
+    "Plumbing Permit",
+    "Plumbing Inspection",
+    
+    // Electrical
+    "Electrical Rough-in Labor",
+    "Electrical Panel Installation",
+    "Electrical Wiring/Cables",
+    "Electrical Boxes/Devices",
+    "Light Fixture Rough-in",
+    "Electrical Permit",
+    "Electrical Inspection",
     
     // HVAC
-    "HVAC Ductwork Materials",
-    "Flexible Duct Materials",
+    "HVAC Rough-in Labor",
     "HVAC Equipment",
-    "Furnace Installation",
-    "AC Condenser/Coil",
-    "Vent/Register Materials",
-    "Return Air Materials",
-    "HVAC Control Wiring",
-    "HVAC Permit Fee",
+    "Ductwork Installation",
+    "HVAC Permit",
+    "HVAC Inspection",
     
-    // Other Systems
-    "Security System Wiring",
-    "Smart Home/Automation Wiring",
-    "Vacuum System Rough-in",
-    "Audio/Video System Wiring",
-    "Fire Suppression System",
-    "Data/Network Cabling",
+    // Other
+    "Low Voltage Wiring",
+    "Security System Rough-in",
+    "Central Vacuum Rough-in",
   ],
   
   "exterior": [
     // Roofing
-    "Roofing Materials",
     "Roof Underlayment",
-    "Roofing Shingles/Tiles",
-    "Metal Roofing Materials",
+    "Roofing Materials",
+    "Roofing Labor",
     "Roof Flashing",
-    "Roof Vents/Boots",
-    "Gutter Materials",
-    "Downspout Materials",
-    "Soffit Materials",
-    "Fascia Materials",
-    "Roof Equipment Rental",
+    "Roof Vents",
+    "Gutter Installation",
+    "Downspout Installation",
     
-    // Siding & Exterior Walls
-    "Exterior Siding Materials",
-    "Fiber Cement Siding",
-    "Vinyl Siding Materials",
-    "Wood/Cedar Siding",
-    "Stone Veneer Materials",
-    "Brick Materials",
-    "Stucco Materials",
-    "EIFS/Synthetic Stucco",
+    // Siding/Exterior Finishes
+    "House Wrap/Moisture Barrier",
+    "Siding Materials",
+    "Siding Labor",
     "Exterior Trim Materials",
-    "Exterior Caulk/Sealant",
+    "Exterior Trim Labor",
+    "Exterior Caulking/Sealant",
+    "Exterior Paint Materials",
+    "Exterior Painting Labor",
     
     // Windows & Doors
-    "Window Package",
-    "Exterior Door Package",
-    "Garage Door Purchase",
-    "Garage Door Opener",
-    "Entry Door Hardware",
-    "Window Flashing Materials",
-    "Door Threshold Materials",
+    "Window Units",
     "Window Installation Labor",
-    "Door Installation Labor",
-    
-    // Exterior Features
-    "Deck/Porch Materials",
-    "Deck Railing Systems",
-    "Exterior Stair Materials",
-    "Exterior Paint/Stain",
-    "Exterior Lighting Fixtures",
-    "Masonry Materials",
-    "Landscaping Allowance",
-    "Driveway Materials",
-    "Walkway Materials",
-    "Landscape Wall Materials",
+    "Exterior Door Units",
+    "Exterior Door Installation",
+    "Garage Door Unit",
+    "Garage Door Installation",
   ],
   
   "interior": [
-    // Insulation
-    "Wall Insulation Materials",
-    "Ceiling/Attic Insulation",
-    "Floor Insulation",
-    "Spray Foam Insulation",
-    "Rigid Foam Insulation",
-    "Sound Insulation Materials",
-    "Vapor Barrier Materials",
-    "Air Sealing Materials",
-    
-    // Drywall & Wall Finishes
+    // Insulation and Drywall
+    "Wall Insulation",
+    "Ceiling Insulation",
     "Drywall Materials",
-    "Drywall Delivery",
-    "Specialty Drywall/Cement Board",
-    "Drywall Mud/Joint Compound",
-    "Drywall Tape/Corner Bead",
-    "Drywall Screws/Fasteners",
-    "Drywall Tools Rental",
-    "Wall Texture Materials",
+    "Drywall Hanging Labor",
+    "Drywall Finishing Labor",
+    "Drywall Texture",
+    
+    // Interior Framing
     "Interior Wall Framing",
-    "Patch & Repair Materials",
+    "Interior Door Framing",
+    "Soffit/Bulkhead Framing",
+    "Backing/Blocking Installation",
     
-    // Paint & Wall Coverings
-    "Interior Paint Materials",
-    "Primer/Sealer",
-    "Painting Equipment Rental",
-    "Painting Labor",
-    "Wallpaper Materials",
-    "Wall Paneling Materials",
-    "Decorative Wall Finishes",
-    
-    // Trim & Interior Doors
-    "Interior Door Package",
-    "Door Hardware/Hinges",
-    "Door Casing Materials",
-    "Baseboard Materials",
-    "Crown Molding Materials",
-    "Window Trim Materials",
-    "Interior Columns/Posts",
-    "Specialty Millwork",
-    "Wood Paneling/Wainscot",
-    "Closet Shelving/Organizers",
-    
-    // Ceilings
-    "Ceiling Grid System",
-    "Ceiling Tiles/Panels",
-    "Ceiling Fan Installation",
-    "Specialty Ceiling Materials",
+    // Other
+    "Fireplace Installation",
+    "Sound Insulation",
   ],
   
   "finishes": [
     // Flooring
-    "Hardwood Flooring Materials",
-    "Engineered Wood Flooring",
-    "Laminate Flooring Materials",
-    "Vinyl/LVP Flooring",
-    "Tile Flooring Materials",
-    "Tile Setting Materials",
-    "Grout/Adhesives",
     "Carpet Materials",
-    "Carpet Pad/Underlayment",
-    "Floor Transition Materials",
-    "Floor Finish/Sealer",
-    "Floor Protection Materials",
+    "Carpet Installation",
+    "Hardwood Flooring Materials",
+    "Hardwood Floor Installation",
+    "Tile Flooring Materials",
+    "Tile Floor Installation",
+    "Vinyl Flooring Materials",
+    "Vinyl Floor Installation",
+    "Floor Underlayment",
+    "Floor Prep Labor",
     
-    // Cabinets & Countertops
-    "Kitchen Cabinet Package",
-    "Bathroom Vanity Cabinets",
-    "Cabinet Hardware",
-    "Countertop Materials",
-    "Solid Surface Countertops",
-    "Quartz/Granite Countertops",
-    "Countertop Fabrication",
-    "Countertop Installation",
-    "Backsplash Materials",
+    // Interior Painting
+    "Interior Paint Materials",
+    "Interior Painting Labor",
+    "Primer Materials",
+    "Wall Texture Materials",
+    
+    // Trim and Doors
+    "Interior Trim Materials",
+    "Interior Trim Labor",
+    "Interior Door Units",
+    "Interior Door Installation",
+    "Door Hardware",
+    
+    // Cabinets and Countertops
+    "Kitchen Cabinet Materials",
     "Cabinet Installation Labor",
+    "Bathroom Vanity Cabinets",
+    "Countertop Materials",
+    "Countertop Installation",
+    "Cabinet Hardware",
     
-    // Plumbing Fixtures
-    "Kitchen Sink Purchase",
-    "Bathroom Sink(s) Purchase",
-    "Faucet Package",
-    "Shower System Purchase",
-    "Bathtub Purchase",
-    "Toilet Purchase",
-    "Garbage Disposal",
-    "Water Filtration System",
-    "Plumbing Trim-out Materials",
-    
-    // Electrical Finish
-    "Light Fixture Package",
-    "Recessed Light Trim",
-    "Ceiling Fan Purchase",
-    "Electrical Outlet Covers",
-    "Switch Plates",
-    "Doorbell/Chime",
-    "Smart Home Devices",
-    "Electrical Trim-out Materials",
-    
-    // Appliances & HVAC Finish
-    "Refrigerator Purchase",
-    "Range/Oven Purchase",
-    "Microwave Purchase",
-    "Dishwasher Purchase",
-    "Washer/Dryer Purchase",
-    "Range Hood Purchase",
-    "HVAC Registers/Grills",
-    "Thermostat Purchase",
-    
-    // Miscellaneous Finish
-    "Mirror Installation",
-    "Shower Door/Enclosure",
+    // Fixtures and Appliances
+    "Light Fixtures",
+    "Light Fixture Installation",
+    "Plumbing Fixtures Installation",
+    "Appliance Installation",
+    "Appliance Purchase",
+    "Shower Door Installation",
     "Bathroom Accessories",
-    "Closet Shelving Installation",
-    "Window Treatment Materials",
-    "Final Touch-up Materials",
+    "Closet Shelving/Organizers",
+    
+    // Specialty Finishes
+    "Staircase Materials",
+    "Staircase Installation",
+    "Railing Installation",
+    "Built-in Shelving",
+    "Wall Paneling",
   ],
   
   "specialty": [
-    // Specialty Spaces
-    "Home Theater Equipment",
-    "Wine Cellar Materials",
-    "Gym/Exercise Room Equipment",
-    "Sauna/Steam Room Materials",
-    "Pool Equipment",
+    // Home Technology/Automation
+    "Home Automation System",
+    "Home Theater Installation",
+    "Security System Installation",
+    "Smart Home Devices",
+    "Network/WiFi Setup",
+    
+    // Specialty Features
+    "Pool Installation",
     "Hot Tub/Spa Installation",
-    "Outdoor Kitchen Equipment/Materials",
-    "Fireplace Installation Materials",
-    "Built-in Shelving Materials",
-    "Smart Home System Installation",
-    "Security System Equipment",
-    "Central Vacuum System",
-    "Elevator/Lift Installation",
-    "Solar Panel System",
-    "Backup Generator System",
-    "Radon Mitigation System",
-    "Water Treatment System",
+    "Sauna Installation",
+    "Wine Cellar Construction",
+    "Elevator Installation",
+    "Generator Installation",
+    "Solar Panel Installation",
+    "EV Charging Station",
     
-    // Permits & Inspections
-    "Specialty System Permit",
-    "Pool Construction Permit",
-    "Electrical Specialty Inspection",
-    "Plumbing Specialty Inspection",
-    "HVAC Specialty Inspection",
-    "Final Building Inspection",
-    
-    // Professional Services
-    "Interior Design Fee",
-    "Landscape Design Fee",
-    "Engineering Consultation",
-    "Energy Audit Services",
-    "Specialty Cleaning Services",
-    "Specialty Contractor Fee",
-  ],
-  
-  "landscape": [
-    // Hardscape
-    "Patio Materials",
-    "Landscape Retaining Wall Materials",
-    "Paver Materials",
-    "Concrete Flatwork",
-    "Outdoor Steps/Stairs",
-    "Stone/Gravel Materials",
-    "Edging Materials",
-    "Landscape Curbing",
-    "Outdoor Lighting Fixtures",
-    "Irrigation System Materials",
-    "Landscape Drainage Materials",
-    
-    // Softscape
-    "Sod/Turf Installation",
-    "Topsoil/Garden Soil",
-    "Mulch/Ground Cover",
-    "Tree Purchase",
-    "Shrub/Plant Materials",
-    "Hydroseeding Services",
-    "Fertilizer/Soil Amendments",
-    
-    // Outdoor Features
-    "Fence Materials",
-    "Pergola/Arbor Materials",
-    "Outdoor Fire Pit/Fireplace",
-    "Water Feature Materials",
-    "Outdoor Furniture",
-    "Playground Equipment",
-    "Garden Bed Materials",
-    "Outdoor Kitchen Equipment",
+    // Custom Features
+    "Custom Cabinetry",
+    "Custom Millwork",
+    "Custom Built-ins",
+    "Custom Shelving",
   ],
   
   "renovation": [
     // Demolition & Preparation
-    "Interior Demolition Services",
-    "Dumpster Rental",
+    "Interior Demolition Labor",
+    "Kitchen Demolition",
+    "Bathroom Demolition",
+    "Wall Removal Labor",
     "Asbestos/Lead Testing",
     "Mold Remediation",
     "Structure Repair Materials",
-    "Wall Removal Labor",
     "Subfloor Repair Materials",
-    "Electrical System Updates",
-    "Plumbing System Updates",
-    "HVAC System Updates",
-    "Permit for Renovation",
     
     // Conservation
     "Historic Restoration Materials",
@@ -628,15 +463,24 @@ const PHASE_EXPENSE_DESCRIPTIONS: Record<string, string[]> = {
   "maintenance": [
     // Repairs
     "Roof Repair Materials",
+    "Roof Repair Labor",
     "Siding Repair Materials",
-    "Gutter Cleaning/Repair",
-    "Window/Door Repair",
+    "Siding Repair Labor",
+    "Gutter Cleaning",
+    "Gutter Repair",
+    "Window Repair",
+    "Door Repair",
     "Drywall Repair Materials",
+    "Drywall Repair Labor",
     "Plumbing Repair Parts",
+    "Plumbing Repair Labor",
     "Electrical Repair Materials",
-    "HVAC Service/Repair",
+    "Electrical Repair Labor",
+    "HVAC Service",
+    "HVAC Repair Parts",
     "Appliance Repair",
     "Flooring Repair Materials",
+    "Flooring Repair Labor",
     
     // Scheduled Maintenance
     "HVAC Filter Replacement",
@@ -646,8 +490,6 @@ const PHASE_EXPENSE_DESCRIPTIONS: Record<string, string[]> = {
     "Pressure Washing Service",
     "Duct Cleaning Service",
     "Carpet Cleaning Service",
-    "Lawn Maintenance",
-    "Tree Trimming Service",
     "Pest Control Service",
   ],
 };
@@ -722,136 +564,102 @@ const ExpenseFormModal: React.FC<ExpenseFormModalProps> = ({
         
         console.log(`[getExpenseDescOptions] Analyzing phase: "${phase.name}" (ID: ${phase.id})`);
 
-        // Detect phase category based on name keywords
-        // Site work and excavation
-        if (phaseNameLower.includes("site") || 
-            phaseNameLower.includes("excav") || 
-            phaseNameLower.includes("demo") || 
-            phaseNameLower.includes("prep") || 
-            phaseNameLower.includes("clear")) {
+        // More targeted category matching with fewer overlaps
+        // Site work - only match if explicitly site-related
+        if (phaseNameLower.includes("site work") || 
+            phaseNameLower.includes("excavation") || 
+            phaseNameLower.includes("demolition") || 
+            phaseNameLower.includes("clearing")) {
           applicableKeys.push("site_work");
         }
         
-        // Foundation work
-        if (phaseNameLower.includes("foundation") || 
+        // Foundation - more explicit matching
+        else if (phaseNameLower.includes("foundation") || 
             phaseNameLower.includes("concrete") || 
-            phaseNameLower.includes("foot") || // catches footings/footing
-            phaseNameLower.includes("slab")) {
+            phaseNameLower.includes("footings")) {
           applicableKeys.push("foundation");
         }
         
-        // Framing
-        if (phaseNameLower.includes("frame") || 
-            phaseNameLower.includes("struct") || 
-            phaseNameLower.includes("joist") || 
-            phaseNameLower.includes("beam") || 
-            phaseNameLower.includes("truss")) {
+        // Framing - more explicit matching
+        else if (phaseNameLower.includes("framing") || 
+            phaseNameLower.includes("structural") ||
+            (phaseNameLower.includes("frame") && !phaseNameLower.includes("window"))) {
           applicableKeys.push("framing");
         }
         
-        // Rough-ins
-        if (phaseNameLower.includes("rough") || 
-            phaseNameLower.includes("plumb") || 
-            phaseNameLower.includes("electr") || 
-            phaseNameLower.includes("hvac") || 
-            phaseNameLower.includes("mechanic")) {
+        // Rough-ins - more explicit matching
+        else if (phaseNameLower.includes("rough") || 
+            phaseNameLower.includes("mech") || 
+            phaseNameLower.includes("electrical rough") ||
+            phaseNameLower.includes("plumbing rough")) {
           applicableKeys.push("rough_ins");
         }
         
-        // Exterior work
-        if (phaseNameLower.includes("exterior") || 
-            phaseNameLower.includes("roof") || 
+        // Exterior - more explicit matching
+        else if (phaseNameLower.includes("exterior") || 
             phaseNameLower.includes("siding") || 
-            phaseNameLower.includes("window") || 
-            phaseNameLower.includes("door") || 
-            phaseNameLower.includes("flash")) {
+            phaseNameLower.includes("roofing")) {
           applicableKeys.push("exterior");
         }
         
-        // Interior work
-        if (phaseNameLower.includes("interior") || 
-            phaseNameLower.includes("drywall") || 
-            phaseNameLower.includes("paint") || 
-            phaseNameLower.includes("wall") || 
-            phaseNameLower.includes("insul")) {
+        // Interior - more explicit matching
+        else if (phaseNameLower.includes("interior") &&
+            !phaseNameLower.includes("finish")) {
           applicableKeys.push("interior");
         }
         
-        // Finishes
-        if (phaseNameLower.includes("finish") || 
-            phaseNameLower.includes("cabinet") || 
-            phaseNameLower.includes("counter") ||
-            phaseNameLower.includes("tile") || 
-            phaseNameLower.includes("floor") || 
-            phaseNameLower.includes("trim") || 
-            phaseNameLower.includes("paint")) {
+        // Finishes - more explicit matching
+        else if (phaseNameLower.includes("finish") || 
+            phaseNameLower.includes("paint") ||
+            phaseNameLower.includes("flooring") ||
+            phaseNameLower.includes("trim")) {
           applicableKeys.push("finishes");
         }
         
         // Specialty items
-        if (phaseNameLower.includes("pool") || 
-            phaseNameLower.includes("special") || 
-            phaseNameLower.includes("custom") || 
-            phaseNameLower.includes("home theater") || 
-            phaseNameLower.includes("smart") || 
+        else if (phaseNameLower.includes("special") || 
+            phaseNameLower.includes("pool") || 
+            phaseNameLower.includes("theater") || 
             phaseNameLower.includes("automation")) {
           applicableKeys.push("specialty");
         }
         
-        // Landscaping
-        if (phaseNameLower.includes("landscape") || 
-            phaseNameLower.includes("yard") || 
-            phaseNameLower.includes("garden") || 
-            phaseNameLower.includes("outdoor") || 
-            phaseNameLower.includes("patio") || 
-            phaseNameLower.includes("lawn")) {
-          applicableKeys.push("landscape");
-        }
-        
         // Renovation
-        if (phaseNameLower.includes("renovat") || 
-            phaseNameLower.includes("remodel") || 
-            phaseNameLower.includes("restor") || 
-            phaseNameLower.includes("repair") || 
-            phaseNameLower.includes("updat")) {
+        else if (phaseNameLower.includes("renovat") || 
+            phaseNameLower.includes("remodel")) {
           applicableKeys.push("renovation");
         }
         
         // Maintenance
-        if (phaseNameLower.includes("maint") || 
-            phaseNameLower.includes("repair") || 
-            phaseNameLower.includes("fix") || 
-            phaseNameLower.includes("service") || 
-            phaseNameLower.includes("clean")) {
+        else if (phaseNameLower.includes("maint") || 
+            phaseNameLower.includes("repair")) {
           applicableKeys.push("maintenance");
         }
-      } else {
-        console.log(`[getExpenseDescOptions] Phase ID ${phaseId} provided but not found in phases list.`);
+        
+        console.log(`[getExpenseDescOptions] Applicable categories for "${phase.name}": ${applicableKeys.join(', ')}`);
       }
-    } else if (!phaseId) {
-        console.log('[getExpenseDescOptions] No phase selected.');
-    } else { // projectPhases.length === 0
-        console.log('[getExpenseDescOptions] Phase ID provided but phases list is empty.');
     }
-
-    // Remove duplicates from applicableKeys
-    const uniqueKeys = Array.from(new Set(applicableKeys));
-    console.log(`[getExpenseDescOptions] For Phase: "${phaseNameForLog}", Applicable Keys:`, uniqueKeys);
-
-    // Collect descriptions from all applicable keys using a Set for automatic deduplication
-    const combinedDescriptions = new Set<string>();
-    uniqueKeys.forEach(key => {
+    
+    // Create a Map to track seen descriptions (for case-insensitive deduplication)
+    const seenDescriptions = new Map<string, string>();
+    
+    // Gather all descriptions from applicable categories and deduplicate
+    for (const key of applicableKeys) {
       const descriptions = PHASE_EXPENSE_DESCRIPTIONS[key] || [];
-      console.log(`[getExpenseDescOptions] Adding ${descriptions.length} descriptions from category "${key}"`);
-      descriptions.forEach(desc => combinedDescriptions.add(desc));
-    });
-
-    // Convert Set to sorted array
-    const finalOptions = Array.from(combinedDescriptions).sort();
+      for (const desc of descriptions) {
+        // Use lowercase version as the key for deduplication, but keep original case for display
+        const lowerDesc = desc.toLowerCase().trim();
+        if (!seenDescriptions.has(lowerDesc)) {
+          seenDescriptions.set(lowerDesc, desc);
+        }
+      }
+    }
     
-    console.log(`[getExpenseDescOptions] Final Combined & Sorted Options: ${finalOptions.length} descriptions available`);
+    // Get unique descriptions (preserving original casing)
+    const uniqueDescriptions = Array.from(seenDescriptions.values());
     
-    return finalOptions;
+    // Sort alphabetically
+    return uniqueDescriptions.sort();
   }, []);
 
   // Effect to initialize form and phases when opening/editing
@@ -1243,6 +1051,7 @@ const ExpenseFormModal: React.FC<ExpenseFormModalProps> = ({
         lineItems: finalLineItems,
         projectId: formData.projectId || null,
         phaseId: formData.phaseId || null,
+        detailedCategoryId: detailedCategoryId || (formData.category ? mapSimpleToDetailedCategory(formData.category, formData.vendor || undefined, formData.description) : undefined),
         receiptUrl: receiptPreview || null,
         status: formData.status || 'pending',
         subcontractorId: formData.category === 'subcontractor' ? (formData.subcontractorId || null) : null,
@@ -1447,14 +1256,14 @@ const ExpenseFormModal: React.FC<ExpenseFormModalProps> = ({
 
                 <Grid item xs={12} sm={6}>
                   <FormControl fullWidth size="small" error={!!errors.category}>
-                    <InputLabel id="category-label">Category</InputLabel>
+                    <InputLabel id="category-label">General Category</InputLabel>
                     <Select
                       labelId="category-label"
                       id="category"
                       name="category"
-                      value={formData.category}
+                      value={formData.category || ''}
                       onChange={(e) => handleChange('category', e.target.value as Expense['category'])}
-                      label="Category"
+                      label="General Category"
                       startAdornment={
                         <InputAdornment position="start">
                           <CategoryIcon fontSize="small" color="primary" />
@@ -1463,12 +1272,25 @@ const ExpenseFormModal: React.FC<ExpenseFormModalProps> = ({
                     >
                       {availableExpenseCategories.map((category) => (
                         <MenuItem key={category} value={category}>
-                          {category}
+                          {formatCategoryName(category)}
                         </MenuItem>
                       ))}
                     </Select>
                     {errors.category && <FormHelperText error>{errors.category}</FormHelperText>}
                   </FormControl>
+                </Grid>
+
+                <Grid item xs={12} sm={6}>
+                  <CategorySelector
+                    value={detailedCategoryId || ''}
+                    onChange={handleDetailedCategoryChange}
+                    label="Specific Construction Category"
+                    error={errors.detailedCategoryId}
+                    size="small"
+                  />
+                  <Typography variant="caption" color="text.secondary">
+                    Select a construction-specific classification
+                  </Typography>
                 </Grid>
 
                 <Grid item xs={12}>
