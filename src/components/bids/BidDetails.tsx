@@ -36,12 +36,16 @@ import {
   GetApp as DownloadIcon,
   AddCircleOutline as AddVersionIcon,
 } from '@mui/icons-material';
-import { Bid, BidVersion, LineItem } from '../../types';
+import { Bid, BidVersion, LineItem, Subcontractor, Phase, Project, BidFormData } from '../../types';
 import { BidService } from '../../services/bid';
+import { ProjectService } from '../../services/project';
 import LineItemsTable from './LineItemsTable';
 import { formatCurrency, formatDate } from '../../utils/formatters';
 import { useAuth } from '../../contexts/AuthContext';
 import BidDeletionWrapper from './BidDeletionWrapper';
+import ReusableBidForm from './ReusableBidForm';
+import { SubcontractorService } from '../../services/subcontractor';
+import { v4 as uuidv4 } from 'uuid';
 
 // Status chip colors (Align with Bid['status'] from types/index.ts)
 const STATUS_COLORS: Record<Bid['status'], string> = {
@@ -186,42 +190,79 @@ const BidDetails: React.FC = () => {
   const [tabValue, setTabValue] = useState<number>(0);
   const [selectedVersionId, setSelectedVersionId] = useState<string | null>(null);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState<boolean>(false);
+  const [isEditing, setIsEditing] = useState<boolean>(false);
+  const [subcontractors, setSubcontractors] = useState<Subcontractor[]>([]);
+  const [loadingSubcontractors, setLoadingSubcontractors] = useState<boolean>(false);
+  const [projectPhases, setProjectPhases] = useState<Phase[]>([]);
+  const [loadingProject, setLoadingProject] = useState<boolean>(false);
   
   useEffect(() => {
-    const fetchBidDetails = async () => {
-      if (!id) {
-        setError('Bid ID is missing');
+    const fetchBidAndProjectDetails = async () => {
+      if (!id || !user?.uid) {
+        setError(!id ? 'Bid ID is missing' : 'User not authenticated');
         setLoading(false);
         return;
       }
-      if (!user?.uid) {
-          setError('User not authenticated');
-          setLoading(false);
-          return;
-      }
 
+      setLoading(true);
+      setError(null);
       try {
-        setLoading(true);
-        // Pass userId to getBid
+        // Fetch Bid
         const bidData = await BidService.getBid(user.uid, id);
-        
         if (!bidData) {
           setError('Bid not found or access denied');
+          setBid(null);
         } else {
           setBid(bidData);
-          // Use currentVersionId from fetched data
-          setSelectedVersionId(bidData.currentVersionId || null); 
+          setSelectedVersionId(bidData.currentVersionId || null);
+
+          // ---> Fetch Project Phases if Bid found and has projectId <----
+          if (bidData.projectId) {
+            setLoadingProject(true);
+            try {
+              const projectData = await ProjectService.getProjectById(bidData.projectId);
+              setProjectPhases(projectData?.phases || []);
+            } catch (projErr) {
+              console.error("Error fetching project details:", projErr);
+              setError('Failed to load associated project phases.'); // Add specific error
+              setProjectPhases([]);
+            } finally {
+              setLoadingProject(false);
+            }
+          } else {
+            setProjectPhases([]); // No project ID associated with the bid
+          }
+          // ---> END Fetch Project Phases <----
         }
       } catch (err) {
         console.error('Error fetching bid:', err);
         setError('Failed to load bid details');
+        setBid(null);
+        setProjectPhases([]);
       } finally {
         setLoading(false);
       }
     };
 
-    fetchBidDetails();
-  }, [id, user]);
+    fetchBidAndProjectDetails();
+  }, [id, user]); // Rerun if id or user changes
+  
+  useEffect(() => {
+    const fetchSubcontractors = async () => {
+      if (user?.uid) {
+        setLoadingSubcontractors(true);
+        try {
+          const fetchedSubs = await SubcontractorService.getSubcontractors(user.uid);
+          setSubcontractors(fetchedSubs);
+        } catch (err) {
+          console.error("Error fetching subcontractors for BidDetails:", err);
+        } finally {
+          setLoadingSubcontractors(false);
+        }
+      }
+    };
+    fetchSubcontractors();
+  }, [user]);
   
   const handleTabChange = (_: React.SyntheticEvent, newValue: number) => {
     setTabValue(newValue);
@@ -233,7 +274,22 @@ const BidDetails: React.FC = () => {
   
   const handleEdit = () => {
     if (!id) return;
-    navigate(`/bids/${id}/edit`);
+    setIsEditing(true);
+  };
+  
+  const handleCancelEdit = () => {
+    setIsEditing(false);
+  };
+  
+  const handleAddNewSubcontractor = () => {
+    console.log("Placeholder: Trigger Add New Subcontractor Modal/Flow from BidDetails");
+    setError("Add new subcontractor functionality not yet implemented here.");
+  };
+  
+  const handleSave = async (formData: any) => {
+    console.log("Placeholder: Saving edited bid data...", formData);
+    if (!id) return;
+    setIsEditing(false);
   };
   
   const handleDuplicate = () => {
@@ -258,7 +314,8 @@ const BidDetails: React.FC = () => {
   
   const currentVersion = getCurrentVersion();
   
-  if (loading) {
+  // Adjust loading state to include project loading
+  if (loading || loadingProject) {
     return (
       <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '50vh' }}>
         <CircularProgress />
@@ -285,6 +342,56 @@ const BidDetails: React.FC = () => {
     );
   }
   
+  // ---> MAP Bid to Initial Form Data (inside return, before render) <----
+  const getInitialFormData = (): Partial<BidFormData> | undefined => {
+    if (!bid) return undefined;
+    
+    // Helper to convert status
+    const convertBidStatus = (status: Bid['status']): 'submitted' | 'draft' | 'accepted' | 'rejected' | 'expired' | 'withdrawn' | 'revision_requested' => {
+        // Keep all statuses available in the form
+        return status;
+    };
+    
+    // Helper to convert attachments
+    const convertAttachments = (attachments: Bid['attachments']): string[] => {
+        if (!attachments) return [];
+        // Assuming attachments are stored as { name: string, url: string } or similar
+        // Adjust this based on your actual Attachment type structure
+        return attachments.map(att => 
+            typeof att === 'string' ? att : (att?.url || 'invalid-attachment')
+        );
+    };
+    
+    return {
+      title: bid.title || '',
+      subcontractorId: bid.subcontractorId || '',
+      subcontractorName: bid.subcontractorName || '',
+      totalAmount: bid.totalAmount || 0,
+      phaseId: bid.phaseId || '', // Use bid's phaseId directly
+      phaseName: bid.phaseName || '', // Use bid's phaseName directly
+      scope: bid.scope || '',
+      timeline: bid.timeline || 30, // Assuming timeline is stored on bid
+      status: convertBidStatus(bid.status),
+      submissionDeadline: bid.submissionDeadline || new Date(),
+      paymentTerms: {
+        downPaymentPercent: bid.paymentSchedule?.[0]?.percentage || 0,
+        installments: bid.paymentSchedule?.slice(1).map(payment => ({
+          id: payment.id || uuidv4(), // Need uuidv4 import if not already there
+          name: payment.name || '',
+          percent: payment.percentage || 0,
+          milestoneDescription: payment.description || '',
+          phaseId: payment.phaseId || '',
+          phaseName: payment.phaseName || '',
+        })) || []
+      },
+      notes: bid.notes || '',
+      attachments: convertAttachments(bid.attachments),
+      tags: Array.isArray(bid.tags) ? bid.tags : [],
+      projectId: bid.projectId, // Keep projectId
+    };
+  };
+  // ---> END MAP Bid to Initial Form Data <----
+
   return (
     <Box sx={{ py: 3 }}>
       {/* Header */}
@@ -300,28 +407,36 @@ const BidDetails: React.FC = () => {
           <Typography variant="h4">{bid.title || 'Untitled Bid'}</Typography>
         </Box>
         <Box>
-          <Button 
-            variant="outlined" 
-            startIcon={<EditIcon />} 
-            onClick={handleEdit}
-            sx={{ mr: 1 }}
-          >
-            Edit
-          </Button>
-          <Button 
-            variant="outlined" 
-            startIcon={<DuplicateIcon />} 
-            onClick={handleDuplicate}
-            sx={{ mr: 1 }}
-          >
-            Duplicate
-          </Button>
-          <BidDeletionWrapper
-            bid={bid}
-            userId={user?.uid || ''}
-            onBidDeleted={() => navigate('/bids')}
-            variant="button"
-          />
+          <Stack direction="row" spacing={1}>
+            {isEditing ? (
+              <>
+                <Button variant="outlined" onClick={handleCancelEdit}>Cancel</Button>
+                <Button variant="contained" onClick={() => handleSave(bid)}>Save</Button>
+              </>
+            ) : (
+              <>
+                <Button 
+                  variant="outlined" 
+                  startIcon={<DuplicateIcon />} 
+                  onClick={handleDuplicate}
+                  sx={{ mr: 1 }}
+                >
+                  Duplicate
+                </Button>
+                <Button 
+                  variant="contained" 
+                  startIcon={<EditIcon />} 
+                  onClick={handleEdit}
+                  sx={{ mr: 1 }}
+                >
+                  Edit
+                </Button>
+                <IconButton onClick={() => setDeleteDialogOpen(true)} color="error"><DeleteIcon /></IconButton>
+                <Tooltip title="More actions"><IconButton><HistoryIcon /></IconButton></Tooltip>
+                <Tooltip title="Print/Download"><IconButton onClick={handlePrint}><PrintIcon /></IconButton></Tooltip>
+              </>
+            )}
+          </Stack>
         </Box>
       </Box>
       
@@ -684,6 +799,45 @@ const BidDetails: React.FC = () => {
           </Grid>
         )}
       </Box>
+
+      {/* Conditional Rendering */}
+      {isEditing ? (
+        // ---> RENDER EDIT FORM <----
+        <Paper sx={{ p: { xs: 1.5, md: 2.5 } }}> {/* Match form padding */} 
+          {/* Remove temporary placeholder box */}
+          {/* <Box sx={{my: 2, p:2, border: '1px dashed grey'}}> ReusableBidForm will go here... </Box> */}
+          
+          <ReusableBidForm
+            initialBidData={getInitialFormData()} // <-- Pass mapped data
+            onSubmit={handleSave} // <-- Pass save handler
+            onClose={handleCancelEdit} // <-- Pass cancel handler
+            subcontractors={subcontractors} // <-- Pass fetched subcontractors
+            onAddSubcontractor={handleAddNewSubcontractor} // <-- Pass add handler
+            phases={projectPhases} // <-- Pass fetched phases
+            isDialog={false} // <-- Standalone mode
+            editingBidId={bid.id} // <-- Pass the ID of the bid being edited
+            isSaving={false} // <-- Placeholder: Add isSaving state later
+            projectId={bid.projectId} // Pass projectId for context if needed by form
+            projectName={bid.projectName} // Pass projectName for context
+            error={error} // Pass any relevant error state
+          />
+        </Paper>
+      ) : (
+        // ---> RENDER DETAILS VIEW (Existing code) <----
+        <>
+          {/* ... Existing Summary Section ... */}
+          {/* ... Existing Tabs Section ... */}
+          {/* ... Existing Tab Content ... */}
+        </>
+      )}
+      {/* End Conditional Rendering */}
+
+      {/* Delete Confirmation Dialog (existing) */}
+      <BidDeletionWrapper
+        bid={bid}
+        userId={user?.uid || ''}
+        onBidDeleted={() => navigate('/bids')}
+      />
     </Box>
   );
 };

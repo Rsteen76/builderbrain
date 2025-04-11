@@ -121,9 +121,13 @@ export function useBidFormDialog(userId: string | undefined, options: UseBidForm
   };
 
   const handleBidSubmitSuccess = (savedBid: Bid) => {
+    console.log('useBidFormDialog - DEBUG - handleBidSubmitSuccess called with bid:', savedBid.id);
     closeBidDialog();
+    console.log('useBidFormDialog - DEBUG - Dialog closed, onSubmitSuccess callback present:', !!options.onSubmitSuccess);
     if (options.onSubmitSuccess) {
+      console.log('useBidFormDialog - DEBUG - Calling parent onSubmitSuccess callback');
       options.onSubmitSuccess(savedBid);
+      console.log('useBidFormDialog - DEBUG - Parent callback completed');
     }
   };
 

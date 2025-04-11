@@ -107,6 +107,7 @@ export interface Bid {
     pending: number;
     remaining: number;
   };
+  categoryId?: string; // Category ID for bid categorization
 }
 
 export interface BidVersion {

@@ -78,4 +78,5 @@ export interface Bid {
   attachments?: BidAttachment[] | string[];
   paymentSchedule?: BidPaymentStage[];
   paymentProgress?: BidPaymentProgress;
+  categoryId?: string;
 } 

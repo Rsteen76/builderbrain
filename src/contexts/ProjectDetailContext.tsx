@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
-import { Project, ProjectPhase, Bid, Expense, BidFormData, BidSummary, Phase } from '../types';
+import { Project, ProjectPhase, Bid, Expense, BidFormData, BidSummary, Phase, Subcontractor } from '../types';
 import { useProjectData } from '../hooks/useProjectData'; // Keep using this for core data
 // Import necessary hooks FOR the provider
 import { useAuth } from '../hooks/useAuth';
@@ -19,10 +19,16 @@ interface ProjectDetailContextState {
   phases: ProjectPhase[];
   bids: Bid[];
   expenses: Expense[];
+  subcontractors: Subcontractor[];
   loading: boolean;
   error: string | null; // Error from useProjectData
   refreshAllProjectData: () => Promise<void>;
-  // REMOVED Setters: setProject, setPhases, setBids, setExpenses - useProjectData is read-only for data
+  // Phase setter for optimistic updates
+  setPhases: React.Dispatch<React.SetStateAction<ProjectPhase[]>>;
+  // Other Setters (if needed for optimistic updates outside context)
+  setBids: React.Dispatch<React.SetStateAction<Bid[]>>;
+  setExpenses: React.Dispatch<React.SetStateAction<Expense[]>>;
+  setSubcontractors: React.Dispatch<React.SetStateAction<Subcontractor[]>>;
 
   // Notification
   showNotification: (message: string, severity: 'success' | 'error' | 'warning' | 'info') => void;
@@ -73,10 +79,14 @@ const defaultContextValue: ProjectDetailContextState = {
   phases: [],
   bids: [],
   expenses: [],
+  subcontractors: [],
   loading: true,
   error: null,
   refreshAllProjectData: async () => { console.warn("refreshAllProjectData called on default context"); },
-  // REMOVED Setters
+  setPhases: () => {},
+  setBids: () => {},
+  setExpenses: () => {},
+  setSubcontractors: () => {},
   showNotification: () => { console.warn("showNotification called on default context"); },
   NotificationComponent: () => null, 
   isBidModalOpen: false,
@@ -89,25 +99,16 @@ const defaultContextValue: ProjectDetailContextState = {
   isBidSubmitting: false,
   bidDialogError: null,
   isBidOperating: false,
-  // Updated default function signatures
   requestDeleteBid: () => { console.warn("requestDeleteBid called on default context"); },
   duplicateBid: async () => { console.warn("duplicateBid called on default context"); },
-  // REMOVED bidOperationError
-
-  // Expense Dialog Defaults
   isExpenseDialogOpen: false,
   editingExpenseId: null,
   initialExpenseData: null,
   openNewExpenseDialog: () => { console.warn("openNewExpenseDialog called on default context"); },
-  openEditExpenseDialog: () => { console.warn("openEditExpenseDialog called on default context"); }, // Returns void
+  openEditExpenseDialog: () => { console.warn("openEditExpenseDialog called on default context"); },
   closeExpenseDialog: () => { console.warn("closeExpenseDialog called on default context"); },
-  // Removed isExpenseSubmitting, expenseDialogError defaults
-
-  // Phase Operations Defaults
   isUpdatingPhase: false,
   updatePhaseStatus: async () => { console.warn("updatePhaseStatus called on default context"); },
-
-  // Expense Operations Defaults
   isExpenseOperating: false,
   addExpense: async () => { console.warn("addExpense called on default context"); return null; },
   updateExpense: async () => { console.warn("updateExpense called on default context"); },
@@ -130,8 +131,9 @@ export const ProjectDetailProvider: React.FC<ProjectDetailProviderProps> = ({ ch
 
   // Core Data Hook
   const {
-    project, phases, bids, expenses, loading, error, // Note: no setters returned
-    refreshAllProjectData, 
+    project, phases, bids, expenses, subcontractors, loading, error,
+    refreshAllProjectData,
+    setPhases, setBids, setExpenses, setSubcontractors
   } = useProjectData(actualProjectId);
 
   // Notification Hook
@@ -199,13 +201,16 @@ export const ProjectDetailProvider: React.FC<ProjectDetailProviderProps> = ({ ch
     phases,
     bids,
     expenses,
+    subcontractors,
     loading,
-    error, // Error from useProjectData
+    error,
     refreshAllProjectData,
-    // REMOVED Setters
+    setPhases,
+    setBids,
+    setExpenses,
+    setSubcontractors,
     showNotification,
     NotificationComponent,
-    // Bid Dialogs
     isBidModalOpen: bidFormDialog.isModalOpen,
     editingBidId: bidFormDialog.editingBidId,
     bidInitialData: bidFormDialog.initialBidData,
@@ -215,25 +220,17 @@ export const ProjectDetailProvider: React.FC<ProjectDetailProviderProps> = ({ ch
     handleBidSubmitSuccess: bidFormDialog.handleBidSubmitSuccess, 
     isBidSubmitting: bidFormDialog.loading,
     bidDialogError: bidFormDialog.error,
-    // Bid Operations
     isBidOperating: bidOperations.isOperating,
-    requestDeleteBid: bidOperations.requestDeleteBid, // Correct signature now
-    duplicateBid: bidOperations.duplicateBid,       // Correct signature now
-    // REMOVED bidOperationError
-
-    // Expense Dialog Values
+    requestDeleteBid: bidOperations.requestDeleteBid,
+    duplicateBid: bidOperations.duplicateBid,
     isExpenseDialogOpen: expenseFormDialog.isExpenseDialogOpen,
     editingExpenseId: expenseFormDialog.editingExpenseId,
     initialExpenseData: expenseFormDialog.initialExpenseData,
     openNewExpenseDialog: expenseFormDialog.openNewExpenseDialog,
     openEditExpenseDialog: expenseFormDialog.openEditExpenseDialog,
     closeExpenseDialog: expenseFormDialog.closeExpenseDialog,
-
-    // Phase Operations Values
     isUpdatingPhase: phaseOperations.isUpdatingPhase,
     updatePhaseStatus: phaseOperations.updatePhaseStatus,
-
-    // Expense Operations Values
     isExpenseOperating: expenseOperations.isOperating,
     addExpense: expenseOperations.addExpense,
     updateExpense: expenseOperations.updateExpense,

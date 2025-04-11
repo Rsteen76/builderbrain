@@ -101,6 +101,7 @@ const CategorySelector: React.FC<CategorySelectorProps> = ({
         disabled={disabled}
         options={subcategoryOptions}
         getOptionLabel={(option) => option.name}
+        isOptionEqualToValue={(option, value) => option.id === value.id}
         renderInput={(params) => (
           <TextField
             {...params}

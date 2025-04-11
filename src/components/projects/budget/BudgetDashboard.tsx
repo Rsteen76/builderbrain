@@ -242,9 +242,9 @@ const BudgetDashboard: React.FC<BudgetDashboardProps> = (/*{ projectId }*/) => {
   // Update budget summary calculation
   const budgetSummary = useMemo<BudgetSummary>(() => {
     if (!project) {
-       return { 
-        totalBudget: 0, 
-        totalSpent: 0, 
+      return {
+        totalBudget: 0,
+        totalSpent: 0,
         remainingBudget: 0, 
         projectedTotal: 0, 
         projectedRemaining: 0,
@@ -312,7 +312,7 @@ const BudgetDashboard: React.FC<BudgetDashboardProps> = (/*{ projectId }*/) => {
             return 'uncategorized';
         }
     };
-
+    
     expenses.forEach(expense => {
       if (!expense.id || typeof expense.amount !== 'number') return; // Need ID and amount
       
@@ -353,23 +353,23 @@ const BudgetDashboard: React.FC<BudgetDashboardProps> = (/*{ projectId }*/) => {
   const expensesByContractor = useMemo(() => {
       // ... (This logic remains the same, grouping by subcontractorName or vendor)
      const contractorMap = new Map<string, { name: string, value: number, count: number, color: string }>();
- 
-     expenses.forEach(expense => {
+    
+    expenses.forEach(expense => {
        if (typeof expense.amount !== 'number') return;
  
        const name = expense.subcontractorName || expense.vendor || 'Unknown Contractor/Vendor';
  
        if (!contractorMap.has(name)) {
          // Add colors based on index for contractors
-         const colors = [
-           theme.palette.primary.main,
-           theme.palette.secondary.main,
-           theme.palette.success.main,
-           theme.palette.warning.main,
-           theme.palette.error.main,
-           theme.palette.info.main,
-           theme.palette.grey[700],
-         ];
+      const colors = [
+        theme.palette.primary.main,
+        theme.palette.secondary.main,
+        theme.palette.success.main,
+        theme.palette.warning.main,
+        theme.palette.error.main,
+        theme.palette.info.main,
+        theme.palette.grey[700],
+      ];
          const color = colors[contractorMap.size % colors.length];
          contractorMap.set(name, { name, value: 0, count: 0, color });
        }
@@ -861,6 +861,56 @@ const BudgetDashboard: React.FC<BudgetDashboardProps> = (/*{ projectId }*/) => {
     } catch (err) {
       console.error("Error deleting projection:", err);
       setSnackbar({ open: true, message: 'Failed to delete projection.', severity: 'error' });
+      throw err;
+    }
+  };
+
+  // Handle editing a projection
+  const handleEditProjection = async (projectionId: string, updatedData: { amount: number; notes: string | null }) => {
+    if (!contextProject || !contextProject.id) {
+      console.error("Cannot edit projection: Project context data missing.");
+      setSnackbar({ open: true, message: 'Cannot edit: Project data missing.', severity: 'error' });
+      throw new Error("Project context data missing");
+    }
+
+    // Update the projection with new data
+    const currentRawProjections = contextProject.projections || [];
+    const updatedRawProjections = currentRawProjections.map(p =>
+      p.id === projectionId ? { ...p, amount: updatedData.amount, notes: updatedData.notes } : p
+    );
+
+    // Also update local state for optimistic UI update
+    setLocalProjections(prev => prev.map(p => 
+      p.id === projectionId ? { ...p, amount: updatedData.amount, notes: updatedData.notes } : p
+    ));
+
+    try {
+      const projectRef = doc(db, 'projects', contextProject.id);
+      const projectionsToSave = updatedRawProjections.map(p => ({
+        id: p.id,
+        categoryId: p.categoryId,
+        amount: p.amount,
+        notes: p.notes || null,
+        createdAt: p.createdAt instanceof Date ? Timestamp.fromDate(p.createdAt) : p.createdAt 
+      }));
+
+      await updateDoc(projectRef, { 
+        projections: projectionsToSave
+      });
+      
+      setSnackbar({ open: true, message: 'Projection updated successfully!', severity: 'success' });
+
+      // Trigger context refresh using existing function
+      if (refreshAllProjectData) {
+        console.log("Triggering context refreshAllProjectData after edit...");
+        await refreshAllProjectData(); // Tell the context to get fresh data
+      } else {
+        console.warn("ProjectDetailContext did not provide refreshAllProjectData! UI might be stale.");
+      }
+
+    } catch (err) {
+      console.error("Error updating projection:", err);
+      setSnackbar({ open: true, message: 'Failed to update projection.', severity: 'error' });
       throw err;
     }
   };
@@ -2434,85 +2484,151 @@ const BudgetDashboard: React.FC<BudgetDashboardProps> = (/*{ projectId }*/) => {
                       </TableRow>
                     </TableHead>
                     <TableBody>
-                      {workingProjections.map((projection) => {
-                        // Find the category name by ID
-                        let categoryName = "Unknown Category";
+                      {workingProjections
+                        .filter(projection => 
+                          projection.categoryId && 
+                          projection.categoryId !== 'uncategorized' && 
+                          getCategoryById(projection.categoryId) !== undefined
+                        )
+                        .map((projection) => {
+                          // Find the category name by ID
+                          const category = getCategoryById(projection.categoryId);
+                          const categoryName = category ? category.name : "Unknown Category";
 
-                        // Search through all phases to find matching category
-                        Object.entries(CONSTRUCTION_CATEGORIES).forEach(
-                          ([sectionKey, categories]) => {
-                            const matchingCategory = categories.find(
-                              (cat) => cat.id === projection.categoryId,
-                            );
-                            if (matchingCategory) {
-                              categoryName = matchingCategory.name;
-                            }
-                          },
-                        );
+                          return (
+                            <TableRow key={projection.id}>
+                              <TableCell>
+                                <Typography variant="body2">
+                                  {categoryName}
+                                </Typography>
+                              </TableCell>
+                              <TableCell>
+                                <Typography
+                                  variant="body2"
+                                  color="text.secondary"
+                                >
+                                  {projection.notes || "No notes provided"}
+                                </Typography>
+                              </TableCell>
+                              <TableCell align="right">
+                                <Typography
+                                  variant="body2"
+                                  color="text.secondary"
+                                >
+                                  {formatDate(projection.createdAt)}
+                                </Typography>
+                              </TableCell>
+                              <TableCell align="right">
+                                <Typography
+                                  variant="body2"
+                                  sx={{
+                                    fontWeight: "medium",
+                                    color: "info.main",
+                                  }}
+                                >
+                                  {formatCurrency(projection.amount)}
+                                </Typography>
+                              </TableCell>
+                            </TableRow>
+                          );
+                        })}
 
-                        return (
-                          <TableRow key={projection.id}>
-                            <TableCell>
-                              <Typography variant="body2">
-                                {categoryName}
-                              </Typography>
-                            </TableCell>
-                            <TableCell>
-                              <Typography
-                                variant="body2"
-                                color="text.secondary"
-                              >
-                                {projection.notes || "No notes provided"}
-                              </Typography>
-                            </TableCell>
-                            <TableCell align="right">
-                              <Typography
-                                variant="body2"
-                                color="text.secondary"
-                              >
-                                {formatDate(projection.createdAt)}
-                              </Typography>
-                            </TableCell>
-                            <TableCell align="right">
-                              <Typography
-                                variant="body2"
-                                sx={{
-                                  fontWeight: "medium",
-                                  color: "info.main",
-                                }}
-                              >
-                                {formatCurrency(projection.amount)}
-                              </Typography>
-                            </TableCell>
-                          </TableRow>
-                        );
-                      })}
+                      {/* Show message when no categorized projections */}
+                      {workingProjections.filter(p => 
+                        p.categoryId && 
+                        p.categoryId !== 'uncategorized' && 
+                        getCategoryById(p.categoryId) !== undefined
+                      ).length === 0 && (
+                        <TableRow>
+                          <TableCell colSpan={4} align="center" sx={{ py: 3 }}>
+                            <Typography color="text.secondary">
+                              No categorized projections available. Please categorize your projections.
+                            </Typography>
+                          </TableCell>
+                        </TableRow>
+                      )}
 
-                      {/* Total row */}
-                      <TableRow>
-                        <TableCell sx={{ borderBottom: "none" }}></TableCell>
-                        <TableCell sx={{ borderBottom: "none" }}></TableCell>
-                        <TableCell
-                          align="right"
-                          sx={{ fontWeight: "bold", borderBottom: "none" }}
-                        >
-                          Total Projected:
-                        </TableCell>
-                        <TableCell
-                          align="right"
-                          sx={{
-                            fontWeight: "bold",
-                            color: "info.main",
-                            borderBottom: "none",
-                          }}
-                        >
-                          {formatCurrency(budgetSummary.projectedTotal)}
-                        </TableCell>
-                      </TableRow>
+                      {/* Total row - only show if there are categorized projections */}
+                      {workingProjections.filter(p => 
+                        p.categoryId && 
+                        p.categoryId !== 'uncategorized' && 
+                        getCategoryById(p.categoryId) !== undefined
+                      ).length > 0 && (
+                        <TableRow>
+                          <TableCell sx={{ borderBottom: "none" }}></TableCell>
+                          <TableCell sx={{ borderBottom: "none" }}></TableCell>
+                          <TableCell
+                            align="right"
+                            sx={{ fontWeight: "bold", borderBottom: "none" }}
+                          >
+                            Total Categorized:
+                          </TableCell>
+                          <TableCell
+                            align="right"
+                            sx={{
+                              fontWeight: "bold",
+                              color: "info.main",
+                              borderBottom: "none",
+                            }}
+                          >
+                            {formatCurrency(
+                              workingProjections
+                                .filter(p => 
+                                  p.categoryId && 
+                                  p.categoryId !== 'uncategorized' && 
+                                  getCategoryById(p.categoryId) !== undefined
+                                )
+                                .reduce((sum, p) => sum + p.amount, 0)
+                            )}
+                          </TableCell>
+                        </TableRow>
+                      )}
                     </TableBody>
                   </Table>
                 </TableContainer>
               </Box>
+
+              {/* Check if there are any uncategorized projections */}
+              {workingProjections.filter(p => 
+                !p.categoryId || 
+                p.categoryId === 'uncategorized' || 
+                getCategoryById(p.categoryId) === undefined
+              ).length > 0 && (
+                <Box sx={{ mt: 3, p: 2, bgcolor: alpha(theme.palette.warning.light, 0.1), borderRadius: 1 }}>
+                  <Typography variant="subtitle2" color="warning.main" gutterBottom>
+                    <WarningIcon fontSize="small" sx={{ verticalAlign: 'middle', mr: 1 }} />
+                    Uncategorized Projections
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary" gutterBottom>
+                    {workingProjections.filter(p => 
+                      !p.categoryId || 
+                      p.categoryId === 'uncategorized' || 
+                      getCategoryById(p.categoryId) === undefined
+                    ).length} projection(s) totaling {formatCurrency(
+                      workingProjections
+                        .filter(p => 
+                          !p.categoryId || 
+                          p.categoryId === 'uncategorized' || 
+                          getCategoryById(p.categoryId) === undefined
+                        )
+                        .reduce((sum, p) => sum + p.amount, 0)
+                    )} are not assigned to valid categories.
+                  </Typography>
+                  <Button 
+                    variant="outlined" 
+                    color="warning" 
+                    size="small" 
+                    sx={{ mt: 1 }}
+                    onClick={() =>
+                      document
+                        .getElementById("budget-allocation-tracker")
+                        ?.scrollIntoView({ behavior: "smooth" })
+                    }
+                  >
+                    Categorize Projections
+                  </Button>
+                </Box>
+              )}
             </CardContent>
           </Card>
         </Grid>
@@ -2592,7 +2708,7 @@ const BudgetDashboard: React.FC<BudgetDashboardProps> = (/*{ projectId }*/) => {
         </Grid>
       )}
       {/* --- End Projections Section --- */}
-
+      
       {/* Add Budget Allocation Tracker here, right before the final closing tag */}
       <div id="budget-allocation-tracker">
       <BudgetAllocationTracker 
@@ -2604,6 +2720,7 @@ const BudgetDashboard: React.FC<BudgetDashboardProps> = (/*{ projectId }*/) => {
         onAddProjection={handleAddProjection} // **** PASS ADD HANDLER ****
         onUpdateProjectionCategory={handleUpdateProjectionCategory} 
         onDeleteProjection={handleDeleteProjection} // **** PASS DELETE HANDLER ****
+        onEditProjection={handleEditProjection} // **** PASS EDIT HANDLER ****
       />
       </div>
 
@@ -2622,4 +2739,4 @@ const BudgetDashboard: React.FC<BudgetDashboardProps> = (/*{ projectId }*/) => {
   );
 };
 
-export default BudgetDashboard;
+export default BudgetDashboard; 

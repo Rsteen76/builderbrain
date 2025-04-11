@@ -14,6 +14,7 @@ interface BidFormDialogProps {
   onSubmitSuccess: (bid: Bid) => void; // Callback on successful save
   projectId?: string; // Optional: If provided, assumes context of a specific project
   phases?: Phase[]; // Make optional again
+  subcontractors: Subcontractor[]; // <-- ADD PROP
   initialBidData?: Partial<BidFormData>; // For editing
   editingBidId?: string | null;
   onAddSubcontractor?: () => void; // Callback to open add sub dialog (if needed)
@@ -25,6 +26,7 @@ const BidFormDialog: React.FC<BidFormDialogProps> = ({
   onSubmitSuccess,
   projectId,
   phases, // Now optional again
+  subcontractors, // <-- ACCEPT PROP
   initialBidData,
   editingBidId,
   onAddSubcontractor,
@@ -34,7 +36,6 @@ const BidFormDialog: React.FC<BidFormDialogProps> = ({
   const [error, setError] = useState<string | null>(null);
   
   // State for fetched data
-  const [subcontractors, setSubcontractors] = useState<Subcontractor[]>([]);
   const [availableProjects, setAvailableProjects] = useState<Project[]>([]);
   const [isLoadingData, setIsLoadingData] = useState(false);
   
@@ -46,13 +47,8 @@ const BidFormDialog: React.FC<BidFormDialogProps> = ({
       setIsLoadingData(true);
       setError(null);
       let fetchedProjects: Project[] = [];
-      let fetchedSubcontractors: Subcontractor[] = [];
       
       try {
-        // Always fetch subcontractors
-        fetchedSubcontractors = await SubcontractorService.getSubcontractors(user.uid);
-        setSubcontractors(fetchedSubcontractors);
-        
         // Fetch projects only if projectId is NOT provided (standalone mode)
         if (!projectId) {
           fetchedProjects = await ProjectService.getProjects(user.uid);
@@ -60,7 +56,6 @@ const BidFormDialog: React.FC<BidFormDialogProps> = ({
         }
         
         console.log('BidFormDialog - Data fetched:', {
-          subs: fetchedSubcontractors.length,
           projects: fetchedProjects.length,
         });
       } catch (err) {
@@ -81,6 +76,7 @@ const BidFormDialog: React.FC<BidFormDialogProps> = ({
       return;
     }
     
+    console.log('BidFormDialog - DEBUG - handleInternalSubmit started with bidFormData:', bidFormData);
     setIsSaving(true);
     setError(null);
     
@@ -105,12 +101,13 @@ const BidFormDialog: React.FC<BidFormDialogProps> = ({
         throw new Error('Project ID is missing. Please select a project.');
       }
       
-      console.log('BidFormDialog - Submitting Bid:', {
+      console.log('BidFormDialog - DEBUG - About to submit bid with:', {
         userId: user.uid,
         formData: bidFormData,
         editingId: editingBidId,
         projectId: finalProjectId,
-        projectName: finalProjectName
+        projectName: finalProjectName,
+        onSubmitSuccess: !!onSubmitSuccess
       });
 
       // Use the shared submitBid utility function
@@ -122,10 +119,23 @@ const BidFormDialog: React.FC<BidFormDialogProps> = ({
         finalProjectName // Use the determined project name
       );
 
+      console.log('BidFormDialog - DEBUG - submitBid returned:', savedBid);
+
       if (savedBid) {
+        console.log('BidFormDialog - Bid saved successfully:', savedBid);
         toast.success(editingBidId ? 'Bid updated successfully' : 'Bid created successfully');
-        onSubmitSuccess(savedBid); // Call the success callback
+        console.log('BidFormDialog - DEBUG - About to call onSubmitSuccess with bid:', savedBid.id);
+        
+        // Add additional debugging for callback execution
+        try {
+          onSubmitSuccess(savedBid); // Call the success callback
+          console.log('BidFormDialog - DEBUG - onSubmitSuccess called successfully');
+        } catch (callbackError) {
+          console.error('BidFormDialog - DEBUG - Error in onSubmitSuccess callback:', callbackError);
+        }
+        
         onClose(); // Close the dialog
+        console.log('BidFormDialog - DEBUG - Dialog closed');
       } else {
         throw new Error('Failed to save bid.');
       }
@@ -140,23 +150,20 @@ const BidFormDialog: React.FC<BidFormDialogProps> = ({
 
   return (
     <ReusableBidForm
-      open={open} // Pass open state for Dialog rendering within ReusableBidForm
+      open={open}
       onClose={onClose}
       onSubmit={handleInternalSubmit}
-      // Pass phases only if projectId is defined. ReusableBidForm handles the undefined case.
-      phases={projectId ? phases : undefined} 
+      phases={projectId ? phases : undefined}
       availableProjects={!projectId ? availableProjects : undefined}
       subcontractors={subcontractors}
       initialBidData={initialBidData}
       editingBidId={editingBidId}
-      isSaving={isSaving || isLoadingData} // Consider data loading as saving state
+      isSaving={isSaving || isLoadingData}
       onAddSubcontractor={onAddSubcontractor}
       isDialog={true}
-      projectId={projectId} // Pass projectId for context if available
-      // projectName might be redundant if project details are fetched, but pass for safety
-      projectName={initialBidData?.projectName} 
-      // Pass error state down
-      error={error} 
+      projectId={projectId}
+      projectName={initialBidData?.projectName}
+      error={error}
     />
   );
 };

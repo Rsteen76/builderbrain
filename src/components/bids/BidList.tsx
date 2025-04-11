@@ -71,6 +71,10 @@ import BidListHeader from './BidListHeader';
 import BidListActions from './BidListActions';
 import { v4 as uuidv4 } from 'uuid';
 import { useBidFormDialog } from '../../hooks';
+import { useQuickAddSubcontractorDialog } from '../../hooks/useQuickAddSubcontractorDialog';
+import QuickAddSubcontractorDialog from '../dialogs/QuickAddSubcontractorDialog';
+import { SubcontractorService } from '../../services/subcontractor';
+import { Subcontractor } from '../../types';
 
 // Status colors
 const bidStatusColors: Record<Bid['status'], string> = {
@@ -121,6 +125,8 @@ const BidList: React.FC<BidListProps> = ({ projectId, hideHeader = false }) => {
   const [bids, setBids] = useState<BidSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [subcontractors, setSubcontractors] = useState<Subcontractor[]>([]);
+  const [loadingSubcontractors, setLoadingSubcontractors] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [filter, setFilter] = useState<BidFilter>({});
   const [sort, setSort] = useState<BidSort>({ field: 'createdAt', direction: 'desc' });
@@ -135,7 +141,8 @@ const BidList: React.FC<BidListProps> = ({ projectId, hideHeader = false }) => {
   const bidDialogs = useBidFormDialog(user?.uid, {
     projectId,
     onSubmitSuccess: (savedBid: Bid) => {
-      console.log('BidList - Bid saved/updated:', savedBid);
+      console.log('BidList - Bid saved/updated successfully:', savedBid);
+      console.log('BidList - Calling fetchBids to refresh list');
       fetchBids(); // Refetch the list after saving
     },
     onError: (errorMsg: string) => {
@@ -143,12 +150,28 @@ const BidList: React.FC<BidListProps> = ({ projectId, hideHeader = false }) => {
     }
   });
 
+  // ---> Use the Quick Add Sub Hook <----
+  const quickAddSubDialog = useQuickAddSubcontractorDialog({
+    onSubmitSuccess: (newSubcontractor) => {
+      setSubcontractors(prev => [...prev, newSubcontractor]);
+    }
+  });
+
+  // ---> Update Placeholder Handler <----
+  const handleAddNewSubcontractor = () => {
+    // Call the function from the hook to open the dialog
+    quickAddSubDialog.openQuickAddSubDialog();
+    // console.log("Placeholder: Trigger Add New Subcontractor Modal/Flow from BidList");
+    // setError("Add new subcontractor functionality needs to be implemented here.");
+  };
+
   const fetchBids = async () => {
     if (!user?.uid) {
         setError("User not authenticated.");
         setLoading(false);
         return;
     }
+    console.log('BidList - fetchBids started', {projectId, filter, tabValue});
     setLoading(true);
     setError(null);
     try {
@@ -173,7 +196,10 @@ const BidList: React.FC<BidListProps> = ({ projectId, hideHeader = false }) => {
         bidFilter.status = statusFilter;
       }
 
+      console.log('BidList - Calling BidService.getBids with filter:', bidFilter);
       const fetchedBids = await BidService.getBids(user.uid, bidFilter, sort);
+      console.log('BidList - Received bids from service:', fetchedBids.length);
+      
       const bidSummaries = fetchedBids.map(bid => ({
         id: bid.id,
         userId: bid.userId,
@@ -189,6 +215,7 @@ const BidList: React.FC<BidListProps> = ({ projectId, hideHeader = false }) => {
         createdAt: bid.createdAt,
         updatedAt: bid.updatedAt
       }));
+      console.log('BidList - Setting bids state with:', bidSummaries.length, 'items');
       setBids(bidSummaries);
     } catch (err) {
       console.error("[BidList] Error fetching bids:", err);
@@ -233,6 +260,30 @@ const BidList: React.FC<BidListProps> = ({ projectId, hideHeader = false }) => {
     };
   }, []);
 
+  // ---> ADD Fetch Subcontractors Effect <----
+  useEffect(() => {
+    const fetchSubcontractors = async () => {
+      if (user?.uid) {
+        setLoadingSubcontractors(true);
+        try {
+          const fetchedSubs = await SubcontractorService.getSubcontractors(user.uid);
+          setSubcontractors(fetchedSubs);
+        } catch (err) {
+          console.error("Error fetching subcontractors for BidList:", err);
+          // Optionally set an error state specific to subcontractors
+          setError(prev => prev ? `${prev}, Failed to load subs` : 'Failed to load subcontractors');
+        } finally {
+          setLoadingSubcontractors(false);
+        }
+      }
+    };
+
+    if (!authLoading) { // Fetch only when auth is resolved
+      fetchSubcontractors();
+    }
+  }, [user, authLoading]); // Depend on user and authLoading
+  // ---> END Fetch Subcontractors Effect <----
+
   const handleSearchChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     setSearchTerm(event.target.value);
   };
@@ -276,7 +327,9 @@ const BidList: React.FC<BidListProps> = ({ projectId, hideHeader = false }) => {
 
   // --- Dialog Handlers (using the hook) ---
   const handleOpenNewBidModal = () => {
+    console.log('[BidList DEBUG] Opening new bid modal');
     bidDialogs.openNewBidDialog();
+    console.log('[BidList DEBUG] After openNewBidDialog call, isModalOpen=', bidDialogs.isModalOpen);
   };
 
   const handleView = (bid: BidSummary) => {
@@ -337,19 +390,34 @@ const BidList: React.FC<BidListProps> = ({ projectId, hideHeader = false }) => {
   const availablePriorities = Array.from(new Set(bids.filter(b => b.priority).map(b => b.priority))) as NonNullable<Bid['priority']>[];
 
   // Display combined loading state
-  const isLoading = loading || bidDialogs.loading;
+  const isLoading = loading || loadingSubcontractors;
   // Display combined error state
   const displayError = error || bidDialogs.error;
 
   return (
-    <Box sx={{ mt: 2 }}>
+    <Box sx={{ p: projectId ? 0 : 3, height: '100%', display: 'flex', flexDirection: 'column' }}>
       {!hideHeader && (
-        <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 2, alignItems: 'center' }}>
-          <Typography variant="h5">Bids</Typography>
+        <Box sx={{ mb: 3 }}>
+          <BidListHeader 
+            searchTerm={searchTerm}
+            onSearchChange={handleSearchChange}
+            showFilters={showFilters}
+            onToggleFilters={handleToggleFilters}
+            hasActiveFilters={hasActiveFilters}
+            sort={sort}
+            onSortChange={handleSortChange}
+            onRefresh={handleRefresh}
+          />
+          <Button 
+             variant="contained" 
+             startIcon={<AddIcon />} 
+             onClick={handleOpenNewBidModal} 
+             sx={{ mt: 2 }}
+          >
+             Add New Bid
+          </Button>
         </Box>
       )}
-
-      <BidListActions onOpenNewBidDialog={handleOpenNewBidModal} />
 
       {displayError && (
         <Alert severity="error" sx={{ mb: 3 }}>
@@ -359,17 +427,6 @@ const BidList: React.FC<BidListProps> = ({ projectId, hideHeader = false }) => {
       )}
 
       <Box sx={{ mb: 3 }}>
-        <BidListHeader
-          searchTerm={searchTerm}
-          onSearchChange={handleSearchChange}
-          showFilters={showFilters}
-          onToggleFilters={handleToggleFilters}
-          hasActiveFilters={hasActiveFilters}
-          sort={sort}
-          onSortChange={handleSortChange}
-          onRefresh={handleRefresh}
-        />
-
         <Collapse in={showFilters}>
           <FilterPanel 
             filter={filter}
@@ -399,7 +456,7 @@ const BidList: React.FC<BidListProps> = ({ projectId, hideHeader = false }) => {
       </Box>
 
       {isLoading ? (
-        <Box sx={{ display: 'flex', justifyContent: 'center', mt: 4 }}>
+        <Box sx={{ display: 'flex', justifyContent: 'center', py: 5 }}>
           <CircularProgress />
         </Box>
       ) : displayError ? (
@@ -437,6 +494,8 @@ const BidList: React.FC<BidListProps> = ({ projectId, hideHeader = false }) => {
           initialBidData={bidDialogs.initialBidData || undefined}
           editingBidId={bidDialogs.editingBidId}
           projectId={projectId}
+          subcontractors={subcontractors}
+          onAddSubcontractor={handleAddNewSubcontractor}
         />
       )}
 
@@ -485,7 +544,14 @@ const BidList: React.FC<BidListProps> = ({ projectId, hideHeader = false }) => {
         )}
       </Menu>
 
-      {/* Pass the required userId prop */}
+      {/* ---> Render the Quick Add Dialog <---- */}
+      <QuickAddSubcontractorDialog 
+        open={quickAddSubDialog.isQuickAddSubDialogOpen}
+        onClose={quickAddSubDialog.closeQuickAddSubDialog}
+        onSubmit={quickAddSubDialog.handleDialogSubmit}
+        isSaving={quickAddSubDialog.isSavingSub}
+      />
+
       <BidDeletePortal userId={user?.uid ?? ''} />
     </Box>
   );

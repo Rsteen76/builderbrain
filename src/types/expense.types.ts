@@ -21,7 +21,7 @@ export interface Expense {
    * Simple category for basic expense type. 
    */
   category: ExpenseCategory;
-  detailedCategoryId?: string;
+  categoryId?: string;
   description: string;
   amount: number;
   date: Date | string;

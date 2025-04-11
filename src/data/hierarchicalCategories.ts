@@ -479,83 +479,6 @@ export const MAIN_CATEGORIES: CategoryWithChildren[] = [
     ]
   },
   {
-    id: 'interior',
-    name: 'Interior Finishes',
-    description: 'All interior finishing work',
-    level: 'main',
-    order: 10,
-    isActive: true,
-    color: '#ab47bc',
-    children: [
-      {
-        id: 'interior-drywall',
-        name: 'Drywall & Insulation',
-        description: 'Wall finishing and insulation',
-        level: 'sub',
-        parentId: 'interior',
-        order: 1,
-        isActive: true,
-        keywords: ['drywall', 'sheetrock', 'insulation', 'walls'],
-        children: []
-      },
-      {
-        id: 'interior-flooring',
-        name: 'Flooring',
-        description: 'All floor covering materials',
-        level: 'sub',
-        parentId: 'interior',
-        order: 2,
-        isActive: true,
-        keywords: ['flooring', 'hardwood', 'tile', 'carpet', 'vinyl'],
-        children: []
-      },
-      {
-        id: 'interior-paint',
-        name: 'Paint & Wall Finishes',
-        description: 'Interior painting and wall coverings',
-        level: 'sub',
-        parentId: 'interior',
-        order: 3,
-        isActive: true,
-        keywords: ['paint', 'wallpaper', 'texture', 'finishing'],
-        children: []
-      },
-      {
-        id: 'interior-trim',
-        name: 'Trim & Millwork',
-        description: 'Baseboards, crown molding, and wood details',
-        level: 'sub',
-        parentId: 'interior',
-        order: 4,
-        isActive: true,
-        keywords: ['trim', 'baseboard', 'crown', 'molding', 'millwork'],
-        children: []
-      },
-      {
-        id: 'interior-cabinets',
-        name: 'Cabinets & Countertops',
-        description: 'Kitchen and bathroom fixed storage',
-        level: 'sub',
-        parentId: 'interior',
-        order: 5,
-        isActive: true,
-        keywords: ['cabinets', 'countertops', 'vanity', 'kitchen', 'bathroom'],
-        children: []
-      },
-      {
-        id: 'interior-lighting-fixtures',
-        name: 'Lighting Fixtures',
-        description: 'Interior and exterior lighting fixtures and installation',
-        level: 'sub',
-        parentId: 'interior',
-        order: 6,
-        isActive: true,
-        keywords: ['light fixture', 'lighting', 'chandelier', 'sconce', 'pendant', 'ceiling fan', 'recessed light', 'lamp'],
-        children: []
-      }
-    ]
-  },
-  {
     id: 'interior-rough',
     name: 'Interior Rough-in',
     description: 'Interior work before finishing',
@@ -576,36 +499,47 @@ export const MAIN_CATEGORIES: CategoryWithChildren[] = [
         children: []
       },
       {
-        id: 'interior-rough-drywall',
-        name: 'Drywall & Plaster',
-        description: 'Wall and ceiling board installation',
-        level: 'sub',
-        parentId: 'interior-rough',
-        order: 2,
-        isActive: true,
-        keywords: ['drywall', 'gypsum', 'sheetrock', 'plaster', 'mud', 'tape', 'hang', 'finish'],
-        children: []
-      },
-      {
-        id: 'interior-rough-framing',
-        name: 'Interior Framing',
-        description: 'Non-load bearing walls and ceilings',
-        level: 'sub',
-        parentId: 'interior-rough',
-        order: 3,
-        isActive: true,
-        keywords: ['framing', 'partition', 'wall', 'soffit', 'ceiling', 'metal studs'],
-        children: []
-      },
-      {
         id: 'interior-rough-soundproofing',
         name: 'Soundproofing',
         description: 'Sound isolation and acoustic treatments',
         level: 'sub',
         parentId: 'interior-rough',
-        order: 4,
+        order: 2,
         isActive: true,
         keywords: ['soundproof', 'acoustic', 'sound barrier', 'sound insulation', 'resilient channel'],
+        children: []
+      },
+      {
+        id: 'interior-rough-electrical',
+        name: 'Rough Electrical',
+        description: 'Electrical wiring before walls are closed',
+        level: 'sub',
+        parentId: 'interior-rough',
+        order: 3,
+        isActive: true,
+        keywords: ['rough electrical', 'wiring', 'electrical box', 'switch box', 'outlet box', 'rough-in electric'],
+        children: []
+      },
+      {
+        id: 'interior-rough-plumbing',
+        name: 'Rough Plumbing',
+        description: 'Plumbing lines before walls are closed',
+        level: 'sub',
+        parentId: 'interior-rough',
+        order: 4,
+        isActive: true,
+        keywords: ['rough plumbing', 'pipe', 'drain', 'vent', 'water line', 'rough-in plumbing'],
+        children: []
+      },
+      {
+        id: 'interior-rough-hvac',
+        name: 'Rough HVAC',
+        description: 'Ductwork and HVAC infrastructure before walls are closed',
+        level: 'sub',
+        parentId: 'interior-rough',
+        order: 5,
+        isActive: true,
+        keywords: ['rough hvac', 'duct', 'ductwork', 'air return', 'supply line', 'hvac rough-in'],
         children: []
       }
     ]
@@ -613,32 +547,43 @@ export const MAIN_CATEGORIES: CategoryWithChildren[] = [
   {
     id: 'interior-finishes',
     name: 'Interior Finishes',
-    description: 'Final interior finishes and trim',
+    description: 'All interior finishing work after rough-in',
     level: 'main',
     order: 9,
     isActive: true,
     color: '#5c6bc0',
     children: [
       {
+        id: 'interior-finishes-drywall-system',
+        name: 'Drywall Installation & Finishing',
+        description: 'Wall/ceiling board installation, taping, finishing, and texturing',
+        level: 'sub',
+        parentId: 'interior-finishes',
+        order: 2,
+        isActive: true,
+        keywords: ['drywall', 'gypsum', 'sheetrock', 'plaster', 'mud', 'tape', 'hang', 'finish', 'texture'],
+        children: []
+      },
+      {
         id: 'interior-finishes-flooring',
         name: 'Flooring',
         description: 'All flooring materials and installation',
         level: 'sub',
         parentId: 'interior-finishes',
-        order: 1,
+        order: 3,
         isActive: true,
         keywords: ['flooring', 'carpet', 'tile', 'hardwood', 'laminate', 'vinyl', 'floor'],
         children: []
       },
       {
-        id: 'interior-finishes-paint',
-        name: 'Painting & Wallcovering',
-        description: 'Interior painting and wall finishes',
+        id: 'interior-finishes-tile',
+        name: 'Tile Work',
+        description: 'Ceramic, porcelain, and stone tile installation',
         level: 'sub',
         parentId: 'interior-finishes',
-        order: 2,
+        order: 4,
         isActive: true,
-        keywords: ['paint', 'primer', 'wallpaper', 'texture', 'finish', 'wall covering'],
+        keywords: ['tile', 'ceramic', 'porcelain', 'stone', 'shower', 'backsplash', 'grout'],
         children: []
       },
       {
@@ -647,7 +592,7 @@ export const MAIN_CATEGORIES: CategoryWithChildren[] = [
         description: 'Baseboards, crown molding, and finish carpentry',
         level: 'sub',
         parentId: 'interior-finishes',
-        order: 3,
+        order: 5,
         isActive: true,
         keywords: ['trim', 'baseboard', 'crown molding', 'casing', 'millwork', 'carpentry'],
         children: []
@@ -658,20 +603,9 @@ export const MAIN_CATEGORIES: CategoryWithChildren[] = [
         description: 'Kitchen and bathroom cabinetry and counters',
         level: 'sub',
         parentId: 'interior-finishes',
-        order: 4,
+        order: 6,
         isActive: true,
         keywords: ['cabinet', 'counter', 'countertop', 'vanity', 'granite', 'quartz', 'kitchen'],
-        children: []
-      },
-      {
-        id: 'interior-finishes-tile',
-        name: 'Tile Work',
-        description: 'Ceramic, porcelain, and stone tile installation',
-        level: 'sub',
-        parentId: 'interior-finishes',
-        order: 5,
-        isActive: true,
-        keywords: ['tile', 'ceramic', 'porcelain', 'stone', 'shower', 'backsplash', 'grout'],
         children: []
       },
       {
@@ -680,9 +614,31 @@ export const MAIN_CATEGORIES: CategoryWithChildren[] = [
         description: 'Interior passage and closet doors',
         level: 'sub',
         parentId: 'interior-finishes',
-        order: 6,
+        order: 7,
         isActive: true,
         keywords: ['door', 'interior door', 'pocket door', 'barn door', 'closet door', 'passage'],
+        children: []
+      },
+      {
+        id: 'interior-finishes-lighting',
+        name: 'Lighting Fixtures',
+        description: 'Interior lighting fixtures and installation',
+        level: 'sub',
+        parentId: 'interior-finishes',
+        order: 8,
+        isActive: true,
+        keywords: ['light fixture', 'lighting', 'chandelier', 'sconce', 'pendant', 'ceiling fan', 'recessed light', 'lamp'],
+        children: []
+      },
+      {
+        id: 'interior-finishes-paint',
+        name: 'Painting & Wallcovering',
+        description: 'Interior painting and wall finishes',
+        level: 'sub',
+        parentId: 'interior-finishes',
+        order: 9,
+        isActive: true,
+        keywords: ['paint', 'primer', 'wallpaper', 'texture', 'finish', 'wall covering'],
         children: []
       }
     ]
@@ -741,17 +697,6 @@ export const MAIN_CATEGORIES: CategoryWithChildren[] = [
         children: []
       },
       {
-        id: 'specialty-landscaping',
-        name: 'Landscaping',
-        description: 'Landscape design and installation',
-        level: 'sub',
-        parentId: 'specialty',
-        order: 5,
-        isActive: true,
-        keywords: ['landscape', 'garden', 'plants', 'irrigation', 'lawn', 'tree', 'shrub'],
-        children: []
-      },
-      {
         id: 'specialty-pool',
         name: 'Pool & Spa',
         description: 'Swimming pools, hot tubs, and water features',
@@ -771,6 +716,72 @@ export const MAIN_CATEGORIES: CategoryWithChildren[] = [
         order: 7,
         isActive: true,
         keywords: ['accessible', 'ada', 'handicap', 'ramp', 'elevator', 'lift'],
+        children: []
+      }
+    ]
+  },
+  {
+    id: 'project-management',
+    name: 'Project Management',
+    description: 'Project management and oversight',
+    level: 'main',
+    order: 11,
+    isActive: true,
+    color: '#78909c',
+    children: [
+      {
+        id: 'project-management-general',
+        name: 'General Conditions',
+        description: 'Site supervision, temporary utilities, and facilities',
+        level: 'sub',
+        parentId: 'project-management',
+        order: 1,
+        isActive: true,
+        keywords: ['general conditions', 'supervision', 'job site', 'temporary', 'facilities'],
+        children: []
+      },
+      {
+        id: 'project-management-fees',
+        name: 'Management Fees',
+        description: 'Contractor and project management fees',
+        level: 'sub',
+        parentId: 'project-management',
+        order: 2,
+        isActive: true,
+        keywords: ['management fee', 'overhead', 'profit', 'supervision', 'admin'],
+        children: []
+      },
+      {
+        id: 'project-management-inspection',
+        name: 'Inspections & Testing',
+        description: 'Building inspections and quality testing',
+        level: 'sub',
+        parentId: 'project-management',
+        order: 3,
+        isActive: true,
+        keywords: ['inspection', 'testing', 'quality control', 'code', 'approval'],
+        children: []
+      },
+      {
+        id: 'project-management-safety',
+        name: 'Safety Management',
+        description: 'Safety equipment, training, and compliance',
+        level: 'sub',
+        parentId: 'project-management',
+        order: 4,
+        isActive: true,
+        keywords: ['safety', 'osha', 'compliance', 'ppe', 'fall protection', 'safety training'],
+        children: []
+      },
+      {
+        id: 'project-management-documentation',
+        name: 'Documentation & Reporting',
+        description: 'Progress reports, submittals, and project documentation',
+        level: 'sub',
+        parentId: 'project-management',
+        order: 5,
+        isActive: true,
+        keywords: ['documentation', 'report', 'submittal', 'rfi', 'photo', 'progress report'],
         children: []
       }
     ]
@@ -836,7 +847,7 @@ export const MAIN_CATEGORIES: CategoryWithChildren[] = [
         parentId: 'cleanup',
         order: 1,
         isActive: true,
-        keywords: ['debris', 'waste', 'cleaning', 'removal'],
+        keywords: ['debris', 'waste', 'cleaning', 'removal', 'dumpster', 'trash', 'disposal'],
         children: []
       },
       {
@@ -849,71 +860,27 @@ export const MAIN_CATEGORIES: CategoryWithChildren[] = [
         isActive: true,
         keywords: ['detail', 'touch-up', 'final', 'finishing'],
         children: []
-      }
-    ]
-  },
-  {
-    id: 'project-management',
-    name: 'Project Management',
-    description: 'Project management and oversight',
-    level: 'main',
-    order: 11,
-    isActive: true,
-    color: '#78909c',
-    children: [
-      {
-        id: 'project-management-general',
-        name: 'General Conditions',
-        description: 'Site supervision, temporary utilities, and facilities',
-        level: 'sub',
-        parentId: 'project-management',
-        order: 1,
-        isActive: true,
-        keywords: ['general conditions', 'supervision', 'job site', 'temporary', 'facilities'],
-        children: []
       },
       {
-        id: 'project-management-fees',
-        name: 'Management Fees',
-        description: 'Contractor and project management fees',
+        id: 'cleanup-punch',
+        name: 'Punch List',
+        description: 'Addressing final deficiencies and corrections',
         level: 'sub',
-        parentId: 'project-management',
-        order: 2,
-        isActive: true,
-        keywords: ['management fee', 'overhead', 'profit', 'supervision', 'admin'],
-        children: []
-      },
-      {
-        id: 'project-management-cleanup',
-        name: 'Cleanup & Disposal',
-        description: 'Construction cleanup and waste removal',
-        level: 'sub',
-        parentId: 'project-management',
+        parentId: 'cleanup',
         order: 3,
         isActive: true,
-        keywords: ['cleanup', 'waste', 'disposal', 'dumpster', 'trash', 'debris'],
+        keywords: ['punch list', 'correction', 'deficiency', 'fix', 'repair', 'final inspection'],
         children: []
       },
       {
-        id: 'project-management-inspection',
-        name: 'Inspections & Testing',
-        description: 'Building inspections and quality testing',
+        id: 'cleanup-handover',
+        name: 'Project Handover',
+        description: 'Documentation and training for the owner',
         level: 'sub',
-        parentId: 'project-management',
+        parentId: 'cleanup',
         order: 4,
         isActive: true,
-        keywords: ['inspection', 'testing', 'quality control', 'code', 'approval'],
-        children: []
-      },
-      {
-        id: 'project-management-contingency',
-        name: 'Contingency',
-        description: 'Budget reserve for unforeseen costs',
-        level: 'sub',
-        parentId: 'project-management',
-        order: 5,
-        isActive: true,
-        keywords: ['contingency', 'reserve', 'budget', 'unforeseen', 'allowance'],
+        keywords: ['handover', 'turnover', 'warranty', 'manual', 'training', 'as-built', 'closeout'],
         children: []
       }
     ]
@@ -923,7 +890,7 @@ export const MAIN_CATEGORIES: CategoryWithChildren[] = [
     name: 'Contingency & Reserves',
     description: 'Funds set aside for unexpected costs',
     level: 'main',
-    order: 15,
+    order: 14,
     isActive: true,
     color: '#ff7043',
     children: [
@@ -1173,6 +1140,14 @@ export const mapSimpleToDetailedCategory = (
   if (desc.includes('irrigation') || desc.includes('sprinkler') || desc.includes('drainage') && 
       (desc.includes('landscape') || desc.includes('lawn') || desc.includes('garden'))) {
     return 'landscape-irrigation';
+  }
+  
+  // Drywall System (Installation & Finishing)
+  if (desc.includes('drywall') || desc.includes('gypsum') || desc.includes('sheetrock') || 
+      desc.includes('plaster') || desc.includes('mud') || desc.includes('tape') || 
+      desc.includes('hang') || desc.includes('finish') && desc.includes('wall') ||
+      vendor.includes('drywall')) {
+    return 'interior-finishes-drywall-system';
   }
   
   // If no specific match is found, default to 'other'

@@ -105,7 +105,7 @@ interface FormErrors {
     [id: string]: {
   description?: string;
       quantity?: string;
-      unitPrice?: string;
+      unitCost?: string;
     }
   } & { general?: string }
 }
@@ -115,7 +115,7 @@ interface ExpenseLineItemForm {
   id: string;
   description: string;
   quantity: number;
-  unitPrice: number;
+  unitCost: number;
   totalPrice: number;
 }
 
@@ -532,7 +532,6 @@ const ExpenseFormModal: React.FC<ExpenseFormModalProps> = ({
   const [duplicateExpenses, setDuplicateExpenses] = useState<Expense[]>([]);
   const [showDuplicateWarning, setShowDuplicateWarning] = useState(false);
   const [tabValue, setTabValue] = useState(0);
-  const [detailedCategoryId, setDetailedCategoryId] = useState<string | null>(null);
   const [expenseDescriptionOptions, setExpenseDescriptionOptions] = useState<string[]>([]);
   const [currentProjectPhases, setCurrentProjectPhases] = useState<ProjectPhase[]>([]);
   const [paymentMethod, setPaymentMethod] = useState('');
@@ -662,89 +661,114 @@ const ExpenseFormModal: React.FC<ExpenseFormModalProps> = ({
     return uniqueDescriptions.sort();
   }, []);
 
-  // Effect to initialize form and phases when opening/editing
+  // Effect to initialize form when expense data is provided (for editing)
   useEffect(() => {
-    if (open) {
-      let initialPhases: ProjectPhase[] = [];
-      let initialFormData: Partial<Expense> = {
-        description: '',
-        amount: 0,
-        category: 'other' as Expense['category'],
-        date: new Date(),
-        status: 'pending',
-        projectId: '',
-        phaseId: '',
-        phaseName: '',
-        vendor: '',
-        notes: '',
-        subcontractorId: '',
-        subcontractorName: '',
-      };
+    // Add logging at the start
+    console.log(`[Phase Init] Effect Run. Open: ${open}, Has Expense: ${!!expense}, Projects Count: ${projects?.length}`);
 
-      if (expense) {
-        initialFormData = {
-          ...initialFormData,
-          ...expense,
-          date: expense.date ? new Date(expense.date) : new Date(),
-        };
-        
-        if (expense.projectId) {
-          const projectSource = projectPhases && projectPhases.length > 0 
-            ? { phases: projectPhases } 
-            : projects.find(p => p.id === expense.projectId);
-            
-          initialPhases = (projectSource?.phases || []).filter((p): p is ProjectPhase => typeof p.id === 'string' && p.id !== '');
-        }
-        
-        if (expense.paymentDetails) {
-          setPaymentMethod(expense.paymentDetails.method || '');
-          setReferenceNumber(expense.paymentDetails.referenceNumber || '');
-          setPaymentDate(expense.paymentDetails.date || new Date().toISOString().split('T')[0]);
-          setPaymentNotes(expense.paymentDetails.notes || '');
-        }
-        
-        if (expense.category === 'subcontractor' && expense.subcontractorId && expense.subcontractorName) {
-          initialFormData.subcontractorId = expense.subcontractorId;
-          initialFormData.subcontractorName = expense.subcontractorName;
-        }
-      } else {
-        if (projects.length === 1) {
-          initialFormData.projectId = projects[0].id;
-          initialPhases = (projects[0].phases || []).filter((p): p is ProjectPhase => typeof p.id === 'string' && p.id !== '');
-          if (initialPhases.length === 1 && initialPhases[0].id) {
-            initialFormData.phaseId = initialPhases[0].id;
-            initialFormData.phaseName = initialPhases[0].name;
-          }
-        }
+    if (open && expense) {
+      // Log relevant IDs from the expense prop
+      console.log(`[Phase Init] Expense Data: projectId='${expense.projectId}', phaseId='${expense.phaseId}'`);
+
+      setFormData({
+        projectId: expense.projectId || projects[0]?.id || 'undefined', // Ensure projectId is always set
+        description: expense.description || '',
+        amount: expense.amount || 0,
+        date: expense.date ? new Date(expense.date) : new Date(),
+        category: expense.category || 'other',
+        categoryId: expense.categoryId || '',
+        vendor: expense.vendor || '',
+        subcontractorId: expense.subcontractorId || '',
+        subcontractorName: expense.subcontractorName || '',
+        phaseId: expense.phaseId || '',
+        status: expense.status || 'pending',
+        notes: expense.notes || '',
+        tags: expense.tags || [],
+      });
+      
+      // Phase list initialization
+      if (expense.projectId) {
+        console.log(`[Phase Init] Looking for project with ID: '${expense.projectId}'`);
+        const currentProject = projects.find(p => p.id === expense.projectId);
+        // Log if project was found and its phases
+        console.log(`[Phase Init] Found project: ${currentProject ? `'${currentProject.name}'` : 'Not Found'}`);
+        const phasesToSet = (currentProject?.phases || []).filter((p): p is ProjectPhase => typeof p.id === 'string' && p.id !== '');
+        console.log(`[Phase Init] Setting currentProjectPhases to:`, phasesToSet.map(p => ({ id: p.id, name: p.name }))); // Log concise phase info
+        setCurrentProjectPhases(phasesToSet);
+    } else {
+        console.log(`[Phase Init] No expense.projectId, clearing phases.`);
+        setCurrentProjectPhases([]);
       }
       
-      setFormData(initialFormData);
-      setCurrentProjectPhases(initialPhases);
-      setTags(initialFormData.tags || []);
-      setErrors({});
-      setBackendError(null);
+      // Initialize line items if they exist
+      if (expense.lineItems && expense.lineItems.length > 0) {
+        setLineItems(expense.lineItems.map(li => ({
+          id: li.id || uuidv4(),
+          description: li.description || '',
+          quantity: li.quantity || 1,
+          unitCost: li.unitCost || 0,
+          totalPrice: (li.quantity || 1) * (li.unitCost || 0)
+        })));
+        setShowLineItems(true);
+      } else {
+        setLineItems([]);
+        setShowLineItems(false);
+      }
+      
+      // Initialize receipt preview
+      setReceiptPreview(expense.receiptUrl || null);
+      
+      // Initialize payment details if status is 'paid'
+      if (expense.status === 'paid' && expense.paymentDetails) {
+        setPaymentMethod(expense.paymentDetails.method || 'other');
+        const paymentDateObj = expense.paymentDetails.date ? new Date(expense.paymentDetails.date) : new Date();
+        setPaymentDate(paymentDateObj.toISOString().split('T')[0]);
+        setReferenceNumber(expense.paymentDetails.referenceNumber || '');
+        setPaymentNotes(expense.paymentDetails.notes || '');
+      }
+      
+    } else if (open) {
+      // Reset logic
+      console.log(`[Phase Init] Resetting form for new expense.`);
+       setFormData({
+        projectId: projects[0]?.id || 'undefined',
+        description: '',
+        amount: 0,
+        date: new Date(),
+        category: 'other',
+        categoryId: '',
+        vendor: '',
+        subcontractorId: '',
+        subcontractorName: '',
+        phaseId: '',
+        status: 'pending',
+        notes: '',
+        tags: [],
+      });
+      setLineItems([]);
+      setShowLineItems(false);
+      setReceiptPreview(null);
       setReceiptFile(null);
-      setReceiptPreview(initialFormData.receiptUrl || null);
-      const initialLineItems: ExpenseLineItemForm[] = (expense?.lineItems || []).map(item => ({
-        id: item.id || uuidv4(),
-        description: item.description || '',
-        quantity: item.quantity || 1,
-        unitPrice: typeof item.unitCost === 'number' ? item.unitCost : 0,
-        totalPrice: (item.quantity || 1) * (typeof item.unitCost === 'number' ? item.unitCost : 0),
-      }));
-      setLineItems(initialLineItems);
-      setShowLineItems(!!initialFormData.lineItems && initialFormData.lineItems.length > 0);
-      setPaymentMethod(expense?.paymentDetails?.method || '');
-      setReferenceNumber(expense?.paymentDetails?.referenceNumber || '');
-      setPaymentDate(expense?.paymentDetails?.date || new Date().toISOString().split('T')[0]);
-      setPaymentNotes(expense?.paymentDetails?.notes || '');
-      setDuplicateCheckDone(false);
-      setShowDuplicateWarning(false);
-      setDuplicateExpenses([]);
-      setTabValue(0);
-      setDetailedCategoryId(null);
+      setPaymentMethod('other');
+      setPaymentDate(new Date().toISOString().split('T')[0]);
+      setReferenceNumber('');
+      setPaymentNotes('');
+      setCurrentProjectPhases([]);
     }
-  }, [open, expense, isEditMode, projects, projectPhases]);
+    // Reset errors and saving state whenever modal opens or expense changes
+    setErrors({});
+    setBackendError(null); // Reset backend error
+    setIsSubmitting(false); // Ensure submit button is enabled
+    setDuplicateCheckDone(false);
+    setShowDuplicateWarning(false);
+    setDuplicateExpenses([]);
+    setTabValue(0);
+    setExpenseDescriptionOptions([]);
+    setPaymentMethod('');
+    setReferenceNumber('');
+    setPaymentDate(new Date().toISOString().split('T')[0]);
+    setPaymentNotes('');
+  }, [open, expense, projects]);
 
   // useEffect for description options (now uses the defined function)
   useEffect(() => {
@@ -773,15 +797,14 @@ const ExpenseFormModal: React.FC<ExpenseFormModalProps> = ({
 
   // ADD handler for hierarchical category change
   const handleDetailedCategoryChange = (categoryId: string) => {
-      setDetailedCategoryId(categoryId);
-      // Clear category error if present
-      if (errors.detailedCategoryId) {
-          setErrors(prev => ({ ...prev, detailedCategoryId: undefined }));
-      }
-      // Assign a default simple category based on the detailed one if needed for other logic
-      // This might be unnecessary if we fully remove reliance on simple category
-      // For now, let's default it to 'other' when a detailed one is selected
-      handleChange('category', 'other'); 
+    // Only update the detailed categoryId, preserve the general category
+    setFormData(prev => ({
+      ...prev,
+      categoryId: categoryId,
+      // REMOVED: category: 'other', // Don't automatically set general category here
+    }));
+    // Clear potential category error if user selects a valid one
+    setErrors(prev => ({ ...prev, categoryId: undefined }));
   };
 
   const handlePhaseChange = (event: SelectChangeEvent<string>) => {
@@ -841,7 +864,7 @@ const ExpenseFormModal: React.FC<ExpenseFormModalProps> = ({
       id: uuidv4(),
       description: '',
       quantity: 1,
-      unitPrice: 0,
+      unitCost: 0,
       totalPrice: 0,
     };
     setLineItems([...lineItems, newItem]);
@@ -865,8 +888,8 @@ const ExpenseFormModal: React.FC<ExpenseFormModalProps> = ({
           const updatedItem = { ...item, [field]: value };
           
           // Recalculate total price if quantity or unitPrice changed
-          if (field === 'quantity' || field === 'unitPrice') {
-            updatedItem.totalPrice = updatedItem.quantity * updatedItem.unitPrice;
+          if (field === 'quantity' || field === 'unitCost') {
+            updatedItem.totalPrice = updatedItem.quantity * updatedItem.unitCost;
           }
           
           return updatedItem;
@@ -938,7 +961,7 @@ const ExpenseFormModal: React.FC<ExpenseFormModalProps> = ({
       const lineItemErrors: FormErrors['lineItems'] = {};
       
       lineItems.forEach(item => {
-        const itemErrors: { description?: string; quantity?: string; unitPrice?: string } = {};
+        const itemErrors: { description?: string; quantity?: string; unitCost?: string } = {};
         let hasItemError = false;
         
         if (!item.description.trim()) {
@@ -951,8 +974,8 @@ const ExpenseFormModal: React.FC<ExpenseFormModalProps> = ({
           hasItemError = true;
         }
         
-        if (item.unitPrice < 0) {
-          itemErrors.unitPrice = 'Unit price cannot be negative';
+        if (item.unitCost < 0) {
+          itemErrors.unitCost = 'Unit cost cannot be negative';
           hasItemError = true;
         }
         
@@ -1004,83 +1027,86 @@ const ExpenseFormModal: React.FC<ExpenseFormModalProps> = ({
   };
 
   const handleSubmit = async () => {
+    const formErrors = validateForm();
+    if (Object.keys(formErrors).length > 0) {
+      setErrors(formErrors);
+      console.log("Form Validation Errors:", formErrors);
+      return;
+    }
+
     setIsSubmitting(true);
     setBackendError(null);
+
+    const calculatedTotal = showLineItems 
+      ? calculateTotalFromLineItems() // Use the useCallback version
+      : formData.amount || 0;
+
+    // Corrected mapping logic using the helper function
+    const finalLineItems: ExpenseLineItem[] = showLineItems 
+      ? lineItems.map((li): ExpenseLineItem => {
+          let itemCategory: ExpenseLineItem['category'];
+
+          // Determine the category, prioritizing specific keywords then mapping the form category
+          if (formData.category === 'subcontractor') {
+            itemCategory = 'subcontractor';
+          } else if (li.description.toLowerCase().includes('material')) {
+            itemCategory = 'material'; // Keyword match
+          } else {
+            // Fallback: Map the main expense category to the line item category type
+            itemCategory = mapExpenseCategoryToLineItemCategory(formData.category);
+          }
+
+          return {
+            id: li.id,
+            description: li.description,
+            quantity: li.quantity,
+            unit: '', // Adjust as needed
+            unitCost: li.unitCost > 0 ? li.unitCost : undefined,
+            totalCost: li.totalPrice,
+            category: itemCategory, // Assign the correctly mapped category
+          };
+        })
+      : [];
+
+    const finalData: Partial<Expense> = cleanForFirestore({
+      ...formData,
+      amount: calculatedTotal,
+      date: formData.date instanceof Date ? formData.date : new Date(formData.date || Date.now()),
+      lineItems: finalLineItems,
+      projectId: formData.projectId || null,
+      phaseId: formData.phaseId || null,
+      categoryId: formData.categoryId || undefined,
+      receiptUrl: receiptPreview || null,
+      status: formData.status || 'pending',
+      subcontractorId: formData.category === 'subcontractor' ? (formData.subcontractorId || null) : null,
+      vendor: formData.category !== 'subcontractor' ? (formData.vendor || null) : null,
+      tags: tags, // Include tags
+      paymentDetails: formData.status === 'paid' ? {
+        method: paymentMethod,
+        date: paymentDate,
+        referenceNumber: referenceNumber,
+        notes: paymentNotes
+      } : null,
+      ...(expense?.id && { id: expense.id }),
+    });
     
-    // Correctly call validateForm and use the result
-    const formErrors = validateForm();
-    setErrors(formErrors);
+    if (user?.uid) {
+      finalData.userId = user.uid;
+    }
 
-    if (Object.keys(formErrors).length === 0) {
-       // ... (rest of handleSubmit logic as corrected in previous step) ...
-       const calculatedTotal = showLineItems 
-        ? calculateTotalFromLineItems() // Use the useCallback version
-        : formData.amount || 0;
-
-      // Corrected mapping logic using the helper function
-      const finalLineItems: ExpenseLineItem[] = showLineItems 
-        ? lineItems.map((li): ExpenseLineItem => {
-            let itemCategory: ExpenseLineItem['category'];
-
-            // Determine the category, prioritizing specific keywords then mapping the form category
-            if (formData.category === 'subcontractor') {
-              itemCategory = 'subcontractor';
-            } else if (li.description.toLowerCase().includes('material')) {
-              itemCategory = 'material'; // Keyword match
-            } else {
-              // Fallback: Map the main expense category to the line item category type
-              itemCategory = mapExpenseCategoryToLineItemCategory(formData.category);
-            }
-
-            return {
-              id: li.id,
-              description: li.description,
-              quantity: li.quantity,
-              unit: '', // Adjust as needed
-              unitCost: li.unitPrice > 0 ? li.unitPrice : undefined,
-              totalCost: li.totalPrice,
-              category: itemCategory, // Assign the correctly mapped category
-            };
-          })
-        : [];
-
-      const finalData: Partial<Expense> = cleanForFirestore({
-        ...formData,
-        amount: calculatedTotal,
-        date: formData.date instanceof Date ? formData.date : new Date(formData.date || Date.now()),
-        lineItems: finalLineItems,
-        projectId: formData.projectId || null,
-        phaseId: formData.phaseId || null,
-        detailedCategoryId: detailedCategoryId || (formData.category ? mapSimpleToDetailedCategory(formData.category, formData.vendor || undefined, formData.description) : undefined),
-        receiptUrl: receiptPreview || null,
-        status: formData.status || 'pending',
-        subcontractorId: formData.category === 'subcontractor' ? (formData.subcontractorId || null) : null,
-        vendor: formData.category !== 'subcontractor' ? (formData.vendor || null) : null,
-        tags: tags, // Include tags
-        paymentDetails: formData.status === 'paid' ? {
-          method: paymentMethod,
-          date: paymentDate,
-          referenceNumber: referenceNumber,
-          notes: paymentNotes
-        } : null,
-      });
-      
-      if (user?.uid) {
-        finalData.userId = user.uid;
-      }
-
-      try {
-        await onSave(finalData);
-        handleCloseModal();
-      } catch (error) {
-        console.error("Error saving expense:", error);
-        setBackendError(`Failed to save expense: ${error instanceof Error ? error.message : String(error)}`);
-      } finally {
+    try {
+      // Always check for duplicates before saving, unless it's an edit
+      if (!expense?.id && await checkForDuplicates()) {
         setIsSubmitting(false);
+        return; // Stop submission if duplicate warning is shown
       }
-    } else {
-      console.log('Form is invalid:', formErrors);
-      setBackendError('Please fix the validation errors before saving.');
+      
+      await onSave(finalData);
+      handleCloseModal();
+    } catch (error) {
+      console.error("Error saving expense:", error);
+      setBackendError(`Failed to save expense: ${error instanceof Error ? error.message : String(error)}`);
+    } finally {
       setIsSubmitting(false);
     }
   };
@@ -1111,7 +1137,6 @@ const ExpenseFormModal: React.FC<ExpenseFormModalProps> = ({
     setDuplicateExpenses([]);
     setShowDuplicateWarning(false);
     setTabValue(0);
-    setDetailedCategoryId(null);
     setExpenseDescriptionOptions([]);
     setCurrentProjectPhases([]);
     setPaymentMethod('');
@@ -1124,40 +1149,40 @@ const ExpenseFormModal: React.FC<ExpenseFormModalProps> = ({
 
   return (
     <>
-      <Dialog
-        open={open}
+    <Dialog
+      open={open}
         onClose={handleCloseModal}
-        maxWidth="md"
-        fullWidth
-        disableEnforceFocus
-        disableScrollLock
-      >
-        <DialogTitle sx={{ p: 2.5, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <Typography 
-            variant="h6" 
-            fontWeight="600" 
-          >
-            {isEditMode ? 'Edit Expense' : 'New Expense'}
-          </Typography>
-          
-          <IconButton 
+      maxWidth="md"
+      fullWidth
+      disableEnforceFocus
+      disableScrollLock
+    >
+      <DialogTitle sx={{ p: 2.5, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <Typography 
+          variant="h6" 
+          fontWeight="600" 
+        >
+          {isEditMode ? 'Edit Expense' : 'New Expense'}
+        </Typography>
+        
+        <IconButton 
             onClick={handleCloseModal} 
-            aria-label="close"
-            size="small"
-            sx={{
-              color: 'text.secondary',
-            }}
-          >
-            <CloseIcon />
-          </IconButton>
-        </DialogTitle>
-
-        <DialogContent 
-          sx={{ 
-            p: 2.5,
-            overflow: 'auto',
+          aria-label="close"
+          size="small"
+          sx={{
+            color: 'text.secondary',
           }}
         >
+          <CloseIcon />
+        </IconButton>
+      </DialogTitle>
+
+      <DialogContent 
+        sx={{ 
+          p: 2.5,
+          overflow: 'auto',
+        }}
+      >
           <Tabs value={tabValue} onChange={(event, newValue) => setTabValue(newValue)}>
             <Tab label="Main Info" />
             <Tab label="Line Items" />
@@ -1167,125 +1192,124 @@ const ExpenseFormModal: React.FC<ExpenseFormModalProps> = ({
           {tabValue === 0 && (
             <Box sx={{ display: 'block', p: 3 }}>
               <Grid container spacing={3}>
-                <Grid item xs={12} md={6}>
-                  <FormControl fullWidth error={!!errors.projectId} variant="outlined" size="small">
-                    <InputLabel id="project-label">Project</InputLabel>
-                    <Select
-                      labelId="project-label"
-                      id="projectId"
-                      name="projectId"
-                      value={formData.projectId || ''}
-                      onChange={handleSelectChange}
-                      label="Project"
-                      disabled={!!expense?.projectId && !isEditMode}
-                      startAdornment={
+          <Grid item xs={12} md={6}>
+            <FormControl fullWidth error={!!errors.projectId} variant="outlined" size="small">
+              <InputLabel id="project-label">Project</InputLabel>
+              <Select
+                labelId="project-label"
+                id="projectId"
+                name="projectId"
+                value={formData.projectId || ''}
+                onChange={handleSelectChange}
+                label="Project"
+                disabled={!!expense?.projectId && !isEditMode}
+                startAdornment={
+                  <InputAdornment position="start">
+                      <ProjectIcon fontSize="small" color="primary" />
+                  </InputAdornment>
+                }
+              >
+                <MenuItem value="" disabled>
+                  <Typography variant="body2" color="text.secondary">Select a project</Typography>
+                </MenuItem>
+                {projects.map((project) => (
+                  <MenuItem key={project.id} value={project.id}>
+                    {project.name}
+                  </MenuItem>
+                ))}
+              </Select>
+              {errors.projectId && (
+                <FormHelperText error>{errors.projectId}</FormHelperText>
+              )}
+            </FormControl>
+          </Grid>
+
+          <Grid item xs={12} md={6}>
+            <LocalizationProvider dateAdapter={AdapterDateFns}>
+              <DatePicker
+                label="Date"
+                value={typeof formData.date === 'string' ? new Date(formData.date) : formData.date || null}
+                onChange={handleDateChange}
+                slotProps={{
+                  textField: {
+                    fullWidth: true,
+                    error: !!errors.date,
+                    helperText: errors.date,
+                        size: "small",
+                    InputProps: {
+                      startAdornment: (
                         <InputAdornment position="start">
-                            <ProjectIcon fontSize="small" color="primary" />
+                            <CalendarIcon fontSize="small" color="primary" />
                         </InputAdornment>
-                      }
-                    >
-                      <MenuItem value="" disabled>
-                        <Typography variant="body2" color="text.secondary">Select a project</Typography>
-                      </MenuItem>
-                      {projects.map((project) => (
-                        <MenuItem key={project.id} value={project.id}>
-                          {project.name}
-                        </MenuItem>
-                      ))}
-                    </Select>
-                    {errors.projectId && (
-                      <FormHelperText error>{errors.projectId}</FormHelperText>
-                    )}
-                  </FormControl>
-                </Grid>
+                      )
+                    }
+                  },
+                }}
+              />
+            </LocalizationProvider>
+          </Grid>
 
-                <Grid item xs={12} md={6}>
-                  <LocalizationProvider dateAdapter={AdapterDateFns}>
-                    <DatePicker
-                      label="Date"
-                      value={typeof formData.date === 'string' ? new Date(formData.date) : formData.date || null}
-                      onChange={handleDateChange}
-                      slotProps={{
-                        textField: {
-                          fullWidth: true,
-                          error: !!errors.date,
-                          helperText: errors.date,
-                              size: "small",
-                          InputProps: {
-                            startAdornment: (
-                              <InputAdornment position="start">
-                                  <CalendarIcon fontSize="small" color="primary" />
-                              </InputAdornment>
-                            )
-                          }
-                        },
-                      }}
-                    />
-                  </LocalizationProvider>
-                </Grid>
+          <Grid item xs={12} sm={6}>
+            <FormControl fullWidth size="small" error={!!errors.phaseId}>
+              <InputLabel id="phase-label">Phase</InputLabel>
+              <Select
+                labelId="phase-label"
+                id="phaseId"
+                name="phaseId"
+                value={formData.phaseId || ''}
+                onChange={handlePhaseChange}
+                label="Phase"
+                startAdornment={
+                  <InputAdornment position="start">
+                    <BuildingPhaseIcon fontSize="small" color="action" />
+                  </InputAdornment>
+                }
+                disabled={!formData.projectId || currentProjectPhases.length === 0}
+              >
+                <MenuItem value="">
+                  <em>{formData.projectId ? (currentProjectPhases.length > 0 ? 'Select Phase' : 'No Phases Available') : 'Select Project First'}</em>
+                </MenuItem>
+                {PHASE_OPTIONS.map((option) => (
+                  <MenuItem key={option.value} value={option.value}>
+                    {option.label}
+                  </MenuItem>
+                ))}
+              </Select>
+              {errors.phaseId && <FormHelperText>{errors.phaseId}</FormHelperText>}
+            </FormControl>
+          </Grid>
 
-                <Grid item xs={12} sm={6}>
-                  <FormControl fullWidth size="small" error={!!errors.phaseId}>
-                    <InputLabel id="phase-label">Phase</InputLabel>
-                    <Select
-                      labelId="phase-label"
-                      id="phaseId"
-                      name="phaseId"
-                      value={formData.phaseId || ''}
-                      onChange={handlePhaseChange}
-                      label="Phase"
-                      startAdornment={
-                        <InputAdornment position="start">
-                          <BuildingPhaseIcon fontSize="small" color="action" />
-                        </InputAdornment>
-                      }
-                      disabled={!formData.projectId || currentProjectPhases.length === 0}
-                    >
-                      <MenuItem value="">
-                        <em>{formData.projectId ? (currentProjectPhases.length > 0 ? 'Select Phase' : 'No Phases Available') : 'Select Project First'}</em>
-                      </MenuItem>
-                      {PHASE_OPTIONS.map((option) => (
-                        <MenuItem key={option.value} value={option.value}>
-                          {option.label}
-                        </MenuItem>
-                      ))}
-                    </Select>
-                    {errors.phaseId && <FormHelperText>{errors.phaseId}</FormHelperText>}
-                  </FormControl>
-                </Grid>
-
-                <Grid item xs={12} sm={6}>
+          <Grid item xs={12} sm={6}>
                   <FormControl fullWidth size="small" error={!!errors.category}>
                     <InputLabel id="category-label">General Category</InputLabel>
-                    <Select
-                      labelId="category-label"
-                      id="category"
-                      name="category"
+              <Select
+                labelId="category-label"
+                id="category"
+                name="category"
                       value={formData.category || ''}
                       onChange={(e) => handleChange('category', e.target.value as Expense['category'])}
                       label="General Category"
-                      startAdornment={
-                        <InputAdornment position="start">
-                          <CategoryIcon fontSize="small" color="primary" />
-                        </InputAdornment>
-                      }
-                    >
+                startAdornment={
+                  <InputAdornment position="start">
+                    <CategoryIcon fontSize="small" color="primary" />
+                  </InputAdornment>
+                }
+              >
                       {availableExpenseCategories.map((category) => (
                         <MenuItem key={category} value={category}>
                           {formatCategoryName(category)}
-                        </MenuItem>
-                      ))}
-                    </Select>
-                    {errors.category && <FormHelperText error>{errors.category}</FormHelperText>}
-                  </FormControl>
-                </Grid>
-
+                  </MenuItem>
+                ))}
+              </Select>
+              {errors.category && <FormHelperText error>{errors.category}</FormHelperText>}
+            </FormControl>
+          </Grid>
+       
                 <Grid item xs={12} sm={6}>
                   <CategorySelector
-                    value={detailedCategoryId || ''}
+                    value={formData.categoryId || ''} 
                     onChange={handleDetailedCategoryChange}
                     label="Specific Construction Category"
-                    error={errors.detailedCategoryId}
                     size="small"
                   />
                   <Typography variant="caption" color="text.secondary">
@@ -1293,213 +1317,213 @@ const ExpenseFormModal: React.FC<ExpenseFormModalProps> = ({
                   </Typography>
                 </Grid>
 
-                <Grid item xs={12}>
-                  <Autocomplete
-                    fullWidth
-                    freeSolo
-                    id="expense-description"
+          <Grid item xs={12}>
+            <Autocomplete
+              fullWidth
+              freeSolo
+              id="expense-description"
                     options={expenseDescriptionOptions}
-                    value={formData.description || ''}
-                    onChange={(event, newValue) => {
-                      // Directly update the form data state
-                      setFormData(prev => ({...prev, description: newValue || ''}));
-                      // Clear potential error for description
-                      if (errors.description) {
-                         setErrors(prev => ({...prev, description: undefined}));
-                      }
-                    }}
-                    inputValue={formData.description || ''} // Keep controlled input value if needed for freeSolo interaction
-                    onInputChange={(event, newInputValue) => {
-                      // Update description as user types
-                      setFormData(prev => ({...prev, description: newInputValue || ''}));
-                       // Clear potential error for description while typing
-                       if (errors.description) {
-                          setErrors(prev => ({...prev, description: undefined}));
-                       }
-                    }}
-                    renderInput={(params) => (
-                      <TextField
-                        {...params}
-                        label="Description"
-                        required
-                        size="small"
-                        placeholder="Select or type a description..."
-                        error={!!errors.description}
-                        helperText={errors.description}
-                      />
-                    )}
-                  />
-                </Grid>
+              value={formData.description || ''}
+              onChange={(event, newValue) => {
+                // Directly update the form data state
+                setFormData(prev => ({...prev, description: newValue || ''}));
+                // Clear potential error for description
+                if (errors.description) {
+                   setErrors(prev => ({...prev, description: undefined}));
+                }
+              }}
+              inputValue={formData.description || ''} // Keep controlled input value if needed for freeSolo interaction
+              onInputChange={(event, newInputValue) => {
+                // Update description as user types
+                setFormData(prev => ({...prev, description: newInputValue || ''}));
+                 // Clear potential error for description while typing
+                 if (errors.description) {
+                    setErrors(prev => ({...prev, description: undefined}));
+                 }
+              }}
+              renderInput={(params) => (
+                <TextField
+                  {...params}
+                  label="Description"
+                  required
+                  size="small"
+                  placeholder="Select or type a description..."
+                  error={!!errors.description}
+                  helperText={errors.description}
+                />
+              )}
+            />
+          </Grid>
 
-                <Grid item xs={12} sm={6}>
-                  <VendorSelector
-                    value={formData.vendor || ''}
-                    onChange={(vendor) => {
-                      setFormData({
-                        ...formData,
-                        vendor: vendor,
-                      });
-                    }}
-                    error={!!errors.vendor}
-                    helperText={errors.vendor}
-                  />
-                </Grid>
-               
-                {formData.category === 'subcontractor' && (
-                  <Grid item xs={12} sm={6}>
-                    <SubcontractorSelector
-                      value={formData.subcontractorId || ''}
-                      onChange={handleSubcontractorChange}
-                      error={!!errors.subcontractorId}
-                      helperText={errors.subcontractorId}
-                    />
-                  </Grid>
-                )}
+          <Grid item xs={12} sm={6}>
+            <VendorSelector
+              value={formData.vendor || ''}
+              onChange={(vendor) => {
+                setFormData({
+                  ...formData,
+                  vendor: vendor,
+                });
+              }}
+              error={!!errors.vendor}
+              helperText={errors.vendor}
+            />
+          </Grid>
+         
+          {formData.category === 'subcontractor' && (
+            <Grid item xs={12} sm={6}>
+              <SubcontractorSelector
+                value={formData.subcontractorId || ''}
+                onChange={handleSubcontractorChange}
+                error={!!errors.subcontractorId}
+                helperText={errors.subcontractorId}
+              />
+            </Grid>
+          )}
 
-                <Grid item xs={12}>
-                  <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
-                    <Typography variant="subtitle2" fontWeight={600} color="text.primary">
-                      Amount Details
+          <Grid item xs={12}>
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
+              <Typography variant="subtitle2" fontWeight={600} color="text.primary">
+                Amount Details
+              </Typography>
+         
+              <FormControlLabel
+                control={
+                  <Switch
+                    checked={showLineItems}
+                    onChange={toggleLineItems}
+                    color="primary"
+                    size="small"
+                  />
+                }
+                label={<Typography variant="caption">{showLineItems ? 'Itemized' : 'Simple'}</Typography>}
+                sx={{ m: 0 }}
+              />
+            </Box>
+
+            {!showLineItems ? (
+              <TextField
+                fullWidth
+                id="amount"
+                name="amount"
+                label="Amount"
+                type="number"
+                value={formData.amount || ''}
+                onChange={(e) => handleChange('amount', parseFloat(e.target.value))}
+                error={!!errors.amount}
+                helperText={errors.amount || null}
+                size="small"
+                InputProps={{
+                  startAdornment: (
+                    <InputAdornment position="start">
+                      <MoneyIcon fontSize="small" color="primary" />
+                    </InputAdornment>
+                  )
+                }}
+              />
+            ) : (
+              <Box>
+                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
+                  <Button
+                    variant="outlined"
+                    color="primary"
+                    startIcon={<AddIcon />}
+                    onClick={handleAddLineItem}
+                    size="small"
+                    sx={{ 
+                      textTransform: 'none',
+                    }}
+                  >
+                    Add Item
+                  </Button>
+                  
+                  <Typography variant="subtitle2" fontWeight={600} color="success.main">
+                    Total: ${calculateTotalFromLineItems().toFixed(2)}
+                  </Typography>
+                </Box>
+                
+                <Box sx={{ 
+                  maxHeight: 220, 
+                  overflowY: 'auto',
+                }}>
+                  {lineItems.length === 0 ? (
+                    <Typography variant="body2" color="text.secondary" align="center" sx={{ py: 2 }}>
+                      No line items yet. Add some!
                     </Typography>
-               
-                    <FormControlLabel
-                      control={
-                        <Switch
-                          checked={showLineItems}
-                          onChange={toggleLineItems}
-                          color="primary"
-                          size="small"
-                        />
-                      }
-                      label={<Typography variant="caption">{showLineItems ? 'Itemized' : 'Simple'}</Typography>}
-                      sx={{ m: 0 }}
-                    />
-                  </Box>
-
-                  {!showLineItems ? (
-                    <TextField
-                      fullWidth
-                      id="amount"
-                      name="amount"
-                      label="Amount"
-                      type="number"
-                      value={formData.amount || ''}
-                      onChange={(e) => handleChange('amount', parseFloat(e.target.value))}
-                      error={!!errors.amount}
-                      helperText={errors.amount || null}
-                      size="small"
-                      InputProps={{
-                        startAdornment: (
-                          <InputAdornment position="start">
-                            <MoneyIcon fontSize="small" color="primary" />
-                          </InputAdornment>
-                        )
-                      }}
-                    />
                   ) : (
-                    <Box>
-                      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
-                        <Button
-                          variant="outlined"
-                          color="primary"
-                          startIcon={<AddIcon />}
-                          onClick={handleAddLineItem}
-                          size="small"
-                          sx={{ 
-                            textTransform: 'none',
-                          }}
-                        >
-                          Add Item
-                        </Button>
-                        
-                        <Typography variant="subtitle2" fontWeight={600} color="success.main">
-                          Total: ${calculateTotalFromLineItems().toFixed(2)}
-                        </Typography>
-                      </Box>
-                      
-                      <Box sx={{ 
-                        maxHeight: 220, 
-                        overflowY: 'auto',
-                      }}>
-                        {lineItems.length === 0 ? (
-                          <Typography variant="body2" color="text.secondary" align="center" sx={{ py: 2 }}>
-                            No line items yet. Add some!
-                          </Typography>
-                        ) : (
-                          <TableContainer component={Paper} variant="outlined" sx={{ mt: 1 }}>
-                            <Table size="small">
-                              <TableHead>
-                                <TableRow>
-                                  <TableCell>Description</TableCell>
-                                  <TableCell align="right">Qty</TableCell>
-                                  <TableCell align="right">Unit Price</TableCell>
-                                  <TableCell align="right">Total</TableCell>
-                                  <TableCell padding="checkbox"></TableCell>
-                                </TableRow>
-                              </TableHead>
-                              <TableBody>
-                                {lineItems.map((item: ExpenseLineItemForm, index) => (
-                                  <TableRow key={item.id}>
-                                    <TableCell>
-                                      <TextField
-                                        fullWidth
-                                        placeholder="Description"
-                                        value={item.description}
-                                        onChange={(e) => handleLineItemChange(item.id, 'description', e.target.value)}
-                                        error={!!errors.lineItems?.[item.id]?.description}
-                                        helperText={errors.lineItems?.[item.id]?.description}
-                                        variant="standard"
-                                        size="small"
-                                      />
-                                    </TableCell>
-                                    <TableCell align="right">
-                                      <TextField
-                                        type="number"
-                                        value={item.quantity}
-                                        onChange={(e) => handleLineItemChange(item.id, 'quantity', parseFloat(e.target.value) || 0)}
-                                        error={!!errors.lineItems?.[item.id]?.quantity}
-                                        inputProps={{ min: 0, step: 0.01, style: { textAlign: 'right' } }}
-                                        variant="standard"
-                                        size="small"
-                                        sx={{ width: 70 }}
-                                      />
-                                    </TableCell>
-                                    <TableCell align="right">
-                                      <TextField
-                                        type="number"
-                                        value={item.unitPrice}
-                                        onChange={(e) => handleLineItemChange(item.id, 'unitPrice', parseFloat(e.target.value) || 0)}
-                                        error={!!errors.lineItems?.[item.id]?.unitPrice}
-                                        inputProps={{ min: 0, step: 0.01, style: { textAlign: 'right' } }}
-                                        variant="standard"
-                                        size="small"
-                                        sx={{ width: 90 }}
-                                      />
-                                    </TableCell>
-                                    <TableCell align="right">
-                                      ${item.totalPrice.toFixed(2)}
-                                    </TableCell>
-                                    <TableCell padding="checkbox">
-                                      <IconButton
-                                        size="small"
-                                        onClick={() => handleRemoveLineItem(item.id)}
-                                        color="error"
-                                      >
-                                        <DeleteIcon fontSize="small" />
-                                      </IconButton>
-                                    </TableCell>
-                                  </TableRow>
-                                ))}
-                              </TableBody>
-                            </Table>
-                          </TableContainer>
-                        )}
-                      </Box>
-                    </Box>
+                    <TableContainer component={Paper} variant="outlined" sx={{ mt: 1 }}>
+                      <Table size="small">
+                        <TableHead>
+                          <TableRow>
+                            <TableCell>Description</TableCell>
+                            <TableCell align="right">Qty</TableCell>
+                                  <TableCell align="right">Unit Cost</TableCell>
+                            <TableCell align="right">Total</TableCell>
+                            <TableCell padding="checkbox"></TableCell>
+                          </TableRow>
+                        </TableHead>
+                        <TableBody>
+                          {lineItems.map((item: ExpenseLineItemForm, index) => (
+                            <TableRow key={item.id}>
+                              <TableCell>
+                                <TextField
+                                  fullWidth
+                                  placeholder="Description"
+                                  value={item.description}
+                                  onChange={(e) => handleLineItemChange(item.id, 'description', e.target.value)}
+                                  error={!!errors.lineItems?.[item.id]?.description}
+                                  helperText={errors.lineItems?.[item.id]?.description}
+                                  variant="standard"
+                                  size="small"
+                                />
+                              </TableCell>
+                              <TableCell align="right">
+                                <TextField
+                                  type="number"
+                                  value={item.quantity}
+                                  onChange={(e) => handleLineItemChange(item.id, 'quantity', parseFloat(e.target.value) || 0)}
+                                  error={!!errors.lineItems?.[item.id]?.quantity}
+                                  inputProps={{ min: 0, step: 0.01, style: { textAlign: 'right' } }}
+                                  variant="standard"
+                                  size="small"
+                                  sx={{ width: 70 }}
+                                />
+                              </TableCell>
+                              <TableCell align="right">
+                                <TextField
+                                  type="number"
+                                        value={item.unitCost}
+                                        onChange={(e) => handleLineItemChange(item.id, 'unitCost', parseFloat(e.target.value) || 0)}
+                                        error={!!errors.lineItems?.[item.id]?.unitCost}
+                                  inputProps={{ min: 0, step: 0.01, style: { textAlign: 'right' } }}
+                                  variant="standard"
+                                  size="small"
+                                  sx={{ width: 90 }}
+                                />
+                              </TableCell>
+                              <TableCell align="right">
+                                ${item.totalPrice.toFixed(2)}
+                              </TableCell>
+                              <TableCell padding="checkbox">
+                                <IconButton
+                                  size="small"
+                                  onClick={() => handleRemoveLineItem(item.id)}
+                                  color="error"
+                                >
+                                  <DeleteIcon fontSize="small" />
+                                </IconButton>
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </TableContainer>
                   )}
-                </Grid>
+                </Box>
+              </Box>
+            )}
+          </Grid>
 
-                <Grid item xs={12}>
+          <Grid item xs={12}>
                   <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
                     <Typography variant="subtitle2" fontWeight={600} color="text.primary">
                       Amount
@@ -1507,191 +1531,191 @@ const ExpenseFormModal: React.FC<ExpenseFormModalProps> = ({
                
                     <Typography variant="subtitle2" fontWeight={600} color="success.main">
                       ${formData.amount?.toFixed(2) || '0.00'}
-                    </Typography>
+            </Typography>
                   </Box>
                 </Grid>
-
+           
                 <Grid item xs={12} sm={6}>
-                  <FormControl fullWidth sx={{ mb: 1.5 }} size="small">
-                    <InputLabel id="status-label">Status</InputLabel>
-                    <Select
-                      labelId="status-label"
-                      id="status"
-                      name="status"
-                      value={formData.status || 'pending'}
-                      onChange={handleStatusChange}
-                      label="Status"
-                      startAdornment={
-                        <InputAdornment position="start">
-                          <PaymentIcon fontSize="small" color="primary" />
-                        </InputAdornment>
-                      }
-                    >
-                      <MenuItem value="pending">
-                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                          <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: 'warning.main' }} />
-                          Pending
-                        </Box>
-                      </MenuItem>
-                      <MenuItem value="paid">
-                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                          <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: 'success.main' }} />
-                          Paid
-                        </Box>
-                      </MenuItem>
+            <FormControl fullWidth sx={{ mb: 1.5 }} size="small">
+              <InputLabel id="status-label">Status</InputLabel>
+              <Select
+                labelId="status-label"
+                id="status"
+                name="status"
+                value={formData.status || 'pending'}
+                onChange={handleStatusChange}
+                label="Status"
+                startAdornment={
+                  <InputAdornment position="start">
+                    <PaymentIcon fontSize="small" color="primary" />
+                  </InputAdornment>
+                }
+              >
+                <MenuItem value="pending">
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                    <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: 'warning.main' }} />
+                    Pending
+                  </Box>
+                </MenuItem>
+                <MenuItem value="paid">
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                    <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: 'success.main' }} />
+                    Paid
+                  </Box>
+                </MenuItem>
                     </Select>
                   </FormControl>
-                </Grid>
+          </Grid>
 
-                <Grid item xs={12} sm={6}>
-                  <Typography variant="subtitle2" fontWeight={600} color="text.primary" gutterBottom>
-                    Receipt
-                  </Typography>
-                 
-                  {receiptPreview ? (
-                    <Box sx={{ position: 'relative', height: 120, display: 'flex', justifyContent: 'center' }}>
-                      <img
-                        src={receiptPreview}
-                        alt="Receipt preview"
-                        style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }}
-                      />
-                      <IconButton
-                        onClick={handleRemoveReceipt}
-                        size="small"
-                        sx={{
-                          position: 'absolute',
-                          top: 0,
-                          right: 0,
-                          bgcolor: 'error.main',
-                          color: 'white',
-                          '&:hover': { bgcolor: 'error.dark' },
-                        }}
-                      >
-                        <DeleteIcon fontSize="small" />
-                      </IconButton>
-                    </Box>
-                  ) : (
-                    <Box sx={{ 
-                      display: 'flex',
-                      flexDirection: 'column',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      border: '2px dashed',
-                      borderColor: alpha(theme.palette.primary.main, 0.2),
-                      borderRadius: '6px',
-                      p: 2,
-                      height: 120,
-                      backgroundColor: alpha(theme.palette.primary.main, 0.03),
-                    }}>
-                    <input
-                        accept="image/*,application/pdf"
-                        id="receipt-file"
-                      type="file"
-                        style={{ display: 'none' }}
-                        onChange={handleFileChange}
-                      />
-                    <label htmlFor="receipt-file" style={{ width: '100%', textAlign: 'center' }}>
-                      <Button
-                        component="span"
-                        startIcon={<UploadIcon />}
-                        sx={{ textTransform: 'none' }}
-                      >
-                        Upload Receipt
-                      </Button>
-                      <Typography variant="caption" display="block" color="text.secondary">
-                        Drag & drop or click to browse
-                      </Typography>
-                    </label>
-                  </Box>
-                )}
-              </Grid>
-
-              <Grid item xs={12}>
-                <Accordion
-                  disableGutters
-                  elevation={0}
-                  sx={{ 
-                    '&:before': { display: 'none' },
-                    border: '1px solid',
-                    borderColor: 'divider',
-                    borderRadius: 1,
-                    mt: 1
+          <Grid item xs={12} sm={6}>
+            <Typography variant="subtitle2" fontWeight={600} color="text.primary" gutterBottom>
+              Receipt
+            </Typography>
+           
+            {receiptPreview ? (
+              <Box sx={{ position: 'relative', height: 120, display: 'flex', justifyContent: 'center' }}>
+                <img
+                  src={receiptPreview}
+                  alt="Receipt preview"
+                  style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }}
+                />
+                <IconButton
+                  onClick={handleRemoveReceipt}
+                  size="small"
+                  sx={{
+                    position: 'absolute',
+                    top: 0,
+                    right: 0,
+                    bgcolor: 'error.main',
+                    color: 'white',
+                    '&:hover': { bgcolor: 'error.dark' },
                   }}
                 >
-                  <AccordionSummary expandIcon={<ExpandMoreIcon />}>
-                    <Typography variant="subtitle2">Additional Notes</Typography>
-                  </AccordionSummary>
-                  <AccordionDetails>
-                    <TextField
-                      fullWidth
-                      id="notes"
-                      name="notes"
-                      multiline
-                      rows={3}
-                      value={formData.notes || ''}
-                      onChange={(e) => handleChange('notes', e.target.value)}
-                      placeholder="Enter any additional notes here..."
-                      size="small"
-                    />
-                  </AccordionDetails>
-                </Accordion>
-              </Grid>
-             
-              <Grid item xs={12}>
-                <Typography variant="subtitle2" gutterBottom>
-                  Tags
-                </Typography>
-                <Autocomplete
-                  multiple
-                  id="tags"
-                  options={[]} // Use empty array instead of suggestedTags
-                  value={tags}
-                  onChange={handleTagsChange}
-                  freeSolo
-                  renderTags={(value, getTagProps) =>
-                    value.map((option, index) => (
-                      <Chip
-                        label={option}
-                        size="small"
-                        {...getTagProps({ index })}
-                        sx={{
-                          bgcolor: theme.palette.primary.light,
-                          color: theme.palette.primary.contrastText,
-                        }}
-                      />
-                    ))
-                  }
-                  renderInput={(params) => (
-                    <TextField
-                      {...params}
-                      variant="outlined"
-                      size="small"
-                      placeholder="Add tags (press Enter after each tag)"
-                      fullWidth
-                    />
-                  )}
+                  <DeleteIcon fontSize="small" />
+                </IconButton>
+              </Box>
+            ) : (
+              <Box sx={{ 
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                justifyContent: 'center',
+                border: '2px dashed',
+                borderColor: alpha(theme.palette.primary.main, 0.2),
+                borderRadius: '6px',
+                p: 2,
+                height: 120,
+                backgroundColor: alpha(theme.palette.primary.main, 0.03),
+              }}>
+              <input
+                  accept="image/*,application/pdf"
+                  id="receipt-file"
+                type="file"
+                  style={{ display: 'none' }}
+                  onChange={handleFileChange}
                 />
-                <Typography variant="caption" color="text.secondary">
-                  Add tags to categorize this expense
-                </Typography>
-              </Grid>
-             
-              {backendError && (
-                <Grid item xs={12}>
-                  <Typography 
-                    variant="body2" 
-                    color="error" 
-                    sx={{ 
-                      bgcolor: alpha(theme.palette.error.main, 0.1),
-                      p: 1,
-                      borderRadius: 1,
-                    }}
+                <label htmlFor="receipt-file" style={{ width: '100%', textAlign: 'center' }}>
+                  <Button
+                    component="span"
+                    startIcon={<UploadIcon />}
+                    sx={{ textTransform: 'none' }}
                   >
-                    {backendError}
+                    Upload Receipt
+                  </Button>
+                  <Typography variant="caption" display="block" color="text.secondary">
+                    Drag & drop or click to browse
                   </Typography>
-                </Grid>
+                </label>
+              </Box>
+            )}
+          </Grid>
+
+          <Grid item xs={12}>
+            <Accordion
+              disableGutters
+              elevation={0}
+              sx={{ 
+                '&:before': { display: 'none' },
+                border: '1px solid',
+                borderColor: 'divider',
+                borderRadius: 1,
+                mt: 1
+              }}
+            >
+              <AccordionSummary expandIcon={<ExpandMoreIcon />}>
+                <Typography variant="subtitle2">Additional Notes</Typography>
+              </AccordionSummary>
+              <AccordionDetails>
+                <TextField
+                  fullWidth
+                  id="notes"
+                  name="notes"
+                  multiline
+                  rows={3}
+                  value={formData.notes || ''}
+                  onChange={(e) => handleChange('notes', e.target.value)}
+                  placeholder="Enter any additional notes here..."
+                  size="small"
+                />
+              </AccordionDetails>
+            </Accordion>
+          </Grid>
+         
+          <Grid item xs={12}>
+            <Typography variant="subtitle2" gutterBottom>
+              Tags
+            </Typography>
+            <Autocomplete
+              multiple
+              id="tags"
+                  options={[]} // Use empty array instead of suggestedTags
+              value={tags}
+              onChange={handleTagsChange}
+              freeSolo
+              renderTags={(value, getTagProps) =>
+                value.map((option, index) => (
+                  <Chip
+                    label={option}
+                    size="small"
+                    {...getTagProps({ index })}
+                    sx={{
+                      bgcolor: theme.palette.primary.light,
+                      color: theme.palette.primary.contrastText,
+                    }}
+                  />
+                ))
+              }
+              renderInput={(params) => (
+                <TextField
+                  {...params}
+                  variant="outlined"
+                  size="small"
+                      placeholder="Add tags (press Enter after each tag)"
+                  fullWidth
+                />
               )}
+            />
+            <Typography variant="caption" color="text.secondary">
+                  Add tags to categorize this expense
+            </Typography>
+          </Grid>
+         
+          {backendError && (
+            <Grid item xs={12}>
+              <Typography 
+                variant="body2" 
+                color="error" 
+                sx={{ 
+                  bgcolor: alpha(theme.palette.error.main, 0.1),
+                  p: 1,
+                  borderRadius: 1,
+                }}
+              >
+                {backendError}
+              </Typography>
             </Grid>
+          )}
+        </Grid>
           </Box>
         )}
 
@@ -1737,84 +1761,84 @@ const ExpenseFormModal: React.FC<ExpenseFormModalProps> = ({
   </Dialog>
 
     {showDuplicateWarning && (
-      <Dialog
-        open={showDuplicateWarning}
-        onClose={() => setShowDuplicateWarning(false)}
-        aria-labelledby="duplicate-warning-title"
-        maxWidth="sm"
-        fullWidth
-      >
-        <DialogTitle id="duplicate-warning-title">
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" color="#f59e0b">
-              <circle cx="12" cy="12" r="10"></circle>
-              <line x1="12" y1="8" x2="12" y2="12"></line>
-              <line x1="12" y1="16" x2="12.01" y2="16"></line>
-            </svg>
-            <Typography variant="h6">Potential Duplicate Expense</Typography>
-          </Box>
-        </DialogTitle>
-        <DialogContent>
-          <DialogContentText sx={{ mb: 2 }}>
-            We found {duplicateExpenses.length} similar expense{duplicateExpenses.length > 1 ? 's' : ''} that might be duplicates:
-          </DialogContentText>
-          
-          <List sx={{ 
-            bgcolor: 'background.paper', 
-            borderRadius: 1,
-            border: '1px solid',
-            borderColor: 'divider',
-            mb: 2,
-          }}>
-            {duplicateExpenses.map((expense) => (
-              <ListItem key={expense.id} divider>
-                <ListItemText
-                  primary={
-                    <Typography variant="subtitle2">{expense.description}</Typography>
-                  }
-                  secondary={
-                    <Box sx={{ mt: 0.5 }}>
+    <Dialog
+      open={showDuplicateWarning}
+      onClose={() => setShowDuplicateWarning(false)}
+      aria-labelledby="duplicate-warning-title"
+      maxWidth="sm"
+      fullWidth
+    >
+      <DialogTitle id="duplicate-warning-title">
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+          <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" color="#f59e0b">
+            <circle cx="12" cy="12" r="10"></circle>
+            <line x1="12" y1="8" x2="12" y2="12"></line>
+            <line x1="12" y1="16" x2="12.01" y2="16"></line>
+          </svg>
+          <Typography variant="h6">Potential Duplicate Expense</Typography>
+        </Box>
+      </DialogTitle>
+      <DialogContent>
+        <DialogContentText sx={{ mb: 2 }}>
+          We found {duplicateExpenses.length} similar expense{duplicateExpenses.length > 1 ? 's' : ''} that might be duplicates:
+        </DialogContentText>
+        
+        <List sx={{ 
+          bgcolor: 'background.paper', 
+          borderRadius: 1,
+          border: '1px solid',
+          borderColor: 'divider',
+          mb: 2,
+        }}>
+          {duplicateExpenses.map((expense) => (
+            <ListItem key={expense.id} divider>
+              <ListItemText
+                primary={
+                  <Typography variant="subtitle2">{expense.description}</Typography>
+                }
+                secondary={
+                  <Box sx={{ mt: 0.5 }}>
+                    <Typography variant="body2" color="text.secondary" component="span">
+                      {new Date(expense.date).toLocaleDateString()} • {formatCurrency(expense.amount)}
+                    </Typography>
+                    {expense.vendor && (
                       <Typography variant="body2" color="text.secondary" component="span">
-                        {new Date(expense.date).toLocaleDateString()} • {formatCurrency(expense.amount)}
+                        {' • '}{expense.vendor}
                       </Typography>
-                      {expense.vendor && (
-                        <Typography variant="body2" color="text.secondary" component="span">
-                          {' • '}{expense.vendor}
-                        </Typography>
-                      )}
-                    </Box>
-                  }
-                />
-              </ListItem>
-            ))}
-          </List>
-          
-          <DialogContentText>
-            Do you still want to save this expense? If this is not a duplicate, please continue.
-          </DialogContentText>
-        </DialogContent>
-        <DialogActions sx={{ px: 3, py: 2 }}>
-          <Button 
-            onClick={() => setShowDuplicateWarning(false)} 
-            variant="outlined"
-          >
-            Go Back and Edit
-          </Button>
-          <Button 
+                    )}
+                  </Box>
+                }
+              />
+            </ListItem>
+          ))}
+        </List>
+        
+        <DialogContentText>
+          Do you still want to save this expense? If this is not a duplicate, please continue.
+        </DialogContentText>
+      </DialogContent>
+      <DialogActions sx={{ px: 3, py: 2 }}>
+        <Button 
+          onClick={() => setShowDuplicateWarning(false)} 
+          variant="outlined"
+        >
+          Go Back and Edit
+        </Button>
+        <Button 
             onClick={handleSubmit} 
-            variant="contained" 
-            color="primary"
-            startIcon={
-              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <polyline points="9 11 12 14 22 4"></polyline>
-                <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"></path>
-              </svg>
-            }
-          >
-            Save Anyway
-          </Button>
-        </DialogActions>
-      </Dialog>
+          variant="contained" 
+          color="primary"
+          startIcon={
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <polyline points="9 11 12 14 22 4"></polyline>
+              <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"></path>
+            </svg>
+          }
+        >
+          Save Anyway
+        </Button>
+      </DialogActions>
+    </Dialog>
     )}
   </>
 );

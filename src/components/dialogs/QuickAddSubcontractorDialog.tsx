@@ -32,6 +32,7 @@ const CONSTRUCTION_SPECIALTIES = [
   'Demolition',
   'Landscaping',
   'Glass & Windows',
+  'Garage Door Installation',
   'Insulation',
   'Site Work',
   'Steel & Metal',

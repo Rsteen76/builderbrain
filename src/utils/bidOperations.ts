@@ -4,6 +4,7 @@ import { ExpenseService } from '../services/expense';
 import { Bid, BidPaymentStage, Expense } from '../types';
 import { db } from '../config/firebase';
 import { collection, query, where, getDocs } from 'firebase/firestore';
+import { mapSimpleToDetailedCategory } from '../data/hierarchicalCategories';
 
 // Extended Expense type that includes bid references
 interface EnhancedExpense extends Expense {
@@ -149,6 +150,29 @@ export const submitBid = async (
       }
     };
     
+    // Calculate categoryId based on bid data if it wasn't provided
+    // Note: We only calculate this for display purposes in the client
+    // The actual categorization might happen on the server
+    try {
+      // Only attempt to determine category if we have enough information
+      if (bidData.title || bidData.subcontractorName || bidData.scope) {
+        // This is just for suggestion, not enforcing a value
+        const categoryId = mapSimpleToDetailedCategory(
+          'bid',
+          bidData.subcontractorName || '',
+          (bidData.title || '') + ' - ' + (bidData.scope || '')
+        );
+        
+        // Only set if we got a valid category
+        if (categoryId && categoryId !== 'uncategorized') {
+          cleanBidData.categoryId = categoryId;
+        }
+      }
+    } catch (catError) {
+      // Log but don't fail the whole operation just for category mapping
+      console.warn('Non-critical error calculating bid category:', catError);
+    }
+    
     let resultBid: Bid;
     
     if (editingBidId) {
@@ -164,15 +188,57 @@ export const submitBid = async (
       resultBid = updatedBid;
     } else {
       // Create new bid
-      const newBidId = uuidv4();
-      const newBid: Bid = {
-        id: newBidId,
-        userId: userId,
-        ...cleanBidData,
-        createdAt: now,
-      } as Bid;
+      console.log('Creating new bid with data:', cleanBidData);
       
-      resultBid = await BidService.createBid(userId, newBid);
+      // Ensure projectId is defined (it's required by the service)
+      if (!projectId) {
+        throw new Error('Project ID is required to create a bid');
+      }
+      
+      try {
+        // Create a bid object with required fields guaranteed to be non-optional
+        const createBidPayload = {
+          projectId, // This is guaranteed to be a string now
+          projectName: projectName || 'Unknown Project',
+          title: cleanBidData.title || '',
+          subcontractorName: cleanBidData.subcontractorName || '',
+          contractorName: cleanBidData.contractorName || cleanBidData.subcontractorName || '',
+          subcontractorId: cleanBidData.subcontractorId || '',
+          totalAmount: cleanBidData.totalAmount || 0,
+          status: cleanBidData.status || 'draft',
+          scope: cleanBidData.scope || '',
+          notes: cleanBidData.notes || '',
+          timeline: cleanBidData.timeline || 30,
+          paymentSchedule: cleanBidData.paymentSchedule || [],
+          tags: cleanBidData.tags || [],
+          attachments: cleanBidData.attachments || [],
+          submissionDeadline: cleanBidData.submissionDeadline
+        };
+        
+        // Only add categoryId if it exists in cleanBidData
+        if (cleanBidData.categoryId) {
+          (createBidPayload as any).categoryId = cleanBidData.categoryId;
+        }
+        
+        console.log('Calling BidService.createBid with payload:', JSON.stringify(createBidPayload, null, 2));
+        
+        // DEBUG: Try to wrap the creation call in a more detailed error handling block
+        try {
+          resultBid = await BidService.createBid(userId, createBidPayload);
+          console.log('Successfully created bid:', resultBid);
+        } catch (createError) {
+          console.error('ERROR IN BidService.createBid:', createError);
+          if (createError instanceof Error) {
+            console.error('Error message:', createError.message);
+            console.error('Error stack:', createError.stack);
+          }
+          // Re-throw to be caught by the outer catch block
+          throw createError;
+        }
+      } catch (innerError) {
+        console.error('CRITICAL: Error preparing or creating bid:', innerError);
+        throw new Error(`Failed to create bid: ${innerError instanceof Error ? innerError.message : String(innerError)}`);
+      }
     }
     
     // Handle expenses ONLY when status transitions to 'accepted'

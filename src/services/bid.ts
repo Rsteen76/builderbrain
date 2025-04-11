@@ -67,6 +67,7 @@ interface FirestoreBid {
     pending: number;
     remaining: number;
   };
+  categoryId?: string;
 }
 
 // Define Firestore-specific BidVersion type
@@ -281,52 +282,77 @@ export class BidService {
     const cleanBidData = this.removeUndefined(newBid);
     
     // Convert to Firestore format and save
-    const firestoreBid = this.convertToFirestoreFormat(cleanBidData);
-    const docRef = await addDoc(this.collection, firestoreBid);
-    const newBidId = docRef.id;
-    
-    // Fetch the complete bid from Firestore to ensure data consistency
-    const createdBid = await this.getBid(userId, newBidId);
-    
-    // If fetching failed, construct the bid with the local data
-    if (!createdBid) {
-      return {
-        ...cleanBidData,
-        id: newBidId,
-      } as Bid;
+    try {
+      console.log('BidService - DEBUG - Converting bid to Firestore format');
+      const firestoreBid = this.convertToFirestoreFormat(cleanBidData);
+      
+      console.log('BidService - DEBUG - About to add document to Firestore collection');
+      let docRef;
+      try {
+        docRef = await addDoc(this.collection, firestoreBid);
+        console.log('BidService - DEBUG - Document added successfully with ID:', docRef.id);
+      } catch (addDocError) {
+        console.error('BidService - CRITICAL ERROR during addDoc operation:', addDocError);
+        if (addDocError instanceof Error) {
+          console.error('Error message:', addDocError.message);
+          console.error('Error stack:', addDocError.stack);
+        }
+        throw new Error(`Failed to save bid to Firestore: ${addDocError instanceof Error ? addDocError.message : String(addDocError)}`);
+      }
+      
+      const newBidId = docRef.id;
+      
+      // Fetch the complete bid from Firestore to ensure data consistency
+      console.log('BidService - DEBUG - Fetching newly created bid from Firestore');
+      const createdBid = await this.getBid(userId, newBidId);
+      
+      // If fetching failed, construct the bid with the local data
+      if (!createdBid) {
+        console.log('BidService - DEBUG - Failed to fetch newly created bid, constructing from local data');
+        return {
+          ...cleanBidData,
+          id: newBidId,
+        } as Bid;
+      }
+      
+      // Make sure payment schedule is intact
+      if (!createdBid.paymentSchedule && cleanBidData.paymentSchedule) {
+        console.log('BidService - DEBUG - Restoring payment schedule from local data');
+        createdBid.paymentSchedule = cleanBidData.paymentSchedule;
+      }
+      
+      console.log('BidService - DEBUG - Successfully created and returned bid');
+      return createdBid;
+    } catch (error) {
+      console.error('BidService - CRITICAL ERROR in createBid:', error);
+      if (error instanceof Error) {
+        console.error('Error message:', error.message);
+        console.error('Error stack:', error.stack);
+      }
+      throw error;
     }
-    
-    // Make sure payment schedule is intact
-    if (!createdBid.paymentSchedule && cleanBidData.paymentSchedule) {
-      createdBid.paymentSchedule = cleanBidData.paymentSchedule;
-    }
-    
-    return createdBid;
   }
 
   // Create new version (Input/Output uses imported BidVersion type)
   static async createBidVersion(userId: string, bidId: string, versionData: Omit<BidVersion, 'id' | 'createdAt'>, updateBid: boolean = true): Promise<BidVersion> {
-    const bidRef = doc(this.collection, bidId);
-    const bidDoc = await getDoc(bidRef);
-    
-    if (!bidDoc.exists()) {
+    // Get the bid first
+    const bid = await this.getBid(userId, bidId);
+    if (!bid) {
       throw new Error(`Bid with ID ${bidId} not found`);
     }
     
-    const firestoreData = bidDoc.data() as FirestoreBid;
-    if (firestoreData.userId !== userId) {
-      throw new Error(`User ${userId} cannot modify bid ${bidId} owned by ${firestoreData.userId}.`);
-    }
-    
-    const bid = this.convertFromFirestoreFormat(firestoreData, bidId);
-    const now = new Date();
     const versionId = uuidv4();
+    const now = new Date();
     
+    // Create new version object
     const newVersion: BidVersion = {
-      ...versionData,
       id: versionId,
       createdAt: now,
       lineItems: versionData.lineItems || [], // Ensure lineItems is array
+      versionNumber: versionData.versionNumber || (bid.versions?.length ?? 0) + 1 || 1,
+      totalAmount: versionData.totalAmount || 0,
+      notes: versionData.notes || '',
+      attachments: versionData.attachments || []
     };
     
     const updatedVersions = [...(bid.versions || []), newVersion];
@@ -334,7 +360,7 @@ export class BidService {
     if (updateBid) {
       const firestoreVersions = updatedVersions.map(v => this.convertVersionToFirestoreFormat(v));
       
-      await updateDoc(bidRef, {
+      await updateDoc(doc(this.collection, bidId), {
         versions: firestoreVersions,
         currentVersionId: versionId,
         totalAmount: newVersion.totalAmount,
@@ -404,7 +430,7 @@ export class BidService {
 
     console.log(`BidService: Updating bid ${id} with payload:`, JSON.stringify(finalPayload, null, 2));
 
-    await updateDoc(bidRef, finalPayload);
+    await updateDoc(doc(this.collection, id), finalPayload);
   }
 
   // Update line item (Input uses imported LineItem type)
@@ -681,7 +707,7 @@ export class BidService {
 
   // Convert Bid (imported type) to FirestoreBid
   private static convertToFirestoreFormat(bid: Omit<Bid, 'id'>): FirestoreBid {
-      const { versions, createdAt, updatedAt, submissionDeadline, startDate, completionDate, paymentSchedule, tags, attachments, ...rest } = bid;
+      const { versions, createdAt, updatedAt, submissionDeadline, startDate, completionDate, paymentSchedule, tags, attachments, categoryId, ...rest } = bid;
       
       // Debug paymentSchedule
       console.log('paymentSchedule in convertToFirestoreFormat:', typeof paymentSchedule, 
@@ -782,6 +808,11 @@ export class BidService {
       // Only add payment schedule if it contains items
       if (convertedPaymentSchedule && convertedPaymentSchedule.length > 0) {
           firestoreBid.paymentSchedule = convertedPaymentSchedule;
+      }
+      
+      // Only add categoryId if it exists and is defined
+      if (categoryId) {
+          firestoreBid.categoryId = categoryId;
       }
       
       return firestoreBid;

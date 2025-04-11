@@ -12,6 +12,9 @@ import { BidService } from '../../services/bid';
 import { SubcontractorService } from '../../services/subcontractor';
 import ReusableBidForm from '../bids/ReusableBidForm';
 import { v4 as uuidv4 } from 'uuid';
+import { mapSimpleToDetailedCategory } from '../../data/hierarchicalCategories';
+import { useQuickAddSubcontractorDialog } from '../../hooks/useQuickAddSubcontractorDialog';
+import QuickAddSubcontractorDialog from '../dialogs/QuickAddSubcontractorDialog';
 
 interface BidFormModalProps {
   open: boolean;
@@ -36,7 +39,12 @@ const BidFormModal: React.FC<BidFormModalProps> = ({
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Fetch subcontractors
+  const quickAddSubDialog = useQuickAddSubcontractorDialog({
+    onSubmitSuccess: (newSubcontractor) => {
+      setSubcontractors(prev => [...prev, newSubcontractor]);
+    }
+  });
+
   useEffect(() => {
     const fetchSubcontractors = async () => {
       try {
@@ -53,13 +61,28 @@ const BidFormModal: React.FC<BidFormModalProps> = ({
     }
   }, [open, userId]);
 
-  // Handle form submission
+  const handleAddNewSubcontractor = () => {
+    quickAddSubDialog.openQuickAddSubDialog();
+  };
+
   const handleSubmit = async (bidFormData: any) => {
     setIsSaving(true);
     setError(null);
 
     try {
-      const submitPayload: Omit<Bid, 'id' | 'createdAt' | 'updatedAt' | 'userId'> = {
+      console.log('[Category Mapping Inputs]', {
+        title: bidFormData.title || '',
+        subcontractor: bidFormData.subcontractorName || '',
+        scope: bidFormData.scope || ''
+      });
+      
+      const categoryId = mapSimpleToDetailedCategory(
+        bidFormData.title || '',
+        bidFormData.subcontractorName || '',
+        bidFormData.scope || ''
+      );
+
+      const submitPayload: Omit<Bid, 'id' | 'createdAt' | 'updatedAt' | 'userId'> & { categoryId?: string } = {
         title: bidFormData.title || `Bid from ${bidFormData.subcontractorName}`,
         projectId,
         projectName: initialData?.projectName || 'Unknown Project',
@@ -67,6 +90,7 @@ const BidFormModal: React.FC<BidFormModalProps> = ({
         subcontractorName: bidFormData.subcontractorName || '',
         scope: bidFormData.scope || 'N/A',
         status: (bidFormData.status?.toLowerCase() || 'submitted') as Bid['status'],
+        categoryId: categoryId,
         priority: bidFormData.priority || 'medium',
         submissionDeadline: bidFormData.submissionDeadline || new Date(),
         startDate: bidFormData.startDate || null,
@@ -125,7 +149,6 @@ const BidFormModal: React.FC<BidFormModalProps> = ({
     }
   };
 
-  // Convert bid status to form data status
   const convertBidStatus = (status: Bid['status']): 'submitted' | 'draft' | 'accepted' | 'rejected' | 'expired' => {
     switch (status) {
       case 'withdrawn':
@@ -136,7 +159,6 @@ const BidFormModal: React.FC<BidFormModalProps> = ({
     }
   };
 
-  // Convert attachments to string array
   const convertAttachments = (attachments: Bid['attachments']): string[] => {
     if (!attachments) return [];
     return attachments.map(attachment => 
@@ -145,45 +167,55 @@ const BidFormModal: React.FC<BidFormModalProps> = ({
   };
 
   return (
-    <Dialog open={open} onClose={onClose} maxWidth="md" fullWidth>
-      <DialogTitle>
-        {initialData ? 'Edit Bid' : 'New Bid'}
-      </DialogTitle>
-      <DialogContent dividers>
-        {error && (
-          <Alert severity="error" sx={{ mb: 2 }}>
-            {error}
-          </Alert>
-        )}
-        <ReusableBidForm
-          onSubmit={handleSubmit}
-          phases={projectPhases}
-          subcontractors={subcontractors}
-          initialBidData={initialData ? {
-            ...initialData,
-            submissionDeadline: initialData.submissionDeadline || new Date(),
-            status: convertBidStatus(initialData.status),
-            attachments: convertAttachments(initialData.attachments),
-            paymentTerms: {
-              downPaymentPercent: initialData.paymentSchedule?.[0]?.percentage || 20,
-              installments: initialData.paymentSchedule?.slice(1).map(payment => ({
-                id: payment.id || uuidv4(),
-                name: payment.name || '',
-                percent: payment.percentage || 0,
-                milestoneDescription: payment.description || '',
-                phaseId: payment.phaseId || '',
-                phaseName: payment.phaseName || ''
-              })) || [{id: uuidv4(), name: 'Final Payment', percent: 80, milestoneDescription: 'Upon completion'}]
-            }
-          } : undefined}
-          isDialog={true}
-          isSaving={isSaving}
-        />
-      </DialogContent>
-      <DialogActions>
-        <Button onClick={onClose}>Cancel</Button>
-      </DialogActions>
-    </Dialog>
+    <>
+      <Dialog open={open} onClose={onClose} maxWidth="md" fullWidth>
+        <DialogTitle>
+          {initialData ? 'Edit Bid' : 'New Bid'}
+        </DialogTitle>
+        <DialogContent dividers>
+          {error && (
+            <Alert severity="error" sx={{ mb: 2 }}>
+              {error}
+            </Alert>
+          )}
+          <ReusableBidForm
+            onSubmit={handleSubmit}
+            phases={projectPhases}
+            subcontractors={subcontractors}
+            initialBidData={initialData ? {
+              ...initialData,
+              submissionDeadline: initialData.submissionDeadline || new Date(),
+              status: convertBidStatus(initialData.status),
+              attachments: convertAttachments(initialData.attachments),
+              paymentTerms: {
+                downPaymentPercent: initialData.paymentSchedule?.[0]?.percentage || 20,
+                installments: initialData.paymentSchedule?.slice(1).map(payment => ({
+                  id: payment.id || uuidv4(),
+                  name: payment.name || '',
+                  percent: payment.percentage || 0,
+                  milestoneDescription: payment.description || '',
+                  phaseId: payment.phaseId || '',
+                  phaseName: payment.phaseName || ''
+                })) || [{id: uuidv4(), name: 'Final Payment', percent: 80, milestoneDescription: 'Upon completion'}]
+              }
+            } : undefined}
+            isDialog={true}
+            isSaving={isSaving}
+            onAddSubcontractor={handleAddNewSubcontractor}
+          />
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={onClose}>Cancel</Button>
+        </DialogActions>
+      </Dialog>
+      
+      <QuickAddSubcontractorDialog 
+        open={quickAddSubDialog.isQuickAddSubDialogOpen}
+        onClose={quickAddSubDialog.closeQuickAddSubDialog}
+        onSubmit={quickAddSubDialog.handleDialogSubmit}
+        isSaving={quickAddSubDialog.isSavingSub}
+      />
+    </>
   );
 };
 

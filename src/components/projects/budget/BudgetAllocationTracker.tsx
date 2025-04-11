@@ -84,6 +84,7 @@ interface BudgetAllocationTrackerProps {
   onAddProjection?: (projectionData: Omit<BudgetProjection, 'id' | 'createdAt'>) => Promise<void>;
   onUpdateProjectionCategory?: (projectionId: string, newCategoryId: string) => Promise<void>;
   onDeleteProjection?: (projectionId: string) => Promise<void>;
+  onEditProjection?: (projectionId: string, updatedData: { amount: number; notes: string | null }) => Promise<void>;
 }
 
 // Define a common structure for items displayed in the tracker
@@ -110,7 +111,8 @@ const BudgetAllocationTracker: React.FC<BudgetAllocationTrackerProps> = ({
   projections,
   onAddProjection,
   onUpdateProjectionCategory,
-  onDeleteProjection
+  onDeleteProjection,
+  onEditProjection
 }) => {
   const theme = useTheme();
   const [selectedPhase, setSelectedPhase] = useState<string>('all');
@@ -138,6 +140,12 @@ const BudgetAllocationTracker: React.FC<BudgetAllocationTrackerProps> = ({
 
   // Add a new state to manage local projections for optimistic updates
   const [localProjections, setLocalProjections] = useState<BudgetProjection[]>(projections);
+
+  // Add state variables for editing projections
+  const [editProjectionDialogOpen, setEditProjectionDialogOpen] = useState(false);
+  const [editingProjection, setEditingProjection] = useState<BudgetProjection | null>(null);
+  const [editProjectionAmount, setEditProjectionAmount] = useState<number | string>('');
+  const [editProjectionNotes, setEditProjectionNotes] = useState<string>('');
 
   useEffect(() => {
     if (project?.id) {
@@ -272,8 +280,8 @@ const BudgetAllocationTracker: React.FC<BudgetAllocationTrackerProps> = ({
         id: string;
         name: string;
         description?: string;
-        paid: number;
-        pending: number;
+      paid: number;
+      pending: number;
         total: number;
         items: DisplayableBudgetItem[];
         needsReview: boolean;
@@ -298,8 +306,8 @@ const BudgetAllocationTracker: React.FC<BudgetAllocationTrackerProps> = ({
           id: subCat.id,
           name: subCat.name,
           description: subCat.description,
-          paid: 0, 
-          pending: 0, 
+          paid: 0,
+          pending: 0,
           total: 0,
           items: [],
           needsReview: false 
@@ -310,7 +318,7 @@ const BudgetAllocationTracker: React.FC<BudgetAllocationTrackerProps> = ({
         subCategories: subCatMap,
       });
     });
-
+    
     // Define the structure for subcategory data explicitly
     type SubCategoryData = {
       id: string;
@@ -331,8 +339,8 @@ const BudgetAllocationTracker: React.FC<BudgetAllocationTrackerProps> = ({
         id: 'needs-review',
         name: 'Items Needing Review',
         description: 'Items that could not be automatically categorized', 
-        paid: 0,
-        pending: 0,
+          paid: 0,
+          pending: 0,
         total: 0,
         items: [],
         needsReview: true
@@ -350,11 +358,29 @@ const BudgetAllocationTracker: React.FC<BudgetAllocationTrackerProps> = ({
         return;
       }
 
-      let detailedCategoryId = type === 'projection' 
-        ? ((item as BudgetProjection).categoryId || 'needs-review') 
-        : getCategoryIdForItem(item as Partial<Expense | Bid>);
-      
-      // **** Log the determined category ID ****
+      let detailedCategoryId: string; // Declare variable
+
+      // ---> PRIORITIZE existing categoryId for Expenses <----
+      if (type === 'expense') {
+        const expense = item as Expense;
+        // Use existing categoryId if valid, otherwise fallback
+        if (expense.categoryId && getCategoryById(expense.categoryId)) { 
+          detailedCategoryId = expense.categoryId;
+      } else {
+          // Fallback to checking manual map / auto-map
+          detailedCategoryId = getCategoryIdForItem(expense);
+        }
+      } 
+      // ---> For Bids and Projections, keep existing logic <----
+      else if (type === 'projection') {
+        detailedCategoryId = (item as BudgetProjection).categoryId || 'needs-review';
+      } 
+      else { // type === 'bid'
+        detailedCategoryId = getCategoryIdForItem(item as Partial<Bid>);
+      }
+      // ---> END CATEGORY ID DETERMINATION <----
+
+      // Log the determined category ID
       console.log(`Processing Item: Type=${type}, ID=${item.id}, Desc/Notes=${(item as any).description || (item as any).notes || (item as any).title || 'N/A'}, Determined Category=${detailedCategoryId}`); 
 
       // Find main category
@@ -387,8 +413,8 @@ const BudgetAllocationTracker: React.FC<BudgetAllocationTrackerProps> = ({
                 id: generalSubCatId,
                 name: 'General',
                 description: `General ${mainCategory?.name} expenses`, 
-                paid: 0,
-                pending: 0, 
+          paid: 0,
+          pending: 0,
                 total: 0,
                 items: [],
                 needsReview: true // Mark these for review since they're not specifically categorized
@@ -427,8 +453,8 @@ const BudgetAllocationTracker: React.FC<BudgetAllocationTrackerProps> = ({
               id: 'needs-review',
               name: 'Items Needing Review',
               description: 'Items that could not be categorized automatically',
-              paid: 0,
-              pending: 0,
+            paid: 0,
+            pending: 0,
               total: 0,
               items: [],
               needsReview: true
@@ -479,7 +505,7 @@ const BudgetAllocationTracker: React.FC<BudgetAllocationTrackerProps> = ({
             description: bid.title || bid.scope || 'Bid',
             amount: amount,
             date: bid.submissionDeadline || bid.createdAt,
-            status: bid.status,  
+          status: bid.status,
             type: 'bid',
             subcontractorName: bid.subcontractorName || null,
             phaseId: bid.phaseId
@@ -516,8 +542,8 @@ const BudgetAllocationTracker: React.FC<BudgetAllocationTrackerProps> = ({
 
     // Process all items
     console.log("Processing all items for costsByCategory...");
-    expenses.forEach(expense => processItem(expense, 'expense'));
-    bids.filter(bid => bid.status === 'accepted')
+    expenses.forEach(expense => processItem(expense, 'expense')); // Process ALL expenses
+    bids.filter(bid => bid.status === 'submitted') 
         .forEach(bid => processItem(bid, 'bid'));
     localProjections.forEach(projection => processItem(projection, 'projection'));
     console.log("Finished processing items for costsByCategory.");
@@ -529,6 +555,37 @@ const BudgetAllocationTracker: React.FC<BudgetAllocationTrackerProps> = ({
     );
 
   }, [expenses, bids, localProjections, categoryMappings, theme]);
+
+  // Function to convert a DisplayableBudgetItem to BudgetProjection
+  const getProjectionFromDisplayableItem = (item: DisplayableBudgetItem): BudgetProjection => {
+    // Find the original projection in the projections array
+    const originalProjection = localProjections.find(p => p.id === item.id);
+    
+    if (originalProjection) {
+      return originalProjection;
+    }
+    
+    // Handle converting date to Date object properly, accounting for Timestamp
+    let createdAtDate: Date;
+    if (item.date instanceof Date) {
+      createdAtDate = item.date;
+    } else if (item.date instanceof Timestamp) {
+      createdAtDate = item.date.toDate();
+    } else if (typeof item.date === 'string') {
+      createdAtDate = new Date(item.date);
+    } else {
+      createdAtDate = new Date();
+    }
+    
+    // If not found, construct a new one with required properties
+    return {
+      id: item.id,
+      amount: item.amount,
+      categoryId: item.categoryId || '',
+      notes: item.notes || null,
+      createdAt: createdAtDate
+    };
+  };
 
   // filteredCategories might need adjustment if filtering logic changes based on new structure
   const filteredCategories = useMemo(() => {
@@ -708,6 +765,60 @@ const BudgetAllocationTracker: React.FC<BudgetAllocationTrackerProps> = ({
     }
   };
 
+  // Handle opening the edit projection dialog
+  const handleOpenEditProjectionDialog = (projection: BudgetProjection) => {
+    setEditingProjection(projection);
+    setEditProjectionAmount(projection.amount);
+    setEditProjectionNotes(projection.notes || '');
+    setEditProjectionDialogOpen(true);
+  };
+
+  // Handle saving the edited projection
+  const handleEditProjectionSave = async () => {
+    if (!editingProjection || !onEditProjection) {
+      console.error("Missing projection data or edit handler");
+      setSnackbar({ open: true, message: 'Cannot edit: Missing data', severity: 'error' });
+      return;
+    }
+
+    setEditProjectionDialogOpen(false);
+    setUpdatingItemId(editingProjection.id);
+
+    try {
+      const updatedData = {
+        amount: typeof editProjectionAmount === 'number' ? editProjectionAmount : Number(editProjectionAmount),
+        notes: editProjectionNotes || null
+      };
+
+      // Optimistic UI update
+      setLocalProjections(prev => prev.map(p => 
+        p.id === editingProjection.id ? { ...p, ...updatedData } : p
+      ));
+
+      // Call the actual update operation
+      await onEditProjection(editingProjection.id, updatedData);
+      
+      // Success message
+      setSnackbar({ open: true, message: 'Projection updated successfully', severity: 'success' });
+    } catch (error) {
+      console.error("Error updating projection:", error);
+      setSnackbar({ open: true, message: 'Failed to update projection', severity: 'error' });
+      
+      // Revert the optimistic update if the server call failed
+      if (projections) {
+        const originalProjection = projections.find(p => p.id === editingProjection.id);
+        if (originalProjection) {
+          setLocalProjections(prev => prev.map(p => 
+            p.id === editingProjection.id ? originalProjection : p
+          ));
+        }
+      }
+    } finally {
+      setUpdatingItemId(null);
+      setEditingProjection(null);
+    }
+  };
+
   // **** Calculate orphanedItems directly on each render (remove useMemo) ****
   const allHierarchicalIds = new Set(getAllHierarchicalCategories().map(c => c.id));
     
@@ -716,7 +827,11 @@ const BudgetAllocationTracker: React.FC<BudgetAllocationTrackerProps> = ({
     | (Bid & { itemType: 'bid' })
     | (BudgetProjection & { itemType: 'projection' });
   
-  const expenseItems: (Expense & { itemType: 'expense' })[] = expenses.map(expense => ({ ...expense, itemType: 'expense' as const }));
+  // Filter expenses to exclude those created from bids
+  const expenseItems: (Expense & { itemType: 'expense' })[] = expenses
+    .filter(expense => !expense.bidId) // Skip expenses created from bids
+    .map(expense => ({ ...expense, itemType: 'expense' as const }));
+    
   const bidItems: (Bid & { itemType: 'bid' })[] = bids.map(bid => ({ ...bid, itemType: 'bid' as const }));
   const projectionItems: (BudgetProjection & { itemType: 'projection' })[] = localProjections.map(projection => ({ ...projection, itemType: 'projection' as const }));
     
@@ -749,31 +864,31 @@ const BudgetAllocationTracker: React.FC<BudgetAllocationTrackerProps> = ({
       <Paper elevation={1} sx={{ p: 2, mb: 3, display: 'flex', gap: 2, flexWrap: 'wrap', alignItems: 'center' }}>
         <FormControl size="small" sx={{ minWidth: 150 }}>
           <InputLabel id="phase-filter-label">Phase</InputLabel>
-          <Select
-            labelId="phase-filter-label"
-            value={selectedPhase}
+              <Select
+                labelId="phase-filter-label"
+                value={selectedPhase}
             label="Phase"
             onChange={(e) => setSelectedPhase(e.target.value)}
-          >
-            <MenuItem value="all">All Phases</MenuItem>
+              >
+                <MenuItem value="all">All Phases</MenuItem>
             {phases.map((phase) => (
-              <MenuItem key={phase.id} value={phase.id}>{phase.name}</MenuItem>
-            ))}
-          </Select>
-        </FormControl>
-        <TextField 
-          size="small"
+                  <MenuItem key={phase.id} value={phase.id}>{phase.name}</MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+            <TextField
+              size="small"
           label="Search Categories/Items"
           variant="outlined"
-          value={searchTerm}
-          onChange={(e) => setSearchTerm(e.target.value)}
-          InputProps={{
-            startAdornment: (
-              <InputAdornment position="start">
-                <SearchIcon />
-              </InputAdornment>
-            ),
-          }}
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              InputProps={{
+                startAdornment: (
+                  <InputAdornment position="start">
+                    <SearchIcon />
+                  </InputAdornment>
+                ),
+              }}
           sx={{ flexGrow: 1 }}
         />
         <Button 
@@ -832,8 +947,8 @@ const BudgetAllocationTracker: React.FC<BudgetAllocationTrackerProps> = ({
                                         sx={{ opacity: isCurrentlyUpdating ? 0.5 : 1 }}
                                       >
                                           <TableCell>
-                                            <Chip 
-                                              size="small" 
+                  <Chip 
+                    size="small"
                                               label={itemType === 'expense' ? 'Expense' : 
                                                     itemType === 'bid' ? 'Bid' : 'Projection'} 
                                               color={itemType === 'expense' ? 'primary' : 
@@ -853,7 +968,7 @@ const BudgetAllocationTracker: React.FC<BudgetAllocationTrackerProps> = ({
                                               {isCurrentlyUpdating ? (
                                                 <Box sx={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', height: '100%' }}>
                                                    <CircularProgress size={20} />
-                                                </Box>
+                </Box>
                                               ) : editingItemId === item.id ? (
                                                   <CategorySelector 
                                                       value={itemType === 'projection' && 'categoryId' in item ? (item.categoryId || '') : (categoryMappings[item.id!] || '')}
@@ -905,16 +1020,16 @@ const BudgetAllocationTracker: React.FC<BudgetAllocationTrackerProps> = ({
 
       <TableContainer component={Paper} elevation={2}>
         <Table stickyHeader aria-label="budget allocation table">
-          <TableHead>
+                    <TableHead>
             <TableRow sx={{ '& th': { fontWeight: 'bold', bgcolor: 'background.default' } }}>
               <TableCell>Category / Item</TableCell>
-              <TableCell align="right">Paid</TableCell>
+                        <TableCell align="right">Paid</TableCell>
               <TableCell align="right">Pending/Projected</TableCell>
               <TableCell align="right">Total</TableCell>
               <TableCell align="right">Actions</TableCell>
-            </TableRow>
-          </TableHead>
-          <TableBody>
+                      </TableRow>
+                    </TableHead>
+                    <TableBody>
             {prefsLoading ? (
               <TableRow>
                 <TableCell colSpan={5} align="center">Loading categories...</TableCell>
@@ -945,10 +1060,10 @@ const BudgetAllocationTracker: React.FC<BudgetAllocationTrackerProps> = ({
                 return (
                   <React.Fragment key={mainCategoryDetails.id}>
                     {/* Main Category Row - Access via mainCategoryDetails */}
-                    <TableRow 
+                        <TableRow 
                       hover 
                       onClick={() => toggleSection(mainCategoryDetails.id)}
-                      sx={{ 
+                          sx={{ 
                         cursor: 'pointer',
                         bgcolor: alpha(mainCategoryDetails.color || theme.palette.grey[500], 0.08),
                         borderBottom: isMainExpanded ? 'none' : `1px solid ${theme.palette.divider}`,
@@ -987,7 +1102,7 @@ const BudgetAllocationTracker: React.FC<BudgetAllocationTrackerProps> = ({
                       </TableCell>
                       <TableCell align="right" sx={{ fontWeight: 'medium' }}>{formatCurrency(totalMainPaid)}</TableCell>
                       <TableCell align="right" sx={{ fontWeight: 'medium' }}>{formatCurrency(totalMainPending)}</TableCell>
-                      <TableCell align="right">
+                          <TableCell align="right">
                         <Typography variant="subtitle1" fontWeight="bold">{formatCurrency(totalMainTotal)}</Typography>
                       </TableCell>
                       <TableCell align="right">
@@ -1047,8 +1162,8 @@ const BudgetAllocationTracker: React.FC<BudgetAllocationTrackerProps> = ({
                                  >
                                    {subCategoryData.name} 
                                    {hasItems && (
-                                     <Chip 
-                                       size="small" 
+                              <Chip 
+                                size="small"
                                        label={`${subCategoryData.items.length}`} 
                                        sx={{ ml: 1, height: 20, fontSize: '0.7rem' }} 
                                      />
@@ -1074,6 +1189,23 @@ const BudgetAllocationTracker: React.FC<BudgetAllocationTrackerProps> = ({
                              <TableCell align="right">{formatCurrency(subCategoryData.pending)}</TableCell>
                              <TableCell align="right" sx={{ fontWeight: 'medium' }}>{formatCurrency(subCategoryData.total)}</TableCell>
                              <TableCell align="right">
+                               {/* ---> SHOW Add Button if NO projections exist for this subcategory <---- */}
+                               {!subCategoryData.items.some(item => item.type === 'projection') && (
+                                <Tooltip title={`Add Projection to ${subCategoryData.name}`}>
+                                  <IconButton 
+                                    size="small" 
+                                    onClick={(e) => {
+                                      e.stopPropagation(); // Prevent row expansion toggle
+                                      handleOpenProjectionDialog(subCategoryData.id, subCategoryData.name);
+                                    }}
+                                    sx={{ mr: 0.5 }} // Add some margin if needed
+                                  >
+                                    <AddIcon fontSize="small" />
+                                  </IconButton>
+                                </Tooltip>
+                               )}
+                               
+                               {/* Existing View/Review Items Button */}
                                {subCategoryData.items.length > 0 && (
                                  <Tooltip title={subCategoryData.needsReview ? "Review Categories" : "View Items"}>
                                    <IconButton 
@@ -1119,8 +1251,8 @@ const BudgetAllocationTracker: React.FC<BudgetAllocationTrackerProps> = ({
                                  >
                                    <TableCell sx={{ pl: 10 }}>
                                      <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                                       <Chip 
-                                         size="small" 
+                              <Chip 
+                                size="small"
                                          label={item.type === 'expense' ? 'Expense' : 
                                                 item.type === 'bid' ? 'Bid' : 'Projection'} 
                                          color={item.type === 'expense' ? 'primary' : 
@@ -1183,19 +1315,34 @@ const BudgetAllocationTracker: React.FC<BudgetAllocationTrackerProps> = ({
                                        </Tooltip>
                                      )}
                                      {item.type === 'projection' && item.id && (
-                                       <Tooltip title="Delete Projection">
-                                         <IconButton 
-                                           size="small" 
-                                           onClick={(e) => handleDeleteProjection(item.id, e)}
-                                           sx={{ ml: 1, opacity: 0.6 }}
-                                         >
-                                           <DeleteIcon fontSize="small" sx={{ fontSize: '1rem' }} />
-                                         </IconButton>
-                                       </Tooltip>
-                                     )}
-                                   </TableCell>
-                                 </TableRow>
-                               ))}
+                                       <>
+                                         <Tooltip title="Edit Projection">
+                                           <IconButton 
+                                             size="small" 
+                                             onClick={(e) => {
+                                               e.stopPropagation();
+                                               const projectionItem = getProjectionFromDisplayableItem(item);
+                                               handleOpenEditProjectionDialog(projectionItem);
+                                             }}
+                                             sx={{ ml: 1, opacity: 0.6 }}
+                                           >
+                                             <EditIcon fontSize="small" sx={{ fontSize: '1rem' }} />
+                                           </IconButton>
+                                         </Tooltip>
+                                         <Tooltip title="Delete Projection">
+                                           <IconButton 
+                                             size="small" 
+                                             onClick={(e) => handleDeleteProjection(item.id, e)}
+                                             sx={{ ml: 1, opacity: 0.6 }}
+                                           >
+                                             <DeleteIcon fontSize="small" sx={{ fontSize: '1rem' }} />
+                                           </IconButton>
+                                         </Tooltip>
+                                       </>
+                            )}
+                          </TableCell>
+                        </TableRow>
+                      ))}
                              </>
                            )}
                          </React.Fragment>
@@ -1206,9 +1353,9 @@ const BudgetAllocationTracker: React.FC<BudgetAllocationTrackerProps> = ({
                 );
               })
             )}
-          </TableBody>
-        </Table>
-      </TableContainer>
+                    </TableBody>
+                  </Table>
+                </TableContainer>
 
       <Dialog open={projectionDialogOpen} onClose={() => setProjectionDialogOpen(false)} maxWidth="xs" fullWidth>
         <DialogTitle>Add Projection for {currentProjectionCategory?.name}</DialogTitle>
@@ -1244,6 +1391,40 @@ const BudgetAllocationTracker: React.FC<BudgetAllocationTrackerProps> = ({
         </DialogActions>
       </Dialog>
 
+      <Dialog open={editProjectionDialogOpen} onClose={() => setEditProjectionDialogOpen(false)} maxWidth="xs" fullWidth>
+        <DialogTitle>Edit Projection</DialogTitle>
+        <DialogContent>
+          <TextField
+            autoFocus
+            margin="dense"
+            label="Amount"
+            type="number"
+            fullWidth
+            variant="outlined"
+            value={editProjectionAmount}
+            onChange={(e) => setEditProjectionAmount(e.target.value === '' ? '' : parseFloat(e.target.value))}
+            InputProps={{ startAdornment: <InputAdornment position="start">$</InputAdornment> }}
+          />
+          <TextField
+            margin="dense"
+            label="Notes (Optional)"
+            type="text"
+            fullWidth
+            multiline
+            rows={2}
+            variant="outlined"
+            value={editProjectionNotes}
+            onChange={(e) => setEditProjectionNotes(e.target.value)}
+          />
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setEditProjectionDialogOpen(false)}>Cancel</Button>
+          <Button onClick={handleEditProjectionSave} variant="contained" disabled={editProjectionAmount === '' || !onEditProjection}>
+            Save Changes
+          </Button>
+        </DialogActions>
+      </Dialog>
+
       <Snackbar 
         open={snackbar.open} 
         autoHideDuration={4000} 
@@ -1259,7 +1440,7 @@ const BudgetAllocationTracker: React.FC<BudgetAllocationTrackerProps> = ({
   );
 };
 
-export default BudgetAllocationTracker;
+export default BudgetAllocationTracker; 
 
 // Define BidStatus and ExpenseStatus if not globally available
 type ExpenseStatus = 'pending' | 'approved' | 'rejected' | 'paid';

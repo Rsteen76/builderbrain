@@ -22,6 +22,7 @@ interface FirestoreExpense extends Omit<Expense, 'id' | 'date' | 'createdAt' | '
   updatedAt: Timestamp;
   bidId?: string;
   paymentStageId?: string;
+  categoryId?: string;
 }
 
 export class ExpenseService {

@@ -49,7 +49,7 @@ import { formatCurrency, formatPercentage } from '../utils/formatters';
 const ProjectDetailContent: React.FC = () => {
   const {
     // Core data
-    project, phases, bids, expenses, loading, error, projectId,
+    project, phases, bids, expenses, subcontractors, loading, error, projectId,
     // Context Functions
     refreshAllProjectData, showNotification, NotificationComponent,
     // Bid Dialog state & actions
@@ -76,7 +76,12 @@ const ProjectDetailContent: React.FC = () => {
   const [tabValue, setTabValue] = useState(0);
 
   // Keep Quick Add Subcontractor Dialog hook local
-  const quickAddSubDialog = useQuickAddSubcontractorDialog();
+  const { setSubcontractors: setContextSubcontractors } = useProjectDetail();
+  const quickAddSubDialog = useQuickAddSubcontractorDialog({
+    onSubmitSuccess: (newSub) => {
+      setContextSubcontractors(prev => [...prev, newSub]);
+    }
+  });
 
   // Update combined loading state
   const isProcessing = loading || isUpdatingPhase || isBidOperating || isExpenseOperating || quickAddSubDialog.isSavingSub || isBidSubmitting;
@@ -206,6 +211,7 @@ const ProjectDetailContent: React.FC = () => {
           editingBidId={editingBidId}
           projectId={projectId ?? undefined}
           phases={phases}
+          subcontractors={subcontractors}
           onAddSubcontractor={quickAddSubDialog.openQuickAddSubDialog}
         />
       )}

@@ -120,6 +120,7 @@ const ProjectDialogs: React.FC<ProjectDialogsProps> = ({
         phases={phases}
         initialBidData={bidForm}
         editingBidId={editingBidId}
+        subcontractors={subcontractors}
         onAddSubcontractor={() => setShowQuickAddSubcontractor(true)}
       />
 
