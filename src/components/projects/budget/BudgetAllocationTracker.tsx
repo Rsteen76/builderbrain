@@ -46,7 +46,8 @@ import {
   ExpandMore as ExpandMoreIcon,
   ExpandLess as ExpandLessIcon,
   Edit as EditIcon,
-  Category as CategoryIcon
+  Category as CategoryIcon,
+  Delete as DeleteIcon
 } from '@mui/icons-material';
 import { Expense, Bid, ProjectPhase, Project, BudgetProjection } from '../../../types';
 import { formatCurrency, formatPercentage } from '../../../utils/formatters';
@@ -82,6 +83,7 @@ interface BudgetAllocationTrackerProps {
   projections: BudgetProjection[];
   onAddProjection?: (projectionData: Omit<BudgetProjection, 'id' | 'createdAt'>) => Promise<void>;
   onUpdateProjectionCategory?: (projectionId: string, newCategoryId: string) => Promise<void>;
+  onDeleteProjection?: (projectionId: string) => Promise<void>;
 }
 
 // Define a common structure for items displayed in the tracker
@@ -107,7 +109,8 @@ const BudgetAllocationTracker: React.FC<BudgetAllocationTrackerProps> = ({
   bids,
   projections,
   onAddProjection,
-  onUpdateProjectionCategory
+  onUpdateProjectionCategory,
+  onDeleteProjection
 }) => {
   const theme = useTheme();
   const [selectedPhase, setSelectedPhase] = useState<string>('all');
@@ -132,6 +135,9 @@ const BudgetAllocationTracker: React.FC<BudgetAllocationTrackerProps> = ({
 
   // Add a new state to track expanded subcategories
   const [expandedSubcategories, setExpandedSubcategories] = useState<Set<string>>(new Set());
+
+  // Add a new state to manage local projections for optimistic updates
+  const [localProjections, setLocalProjections] = useState<BudgetProjection[]>(projections);
 
   useEffect(() => {
     if (project?.id) {
@@ -513,7 +519,7 @@ const BudgetAllocationTracker: React.FC<BudgetAllocationTrackerProps> = ({
     expenses.forEach(expense => processItem(expense, 'expense'));
     bids.filter(bid => bid.status === 'accepted')
         .forEach(bid => processItem(bid, 'bid'));
-    projections.forEach(projection => processItem(projection, 'projection'));
+    localProjections.forEach(projection => processItem(projection, 'projection'));
     console.log("Finished processing items for costsByCategory.");
 
     // Return the processed data, sorted by main category order
@@ -522,7 +528,7 @@ const BudgetAllocationTracker: React.FC<BudgetAllocationTrackerProps> = ({
       (a.mainCategoryDetails.order || 999) - (b.mainCategoryDetails.order || 999)
     );
 
-  }, [expenses, bids, projections, categoryMappings, theme]);
+  }, [expenses, bids, localProjections, categoryMappings, theme]);
 
   // filteredCategories might need adjustment if filtering logic changes based on new structure
   const filteredCategories = useMemo(() => {
@@ -620,7 +626,88 @@ const BudgetAllocationTracker: React.FC<BudgetAllocationTrackerProps> = ({
       });
     }
   };
+
+  const handleRecategorizeProjection = async (projectionId: string, newCategoryId: string) => {
+    if (!projectionId || !newCategoryId || !onUpdateProjectionCategory) {
+      console.error("Missing required data for updating projection category");
+      setSnackbar({ open: true, message: 'Missing required data', severity: 'error' });
+      return;
+    }
+
+    // Save the current category ID for potential rollback
+    const projectionToUpdate = localProjections.find(p => p.id === projectionId);
+    const originalCategoryId = projectionToUpdate?.categoryId || ''; // Ensure it's a string
+    
+    // Set the updating state to show loading UI
+    setUpdatingItemId(projectionId);
+    
+    try {
+      // Optimistic UI update - update local state immediately
+      setLocalProjections(prev => 
+        prev.map(p => 
+          p.id === projectionId ? { ...p, categoryId: newCategoryId } : p
+        )
+      );
+      
+      // Perform the actual update operation
+      await onUpdateProjectionCategory(projectionId, newCategoryId);
+      
+      // Success feedback
+      setSnackbar({ open: true, message: 'Projection category updated successfully', severity: 'success' });
+      
+    } catch (error) {
+      console.error("Error updating projection category:", error);
+      setSnackbar({ open: true, message: 'Failed to update projection category', severity: 'error' });
+      
+      // Revert the optimistic update - explicitly ensure categoryId is a string
+      setLocalProjections(prev => 
+        prev.map(p => 
+          p.id === projectionId ? { ...p, categoryId: originalCategoryId } : p
+        )
+      );
+    } finally {
+      // Clear updating state
+      setUpdatingItemId(null);
+    }
+  };
   
+  // Handle deleting a projection
+  const handleDeleteProjection = async (projectionId: string, event: React.MouseEvent) => {
+    event.stopPropagation(); // Prevent triggering other click handlers
+    
+    if (!projectionId || !onDeleteProjection) {
+      console.error("Missing projection ID or delete handler");
+      setSnackbar({ open: true, message: 'Cannot delete: Missing data', severity: 'error' });
+      return;
+    }
+
+    setUpdatingItemId(projectionId); // Show loading state
+
+    try {
+      // Optimistic UI update - remove from local state first
+      setLocalProjections(prev => prev.filter(p => p.id !== projectionId));
+      
+      // Call the actual delete operation
+      await onDeleteProjection(projectionId);
+      
+      // Success message
+      setSnackbar({ open: true, message: 'Projection deleted successfully', severity: 'success' });
+    } catch (error) {
+      console.error("Error deleting projection:", error);
+      setSnackbar({ open: true, message: 'Failed to delete projection', severity: 'error' });
+      
+      // Try to restore the projection if the server call failed
+      if (projections) {
+        const deletedProjection = projections.find(p => p.id === projectionId);
+        if (deletedProjection) {
+          setLocalProjections(prev => [...prev, deletedProjection]);
+        }
+      }
+    } finally {
+      setUpdatingItemId(null);
+    }
+  };
+
   // **** Calculate orphanedItems directly on each render (remove useMemo) ****
   const allHierarchicalIds = new Set(getAllHierarchicalCategories().map(c => c.id));
     
@@ -631,7 +718,7 @@ const BudgetAllocationTracker: React.FC<BudgetAllocationTrackerProps> = ({
   
   const expenseItems: (Expense & { itemType: 'expense' })[] = expenses.map(expense => ({ ...expense, itemType: 'expense' as const }));
   const bidItems: (Bid & { itemType: 'bid' })[] = bids.map(bid => ({ ...bid, itemType: 'bid' as const }));
-  const projectionItems: (BudgetProjection & { itemType: 'projection' })[] = projections.map(projection => ({ ...projection, itemType: 'projection' as const }));
+  const projectionItems: (BudgetProjection & { itemType: 'projection' })[] = localProjections.map(projection => ({ ...projection, itemType: 'projection' as const }));
     
   const combinedItems: ItemWithType[] = [...expenseItems, ...bidItems, ...projectionItems];
     
@@ -780,7 +867,7 @@ const BudgetAllocationTracker: React.FC<BudgetAllocationTrackerProps> = ({
                                                         try {
                                                           if (itemType === 'projection' && onUpdateProjectionCategory) {
                                                               setSnackbar({ open: true, message: 'Updating category...', severity: 'info' });
-                                                              await onUpdateProjectionCategory(currentItemId, newCatId); 
+                                                              await handleRecategorizeProjection(currentItemId, newCatId); 
                                                           } else if (itemType !== 'projection'){
                                                               await handleRecategorizeItem(currentItemId, newCatId);
                                                           }
@@ -1092,6 +1179,17 @@ const BudgetAllocationTracker: React.FC<BudgetAllocationTrackerProps> = ({
                                            sx={{ ml: 1, opacity: 0.6 }}
                                          >
                                            <CategoryIcon fontSize="small" sx={{ fontSize: '1rem' }} />
+                                         </IconButton>
+                                       </Tooltip>
+                                     )}
+                                     {item.type === 'projection' && item.id && (
+                                       <Tooltip title="Delete Projection">
+                                         <IconButton 
+                                           size="small" 
+                                           onClick={(e) => handleDeleteProjection(item.id, e)}
+                                           sx={{ ml: 1, opacity: 0.6 }}
+                                         >
+                                           <DeleteIcon fontSize="small" sx={{ fontSize: '1rem' }} />
                                          </IconButton>
                                        </Tooltip>
                                      )}

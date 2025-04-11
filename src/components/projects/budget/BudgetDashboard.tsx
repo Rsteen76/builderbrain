@@ -176,9 +176,22 @@ const BudgetDashboard: React.FC<BudgetDashboardProps> = (/*{ projectId }*/) => {
   // State for expense grouping
   const [expenseGrouping, setExpenseGrouping] = useState<'category' | 'contractor'>('category');
 
+  // State for local projections to allow for optimistic updates
+  const [localProjections, setLocalProjections] = useState<BudgetProjection[]>([]);
+  
+  // Initialize local projections from context projections
+  useEffect(() => {
+    if (projections?.length > 0) {
+      setLocalProjections(projections);
+    }
+  }, [projections]);
+
+  // Use local projections in our calculations instead of context projections
+  const workingProjections = localProjections.length > 0 ? localProjections : projections;
+
   // Moved this hook *before* the early return for !project
   const projectionsByMainCategory = useMemo(() => {
-    if (!projections || projections.length === 0) {
+    if (!workingProjections || workingProjections.length === 0) {
       // REMOVE log
       // console.log("Skipping projectionsByMainCategory: No projections");
       return [];
@@ -186,7 +199,7 @@ const BudgetDashboard: React.FC<BudgetDashboardProps> = (/*{ projectId }*/) => {
     // REMOVE log
     // console.log("Calculating projectionsByMainCategory...");
     const grouped = new Map<string, { name: string; totalAmount: number }>();
-    projections.forEach(projection => {
+    workingProjections.forEach(projection => {
       const detailedCategoryId = projection.categoryId || 'uncategorized';
       const mainCategory = getParentCategory(detailedCategoryId) || getCategoryById(detailedCategoryId);
       const mainCategoryId = mainCategory?.id || 'uncategorized';
@@ -197,7 +210,7 @@ const BudgetDashboard: React.FC<BudgetDashboardProps> = (/*{ projectId }*/) => {
       grouped.get(mainCategoryId)!.totalAmount += projection.amount;
     });
     return Array.from(grouped.values()).sort((a, b) => b.totalAmount - a.totalAmount);
-  }, [projections]);
+  }, [workingProjections]);
 
   // REMOVE Fetch data useEffect
   // useEffect(() => { ... }, [projectId, user]);
@@ -254,7 +267,7 @@ const BudgetDashboard: React.FC<BudgetDashboardProps> = (/*{ projectId }*/) => {
       .reduce((sum, expense) => sum + expense.amount, 0);
       
     const remainingBudget = totalBudget - totalSpent;
-    const currentProjections = project?.projections || [];
+    const currentProjections = workingProjections || [];
     const calculatedProjectionTotal = currentProjections.reduce((sum, p) => sum + p.amount, 0);
     const projectedRemaining = remainingBudget - calculatedProjectionTotal;
     const projectedPercentage = totalBudget > 0 ? ((totalSpent + calculatedProjectionTotal + pendingTotal) / totalBudget) * 100 : 0;
@@ -268,7 +281,7 @@ const BudgetDashboard: React.FC<BudgetDashboardProps> = (/*{ projectId }*/) => {
       projectedPercentage,
       pendingTotal,
     };
-  }, [project, expenses]); // Depend on context data
+  }, [project, expenses, workingProjections]); // Depend on context data
 
   // REFACTORED: Group expenses by hierarchical main category
   const expensesByCategory = useMemo(() => {
@@ -490,9 +503,9 @@ const BudgetDashboard: React.FC<BudgetDashboardProps> = (/*{ projectId }*/) => {
       }));
 
     // Add projected expenses to future months
-    if (projections.length > 0) {
+    if (workingProjections.length > 0) {
       // Group projections by category
-      const projectionsByCategory = projections.reduce(
+      const projectionsByCategory = workingProjections.reduce(
         (acc, proj) => {
           if (!acc[proj.categoryId]) {
             acc[proj.categoryId] = 0;
@@ -577,7 +590,7 @@ const BudgetDashboard: React.FC<BudgetDashboardProps> = (/*{ projectId }*/) => {
     }
 
     return monthData;
-  }, [expenses, projections]);
+  }, [expenses, workingProjections]);
 
   // Update budget health calculation to include projections
   const budgetHealth = useMemo(() => {
@@ -806,6 +819,52 @@ const BudgetDashboard: React.FC<BudgetDashboardProps> = (/*{ projectId }*/) => {
     }
   };
 
+  // Handle deleting a projection
+  const handleDeleteProjection = async (projectionId: string) => {
+    if (!contextProject || !contextProject.id) {
+      console.error("Cannot delete projection: Project context data missing.");
+      setSnackbar({ open: true, message: 'Cannot delete: Project data missing.', severity: 'error' });
+      throw new Error("Project context data missing");
+    }
+
+    // Filter out the projection to remove
+    const currentRawProjections = contextProject.projections || [];
+    const updatedRawProjections = currentRawProjections.filter(p => p.id !== projectionId);
+
+    // Also update local state for optimistic UI update
+    setLocalProjections(prev => prev.filter(p => p.id !== projectionId));
+
+    try {
+      const projectRef = doc(db, 'projects', contextProject.id);
+      const projectionsToSave = updatedRawProjections.map(p => ({
+        id: p.id,
+        categoryId: p.categoryId,
+        amount: p.amount,
+        notes: p.notes || null,
+        createdAt: p.createdAt instanceof Date ? Timestamp.fromDate(p.createdAt) : p.createdAt 
+      }));
+
+      await updateDoc(projectRef, { 
+        projections: projectionsToSave
+      });
+      
+      setSnackbar({ open: true, message: 'Projection deleted successfully!', severity: 'success' });
+
+      // Trigger context refresh using existing function
+      if (refreshAllProjectData) {
+        console.log("Triggering context refreshAllProjectData after deletion...");
+        await refreshAllProjectData(); // Tell the context to get fresh data
+      } else {
+        console.warn("ProjectDetailContext did not provide refreshAllProjectData! UI might be stale.");
+      }
+
+    } catch (err) {
+      console.error("Error deleting projection:", err);
+      setSnackbar({ open: true, message: 'Failed to delete projection.', severity: 'error' });
+      throw err;
+    }
+  };
+
   return (
     <Box sx={{ p: { xs: 2, md: 3 } }}>
       {/* Budget Overview Section */}
@@ -827,7 +886,7 @@ const BudgetDashboard: React.FC<BudgetDashboardProps> = (/*{ projectId }*/) => {
             expenses={expenses}
             phases={phases}
             bids={bids}
-            projections={projections} 
+            projections={workingProjections} 
             variant="outlined"
             color="primary"
             size="medium"
@@ -2375,7 +2434,7 @@ const BudgetDashboard: React.FC<BudgetDashboardProps> = (/*{ projectId }*/) => {
                       </TableRow>
                     </TableHead>
                     <TableBody>
-                      {projections.map((projection) => {
+                      {workingProjections.map((projection) => {
                         // Find the category name by ID
                         let categoryName = "Unknown Category";
 
@@ -2460,7 +2519,7 @@ const BudgetDashboard: React.FC<BudgetDashboardProps> = (/*{ projectId }*/) => {
       )}
       
       {/* --- Projections Section --- */}
-      {projections && projections.length > 0 && (
+      {workingProjections && workingProjections.length > 0 && (
         <Grid item xs={12} md={6}>
           <Card elevation={2}>
             <Divider />
@@ -2541,9 +2600,10 @@ const BudgetDashboard: React.FC<BudgetDashboardProps> = (/*{ projectId }*/) => {
         phases={phases}
         expenses={expenses}
         bids={bids}
-        projections={projections} 
+        projections={workingProjections} 
         onAddProjection={handleAddProjection} // **** PASS ADD HANDLER ****
         onUpdateProjectionCategory={handleUpdateProjectionCategory} 
+        onDeleteProjection={handleDeleteProjection} // **** PASS DELETE HANDLER ****
       />
       </div>
 
@@ -2562,4 +2622,4 @@ const BudgetDashboard: React.FC<BudgetDashboardProps> = (/*{ projectId }*/) => {
   );
 };
 
-export default BudgetDashboard; 
+export default BudgetDashboard;
