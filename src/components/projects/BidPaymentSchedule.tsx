@@ -318,15 +318,23 @@ const BidPaymentSchedule: React.FC<BidPaymentScheduleProps> = ({ bid, userId, pr
         // If expense exists for this stage, update it with the new amount
         if (originalStage?.expenseId) {
           try {
-            const updatedExpenseData = {
+            const updatedExpenseData: Partial<Expense> = {
               amount: cleanStage.amount,
-              description: `${cleanStage.name} (${cleanStage.percentage}%) - ${bid.title || 'Untitled Bid'}`,
-              notes: `Updated expense for payment stage: ${cleanStage.name} (${cleanStage.percentage}%) for bid: ${bid.title || bid.scope || 'Unnamed bid'}`
+              description: `${cleanStage.name} (${cleanStage.percentage}%) - ${bid.title || 'Untitled Bid'}`
             };
+            
+            // If stage status has changed to paid, update the expense status to paid
+            if (cleanStage.status === 'paid' && originalStage.status !== 'paid') {
+              updatedExpenseData.status = 'paid';
+              updatedExpenseData.date = cleanStage.paymentDate || new Date();
+              updatedExpenseData.notes = `Paid expense for payment stage: ${cleanStage.name} (${cleanStage.percentage}%) for bid: ${bid.title || bid.scope || 'Unnamed bid'}. Payment processed on ${(cleanStage.paymentDate || new Date()).toLocaleDateString()}`;
+            } else {
+              updatedExpenseData.notes = `Updated expense for payment stage: ${cleanStage.name} (${cleanStage.percentage}%) for bid: ${bid.title || bid.scope || 'Unnamed bid'}`;
+            }
             
             // Update expense with new amount and description
             await ExpenseService.updateExpense(originalStage.expenseId, updatedExpenseData);
-            console.log(`Updated expense ${originalStage.expenseId} for payment stage ${cleanStage.id}`);
+            console.log(`Updated expense ${originalStage.expenseId} for payment stage ${cleanStage.id}${cleanStage.status === 'paid' ? ' (marked as paid)' : ''}`);
           } catch (expenseError) {
             console.error(`Error updating expense for payment stage ${cleanStage.id}:`, expenseError);
           }
@@ -422,20 +430,25 @@ const BidPaymentSchedule: React.FC<BidPaymentScheduleProps> = ({ bid, userId, pr
         if (newStageData) {
           try {
             // Create an expense for this payment stage
-            const expenseData = {
+            const expenseData: Omit<Expense, 'id' | 'userId' | 'createdBy' | 'createdAt' | 'updatedAt'> & { bidId?: string | null; paymentStageId?: string | null } = {
               projectId: projectId,
               category: 'subcontractor' as ExpenseCategory,
               description: `${newStageData.name} (${newStageData.percentage}%) - ${bid.title || 'Untitled Bid'}`,
               amount: newStageData.amount,
-              date: new Date(),
-              status: 'pending' as ExpenseStatus,
+              date: newStageData.status === 'paid' ? (newStageData.paymentDate || new Date()) : new Date(),
+              status: newStageData.status === 'paid' ? 'paid' : 'pending',
               subcontractorId: bid.subcontractorId || '',
               subcontractorName: bid.subcontractorName || '',
-              notes: `This expense is for payment stage: ${newStageData.name} (${newStageData.percentage}%) for bid: ${bid.title || bid.scope || 'Unnamed bid'}`,
+              notes: newStageData.status === 'paid' 
+                ? `Paid expense for payment stage: ${newStageData.name} (${newStageData.percentage}%) for bid: ${bid.title || bid.scope || 'Unnamed bid'}. Payment processed on ${(newStageData.paymentDate || new Date()).toLocaleDateString()}`
+                : `This expense is for payment stage: ${newStageData.name} (${newStageData.percentage}%) for bid: ${bid.title || bid.scope || 'Unnamed bid'}`,
               phaseId: newStageData.phaseId || bid.phaseId || '',
               phaseName: newStageData.phaseName || bid.phaseName || '',
               bidId: bid.id,
-              paymentStageId: newStageData.id
+              paymentStageId: newStageData.id,
+              vendor: bid.subcontractorName || '',
+              tags: [],
+              receiptUrl: ''
             };
             
             // Create the expense
@@ -851,9 +864,13 @@ const PaymentStageForm: React.FC<PaymentStageFormProps> = ({ initialData, bidTot
       amount: 0,
       status: 'pending',
       completionRequirements: '',
-      dueDate: undefined
+      dueDate: undefined,
+      paymentDate: undefined
     }
   );
+  
+  // Track if status is changing to paid
+  const [isChangingToPaid, setIsChangingToPaid] = useState(false);
   
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | { name?: string; value: unknown }>) => {
     const { name, value } = e.target;
@@ -876,11 +893,23 @@ const PaymentStageForm: React.FC<PaymentStageFormProps> = ({ initialData, bidTot
 
   const handleSelectChange = (e: SelectChangeEvent<string>) => {
     const { name, value } = e.target;
-    setFormData(prev => ({ ...prev, [name!]: value }));
+    
+    // Check if status is changing to paid
+    if (name === 'status' && value === 'paid' && formData.status !== 'paid') {
+      setIsChangingToPaid(true);
+      // Automatically set payment date to today if changing to paid
+      setFormData(prev => ({ 
+        ...prev, 
+        [name]: value,
+        paymentDate: new Date()
+      }));
+    } else {
+      setFormData(prev => ({ ...prev, [name!]: value }));
+    }
   };
   
-  const handleDateChange = (date: Date | null) => {
-    setFormData(prev => ({ ...prev, dueDate: date || undefined }));
+  const handleDateChange = (field: 'dueDate' | 'paymentDate') => (date: Date | null) => {
+    setFormData(prev => ({ ...prev, [field]: date || undefined }));
   };
   
   const handleSubmit = () => {
@@ -901,11 +930,12 @@ const PaymentStageForm: React.FC<PaymentStageFormProps> = ({ initialData, bidTot
       dueDate: formData.dueDate,
       createdAt: formData.createdAt || new Date(),
       updatedAt: formData.updatedAt || new Date(),
+      // Payment date is included if status is paid
+      ...(formData.status === 'paid' ? { paymentDate: formData.paymentDate || new Date() } : {}),
       // Only include defined fields
       ...(formData.phaseId ? { phaseId: formData.phaseId } : {}),
       ...(formData.phaseName ? { phaseName: formData.phaseName } : {}),
       ...(formData.expenseId ? { expenseId: formData.expenseId } : {}),
-      ...(formData.paymentDate ? { paymentDate: formData.paymentDate } : {})
     };
     
     onSubmit(cleanedData);
@@ -998,7 +1028,7 @@ const PaymentStageForm: React.FC<PaymentStageFormProps> = ({ initialData, bidTot
             <DatePicker
               label="Due Date"
               value={formData.dueDate ? new Date(formData.dueDate) : null}
-              onChange={handleDateChange}
+              onChange={handleDateChange('dueDate')}
               slotProps={{
                 textField: {
                   fullWidth: true,
@@ -1008,6 +1038,25 @@ const PaymentStageForm: React.FC<PaymentStageFormProps> = ({ initialData, bidTot
             />
           </LocalizationProvider>
         </Grid>
+        
+        {/* Show payment date field if status is paid */}
+        {formData.status === 'paid' && (
+          <Grid item xs={12} sm={6}>
+            <LocalizationProvider dateAdapter={AdapterDateFns}>
+              <DatePicker
+                label="Payment Date"
+                value={formData.paymentDate ? new Date(formData.paymentDate) : new Date()}
+                onChange={handleDateChange('paymentDate')}
+                slotProps={{
+                  textField: {
+                    fullWidth: true,
+                    variant: 'outlined'
+                  }
+                }}
+              />
+            </LocalizationProvider>
+          </Grid>
+        )}
       </Grid>
       
       <Box sx={{ display: 'flex', justifyContent: 'flex-end', mt: 3 }}>
