@@ -1,52 +1,50 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
-  Box,
-  Button,
   Paper,
+  Box,
   Typography,
+  IconButton,
   Collapse,
+  Button,
   Table,
-  TableBody,
-  TableCell,
   TableContainer,
   TableHead,
+  TableBody,
   TableRow,
-  IconButton,
+  TableCell,
   Chip,
+  LinearProgress,
+  Alert,
   Dialog,
   DialogTitle,
   DialogContent,
-  DialogActions,
+  Tooltip,
+  Grid,
   TextField,
+  InputAdornment,
   FormControl,
   InputLabel,
   Select,
   MenuItem,
-  Grid,
-  InputAdornment,
-  Tooltip,
-  CircularProgress,
-  LinearProgress,
-  Alert,
   SelectChangeEvent,
 } from '@mui/material';
 import {
-  ExpandMore as ExpandMoreIcon,
   ExpandLess as ExpandLessIcon,
-  Add as AddIcon,
+  ExpandMore as ExpandMoreIcon,
   Edit as EditIcon,
   Delete as DeleteIcon,
   Receipt as ReceiptIcon,
-  CheckCircle as CheckCircleIcon,
   Payment as PaymentIcon,
+  Add as AddIcon,
 } from '@mui/icons-material';
-import { Bid, BidPaymentStage, Expense } from '../../types';
-import { ExpenseService } from '../../services/expense';
-import { BidService } from '../../services/bid';
-import { v4 as uuidv4 } from 'uuid';
-import { DatePicker } from '@mui/x-date-pickers/DatePicker';
-import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
+import { LocalizationProvider, DatePicker } from '@mui/x-date-pickers';
 import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns';
+import { v4 as uuidv4 } from 'uuid';
+import { Bid, BidPaymentStage, Expense, ExpenseCategory, ExpenseStatus } from '../../types';
+import { BidService } from '../../services/bid';
+import { ExpenseService } from '../../services/expense';
+import { createExtraBidExpense } from '../../utils/bidOperations';
+import PaymentStageDeletionDialog from '../dialogs/PaymentStageDeletionDialog';
 
 interface BidPaymentScheduleProps {
   bid: Bid;
@@ -76,10 +74,14 @@ const BidPaymentSchedule: React.FC<BidPaymentScheduleProps> = ({ bid, userId, pr
   const [expanded, setExpanded] = useState(false);
   const [modalOpen, setModalOpen] = useState(false);
   const [expenseModalOpen, setExpenseModalOpen] = useState(false);
+  const [extraPaymentModalOpen, setExtraPaymentModalOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [selectedStage, setSelectedStage] = useState<BidPaymentStage | null>(null);
+  // State for the deletion dialog
+  const [deletionDialogOpen, setDeletionDialogOpen] = useState(false);
+  const [stageToDelete, setStageToDelete] = useState<BidPaymentStage | null>(null);
   
   // Payment schedule data
   const paymentSchedule = bid.paymentSchedule || [];
@@ -119,20 +121,135 @@ const BidPaymentSchedule: React.FC<BidPaymentScheduleProps> = ({ bid, userId, pr
     setSelectedStage(null);
   };
   
-  const handleDeleteStage = async (stageId: string) => {
-    if (!window.confirm('Are you sure you want to delete this payment stage?')) {
-      return;
-    }
+  const handleDeleteStage = (stageId: string) => {
+    // Find the stage to delete to check if it has an associated expense
+    const stage = paymentSchedule.find(stage => stage.id === stageId);
+    if (!stage) return;
     
+    // Set the stage to delete and open the deletion dialog
+    setStageToDelete(stage);
+    setDeletionDialogOpen(true);
+  };
+  
+  const handleConfirmDeletion = (deleteExpense: boolean) => {
+    if (!stageToDelete) return;
+    
+    console.log(`Deleting payment stage: ${stageToDelete.name} (ID: ${stageToDelete.id})`);
+    console.log(`User chose to ${deleteExpense ? 'DELETE' : 'KEEP'} the associated expense`);
+    
+    // Perform the deletion with the user's choice
+    deletePaymentStage(stageToDelete.id, deleteExpense);
+    
+    // Reset state and close dialog
+    setDeletionDialogOpen(false);
+    setStageToDelete(null);
+  };
+  
+  const handleCloseDeletionDialog = () => {
+    setDeletionDialogOpen(false);
+    setStageToDelete(null);
+  };
+  
+  // Function to actually perform the deletion
+  const deletePaymentStage = async (stageId: string, deleteExpense: boolean) => {
     setLoading(true);
     setError(null);
     
     try {
+      // Find the stage to delete
+      const stageToDelete = paymentSchedule.find(stage => stage.id === stageId);
+      if (!stageToDelete) {
+        throw new Error('Payment stage not found');
+      }
+      
+      // Get the amount that needs to be redistributed
+      const amountToRedistribute = stageToDelete.amount;
+      
       // Filter out the stage to delete
       const updatedSchedule = paymentSchedule.filter(stage => stage.id !== stageId);
       
+      // Check if the bid uses fixed amounts (not percentage-based)
+      // We'll use the presence of custom amounts that don't directly correspond to percentages
+      // as an indicator that we're using fixed amounts
+      const isFixedAmountBid = paymentSchedule.some(stage => {
+        const calculatedAmount = Math.round((stage.percentage / 100) * bid.totalAmount * 100) / 100;
+        const actualAmount = typeof stage.amount === 'string' ? parseFloat(stage.amount) : stage.amount;
+        // Allow for small rounding differences (0.01)
+        return Math.abs(calculatedAmount - actualAmount) > 0.01;
+      });
+      
+      console.log(`Using fixed amount mode: ${isFixedAmountBid}`);
+      
+      // If there are remaining stages, redistribute the deleted amount
+      if (updatedSchedule.length > 0) {
+        // Calculate the current total (excluding the deleted stage)
+        const currentTotal = updatedSchedule.reduce((sum, stage) => {
+          return sum + (typeof stage.amount === 'string' ? parseFloat(stage.amount) : stage.amount);
+        }, 0);
+        
+        const now = new Date();
+        
+        // Redistribute the amount proportionally to maintain the original bid total
+        updatedSchedule.forEach(stage => {
+          // Calculate the stage's current proportion of the remaining total
+          const proportion = (typeof stage.amount === 'string' ? 
+            parseFloat(stage.amount) : stage.amount) / currentTotal;
+            
+          // Distribute the deleted amount based on this proportion
+          const additionalAmount = proportion * amountToRedistribute;
+          const newAmount = (typeof stage.amount === 'string' ? 
+            parseFloat(stage.amount) : stage.amount) + additionalAmount;
+            
+          // Update the stage amount
+          stage.amount = Math.round(newAmount * 100) / 100; // Round to 2 decimal places
+          stage.updatedAt = now;
+          
+          // If this stage has an associated expense, update it too
+          if (stage.expenseId) {
+            try {
+              ExpenseService.updateExpense(stage.expenseId, {
+                amount: stage.amount,
+                notes: `Amount adjusted after deleting payment stage: ${stageToDelete.name}`
+              }).catch(error => {
+                console.error(`Error updating expense ${stage.expenseId} after stage deletion:`, error);
+              });
+            } catch (expenseUpdateError) {
+              console.error(`Error updating expense ${stage.expenseId} after stage deletion:`, expenseUpdateError);
+            }
+          }
+        });
+        
+        // Only recalculate percentages if we're not using fixed amounts
+        // or if all stages are deleted (leaving just one)
+        if (!isFixedAmountBid || updatedSchedule.length <= 1) {
+          // Recalculate percentages based on the new amounts
+          const totalAmount = updatedSchedule.reduce((sum, s) => {
+            const amount = typeof s.amount === 'string' ? parseFloat(s.amount) : s.amount;
+            return sum + amount;
+          }, 0);
+          
+          if (totalAmount > 0) {
+            updatedSchedule.forEach(s => {
+              const amount = typeof s.amount === 'string' ? parseFloat(s.amount) : s.amount;
+              s.percentage = Math.round((amount / totalAmount) * 100 * 10) / 10; // Round to 1 decimal
+            });
+          }
+        }
+      }
+      
       // Recalculate payment progress
       const updatedProgress = calculatePaymentProgress(updatedSchedule);
+      
+      // If the stage has an associated expense and user chose to delete it
+      if (stageToDelete && stageToDelete.expenseId && deleteExpense) {
+        try {
+          await ExpenseService.deleteExpense(stageToDelete.expenseId);
+          console.log(`Deleted expense ${stageToDelete.expenseId} associated with payment stage ${stageId}`);
+        } catch (expenseError) {
+          console.error(`Error deleting expense ${stageToDelete.expenseId}:`, expenseError);
+          // Continue with deleting the stage even if we fail to delete the expense
+        }
+      }
       
       // Update the bid
       await BidService.updateBid(bid.id, {
@@ -162,31 +279,188 @@ const BidPaymentSchedule: React.FC<BidPaymentScheduleProps> = ({ bid, userId, pr
     try {
       let updatedSchedule: BidPaymentStage[];
       const now = new Date();
+      const originalBidAmount = bid.totalAmount;
+      
+      // Clean the stage data to remove any undefined values
+      const cleanStage = Object.entries(stage).reduce((acc, [key, value]) => {
+        // Only include properties that are not undefined
+        if (value !== undefined) {
+          acc[key] = value;
+        }
+        return acc;
+      }, {} as Record<string, any>) as BidPaymentStage;
+      
+      // Check if the bid uses fixed amounts (not percentage-based)
+      const isFixedAmountBid = paymentSchedule.some(stage => {
+        const calculatedAmount = Math.round((stage.percentage / 100) * bid.totalAmount * 100) / 100;
+        const actualAmount = typeof stage.amount === 'string' ? parseFloat(stage.amount) : stage.amount;
+        // Allow for small rounding differences (0.01)
+        return Math.abs(calculatedAmount - actualAmount) > 0.01;
+      });
+      
+      console.log(`Creating/editing stage using fixed amount mode: ${isFixedAmountBid}`);
+      
+      let newStageId: string | null = null;
+      let isNewStage = false;
       
       if (selectedStage) {
-        // Editing existing stage
+        // Editing existing stage - keep track of original amount for adjustment
+        const originalStage = paymentSchedule.find(s => s.id === cleanStage.id);
+        const originalAmount = originalStage ? originalStage.amount : 0;
+        const amountDifference = (typeof cleanStage.amount === 'string' ? 
+          parseFloat(cleanStage.amount) : cleanStage.amount) - originalAmount;
+        
+        // Update the stage
         updatedSchedule = paymentSchedule.map(s => 
-          s.id === stage.id ? { ...stage, updatedAt: now } : s
+          s.id === cleanStage.id ? { ...s, ...cleanStage, updatedAt: now } : s
         );
+        
+        // If expense exists for this stage, update it with the new amount
+        if (originalStage?.expenseId) {
+          try {
+            const updatedExpenseData = {
+              amount: cleanStage.amount,
+              description: `${cleanStage.name} (${cleanStage.percentage}%) - ${bid.title || 'Untitled Bid'}`,
+              notes: `Updated expense for payment stage: ${cleanStage.name} (${cleanStage.percentage}%) for bid: ${bid.title || bid.scope || 'Unnamed bid'}`
+            };
+            
+            // Update expense with new amount and description
+            await ExpenseService.updateExpense(originalStage.expenseId, updatedExpenseData);
+            console.log(`Updated expense ${originalStage.expenseId} for payment stage ${cleanStage.id}`);
+          } catch (expenseError) {
+            console.error(`Error updating expense for payment stage ${cleanStage.id}:`, expenseError);
+          }
+        }
       } else {
         // Creating new stage
+        isNewStage = true;
         const newStage = {
-          ...stage,
+          ...cleanStage,
           id: uuidv4(),
           createdAt: now,
           updatedAt: now
         };
+        newStageId = newStage.id;
         updatedSchedule = [...paymentSchedule, newStage];
+      }
+
+      // Important: When adding a new stage, preserve the original total amount
+      // and adjust other stages proportionally
+      if (isNewStage) {
+        const newStageAmount = typeof cleanStage.amount === 'string' ? 
+          parseFloat(cleanStage.amount) : cleanStage.amount;
+          
+        // Find the final payment stage if it exists (typically the largest one)
+        let finalPaymentStage: BidPaymentStage | undefined;
+        
+        if (paymentSchedule.length > 0) {
+          // Sort stages by amount descending to find the largest one
+          const sortedStages = [...paymentSchedule].sort((a, b) => b.amount - a.amount);
+          finalPaymentStage = sortedStages[0];
+          
+          // Adjust the final payment stage amount
+          const adjustedFinalAmount = Math.max(0, finalPaymentStage.amount - newStageAmount);
+          
+          // Update the final payment stage with new amount
+          updatedSchedule = updatedSchedule.map(s => 
+            s.id === finalPaymentStage?.id ? { 
+              ...s, 
+              amount: adjustedFinalAmount,
+              updatedAt: now 
+            } : s
+          );
+          
+          // If the final stage has an associated expense, update it
+          if (finalPaymentStage.expenseId) {
+            try {
+              await ExpenseService.updateExpense(finalPaymentStage.expenseId, {
+                amount: adjustedFinalAmount,
+                description: `${finalPaymentStage.name} (adjusted) - ${bid.title || 'Untitled Bid'}`,
+                notes: `Amount adjusted after adding new payment stage: ${cleanStage.name}`
+              });
+              console.log(`Updated expense ${finalPaymentStage.expenseId} for adjusted final payment stage`);
+            } catch (expenseError) {
+              console.error(`Error updating expense for final payment stage:`, expenseError);
+            }
+          }
+        }
+      }
+      
+      // Only recalculate percentages if not using fixed amounts or if it's a new bid with first stage
+      if (!isFixedAmountBid || paymentSchedule.length <= 1) {
+        // Recalculate percentages based on the amounts
+        const totalAmount = updatedSchedule.reduce((sum, s) => {
+          const amount = typeof s.amount === 'string' ? parseFloat(s.amount) : (s.amount || 0);
+          return sum + amount;
+        }, 0);
+        
+        if (totalAmount > 0) {
+          updatedSchedule = updatedSchedule.map(s => {
+            const amount = typeof s.amount === 'string' ? parseFloat(s.amount) : (s.amount || 0);
+            const percentage = Math.round((amount / totalAmount) * 100 * 10) / 10; // Round to 1 decimal
+            return {
+              ...s,
+              percentage,
+              updatedAt: now
+            };
+          });
+        }
       }
       
       // Recalculate payment progress
       const updatedProgress = calculatePaymentProgress(updatedSchedule);
       
-      // Update the bid
+      // Update the bid with payment schedule and progress
       await BidService.updateBid(bid.id, {
         paymentSchedule: updatedSchedule,
         paymentProgress: updatedProgress
       });
+      
+      // For new stages, automatically create an expense
+      if (newStageId) {
+        const newStageData = updatedSchedule.find(s => s.id === newStageId);
+        if (newStageData) {
+          try {
+            // Create an expense for this payment stage
+            const expenseData = {
+              projectId: projectId,
+              category: 'subcontractor' as ExpenseCategory,
+              description: `${newStageData.name} (${newStageData.percentage}%) - ${bid.title || 'Untitled Bid'}`,
+              amount: newStageData.amount,
+              date: new Date(),
+              status: 'pending' as ExpenseStatus,
+              subcontractorId: bid.subcontractorId || '',
+              subcontractorName: bid.subcontractorName || '',
+              notes: `This expense is for payment stage: ${newStageData.name} (${newStageData.percentage}%) for bid: ${bid.title || bid.scope || 'Unnamed bid'}`,
+              phaseId: newStageData.phaseId || bid.phaseId || '',
+              phaseName: newStageData.phaseName || bid.phaseName || '',
+              bidId: bid.id,
+              paymentStageId: newStageData.id
+            };
+            
+            // Create the expense
+            const expense = await ExpenseService.createExpense(userId, expenseData);
+            
+            // Update the payment stage with the expense ID
+            if (expense) {
+              const stageWithExpense = updatedSchedule.map(s => 
+                s.id === newStageId ? { ...s, expenseId: expense.id } : s
+              );
+              
+              // Update the bid with the updated payment schedule
+              await BidService.updateBid(bid.id, {
+                paymentSchedule: stageWithExpense
+              });
+              
+              // Update local reference
+              updatedSchedule = stageWithExpense;
+            }
+          } catch (expenseError) {
+            console.error('Error creating expense for new payment stage:', expenseError);
+            // We'll continue even if expense creation fails
+          }
+        }
+      }
       
       // Get updated bid
       const updatedBid = await BidService.getBid(userId, bid.id);
@@ -252,13 +526,62 @@ const BidPaymentSchedule: React.FC<BidPaymentScheduleProps> = ({ bid, userId, pr
     }
   };
   
+  const handleExtraPaymentSubmit = async (extraPaymentData: {
+    amount: number;
+    description: string;
+    notes: string;
+    date: Date;
+    category: string;
+    status: 'pending' | 'approved' | 'paid';
+  }) => {
+    setLoading(true);
+    setError(null);
+    
+    try {
+      const expense = await createExtraBidExpense(
+        userId,
+        bid.id,
+        extraPaymentData
+      );
+      
+      if (!expense) {
+        throw new Error('Failed to create extra payment expense');
+      }
+      
+      // Get updated bid to reflect the payment progress
+      const updatedBid = await BidService.getBid(userId, bid.id);
+      if (updatedBid) {
+        onBidUpdate?.(updatedBid);
+        setSuccess('Extra payment added successfully');
+        setTimeout(() => setSuccess(null), 3000);
+      }
+      
+      setExtraPaymentModalOpen(false);
+    } catch (error) {
+      console.error('Error creating extra payment:', error);
+      setError('Failed to create extra payment');
+    } finally {
+      setLoading(false);
+    }
+  };
+  
   // Helper function to calculate payment progress
   const calculatePaymentProgress = (schedule: BidPaymentStage[]) => {
+    // Ensure we work with numeric values by explicitly converting any string amounts
     const paid = schedule
       .filter(stage => stage.status === 'paid')
-      .reduce((sum, stage) => sum + stage.amount, 0);
+      .reduce((sum, stage) => {
+        // Convert string amounts to numbers
+        const amount = typeof stage.amount === 'string' ? parseFloat(stage.amount) : stage.amount;
+        return sum + (isNaN(amount) ? 0 : amount);
+      }, 0);
     
-    const total = schedule.reduce((sum, stage) => sum + stage.amount, 0);
+    const total = schedule.reduce((sum, stage) => {
+      // Convert string amounts to numbers
+      const amount = typeof stage.amount === 'string' ? parseFloat(stage.amount) : stage.amount;
+      return sum + (isNaN(amount) ? 0 : amount);
+    }, 0);
+    
     const pending = total - paid;
     
     return {
@@ -329,7 +652,16 @@ const BidPaymentSchedule: React.FC<BidPaymentScheduleProps> = ({ bid, userId, pr
           {success && <Alert severity="success" sx={{ mb: 2 }}>{success}</Alert>}
           {loading && <LinearProgress sx={{ mb: 2 }} />}
           
-          <Box sx={{ display: 'flex', justifyContent: 'flex-end', mb: 2 }}>
+          <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 2 }}>
+            <Button 
+              variant="outlined" 
+              startIcon={<AddIcon />} 
+              onClick={() => setExtraPaymentModalOpen(true)}
+              disabled={loading}
+              color="secondary"
+            >
+              Add Extra Payment
+            </Button>
             <Button 
               variant="contained" 
               startIcon={<AddIcon />} 
@@ -409,7 +741,7 @@ const BidPaymentSchedule: React.FC<BidPaymentScheduleProps> = ({ bid, userId, pr
                               size="small"
                               color="error" 
                               onClick={() => handleDeleteStage(stage.id)}
-                              disabled={loading || stage.status === 'paid'}
+                              disabled={loading}
                             >
                               <DeleteIcon fontSize="small" />
                             </IconButton>
@@ -471,6 +803,33 @@ const BidPaymentSchedule: React.FC<BidPaymentScheduleProps> = ({ bid, userId, pr
           />
         </DialogContent>
       </Dialog>
+      
+      {/* Extra Payment Dialog */}
+      <Dialog open={extraPaymentModalOpen} onClose={() => setExtraPaymentModalOpen(false)} maxWidth="md" fullWidth>
+        <DialogTitle>Add Extra Payment for Bid</DialogTitle>
+        <DialogContent>
+          <Box sx={{ mb: 2, mt: 1 }}>
+            <Alert severity="info">
+              This will create an expense outside the regular payment schedule for this bid. The payment will be reflected in the overall bid payment progress.
+            </Alert>
+          </Box>
+          <ExtraPaymentForm 
+            bid={bid}
+            onSubmit={handleExtraPaymentSubmit}
+            onCancel={() => setExtraPaymentModalOpen(false)}
+          />
+        </DialogContent>
+      </Dialog>
+      
+      {/* Payment Stage Deletion Dialog */}
+      <PaymentStageDeletionDialog
+        open={deletionDialogOpen}
+        onClose={handleCloseDeletionDialog}
+        onConfirm={handleConfirmDeletion}
+        stageName={stageToDelete?.name || 'Unknown'}
+        hasExpense={!!stageToDelete?.expenseId}
+        loading={loading}
+      />
     </Paper>
   );
 };
@@ -530,7 +889,26 @@ const PaymentStageForm: React.FC<PaymentStageFormProps> = ({ initialData, bidTot
       return;
     }
     
-    onSubmit(formData as BidPaymentStage);
+    // Ensure all required fields are defined and properly typed before submitting
+    const cleanedData: BidPaymentStage = {
+      id: formData.id || uuidv4(), // Generate ID if not present
+      name: formData.name || '',
+      description: formData.description || '',
+      percentage: typeof formData.percentage === 'string' ? parseFloat(formData.percentage) : (formData.percentage || 0),
+      amount: typeof formData.amount === 'string' ? parseFloat(formData.amount) : (formData.amount || 0),
+      status: (formData.status as BidPaymentStage['status']) || 'pending',
+      completionRequirements: formData.completionRequirements || '',
+      dueDate: formData.dueDate,
+      createdAt: formData.createdAt || new Date(),
+      updatedAt: formData.updatedAt || new Date(),
+      // Only include defined fields
+      ...(formData.phaseId ? { phaseId: formData.phaseId } : {}),
+      ...(formData.phaseName ? { phaseName: formData.phaseName } : {}),
+      ...(formData.expenseId ? { expenseId: formData.expenseId } : {}),
+      ...(formData.paymentDate ? { paymentDate: formData.paymentDate } : {})
+    };
+    
+    onSubmit(cleanedData);
   };
   
   return (
@@ -775,4 +1153,155 @@ const ExpenseForm: React.FC<ExpenseFormProps> = ({ initialData, onSubmit, onCanc
   );
 };
 
-export default BidPaymentSchedule; 
+// Extra Payment Form Component
+interface ExtraPaymentFormProps {
+  bid: Bid;
+  onSubmit: (data: {
+    amount: number;
+    description: string;
+    notes: string;
+    date: Date;
+    category: string;
+    status: 'pending' | 'approved' | 'paid';
+  }) => void;
+  onCancel: () => void;
+}
+
+const ExtraPaymentForm: React.FC<ExtraPaymentFormProps> = ({ bid, onSubmit, onCancel }) => {
+  const [formData, setFormData] = useState({
+    description: `Extra payment for bid: ${bid.title || 'Untitled'}`,
+    amount: 0,
+    notes: 'Additional payment outside of the regular payment schedule',
+    date: new Date(),
+    category: 'construction',
+    status: 'pending' as 'pending' | 'approved' | 'paid'
+  });
+  
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+    const { name, value } = e.target;
+    setFormData(prev => ({ ...prev, [name]: value }));
+  };
+
+  const handleSelectChange = (e: SelectChangeEvent<string>) => {
+    const { name, value } = e.target;
+    setFormData(prev => ({ ...prev, [name]: value }));
+  };
+  
+  const handleDateChange = (date: Date | null) => {
+    setFormData(prev => ({ ...prev, date: date || new Date() }));
+  };
+  
+  const handleSubmit = () => {
+    if (!formData.description || formData.amount <= 0) {
+      alert('Please enter a description and a valid amount');
+      return;
+    }
+    
+    onSubmit(formData);
+  };
+  
+  return (
+    <Box sx={{ mt: 2 }}>
+      <Grid container spacing={2}>
+        <Grid item xs={12}>
+          <TextField
+            fullWidth
+            label="Description"
+            name="description"
+            value={formData.description}
+            onChange={handleChange}
+            required
+          />
+        </Grid>
+        
+        <Grid item xs={12} sm={6}>
+          <TextField
+            fullWidth
+            label="Amount"
+            name="amount"
+            type="number"
+            value={formData.amount}
+            onChange={handleChange}
+            required
+            InputProps={{
+              startAdornment: <InputAdornment position="start">$</InputAdornment>,
+            }}
+          />
+        </Grid>
+        
+        <Grid item xs={12} sm={6}>
+          <FormControl fullWidth>
+            <InputLabel>Category</InputLabel>
+            <Select
+              name="category"
+              value={formData.category}
+              onChange={handleSelectChange}
+              label="Category"
+            >
+              <MenuItem value="labor">Labor</MenuItem>
+              <MenuItem value="materials">Materials</MenuItem>
+              <MenuItem value="construction">Construction</MenuItem>
+              <MenuItem value="change_order">Change Order</MenuItem>
+              <MenuItem value="other">Other</MenuItem>
+            </Select>
+          </FormControl>
+        </Grid>
+        
+        <Grid item xs={12} sm={6}>
+          <LocalizationProvider dateAdapter={AdapterDateFns}>
+            <DatePicker
+              label="Date"
+              value={formData.date}
+              onChange={handleDateChange}
+              slotProps={{
+                textField: {
+                  fullWidth: true,
+                  variant: 'outlined'
+                }
+              }}
+            />
+          </LocalizationProvider>
+        </Grid>
+        
+        <Grid item xs={12} sm={6}>
+          <FormControl fullWidth>
+            <InputLabel>Status</InputLabel>
+            <Select
+              name="status"
+              value={formData.status}
+              onChange={handleSelectChange}
+              label="Status"
+            >
+              <MenuItem value="pending">Pending</MenuItem>
+              <MenuItem value="approved">Approved</MenuItem>
+              <MenuItem value="paid">Paid</MenuItem>
+            </Select>
+          </FormControl>
+        </Grid>
+        
+        <Grid item xs={12}>
+          <TextField
+            fullWidth
+            label="Notes"
+            name="notes"
+            value={formData.notes}
+            onChange={handleChange}
+            multiline
+            rows={3}
+          />
+        </Grid>
+      </Grid>
+      
+      <Box sx={{ display: 'flex', justifyContent: 'flex-end', mt: 3 }}>
+        <Button onClick={onCancel} sx={{ mr: 1 }}>
+          Cancel
+        </Button>
+        <Button variant="contained" color="primary" onClick={handleSubmit}>
+          Create Extra Payment
+        </Button>
+      </Box>
+    </Box>
+  );
+};
+
+export default BidPaymentSchedule;

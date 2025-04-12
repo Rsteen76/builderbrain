@@ -1,7 +1,7 @@
 import { v4 as uuidv4 } from 'uuid';
 import { BidService } from '../services/bid';
 import { ExpenseService } from '../services/expense';
-import { Bid, BidPaymentStage, Expense } from '../types';
+import { Bid, BidPaymentStage, Expense, ExpenseCategory } from '../types';
 import { db } from '../config/firebase';
 import { collection, query, where, getDocs } from 'firebase/firestore';
 import { mapSimpleToDetailedCategory } from '../data/hierarchicalCategories';
@@ -212,7 +212,7 @@ export const submitBid = async (
           paymentSchedule: cleanBidData.paymentSchedule || [],
           tags: cleanBidData.tags || [],
           attachments: cleanBidData.attachments || [],
-          submissionDeadline: cleanBidData.submissionDeadline
+          submissionDeadline: bidData.submissionDeadline
         };
         
         // Only add categoryId if it exists in cleanBidData
@@ -370,4 +370,129 @@ export const findExpensesForBid = async (bidId: string): Promise<Expense[]> => {
     console.error(`Error finding expenses for bid ${bidId}:`, error);
     return [];
   }
-}; 
+};
+
+/**
+ * Create an extra expense for a bid outside of the regular payment schedule
+ * and update the bid's payment progress accordingly
+ */
+export const createExtraBidExpense = async (
+  userId: string,
+  bidId: string,
+  expenseData: {
+    amount: number;
+    description: string;
+    notes?: string;
+    date?: Date;
+    category?: string;
+    status?: 'pending' | 'approved' | 'paid';
+  }
+): Promise<Expense | null> => {
+  if (!userId || !bidId) return null;
+  
+  try {
+    // Fetch the bid to get project info and contractor details
+    const bid = await BidService.getBid(userId, bidId);
+    if (!bid) {
+      throw new Error(`Bid ${bidId} not found`);
+    }
+    
+    // Create the expense
+    const expenseToCreate = {
+      projectId: bid.projectId,
+      description: expenseData.description || `Extra payment for bid: ${bid.title || 'Untitled'}`,
+      amount: expenseData.amount,
+      date: expenseData.date || new Date(),
+      category: (expenseData.category as ExpenseCategory) || 'construction',
+      status: expenseData.status || 'pending',
+      subcontractorId: bid.subcontractorId || '',
+      subcontractorName: bid.subcontractorName || '',
+      notes: expenseData.notes || `Extra expense for bid outside regular payment schedule. Bid ID: ${bidId}`,
+      bidId: bidId, // Link to the bid
+      isExtraPayment: true // Mark this as an extra payment
+    };
+    
+    // Create the expense in the database
+    const expense = await ExpenseService.createExpense(userId, expenseToCreate);
+    
+    // Update the bid's total amount and payment progress
+    // Calculate the new total amount by adding the extra payment amount to the existing total
+    const updatedTotalAmount = bid.totalAmount + expenseData.amount;
+    
+    // Create a new payment stage for the extra payment
+    const now = new Date();
+    const extraPaymentStage: BidPaymentStage = {
+      id: uuidv4(),
+      name: `Extra Payment - ${now.toLocaleDateString()}`,
+      description: expenseData.description || 'Additional payment outside regular schedule',
+      percentage: Math.round((expenseData.amount / updatedTotalAmount) * 100 * 10) / 10, // Calculate percentage of new total
+      amount: expenseData.amount,
+      status: (expenseData.status === 'paid' ? 'paid' : 'pending') as BidPaymentStage['status'],
+      dueDate: expenseData.date || now,
+      expenseId: expense.id, // Link the expense to this payment stage
+      createdAt: now,
+      updatedAt: now
+    };
+    
+    // Update or create payment schedule with the new stage
+    const updatedPaymentSchedule = [...(bid.paymentSchedule || []), extraPaymentStage];
+    
+    // Update existing payment stage percentages based on new total amount
+    // This keeps the payment stage amounts the same, but recalculates percentages
+    const recalculatedPaymentSchedule = updatedPaymentSchedule.map(stage => {
+      if (stage.id !== extraPaymentStage.id) { // Skip the extra payment we just added
+        return {
+          ...stage,
+          percentage: Math.round((stage.amount / updatedTotalAmount) * 100 * 10) / 10, // Recalculate percentage
+          updatedAt: now
+        };
+      }
+      return stage;
+    });
+    
+    if (bid.paymentProgress) {
+      const updatedProgress = { ...bid.paymentProgress };
+      
+      // If expense is already marked as paid, update paid amount
+      if (expenseData.status === 'paid') {
+        updatedProgress.paid += expenseData.amount;
+      } else {
+        // Otherwise update pending amount
+        updatedProgress.pending += expenseData.amount;
+      }
+      
+      // Update remaining amount based on new total
+      updatedProgress.remaining = updatedTotalAmount - updatedProgress.paid;
+      
+      // Update the bid with new total amount, payment schedule, and payment progress
+      await BidService.updateBid(bidId, {
+        totalAmount: updatedTotalAmount,
+        paymentSchedule: recalculatedPaymentSchedule,
+        paymentProgress: updatedProgress
+      });
+      
+      console.log(`Updated bid ${bidId} with extra payment stage and adjusted payment schedule`);
+    } else {
+      // If there's no payment progress yet, create it
+      const initialPaid = expenseData.status === 'paid' ? expenseData.amount : 0;
+      const initialPending = expenseData.status !== 'paid' ? expenseData.amount : 0;
+      
+      await BidService.updateBid(bidId, {
+        totalAmount: updatedTotalAmount,
+        paymentSchedule: recalculatedPaymentSchedule,
+        paymentProgress: {
+          paid: initialPaid,
+          pending: initialPending,
+          remaining: updatedTotalAmount - initialPaid
+        }
+      });
+      
+      console.log(`Created payment schedule with extra payment for bid ${bidId}`);
+    }
+    
+    return expense;
+  } catch (error) {
+    console.error('Error creating extra bid expense:', error);
+    return null;
+  }
+};

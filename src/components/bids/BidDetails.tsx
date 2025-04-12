@@ -46,6 +46,7 @@ import BidDeletionWrapper from './BidDeletionWrapper';
 import ReusableBidForm from './ReusableBidForm';
 import { SubcontractorService } from '../../services/subcontractor';
 import { v4 as uuidv4 } from 'uuid';
+import BidPaymentSchedule from '../projects/BidPaymentSchedule';
 
 // Status chip colors (Align with Bid['status'] from types/index.ts)
 const STATUS_COLORS: Record<Bid['status'], string> = {
@@ -195,6 +196,11 @@ const BidDetails: React.FC = () => {
   const [loadingSubcontractors, setLoadingSubcontractors] = useState<boolean>(false);
   const [projectPhases, setProjectPhases] = useState<Phase[]>([]);
   const [loadingProject, setLoadingProject] = useState<boolean>(false);
+  
+  // Callback for when bid is updated (for BidPaymentSchedule component)
+  const handleBidUpdate = (updatedBid: Bid) => {
+    setBid(updatedBid);
+  };
   
   useEffect(() => {
     const fetchBidAndProjectDetails = async () => {
@@ -673,6 +679,19 @@ const BidDetails: React.FC = () => {
           </Grid>
         </Grid>
       </Paper>
+
+      {/* Payment Management Section */}
+      <Paper sx={{ p: 3, mb: 3 }}>
+        <Typography variant="h6" gutterBottom>Payment Management</Typography>
+        {user && bid && bid.projectId && (
+          <BidPaymentSchedule 
+            bid={bid} 
+            userId={user.uid} 
+            projectId={bid.projectId} 
+            onBidUpdate={handleBidUpdate}
+          />
+        )}
+      </Paper>
       
       {/* Tabs for Line Items and Version History */}
       <Box sx={{ mb: 3 }}>
@@ -843,4 +862,4 @@ const BidDetails: React.FC = () => {
   );
 };
 
-export default BidDetails; 
+export default BidDetails;

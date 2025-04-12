@@ -63,6 +63,7 @@ import {
   Save as SaveIcon,
   Engineering as BuildingPhaseIcon,
   WarningAmberRounded,
+  Gavel as BidIcon,
 } from '@mui/icons-material';
 import { DatePicker } from '@mui/x-date-pickers/DatePicker';
 import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
@@ -81,10 +82,13 @@ import {
   Project,
   ExpenseCategory,
   ExpenseStatus,
+  Bid,
 } from '../../types';
 import { LineItem as ProjectLineItem } from '../../types/project.types';
 import { ExpenseService } from '../../services/expense';
 import { SubcontractorService } from '../../services/subcontractor';
+import { BidService } from '../../services/bid';
+import { createExtraBidExpense } from '../../utils/bidOperations';
 import { useAuth } from '../../contexts/AuthContext';
 import { v4 as uuidv4 } from 'uuid';
 import { formatCurrency } from '../../utils/formatters';
@@ -540,6 +544,11 @@ const ExpenseFormModal: React.FC<ExpenseFormModalProps> = ({
   const [paymentNotes, setPaymentNotes] = useState('');
   const [duplicateCheckDone, setDuplicateCheckDone] = useState(false);
 
+  // State to hold available bids for the selected project
+  const [availableBids, setAvailableBids] = useState<Bid[]>([]);
+  const [selectedBid, setSelectedBid] = useState<string>('');
+  const [loadingBids, setLoadingBids] = useState<boolean>(false);
+
   const isEditMode = useMemo(() => !!expense?.id, [expense]);
 
   // Get phase options based on the currentProjectPhases state
@@ -770,6 +779,37 @@ const ExpenseFormModal: React.FC<ExpenseFormModalProps> = ({
     setPaymentNotes('');
   }, [open, expense, projects]);
 
+  // Effect to fetch available bids when projectId changes
+  useEffect(() => {
+    const fetchProjectBids = async () => {
+      if (!formData.projectId || !user?.uid) {
+        setAvailableBids([]);
+        setSelectedBid('');
+        setLoadingBids(false);
+        return;
+      }
+
+      try {
+        setLoadingBids(true);
+        const bidFilters = { projectId: formData.projectId };
+        const projectBids = await BidService.getBids(user.uid, bidFilters);
+        
+        // Filter to only show accepted bids
+        const acceptedBids = projectBids.filter(bid => bid.status === 'accepted');
+        setAvailableBids(acceptedBids);
+        
+        console.log(`[ExpenseFormModal] Fetched ${acceptedBids.length} accepted bids for project ${formData.projectId}`);
+      } catch (error) {
+        console.error('Error fetching bids for project:', error);
+        setAvailableBids([]);
+      } finally {
+        setLoadingBids(false);
+      }
+    };
+
+    fetchProjectBids();
+  }, [formData.projectId, user?.uid]);
+
   // useEffect for description options (now uses the defined function)
   useEffect(() => {
     const options = getExpenseDescriptionOptions(formData.phaseId, currentProjectPhases);
@@ -793,6 +833,28 @@ const ExpenseFormModal: React.FC<ExpenseFormModalProps> = ({
   const handleSelectChange = (e: SelectChangeEvent) => {
     const { name, value } = e.target;
     handleChange(name, value);
+    
+    // When project changes, update the project phases
+    if (name === 'projectId' && value) {
+      const selectedProject = projects.find(p => p.id === value);
+      console.log(`[Project Changed] Selected Project: ${selectedProject?.name}, with ${selectedProject?.phases?.length || 0} phases`);
+      
+      if (selectedProject?.phases) {
+        const phasesToSet = (selectedProject.phases || []).filter((p): p is ProjectPhase => 
+          typeof p.id === 'string' && p.id !== '');
+        console.log(`[Project Changed] Setting phases: `, phasesToSet.map(p => ({ id: p.id, name: p.name })));
+        setCurrentProjectPhases(phasesToSet);
+        
+        // Reset phase selection when project changes
+        setFormData(prev => ({
+          ...prev,
+          phaseId: '',
+          phaseName: ''
+        }));
+      } else {
+        setCurrentProjectPhases([]);
+      }
+    }
   };
 
   // ADD handler for hierarchical category change
@@ -1088,6 +1150,7 @@ const ExpenseFormModal: React.FC<ExpenseFormModalProps> = ({
         notes: paymentNotes
       } : null,
       ...(expense?.id && { id: expense.id }),
+      bidId: selectedBid || null, // Include bidId if selected
     });
     
     if (user?.uid) {
@@ -1628,6 +1691,41 @@ const ExpenseFormModal: React.FC<ExpenseFormModalProps> = ({
                 </label>
               </Box>
             )}
+          </Grid>
+
+          <Grid item xs={12} sm={6}>
+            <FormControl fullWidth size="small" error={!!errors.bidId}>
+              <InputLabel id="bid-label">Link to Bid</InputLabel>
+              <Select
+                labelId="bid-label"
+                id="bidId"
+                name="bidId"
+                value={selectedBid}
+                onChange={(e) => setSelectedBid(e.target.value)}
+                label="Link to Bid"
+                startAdornment={
+                  <InputAdornment position="start">
+                    <BidIcon fontSize="small" color="primary" />
+                  </InputAdornment>
+                }
+                disabled={!formData.projectId || availableBids.length === 0 || loadingBids}
+              >
+                <MenuItem value="">
+                  <em>{loadingBids ? 'Loading bids...' : 
+                      formData.projectId ? 
+                      (availableBids.length > 0 ? 'Select a Bid (Optional)' : 'No Accepted Bids Available') : 
+                      'Select Project First'}</em>
+                </MenuItem>
+                {availableBids.map((bid) => (
+                  <MenuItem key={bid.id} value={bid.id}>
+                    {bid.title || 'Bid'} - {bid.subcontractorName || 'Unknown'} (${bid.totalAmount?.toFixed(2)})
+                  </MenuItem>
+                ))}
+              </Select>
+              <FormHelperText>
+                {selectedBid ? 'This expense will be linked to the selected bid' : 'Linking to a bid will update its payment progress'}
+              </FormHelperText>
+            </FormControl>
           </Grid>
 
           <Grid item xs={12}>

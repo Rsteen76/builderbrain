@@ -383,7 +383,16 @@ export class BidService {
     // Explicitly handle paymentSchedule conversion
     if (bidData.paymentSchedule && Array.isArray(bidData.paymentSchedule)) {
       updatePayload.paymentSchedule = bidData.paymentSchedule.map(stage => {
-        const firestoreStage: any = { ...stage };
+        // First, ensure all numeric values are properly typed
+        const processedStage = {
+          ...stage,
+          // Convert string amounts to numbers
+          amount: typeof stage.amount === 'string' ? parseFloat(stage.amount) : stage.amount,
+          percentage: typeof stage.percentage === 'string' ? parseFloat(stage.percentage) : stage.percentage
+        };
+
+        const firestoreStage: any = { ...processedStage };
+        
         // Convert date fields within the stage to Timestamps
         if (stage.createdAt instanceof Date) {
           firestoreStage.createdAt = Timestamp.fromDate(stage.createdAt);
@@ -395,21 +404,49 @@ export class BidService {
           firestoreStage.dueDate = Timestamp.fromDate(stage.dueDate);
         } else if (stage.dueDate === null) {
           firestoreStage.dueDate = null; // Allow null
-        } else {
-          delete firestoreStage.dueDate; // Remove if not a Date or null
+        } else if (stage.dueDate === undefined) {
+          // Don't include undefined values
+          delete firestoreStage.dueDate;
         }
+        
         if (stage.paymentDate instanceof Date) {
           firestoreStage.paymentDate = Timestamp.fromDate(stage.paymentDate);
         } else if (stage.paymentDate === null) {
           firestoreStage.paymentDate = null; // Allow null
-        } else {
-          delete firestoreStage.paymentDate; // Remove if not a Date or null
+        } else if (stage.paymentDate === undefined) {
+          // Don't include undefined values
+          delete firestoreStage.paymentDate;
         }
-        // Ensure phaseId and phaseName are included
-        firestoreStage.phaseId = stage.phaseId || '';
-        firestoreStage.phaseName = stage.phaseName || '';
-        return firestoreStage;
+        
+        // Only include phaseId and phaseName if they're defined
+        // This avoids adding empty strings which causes issues
+        if (stage.phaseId === undefined) {
+          delete firestoreStage.phaseId;
+        }
+        
+        if (stage.phaseName === undefined) {
+          delete firestoreStage.phaseName;
+        }
+        
+        // Filter out any remaining undefined fields
+        return this.removeUndefined(firestoreStage);
       });
+    }
+
+    // Handle payment progress conversion
+    if (bidData.paymentProgress) {
+      // Ensure all values are numbers
+      updatePayload.paymentProgress = {
+        paid: typeof bidData.paymentProgress.paid === 'string'
+          ? parseFloat(bidData.paymentProgress.paid)
+          : bidData.paymentProgress.paid,
+        pending: typeof bidData.paymentProgress.pending === 'string'
+          ? parseFloat(bidData.paymentProgress.pending)
+          : bidData.paymentProgress.pending,
+        remaining: typeof bidData.paymentProgress.remaining === 'string'
+          ? parseFloat(bidData.paymentProgress.remaining)
+          : bidData.paymentProgress.remaining
+      };
     }
 
     // Convert top-level dates
@@ -954,4 +991,4 @@ export class BidService {
       updatedAt: data.updatedAt.toDate(),
     };
   }
-} 
+}
