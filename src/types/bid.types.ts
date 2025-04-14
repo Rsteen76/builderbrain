@@ -16,9 +16,12 @@ export interface BidPaymentStage {
   description: string;
   percentage: number;
   amount: number;
-  dueDate?: Date;
+  dueDate?: Date | string;
   status?: 'pending' | 'paid' | 'overdue';
-  paidDate?: Date;
+  paidDate?: Date | string;
+  paid?: boolean;
+  isFixedAmount?: boolean;
+  fixedAmount?: number;
 }
 
 export interface BidVersion {
@@ -79,4 +82,9 @@ export interface Bid {
   paymentSchedule?: BidPaymentStage[];
   paymentProgress?: BidPaymentProgress;
   categoryId?: string;
+  submissionDate?: Date | string;
+  approvalDate?: Date | string;
+  rejectionDate?: Date | string;
+  rejectionReason?: string;
+  description?: string;
 } 

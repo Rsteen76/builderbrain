@@ -250,6 +250,9 @@ export interface BidPaymentStage {
   paymentDate?: Date;
   createdAt: Date;
   updatedAt: Date;
+  isFixedAmount?: boolean;
+  fixedAmount?: number;
+  isPaid?: boolean;
 }
 
 // Add or enhance the Phase interface
@@ -324,6 +327,12 @@ export interface BidSummary {
   totalAmount: number;
   createdAt: Date;
   updatedAt: Date;
+  submissionDate?: Date | string;
+  approvalDate?: Date | string;
+  rejectionDate?: Date | string;
+  rejectionReason?: string;
+  description?: string;
+  tags?: string[];
 }
 
 // Expense Analytics Types (Moved from utils)

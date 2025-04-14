@@ -136,6 +136,8 @@ const BidList: React.FC<BidListProps> = ({ projectId, hideHeader = false }) => {
 
   const [selectedBidId, setSelectedBidId] = useState<string | null>(null);
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
+  const [fullBidsCache, setFullBidsCache] = useState<{[id: string]: Bid}>({});
+  const [loadingBidIds, setLoadingBidIds] = useState<string[]>([]);
   
   // Use the renamed hook
   const bidDialogs = useBidFormDialog(user?.uid, {
@@ -284,6 +286,45 @@ const BidList: React.FC<BidListProps> = ({ projectId, hideHeader = false }) => {
   }, [user, authLoading]); // Depend on user and authLoading
   // ---> END Fetch Subcontractors Effect <----
 
+  // Define filteredBids earlier in the component
+  const filteredBids = useMemo(() => {
+    return bids.filter(bid => {
+      const search = searchTerm.toLowerCase();
+      return (
+        (bid.title || '').toLowerCase().includes(search) ||
+        (bid.projectName || '').toLowerCase().includes(search) ||
+        (bid.subcontractorName || '').toLowerCase().includes(search)
+      );
+    });
+  }, [bids, searchTerm]);
+
+  useEffect(() => {
+    const fetchFullBidsData = async () => {
+      if (!user?.uid || filteredBids.length === 0) return;
+      
+      // Fetch full data for visible bids that we don't already have cached
+      const bidsToFetch = filteredBids.filter(bid => !fullBidsCache[bid.id]);
+      
+      if (bidsToFetch.length === 0) return;
+      
+      try {
+        // Mark bids as loading
+        setLoadingBidIds(bidsToFetch.map(bid => bid.id));
+        
+        // Fetch each bid in parallel
+        const promises = bidsToFetch.map(bid => getFullBidData(bid.id));
+        await Promise.all(promises);
+      } catch (err) {
+        console.error("Error fetching full bids data:", err);
+      } finally {
+        // Clear loading state
+        setLoadingBidIds([]);
+      }
+    };
+    
+    fetchFullBidsData();
+  }, [filteredBids, user, fullBidsCache]);
+
   const handleSearchChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     setSearchTerm(event.target.value);
   };
@@ -377,14 +418,31 @@ const BidList: React.FC<BidListProps> = ({ projectId, hideHeader = false }) => {
     }
   };
 
-  const filteredBids = bids.filter(bid => {
-    const search = searchTerm.toLowerCase();
-    return (
-      (bid.title || '').toLowerCase().includes(search) ||
-      (bid.projectName || '').toLowerCase().includes(search) ||
-      (bid.subcontractorName || '').toLowerCase().includes(search)
-    );
-  });
+  const getFullBidData = async (bidId: string): Promise<Bid | null> => {
+    if (!user?.uid) return null;
+    
+    // Check if we already have this bid in cache
+    if (fullBidsCache[bidId]) {
+      return fullBidsCache[bidId];
+    }
+    
+    try {
+      console.log(`Fetching full bid data for bid ${bidId}`);
+      const fullBid = await BidService.getBid(user.uid, bidId);
+      if (fullBid) {
+        // Update the cache with the new full bid
+        setFullBidsCache(prev => ({
+          ...prev,
+          [bidId]: fullBid
+        }));
+        return fullBid;
+      }
+      return null;
+    } catch (err) {
+      console.error(`Error fetching full bid data for bid ${bidId}:`, err);
+      return null;
+    }
+  };
 
   const availableStatuses = Array.from(new Set(bids.map(b => b.status))) as Bid['status'][];
   const availablePriorities = Array.from(new Set(bids.filter(b => b.priority).map(b => b.priority))) as NonNullable<Bid['priority']>[];
@@ -471,17 +529,31 @@ const BidList: React.FC<BidListProps> = ({ projectId, hideHeader = false }) => {
         </Alert>
       ) : (
         <Box sx={{ mt: 2 }}>
-          {filteredBids.map(bid => (
-            <BidCard
-              key={bid.id}
-              bid={bid}
-              onView={() => handleView(bid)}
-              onEdit={() => handleEdit(bid)}
-              onDeleteRequest={() => handleDeleteRequest(bid)}
-              onDuplicate={() => handleDuplicate(bid)}
-              onMenuOpen={(event: React.MouseEvent<HTMLElement>) => handleMenuOpen(event, bid.id)}
-            />
-          ))}
+          {filteredBids.map(bid => {
+            const isLoadingBid = loadingBidIds.includes(bid.id);
+            const fullBid = fullBidsCache[bid.id];
+            
+            // Show placeholder while loading individual bid data
+            if (isLoadingBid) {
+              return (
+                <Box key={bid.id} sx={{ mb: 2, p: 2, bgcolor: 'background.paper', borderRadius: 1 }}>
+                  <CircularProgress size={24} sx={{ mr: 2 }} />
+                  <Typography variant="body2" component="span">Loading bid details...</Typography>
+                </Box>
+              );
+            }
+            
+            return (
+              <BidCard
+                key={bid.id}
+                bid={fullBid || bid}
+                onView={() => handleView(bid)}
+                onEdit={() => handleEdit(bid)}
+                onDeleteRequest={() => handleDeleteRequest(bid)}
+                onDuplicate={() => handleDuplicate(bid)}
+              />
+            );
+          })}
         </Box>
       )}
 
@@ -557,4 +629,4 @@ const BidList: React.FC<BidListProps> = ({ projectId, hideHeader = false }) => {
   );
 };
 
-export default BidList; 
+export default BidList;

@@ -35,6 +35,10 @@ import {
   DialogTitle,
   DialogContent,
   DialogActions,
+  CardHeader,
+  CardActions,
+  Link,
+  Alert,
 } from '@mui/material';
 import { 
   MoreVert as MoreVertIcon,
@@ -55,9 +59,26 @@ import {
   Email as EmailIcon,
   Description as DescriptionIcon,
   Note as NoteIcon,
+  Alarm as AlarmIcon,
+  CalendarToday as CalendarIcon,
+  ReceiptLong as ReceiptLongIcon,
+  FolderOpen as FolderOpenIcon,
+  AccountCircle as AccountCircleIcon,
+  PriorityHigh as PriorityHighIcon,
+  AccessTime as AccessTimeIcon,
+  LocalOffer as LocalOfferIcon,
+  Timeline as TimelineIcon,
+  Business as BusinessIcon,
+  Payments as PaymentsIcon,
 } from '@mui/icons-material';
 import { formatCurrency, formatDate } from '../../utils/formatters';
 import { Bid, BidSummary, BidPaymentStage } from '../../types';
+import SpeedDial from '@mui/material/SpeedDial';
+import SpeedDialIcon from '@mui/material/SpeedDialIcon';
+import SpeedDialAction from '@mui/material/SpeedDialAction';
+import SendIcon from '@mui/icons-material/Send';
+import MoneyIcon from '@mui/icons-material/Money';
+import { darken } from '@mui/material/styles';
 
 // Status colors
 const bidStatusColors: Record<string, string> = {
@@ -97,27 +118,99 @@ const PRIORITY_DISPLAY: Record<string, string> = {
   urgent: 'Urgent',
 };
 
-// Helper function to safely apply alpha
-const safeAlpha = (color: string, value: number) => {
+// Helper function for safe palette access with string keys
+const getPaletteColor = (theme: any, colorKey: string, variant: string = 'main') => {
   try {
-    return alpha(color, value);
+    // First try to access as a direct palette property
+    if (colorKey === 'default') {
+      return theme.palette.grey[500];
+    }
+    if (theme.palette[colorKey as keyof typeof theme.palette]?.[variant]) {
+      return theme.palette[colorKey as keyof typeof theme.palette][variant];
+    }
+    // Fallback to grey
+    return theme.palette.grey[variant === 'main' ? 500 : 300];
   } catch (e) {
-    console.warn('Error applying alpha:', e);
-    return color;
+    console.warn('Error accessing palette color:', e);
+    return theme.palette.grey[500];
   }
 };
 
 // Type guard to check if bid is a full Bid or just a BidSummary
 const isFullBid = (bid: BidSummary | Bid): bid is Bid => {
-  return 'scope' in bid || 
-         'paymentSchedule' in bid || 
-         'attachments' in bid;
+  // Check for specific properties that only exist in the full Bid interface
+  return !!(bid as Bid).paymentSchedule || !!(bid as Bid).paymentProgress || !!(bid as Bid).attachments;
 };
 
 // Safe date formatter to handle possibly null/undefined dates
-const safeFormatDate = (date: Date | string | null | undefined): string => {
+const safeFormatDate = (date: string | Date | null | undefined): string => {
   if (!date) return 'N/A';
-  return formatDate(new Date(date));
+  try {
+    return formatDate(date);
+  } catch (e) {
+    console.warn('Error formatting date:', e);
+    return 'Invalid date';
+  }
+};
+
+// Generate status chip props
+const getStatusChipProps = (status: string, theme: any) => {
+  let bgColor;
+  let textColor;
+  let icon: React.ReactElement | undefined;
+
+  switch (status) {
+    case 'draft':
+      bgColor = alpha(theme.palette.grey[500], 0.2);
+      textColor = theme.palette.text.secondary;
+      icon = <DescriptionIcon sx={{ fontSize: '0.8rem' }} />;
+      break;
+    case 'submitted':
+      bgColor = alpha(theme.palette.info.main, 0.2);
+      textColor = theme.palette.info.dark;
+      icon = <AssignmentIcon sx={{ fontSize: '0.8rem' }} />;
+      break;
+    case 'accepted':
+      bgColor = alpha(theme.palette.success.main, 0.2);
+      textColor = theme.palette.success.dark;
+      icon = <CheckCircleIcon sx={{ fontSize: '0.8rem' }} />;
+      break;
+    case 'rejected':
+      bgColor = alpha(theme.palette.error.main, 0.2);
+      textColor = theme.palette.error.dark;
+      icon = <CancelIcon sx={{ fontSize: '0.8rem' }} />;
+      break;
+    case 'expired':
+      bgColor = alpha(theme.palette.warning.main, 0.2);
+      textColor = theme.palette.warning.dark;
+      icon = <ScheduleIcon sx={{ fontSize: '0.8rem' }} />;
+      break;
+    case 'revision_requested':
+      bgColor = alpha(theme.palette.warning.main, 0.2);
+      textColor = theme.palette.warning.dark;
+      icon = <EditIcon sx={{ fontSize: '0.8rem' }} />;
+      break;
+    default:
+      bgColor = alpha(theme.palette.grey[500], 0.2);
+      textColor = theme.palette.text.secondary;
+      icon = undefined;
+  }
+
+  return {
+    label: STATUS_DISPLAY[status] || status,
+    icon,
+    size: 'small' as 'small',
+    sx: {
+      backgroundColor: bgColor,
+      color: textColor,
+      borderRadius: '4px',
+      fontWeight: 600,
+      '& .MuiChip-icon': {
+        color: 'inherit',
+        marginLeft: '4px',
+      },
+    },
+  };
 };
 
 export interface BidCardProps {
@@ -126,15 +219,35 @@ export interface BidCardProps {
   onEdit: (bid: BidSummary | Bid) => void;
   onDeleteRequest: (bid: BidSummary | Bid) => void;
   onDuplicate: (bid: BidSummary | Bid) => void;
-  onMenuOpen: (event: React.MouseEvent<HTMLElement>) => void;
   onStatusChange?: (bid: BidSummary | Bid, newStatus: string) => void;
   onAddPayment?: (bid: BidSummary | Bid) => void;
-  onViewDocument?: (documentId: string) => void;
+  onViewDocument?: (documentUrl: string, documentName?: string) => void;
   onSendEmail?: (bid: BidSummary | Bid) => void;
   onAddNote?: (bid: BidSummary | Bid, note: string) => void;
   onGenerateContract?: (bid: BidSummary | Bid) => void;
-  fullBidData?: boolean;
 }
+
+// Interface for TabPanel props
+interface TabPanelProps {
+  children?: React.ReactNode;
+  value: number;
+  index: number;
+}
+
+// TabPanel component
+const TabPanel: React.FC<TabPanelProps> = ({ children, value, index }) => {
+  return (
+    <Box
+      role="tabpanel"
+      hidden={value !== index}
+      id={`bid-tabpanel-${index}`}
+      aria-labelledby={`bid-tab-${index}`}
+      sx={{ p: 2, maxHeight: 320, overflow: 'auto' }}
+    >
+      {value === index && children}
+    </Box>
+  );
+};
 
 const BidCard: React.FC<BidCardProps> = ({ 
   bid, 
@@ -142,14 +255,12 @@ const BidCard: React.FC<BidCardProps> = ({
   onEdit, 
   onDeleteRequest, 
   onDuplicate,
-  onMenuOpen,
   onStatusChange,
   onAddPayment,
   onViewDocument,
   onSendEmail,
   onAddNote,
   onGenerateContract,
-  fullBidData = false,
 }) => {
   const theme = useTheme();
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
@@ -157,11 +268,13 @@ const BidCard: React.FC<BidCardProps> = ({
   const [activeTab, setActiveTab] = useState(0);
   const [note, setNote] = useState("");
   const [showNoteDialog, setShowNoteDialog] = useState(false);
-  const open = Boolean(anchorEl);
+  const menuOpen = Boolean(anchorEl);
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
   
   // Use type guard to check if we have full bid data
   const hasFull = isFullBid(bid);
+  // Cast to Bid if full features are needed, otherwise use BidSummary properties
+  const fullBid = hasFull ? bid as Bid : null;
 
   const handleToggleExpand = (event: React.MouseEvent<HTMLButtonElement>) => {
     event.stopPropagation();
@@ -169,9 +282,8 @@ const BidCard: React.FC<BidCardProps> = ({
   };
 
   const handleMenuClick = (event: React.MouseEvent<HTMLButtonElement>) => {
-    event.stopPropagation(); // Prevent card click through
+    event.stopPropagation();
     setAnchorEl(event.currentTarget);
-    if (onMenuOpen) onMenuOpen(event);
   };
 
   const handleMenuClose = () => {
@@ -191,9 +303,10 @@ const BidCard: React.FC<BidCardProps> = ({
   const handleShowNoteDialog = (e: React.MouseEvent) => {
     e.stopPropagation();
     setShowNoteDialog(true);
+    handleMenuClose(); // Close menu when dialog opens
   };
 
-  const handleAddNote = () => {
+  const handleInternalAddNote = () => {
     if (onAddNote && note.trim()) {
       onAddNote(bid, note);
       setNote("");
@@ -201,11 +314,20 @@ const BidCard: React.FC<BidCardProps> = ({
     setShowNoteDialog(false);
   };
 
-  const handleStatusChange = (newStatus: string) => (e: React.MouseEvent) => {
+  const handleGenerateContract = (e: React.MouseEvent) => {
     e.stopPropagation();
-    if (onStatusChange) {
-      onStatusChange(bid, newStatus);
+    if (onGenerateContract) {
+      onGenerateContract(bid);
     }
+    handleMenuClose();
+  };
+
+  const handleSendEmail = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (onSendEmail) {
+      onSendEmail(bid);
+    }
+    handleMenuClose();
   };
 
   // Calculate if deadline is close (within 3 days)
@@ -215,718 +337,911 @@ const BidCard: React.FC<BidCardProps> = ({
     }
     const now = new Date();
     const deadlineDate = new Date(bid.submissionDeadline);
+    if (isNaN(deadlineDate.getTime())) return false; // Invalid date
     const diffTime = deadlineDate.getTime() - now.getTime();
     const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
     return diffDays <= 3 && diffDays >= 0;
   }, [bid.submissionDeadline]);
 
-  // Get payment progress
+  // Get payment progress with improved calculation
   const paymentProgress = useMemo(() => {
-    if (hasFull && 'paymentProgress' in bid && bid.paymentProgress) {
+    // Default values if no payment progress is available
+    const totalAmount = bid.totalAmount || 0;
+    
+    // Calculate from payment schedule if payment progress is not available but schedule is
+    if (!fullBid?.paymentProgress && fullBid?.paymentSchedule && fullBid.paymentSchedule.length > 0) {
+      let paid = 0;
+      let pending = 0;
+
+      fullBid.paymentSchedule.forEach(stage => {
+        const isStagePaid = stage.isPaid === true || stage.status === 'paid';
+        const isStagePending = !isStagePaid && (stage.status === 'pending' || stage.status === 'in_progress');
+        
+        // Calculate amount based on either percentage or fixed amount
+        // Use the amount already present if it exists, otherwise calculate percentage
+        const stageAmount = stage.isFixedAmount 
+          ? (stage.fixedAmount || 0) 
+          : (stage.amount || (totalAmount * (stage.percentage || 0) / 100));
+
+        if (isStagePaid) {
+          paid += stageAmount;
+        } else if (isStagePending) {
+          pending += stageAmount;
+        }
+      });
+        
       return {
-        percentage: bid.totalAmount > 0 
-          ? Math.round((bid.paymentProgress.paid / bid.totalAmount) * 100) 
-          : 0,
-        paid: bid.paymentProgress.paid,
-        remaining: bid.paymentProgress.remaining
+        percentage: totalAmount > 0 ? Math.round((paid / totalAmount) * 100) : 0,
+        paid,
+        pending,
+        remaining: Math.max(0, totalAmount - paid) // Ensure remaining isn't negative
       };
     }
-    return { percentage: 0, paid: 0, remaining: bid.totalAmount };
-  }, [bid, hasFull]);
-
-  // Get payment schedule
-  const paymentSchedule = useMemo(() => {
-    if (hasFull && 'paymentSchedule' in bid && Array.isArray(bid.paymentSchedule)) {
-      return bid.paymentSchedule || [];
+    
+    // Use existing paymentProgress object if available
+    if (fullBid?.paymentProgress && totalAmount > 0) {
+      const paid = fullBid.paymentProgress.paid || 0;
+      return {
+        percentage: Math.round((paid / totalAmount) * 100),
+        paid,
+        pending: fullBid.paymentProgress.pending || 0,
+        remaining: Math.max(0, fullBid.paymentProgress.remaining ?? (totalAmount - paid)) // Ensure remaining isn't negative
+      };
     }
-    return [];
-  }, [bid, hasFull]);
+    
+    // We always return a valid object with defaults
+    return { 
+      percentage: 0, 
+      paid: 0,
+      pending: 0,
+      remaining: totalAmount 
+    };
+  }, [bid.totalAmount, fullBid]);
+
+  // Get payment schedule with improved normalization
+  const paymentSchedule = useMemo(() => {
+    if (!fullBid?.paymentSchedule) return [];
+    
+    return fullBid.paymentSchedule.map(stage => {
+      const isPaid = stage.isPaid === true || stage.status === 'paid';
+      const isPending = !isPaid && (stage.status === 'pending' || stage.status === 'in_progress');
+
+      // Calculate amount if not explicitly set
+      let calculatedAmount = stage.amount;
+      if (!stage.isFixedAmount && !calculatedAmount && stage.percentage) {
+        calculatedAmount = (fullBid.totalAmount * stage.percentage) / 100;
+      }
+      
+      return {
+        ...stage,
+        amount: calculatedAmount, // Use the calculated or existing amount
+        paid: isPaid,
+        pending: isPending,
+        isFixedAmount: stage.isFixedAmount || false,
+        fixedAmount: stage.fixedAmount || 0,
+        hasPhase: !!(stage.phaseId && stage.phaseName),
+        dueDateFormatted: stage.dueDate ? safeFormatDate(stage.dueDate) : 'N/A',
+        paymentDateFormatted: stage.paymentDate ? safeFormatDate(stage.paymentDate) : null
+      };
+    });
+  }, [fullBid]);
 
   // Get documents
   const documents = useMemo(() => {
-    if (hasFull && 'attachments' in bid && Array.isArray(bid.attachments)) {
-      return bid.attachments || [];
+    if (fullBid?.attachments) {
+      if (Array.isArray(fullBid.attachments)) {
+        return fullBid.attachments.map(att => {
+          if (typeof att === 'string') {
+            // Try to extract a name from URL, otherwise use 'Attachment'
+            const name = att.substring(att.lastIndexOf('/') + 1).split('?')[0] || 'Attachment';
+            return { url: att, name: decodeURIComponent(name) };
+          } else if (att && typeof att === 'object' && att.url) {
+            return { url: att.url, name: att.name || 'Attachment' };
+          }
+          return null;
+        }).filter(Boolean) as { name: string; url: string }[];
+      }
     }
     return [];
-  }, [bid, hasFull]);
+  }, [fullBid]);
 
-  // Get bid details
-  const bidDetails = useMemo(() => {
-    return {
-      scope: hasFull && 'scope' in bid ? bid.scope : undefined,
-      notes: hasFull && 'notes' in bid ? bid.notes : undefined,
-      phaseId: hasFull && 'phaseId' in bid ? bid.phaseId : undefined,
-      phaseName: hasFull && 'phaseName' in bid ? bid.phaseName : undefined,
-      startDate: hasFull && 'startDate' in bid ? bid.startDate : undefined,
-      completionDate: hasFull && 'completionDate' in bid ? bid.completionDate : undefined,
-    };
-  }, [bid, hasFull]);
+  const statusChipProps = getStatusChipProps(bid.status, theme);
 
-  // Get notes
-  const notesList = useMemo(() => {
-    const notes = bidDetails.notes;
-    if (!notes) return [];
-
-    // If notes is a string, convert to an array with a single note object
-    if (typeof notes === 'string') {
-      return [{
-        id: '1',
-        content: notes,
-        createdAt: bid.createdAt,
-        createdBy: hasFull && 'createdBy' in bid ? bid.createdBy : 'System'
-      }];
-    }
-    
-    // If it's already an array, return it
-    if (Array.isArray(notes)) {
-      return notes;
-    }
-    
-    return [];
-  }, [bid, bidDetails.notes, hasFull]);
-
+  const renderHeaderContent = () => {
   return (
-    <Card 
+      <Box sx={{ 
+        display: 'flex', 
+        flexDirection: 'column', 
+        width: '100%',
+        position: 'relative',
+        '&::before': expanded ? {
+          content: '""',
+          position: 'absolute',
+          left: -8,
+          top: 0,
+          bottom: 0,
+          width: 4,
+          borderRadius: 4,
+          backgroundColor: getPaletteColor(theme, bidStatusColors[bid.status] as string || 'grey'),
+        } : {},
+      }}>
+        <Box sx={{ display: 'flex', alignItems: 'flex-start', mb: 1 }}>
+          <Box 
       sx={{ 
-        mb: 2, 
-        borderRadius: 1,
-        border: '1px solid',
-        borderColor: expanded 
-          ? safeAlpha(theme.palette.primary.main, 0.4) 
-          : safeAlpha(theme.palette.divider, 0.1),
-        boxShadow: expanded ? theme.shadows[3] : theme.shadows[1],
-        transition: 'transform 0.2s, box-shadow 0.2s, border-color 0.2s',
-        '&:hover': {
-          transform: expanded ? 'none' : 'translateY(-2px)',
-          boxShadow: expanded ? theme.shadows[4] : theme.shadows[3],
-          '.action-menu-button': { 
-            opacity: 1,
-            backgroundColor: safeAlpha(theme.palette.grey[200], 0.5)
-          },
-        },
-        ...(isDeadlineClose && {
-          borderColor: expanded 
-            ? safeAlpha(theme.palette.warning.main, 0.6) 
-            : safeAlpha(theme.palette.warning.main, 0.4),
-        }),
-        ...(bid.priority === 'urgent' && {
-          borderLeft: `4px solid ${theme.palette.error.main}`,
-        })
-      }}
-    >
-      <CardContent 
+              display: 'flex', 
+              alignItems: 'flex-start', 
+              flexGrow: 1 
+            }}
+          >
+            <Avatar 
         sx={{ 
-          pb: 1, 
-          '&:last-child': { pb: 1 },
-          pt: 2,
-          cursor: 'pointer',
-        }}
-        onClick={() => !expanded && onView(bid)}
-      >
-        <Grid container spacing={2} alignItems="center">
-          {/* Bid Header - Always visible */}
-          <Grid item xs={12} sm={expanded ? 8 : 6}>
-            <Box sx={{ display: 'flex', alignItems: 'flex-start', flexDirection: 'column' }}>
+                bgcolor: alpha(getPaletteColor(theme, bidStatusColors[bid.status] as string || 'grey'), 0.9),
+                color: getPaletteColor(theme, bidStatusColors[bid.status] as string || 'grey', 'contrastText'),
+                mr: 1.5,
+                width: 46,
+                height: 46,
+                boxShadow: `0 3px 5px ${alpha(theme.palette.common.black, 0.2)}`
+              }}
+            >
+              {getStatusIcon(bid.status)}
+            </Avatar>
+            <Box>
               <Typography 
                 variant="h6" 
+                component="div" 
                 sx={{ 
+                  fontWeight: 600,
+                  lineHeight: 1.2,
                   mb: 0.5, 
-                  cursor: 'pointer', 
-                  '&:hover': { color: theme.palette.primary.main },
-                  wordBreak: 'break-word',
-                  fontWeight: 500,
-                  lineHeight: 1.2
-                }}
-                onClick={e => {
-                  e.stopPropagation();
-                  onView(bid);
+                  display: 'flex',
+                  alignItems: 'center'
                 }}
               >
-                {bid.title || 'Untitled Bid'}
-              </Typography>
-              <Typography 
-                variant="body2" 
-                color="text.secondary" 
-                sx={{ mb: 1 }}
-              >
-                Project: {bid.projectName || 'N/A'}
-                {bidDetails.phaseId && ` • Phase: ${bidDetails.phaseName || 'N/A'}`}
-              </Typography>
-              <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.75, mb: 1 }}>
-                <Chip 
-                  size="small" 
-                  label={STATUS_DISPLAY[bid.status] || bid.status} 
-                  color={bidStatusColors[bid.status] as any} 
-                  sx={{ fontWeight: 500 }}
-                  onClick={e => e.stopPropagation()}
-                />
-                {bid.priority && (
-                  <Chip 
-                    size="small" 
-                    label={PRIORITY_DISPLAY[bid.priority] || bid.priority} 
-                    color={bidPriorityColors[bid.priority] as any} 
-                    sx={{ fontWeight: 500 }}
-                    onClick={e => e.stopPropagation()}
+                {bid.title || bid.projectName}
+                {bid.priority === 'high' && (
+                  <PriorityHighIcon 
+                    color="error" 
+                    fontSize="small" 
+                    sx={{ ml: 1 }} 
+                    titleAccess="High Priority"
                   />
                 )}
                 {isDeadlineClose && (
-                  <Chip 
-                    size="small" 
-                    label="Deadline Soon" 
+                  <Tooltip title="Deadline Approaching">
+                    <AlarmIcon 
                     color="warning" 
-                    sx={{ fontWeight: 500 }}
-                    onClick={e => e.stopPropagation()}
-                  />
+                      fontSize="small" 
+                      sx={{ ml: 1 }} 
+                    />
+                  </Tooltip>
                 )}
-                {bidDetails.scope && (
-                  <Chip 
-                    size="small" 
-                    label={bidDetails.scope} 
-                    variant="outlined"
-                    onClick={e => e.stopPropagation()}
-                  />
-                )}
-              </Box>
-            </Box>
-          </Grid>
-          <Grid item xs={12} sm={expanded ? 2 : 3}>
-            <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: isMobile ? 'flex-start' : 'center' }}>
-              <Typography variant="body2" color="text.secondary" sx={{ fontWeight: 500 }}>
-                Subcontractor
               </Typography>
-              <Typography variant="body1" sx={{ fontWeight: 400 }}>
-                {bid.subcontractorName || 'N/A'}
-              </Typography>
-              <Typography variant="body2" color="text.secondary" sx={{ mt: 1, fontWeight: 500 }}>
-                Deadline
-              </Typography>
-              <Typography variant="body1" sx={{ fontWeight: 400 }}>
-                {bid.submissionDeadline ? new Date(bid.submissionDeadline).toLocaleDateString() : 'N/A'}
-              </Typography>
-            </Box>
-          </Grid>
-          <Grid item xs={10} sm={expanded ? 1 : 2}>
-            <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: isMobile ? 'flex-start' : 'center' }}>
-              <Typography variant="body2" color="text.secondary" sx={{ fontWeight: 500 }}>
-                Amount
-              </Typography>
-              <Typography variant="h6" color="primary.main" sx={{ fontWeight: 600 }}>
-                {formatCurrency(bid.totalAmount)}
-              </Typography>
-            </Box>
-          </Grid>
-          <Grid item xs={2} sm={1} sx={{ textAlign: 'right', display: 'flex', justifyContent: 'flex-end', gap: 1 }}>
-            <Tooltip title={expanded ? "Collapse" : "Expand"}>
-              <IconButton
-                aria-label={expanded ? "collapse" : "expand"}
-                onClick={handleToggleExpand}
-                size="small"
-                sx={{ boxShadow: 1, bgcolor: 'background.paper' }}
-              >
-                {expanded ? <ExpandLessIcon /> : <ExpandMoreIcon />}
-              </IconButton>
-            </Tooltip>
-            <IconButton
-              aria-label="actions"
-              onClick={handleMenuClick}
-              size="small"
-              className="action-menu-button"
+              <Typography 
+                color="text.secondary" 
+                variant="body2" 
               sx={{ 
-                opacity: { xs: 1, sm: 0.5 }, 
-                transition: 'opacity 0.2s, background-color 0.2s',
-                boxShadow: 1, 
-                bgcolor: 'background.paper'
-              }} 
-            >
-              <MoreVertIcon />
-            </IconButton>
-            <Menu
-              id="bid-menu"
-              anchorEl={anchorEl}
-              open={open}
-              onClose={handleMenuClose}
-              anchorOrigin={{
-                vertical: 'bottom',
-                horizontal: 'right',
-              }}
-              transformOrigin={{
-                vertical: 'top',
-                horizontal: 'right',
-              }}
-            >
-              <MenuItem onClick={(e) => handleAction(onView, e)}>
-                <ListItemIcon>
-                  <ViewIcon fontSize="small" />
-                </ListItemIcon>
-                <ListItemText>View Details</ListItemText>
-              </MenuItem>
-              <MenuItem onClick={(e) => handleAction(onEdit, e)}>
-                <ListItemIcon>
-                  <EditIcon fontSize="small" />
-                </ListItemIcon>
-                <ListItemText>Edit</ListItemText>
-              </MenuItem>
-              <MenuItem onClick={(e) => handleAction(onDuplicate, e)}>
-                <ListItemIcon>
-                  <DuplicateIcon fontSize="small" />
-                </ListItemIcon>
-                <ListItemText>Duplicate</ListItemText>
-              </MenuItem>
-              <Divider />
-              {bid.status === 'draft' && onStatusChange && (
-                <MenuItem onClick={handleStatusChange('submitted')}>
-                  <ListItemIcon>
-                    <EmailIcon fontSize="small" />
-                  </ListItemIcon>
-                  <ListItemText>Submit Bid</ListItemText>
-                </MenuItem>
-              )}
-              {bid.status === 'submitted' && onStatusChange && (
-                <>
-                  <MenuItem onClick={handleStatusChange('accepted')}>
-                    <ListItemIcon>
-                      <CheckCircleIcon fontSize="small" color="success" />
-                    </ListItemIcon>
-                    <ListItemText>Accept Bid</ListItemText>
-                  </MenuItem>
-                  <MenuItem onClick={handleStatusChange('rejected')}>
-                    <ListItemIcon>
-                      <CancelIcon fontSize="small" color="error" />
-                    </ListItemIcon>
-                    <ListItemText>Reject Bid</ListItemText>
-                  </MenuItem>
-                </>
-              )}
-              {onGenerateContract && (
-                <MenuItem onClick={(e) => handleAction(onGenerateContract, e)}>
-                  <ListItemIcon>
-                    <DescriptionIcon fontSize="small" />
-                  </ListItemIcon>
-                  <ListItemText>Generate Contract</ListItemText>
-                </MenuItem>
-              )}
-              {onSendEmail && (
-                <MenuItem onClick={(e) => handleAction(onSendEmail, e)}>
-                  <ListItemIcon>
-                    <EmailIcon fontSize="small" />
-                  </ListItemIcon>
-                  <ListItemText>Send Email</ListItemText>
-                </MenuItem>
-              )}
-              <Divider />
-              <MenuItem onClick={(e) => handleAction(onDeleteRequest, e)}>
-                <ListItemIcon>
-                  <DeleteIcon fontSize="small" color="error" />
-                </ListItemIcon>
-                <ListItemText>Delete</ListItemText>
-              </MenuItem>
-            </Menu>
-          </Grid>
-        </Grid>
-
-        {/* Expanded View */}
-        <Collapse in={expanded} timeout="auto" unmountOnExit>
-          <Box sx={{ mt: 2 }}>
-            <Divider sx={{ mb: 2 }} />
-            
-            {/* Quick Action Buttons */}
-            <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, mb: 2 }}>
-              <Button 
-                size="small" 
-                variant="outlined" 
-                startIcon={<EditIcon />}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onEdit(bid);
+                  display: 'flex',
+                  alignItems: 'center',
                 }}
               >
-                Edit
-              </Button>
-              
-              {bid.status === 'draft' && onStatusChange && (
-                <Button 
-                  size="small" 
-                  variant="contained" 
-                  color="primary"
-                  startIcon={<EmailIcon />}
-                  onClick={handleStatusChange('submitted')}
-                >
-                  Submit
-                </Button>
-              )}
-              
-              {bid.status === 'submitted' && onStatusChange && (
-                <>
-                  <Button 
-                    size="small" 
-                    variant="contained" 
-                    color="success"
-                    startIcon={<CheckCircleIcon />}
-                    onClick={handleStatusChange('accepted')}
-                  >
-                    Accept
-                  </Button>
-                  <Button 
-                    size="small" 
-                    variant="contained" 
-                    color="error"
-                    startIcon={<CancelIcon />}
-                    onClick={handleStatusChange('rejected')}
-                  >
-                    Reject
-                  </Button>
+                <LocalOfferIcon fontSize="inherit" sx={{ mr: 0.5 }} />
+                {formatCurrency(bid.totalAmount)} • 
+                <AccessTimeIcon fontSize="inherit" sx={{ mx: 0.5 }} />
+                {safeFormatDate((bid as any).submissionDate || new Date().toISOString())}
+                {bid.subcontractorName && (
+                  <>
+                    <BusinessIcon fontSize="inherit" sx={{ mx: 0.5 }} />
+                    {bid.subcontractorName}
                 </>
               )}
-              
-              {onAddPayment && bid.status === 'accepted' && (
-                <Button 
-                  size="small" 
-                  variant="outlined" 
-                  color="primary"
-                  startIcon={<AttachMoneyIcon />}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onAddPayment(bid);
-                  }}
-                >
-                  Add Payment
-                </Button>
-              )}
-              
-              {onGenerateContract && (
-                <Button 
-                  size="small" 
-                  variant="outlined"
-                  startIcon={<DescriptionIcon />}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onGenerateContract(bid);
-                  }}
-                >
-                  Generate Contract
-                </Button>
-              )}
-              
-              <Button 
-                size="small" 
-                variant="outlined"
-                startIcon={<NoteIcon />}
-                onClick={handleShowNoteDialog}
-              >
-                Add Note
-              </Button>
+              </Typography>
             </Box>
-            
-            {/* Payment Progress */}
-            {bid.status === 'accepted' && (
-              <Box sx={{ mb: 2 }}>
-                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 0.5 }}>
-                  <Typography variant="subtitle2">Payment Progress</Typography>
-                  <Typography variant="body2">
-                    {formatCurrency(paymentProgress.paid)} / {formatCurrency(bid.totalAmount)} ({paymentProgress.percentage}%)
+          </Box>
+          
+          {/* Status badge */}
+          <Chip
+            label={STATUS_DISPLAY[bid.status] || bid.status}
+                size="small" 
+            sx={{
+              bgcolor: alpha(getPaletteColor(theme, bidStatusColors[bid.status] as string || 'grey'), 0.15),
+              color: getPaletteColor(theme, bidStatusColors[bid.status] as string || 'grey'),
+              fontWeight: 600,
+              borderRadius: '4px',
+              mr: 1,
+              '&:hover': {
+                bgcolor: alpha(getPaletteColor(theme, bidStatusColors[bid.status] as string || 'grey'), 0.25),
+              }
+            }}
+          />
+        </Box>
+        
+        {/* Alert for rejected bids */}
+        {bid.status === 'rejected' && (bid as any).rejectionReason && (
+          <Alert severity="error" sx={{ mb: 1, py: 0 }}>
+            {(bid as any).rejectionReason}
+          </Alert>
+        )}
+        
+        {/* Alert for accepted bids with upcoming payments */}
+        {bid.status === 'accepted' && getUpcomingPayment() && (
+          <Alert severity="info" sx={{ mb: 1, py: 0 }}>
+            Payment of {formatCurrency(getUpcomingPayment()?.amount || 0)} due on {safeFormatDate(getUpcomingPayment()?.dueDate || '')}
+          </Alert>
+        )}
+        
+        {/* Progress section with better visualization */}
+        <Box sx={{ mt: 1 }}>
+          <Box sx={{ 
+            display: 'flex', 
+            justifyContent: 'space-between', 
+            alignItems: 'center',
+            mb: 0.5 
+          }}>
+            <Typography variant="body2" color="text.secondary">
+              {paymentProgress.percentage === 100 ? 'Payment Completed' : 'Payment Progress'}
+            </Typography>
+            <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
+              <Typography variant="body2" fontWeight="medium">
+                <Box component="span" sx={{ color: 'success.main' }}>
+                  {formatCurrency(paymentProgress.paid)}
+                </Box>
+                {paymentProgress.remaining > 0 && (
+                  <Box component="span" sx={{ color: 'text.secondary' }}>
+                    {' / '}{formatCurrency(paymentProgress.paid + paymentProgress.remaining)}
+                  </Box>
+                )}
+              </Typography>
+              <Typography 
+                variant="body2" 
+                sx={{ 
+                  fontWeight: "600", 
+                  color: paymentProgress.percentage === 100 
+                    ? 'success.main' 
+                    : 'primary.main',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  minWidth: 36,
+                  height: 20,
+                  borderRadius: 1,
+                  fontSize: '0.75rem',
+                  bgcolor: paymentProgress.percentage === 100 
+                    ? alpha(theme.palette.success.main, 0.1)
+                    : alpha(theme.palette.primary.main, 0.1),
+                  px: 0.5
+                }}
+              >
+                {Math.round(paymentProgress.percentage)}%
                   </Typography>
+            </Box>
                 </Box>
                 <LinearProgress 
                   variant="determinate" 
-                  value={paymentProgress.percentage} 
-                  color={paymentProgress.percentage === 100 ? "success" : "primary"} 
-                  sx={{ height: 8, borderRadius: 4 }}
-                />
+            value={Math.min(paymentProgress.percentage, 100)}
+            sx={{
+              height: 10,
+              borderRadius: 5,
+              bgcolor: alpha(theme.palette.grey[300], 0.8),
+              '& .MuiLinearProgress-bar': {
+                borderRadius: 5,
+                backgroundImage: paymentProgress.percentage === 100
+                  ? `linear-gradient(90deg, ${theme.palette.success.dark}, ${theme.palette.success.main})`
+                  : `linear-gradient(90deg, ${theme.palette.primary.dark}, ${theme.palette.primary.main})`
+              }
+            }}
+          />
+          {expanded || (
+            <Box sx={{ 
+              display: 'flex', 
+              justifyContent: 'center', 
+              mt: 1, 
+              opacity: 0.7,
+              color: 'text.secondary' 
+            }}>
+              <Typography 
+                variant="caption" 
+                sx={{ 
+                  display: 'flex', 
+                  alignItems: 'center',
+                  fontStyle: 'italic'
+                }}
+              >
+                <ExpandMoreIcon fontSize="inherit" sx={{ mr: 0.5 }} />
+                Click to expand for details
+              </Typography>
               </Box>
             )}
-            
-            {/* Detailed Information in Tabs */}
-            <Paper sx={{ mb: 2 }}>
-              <Tabs
-                value={activeTab}
-                onChange={handleChangeTab}
-                variant="scrollable"
-                scrollButtons="auto"
-                textColor="primary"
-                indicatorColor="primary"
-                sx={{ borderBottom: 1, borderColor: 'divider' }}
-              >
-                <Tab icon={<AssignmentIcon fontSize="small" />} iconPosition="start" label="Details" />
-                {bid.status === 'accepted' && <Tab icon={<AttachMoneyIcon fontSize="small" />} iconPosition="start" label="Payments" />}
-                <Tab icon={<DescriptionIcon fontSize="small" />} iconPosition="start" label="Documents" />
-                <Tab icon={<NoteIcon fontSize="small" />} iconPosition="start" label="Notes" />
-              </Tabs>
+        </Box>
+      </Box>
+    );
+  };
+  
+  // Helper function to get status icon
+  const getStatusIcon = (status: string) => {
+    switch(status) {
+      case 'draft':
+        return <EditIcon />;
+      case 'submitted':
+        return <SendIcon />;
+      case 'accepted':
+        return <CheckCircleIcon />;
+      case 'rejected':
+        return <CancelIcon />;
+      default:
+        return <EditIcon />;
+    }
+  };
+  
+  // Helper function to get upcoming payment
+  const getUpcomingPayment = () => {
+    if (!paymentSchedule || !paymentSchedule.length) return null;
+    
+    return paymentSchedule
+      .filter(stage => !stage.paid && stage.dueDate && new Date(stage.dueDate).getTime() > new Date().getTime())
+      .sort((a, b) => {
+        const dateA = a.dueDate ? new Date(a.dueDate).getTime() : Infinity;
+        const dateB = b.dueDate ? new Date(b.dueDate).getTime() : Infinity;
+        return dateA - dateB;
+      })[0];
+  };
+
+  return (
+    <Card
+      sx={{
+        position: 'relative',
+        mb: 2,
+        borderRadius: '12px',
+        boxShadow: expanded 
+          ? `0 10px 30px ${alpha(theme.palette.common.black, 0.15)}` 
+          : `0 2px 8px ${alpha(theme.palette.common.black, 0.05)}`,
+        overflow: 'visible',
+        transition: theme.transitions.create(['box-shadow', 'transform', 'border-color'], {
+          duration: theme.transitions.duration.shorter
+        }),
+        transform: expanded ? 'scale(1.01)' : 'scale(1)',
+        border: '1px solid',
+        borderColor: expanded
+          ? alpha(getPaletteColor(theme, bidStatusColors[bid.status] as string || 'grey'), 0.3)
+          : alpha(theme.palette.divider, 0.5),
+        '&:hover': {
+          boxShadow: `0 8px 20px ${alpha(theme.palette.common.black, 0.08)}`,
+          borderColor: alpha(getPaletteColor(theme, bidStatusColors[bid.status] as string || 'grey'), 0.2),
+          cursor: 'pointer'
+        }
+      }}
+      onClick={() => setExpanded(!expanded)}
+    >
+      <CardHeader
+        sx={{
+          p: 2,
+          bgcolor: expanded 
+            ? alpha(getPaletteColor(theme, bidStatusColors[bid.status] as string || 'grey'), 0.05)
+            : 'transparent',
+          transition: 'background 0.3s ease',
+          borderBottom: expanded ? `1px solid ${alpha(theme.palette.divider, 0.5)}` : 'none',
+        }}
+        title={renderHeaderContent()}
+        action={
+          <Stack direction="row" spacing={1} alignItems="center">
+            <IconButton 
+              onClick={handleToggleExpand}
+              aria-expanded={expanded}
+              aria-label="show more"
+              sx={{
+                transform: expanded ? 'rotate(180deg)' : 'rotate(0deg)',
+                transition: theme.transitions.create('transform', {
+                  duration: theme.transitions.duration.shorter
+                }),
+                bgcolor: alpha(getPaletteColor(theme, bidStatusColors[bid.status] as string || 'grey'), 0.1),
+                '&:hover': {
+                  bgcolor: alpha(getPaletteColor(theme, bidStatusColors[bid.status] as string || 'grey'), 0.2),
+                }
+              }}
+            >
+              <ExpandMoreIcon />
+            </IconButton>
+          </Stack>
+        }
+      />
+      
+      <Collapse in={expanded} timeout="auto" unmountOnExit>
+        <CardContent sx={{ pt: 0, pb: 2 }}>
+          <Divider sx={{ my: 2 }} />
+          
+          <Grid container spacing={3}>
+            {/* Bid Details */}
+            <Grid item xs={12} md={6}>
+              <Typography variant="subtitle1" fontWeight={600} gutterBottom sx={{ 
+                display: 'flex', 
+                alignItems: 'center',
+                gap: 1
+              }}>
+                <BusinessIcon fontSize="small" color="primary" />
+                Bid Details
+                          </Typography>
               
-              {/* Details Tab */}
-              <Box role="tabpanel" hidden={activeTab !== 0} sx={{ p: 2 }}>
-                {activeTab === 0 && (
-                  <Grid container spacing={2}>
-                    <Grid item xs={12} sm={6}>
-                      <Stack spacing={1}>
-                        <Box>
-                          <Typography variant="body2" color="text.secondary">Scope</Typography>
-                          <Typography variant="body1">{bidDetails.scope || 'N/A'}</Typography>
-                        </Box>
-                        <Box>
-                          <Typography variant="body2" color="text.secondary">Description</Typography>
-                          <Typography variant="body1">
-                            {hasFull && 'notes' in bid ? (bid.notes as string) || 'No description provided' : 'No description provided'}
+              <Table size="small">
+                <TableBody>
+                  {bid.subcontractorName && (
+                    <TableRow>
+                      <TableCell component="th" sx={{ fontWeight: 500, width: '40%', py: 1, borderBottom: 'none' }}>
+                        Subcontractor
+                      </TableCell>
+                      <TableCell sx={{ py: 1, borderBottom: 'none' }}>
+                        {bid.subcontractorName}
+                      </TableCell>
+                    </TableRow>
+                  )}
+                  <TableRow>
+                    <TableCell component="th" sx={{ fontWeight: 500, width: '40%', py: 1, borderBottom: 'none' }}>
+                      Total Amount
+                    </TableCell>
+                    <TableCell sx={{ py: 1, borderBottom: 'none', fontWeight: 'medium' }}>
+                      {formatCurrency(bid.totalAmount)}
+                    </TableCell>
+                  </TableRow>
+                  <TableRow>
+                    <TableCell component="th" sx={{ fontWeight: 500, width: '40%', py: 1, borderBottom: 'none' }}>
+                      Submission Date
+                    </TableCell>
+                    <TableCell sx={{ py: 1, borderBottom: 'none' }}>
+                      {safeFormatDate((bid as any).submissionDate || new Date().toISOString())}
+                    </TableCell>
+                  </TableRow>
+                  {(bid as any).approvalDate && (
+                    <TableRow>
+                      <TableCell component="th" sx={{ fontWeight: 500, width: '40%', py: 1, borderBottom: 'none' }}>
+                        Approval Date
+                      </TableCell>
+                      <TableCell sx={{ py: 1, borderBottom: 'none' }}>
+                        {safeFormatDate((bid as any).approvalDate)}
+                      </TableCell>
+                    </TableRow>
+                  )}
+                  {(bid as any).rejectionDate && (
+                    <TableRow>
+                      <TableCell component="th" sx={{ fontWeight: 500, width: '40%', py: 1, borderBottom: 'none' }}>
+                        Rejection Date
+                      </TableCell>
+                      <TableCell sx={{ py: 1, borderBottom: 'none' }}>
+                        {safeFormatDate((bid as any).rejectionDate)}
+                      </TableCell>
+                    </TableRow>
+                  )}
+                  {/* Add payment summary row */}
+                  {paymentProgress && (paymentProgress.paid > 0 || paymentProgress.pending > 0) && (
+                    <TableRow>
+                      <TableCell component="th" sx={{ fontWeight: 500, width: '40%', py: 1, borderBottom: 'none' }}>
+                        Payment Summary
+                      </TableCell>
+                      <TableCell sx={{ py: 1, borderBottom: 'none' }}>
+                        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
+                          <Typography variant="body2">
+                            <Chip label="Paid" size="small" sx={{ mr: 0.5, bgcolor: alpha(theme.palette.success.main, 0.1), color: theme.palette.success.main, height: 18 }} />
+                             {formatCurrency(paymentProgress.paid)}
+                          </Typography>
+                          {paymentProgress.pending > 0 && (
+                            <Typography variant="body2">
+                              <Chip label="Pending" size="small" sx={{ mr: 0.5, bgcolor: alpha(theme.palette.warning.main, 0.1), color: theme.palette.warning.main, height: 18 }} />
+                               {formatCurrency(paymentProgress.pending)}
+                          </Typography>
+                          )}
+                          <Typography variant="body2">
+                            <Chip label="Remaining" size="small" sx={{ mr: 0.5, bgcolor: alpha(theme.palette.grey[500], 0.1), color: theme.palette.text.secondary, height: 18 }} />
+                            {formatCurrency(paymentProgress.remaining)}
                           </Typography>
                         </Box>
-                        <Box>
-                          <Typography variant="body2" color="text.secondary">Timeline</Typography>
-                          <Typography variant="body1">
-                            {safeFormatDate(bidDetails.startDate)} - {safeFormatDate(bidDetails.completionDate)}
-                          </Typography>
-                        </Box>
-                      </Stack>
-                    </Grid>
-                    <Grid item xs={12} sm={6}>
-                      <Stack spacing={1}>
-                        <Box>
-                          <Typography variant="body2" color="text.secondary">Budget</Typography>
-                          <Typography variant="body1">
-                            {hasFull && 'bidAmount' in bid ? formatCurrency(bid.bidAmount || 0) : 'N/A'}
-                          </Typography>
-                        </Box>
-                        <Box>
-                          <Typography variant="body2" color="text.secondary">Bid Amount</Typography>
-                          <Typography variant="body1" fontWeight={500} color="primary.main">
-                            {formatCurrency(bid.totalAmount)}
-                          </Typography>
-                        </Box>
-                        <Box>
-                          <Typography variant="body2" color="text.secondary">Subcontractor</Typography>
-                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 0.5 }}>
-                            <Avatar sx={{ width: 24, height: 24, bgcolor: theme.palette.primary.main }}>
-                              <PersonIcon fontSize="small" />
-                            </Avatar>
-                            <Typography variant="body1">{bid.subcontractorName || 'N/A'}</Typography>
-                          </Box>
-                        </Box>
-                      </Stack>
-                    </Grid>
-                  </Grid>
-                )}
-              </Box>
-              
-              {/* Payments Tab */}
-              <Box role="tabpanel" hidden={activeTab !== 1} sx={{ p: 2 }}>
-                {activeTab === 1 && (
-                  <>
-                    <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-                      <Typography variant="subtitle1">Payment Schedule</Typography>
-                      {onAddPayment && (
-                        <Button 
+                      </TableCell>
+                    </TableRow>
+                  )}
+                  {(bid as any).tags && Array.isArray((bid as any).tags) && (bid as any).tags.length > 0 && (
+                    <TableRow>
+                      <TableCell component="th" sx={{ fontWeight: 500, width: '40%', py: 1, borderBottom: 'none' }}>
+                        Tags
+                      </TableCell>
+                      <TableCell sx={{ py: 1, borderBottom: 'none' }}>
+                        <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
+                          {(bid as any).tags.map((tag: string) => (
+                            <Chip 
+                              key={tag} 
+                              label={tag} 
                           size="small" 
-                          startIcon={<AddIcon />}
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            onAddPayment(bid);
-                          }}
-                        >
-                          Add Payment
-                        </Button>
-                      )}
+                              sx={{ 
+                                height: 20, 
+                                fontSize: '0.7rem',
+                                bgcolor: alpha(theme.palette.grey[500], 0.1)
+                              }} 
+                            />
+                          ))}
                     </Box>
-                    
-                    {paymentSchedule.length > 0 ? (
-                      <TableContainer component={Paper} variant="outlined" sx={{ maxHeight: 220 }}>
+                      </TableCell>
+                    </TableRow>
+                  )}
+                </TableBody>
+              </Table>
+            </Grid>
+            
+            {/* Payment Schedule */}
+            <Grid item xs={12} md={6}>
+              <Typography variant="subtitle1" fontWeight={600} gutterBottom sx={{ 
+                display: 'flex', 
+                alignItems: 'center',
+                gap: 1
+              }}>
+                <AttachMoneyIcon fontSize="small" color="primary" />
+                Payment Schedule
+              </Typography>
+              
+              {paymentSchedule && paymentSchedule.length > 0 ? (
+                <TableContainer sx={{ 
+                  maxHeight: 220,
+                  border: `1px solid ${alpha(theme.palette.divider, 0.3)}`,
+                  borderRadius: 1,
+                  overflow: 'hidden'
+                }}>
                         <Table size="small" stickyHeader>
                           <TableHead>
-                            <TableRow>
-                              <TableCell>Stage</TableCell>
-                              <TableCell align="right">Amount</TableCell>
-                              <TableCell align="right">Percentage</TableCell>
-                              <TableCell>Status</TableCell>
-                              <TableCell>Due Date</TableCell>
+                      <TableRow sx={{ 
+                        bgcolor: alpha(theme.palette.primary.main, 0.05),
+                      }}>
+                        <TableCell sx={{ fontWeight: 600 }}>Stage</TableCell>
+                        <TableCell sx={{ fontWeight: 600, textAlign: 'right' }}>Amount</TableCell>
+                        <TableCell sx={{ fontWeight: 600 }}>Due Date</TableCell>
+                        <TableCell sx={{ fontWeight: 600 }}>Status</TableCell>
                             </TableRow>
                           </TableHead>
                           <TableBody>
-                            {paymentSchedule.map((stage: BidPaymentStage) => (
-                              <TableRow key={stage.id}>
-                                <TableCell>
-                                  <Tooltip title={stage.description || ''}>
-                                    <Typography variant="body2" noWrap>{stage.name}</Typography>
-                                  </Tooltip>
-                                </TableCell>
-                                <TableCell align="right">{formatCurrency(stage.amount)}</TableCell>
-                                <TableCell align="right">{stage.percentage}%</TableCell>
-                                <TableCell>
+                      {paymentSchedule.map((stage, index) => (
+                        <TableRow 
+                          key={stage.id || index} 
+                          sx={{
+                            bgcolor: stage.paid ? alpha(theme.palette.success.main, 0.03) : 
+                                    stage.pending ? alpha(theme.palette.warning.main, 0.03) : 'transparent',
+                            '&:hover': { bgcolor: alpha(theme.palette.action.hover, 0.04) }
+                          }}
+                        >
+                          <TableCell>
+                            <Tooltip title={stage.description || ''}>
+                              <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                                {stage.name || stage.description || `Payment ${index + 1}`}
+                                {stage.hasPhase && (
                                   <Chip 
+                                    label={stage.phaseName} 
                                     size="small" 
-                                    label={stage.status.charAt(0).toUpperCase() + stage.status.slice(1)} 
-                                    color={stage.status === 'paid' ? 'success' : 'default'}
+                                    variant="outlined"
+                                    sx={{
+                                      height: 16,
+                                      fontSize: '0.65rem',
+                                      borderColor: alpha(theme.palette.info.main, 0.3),
+                                      color: theme.palette.info.dark
+                                    }}
                                   />
-                                </TableCell>
-                                <TableCell>
-                                  {stage.dueDate ? formatDate(new Date(stage.dueDate)) : 'N/A'}
-                                </TableCell>
-                              </TableRow>
-                            ))}
-                          </TableBody>
-                        </Table>
-                      </TableContainer>
-                    ) : (
-                      <Typography variant="body2" color="text.secondary" sx={{ textAlign: 'center', p: 2 }}>
-                        No payment stages defined.
+                                )}
+                              </Box>
+                            </Tooltip>
+                          </TableCell>
+                          <TableCell sx={{ 
+                            fontWeight: 'medium',
+                            color: stage.isFixedAmount ? theme.palette.primary.dark : 'inherit',
+                            textAlign: 'right' // Align amount right
+                          }}>
+                            {formatCurrency(stage.amount || stage.fixedAmount || 0)}
+                            {stage.isFixedAmount && (
+                              <Chip 
+                                label="Fixed" 
+                                size="small" 
+                                variant="outlined"
+                                sx={{
+                                  height: 16,
+                                  fontSize: '0.65rem',
+                                  ml: 0.5,
+                                  borderColor: alpha(theme.palette.primary.main, 0.3),
+                                  color: theme.palette.primary.dark
+                                }}
+                              />
+                            )}
+                            {!stage.isFixedAmount && stage.percentage != null && (
+                              <Chip 
+                                label={`${stage.percentage}%`} 
+                                size="small" 
+                                variant="outlined"
+                                sx={{
+                                  height: 16,
+                                  fontSize: '0.65rem',
+                                  ml: 0.5,
+                                  borderColor: alpha(theme.palette.secondary.main, 0.3),
+                                  color: theme.palette.secondary.dark
+                                }}
+                              />
+                            )}
+                          </TableCell>
+                          <TableCell>
+                            {isNearDueDate(stage.dueDate) && !stage.paid ? (
+                              <Tooltip title="Upcoming Payment">
+                                <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                                  <AccessTimeIcon 
+                                    color="warning" 
+                                    sx={{ mr: 0.5, fontSize: '0.9rem' }}
+                                  />
+                                  {stage.dueDateFormatted}
+                                </Box>
+                              </Tooltip>
+                            ) : (
+                              stage.dueDateFormatted
+                            )}
+                            {stage.paid && stage.paymentDateFormatted && (
+                              <Tooltip title="Payment Date">
+                                <Typography variant="caption" display="block" sx={{ color: 'success.dark' }}>
+                                  Paid: {stage.paymentDateFormatted}
+                                </Typography>
+                              </Tooltip>
+                            )}
+                          </TableCell>
+                          <TableCell>
+                            <Chip
+                              size="small"
+                              label={stage.paid 
+                                ? "Paid" 
+                                : stage.pending 
+                                  ? "In Progress" 
+                                  : "Pending"}
+                              icon={stage.paid ? <CheckCircleIcon fontSize="inherit"/> : stage.pending ? <TimelineIcon fontSize="inherit"/> : undefined}
+                              sx={{
+                                fontSize: '0.7rem',
+                                fontWeight: 500,
+                                bgcolor: stage.paid 
+                                  ? alpha(theme.palette.success.main, 0.1)
+                                  : stage.pending
+                                    ? alpha(theme.palette.warning.main, 0.1) 
+                                    : alpha(theme.palette.grey[500], 0.1),
+                                color: stage.paid 
+                                  ? theme.palette.success.dark
+                                  : stage.pending 
+                                    ? theme.palette.warning.dark
+                                    : theme.palette.grey[700],
+                                '& .MuiChip-icon': {
+                                  marginLeft: '4px',
+                                  marginRight: '-2px',
+                                  fontSize: '0.8rem'
+                                }
+                              }}
+                            />
+                            {stage.expenseId && (
+                              <Tooltip title="Linked to expense">
+                                <Chip
+                                  size="small"
+                                  label="Exp"
+                                  icon={<ReceiptLongIcon fontSize="inherit"/>}
+                                  variant="outlined"
+                                  sx={{
+                                    fontSize: '0.65rem',
+                                    height: 18,
+                                    ml: 0.5,
+                                    borderColor: alpha(theme.palette.info.main, 0.3),
+                                    color: theme.palette.info.dark,
+                                    '& .MuiChip-icon': {
+                                      marginLeft: '3px',
+                                      marginRight: '-1px',
+                                      fontSize: '0.7rem'
+                                    }
+                                  }}
+                                />
+                              </Tooltip>
+                            )}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </TableContainer>
+              ) : (
+                <Paper 
+                  sx={{ 
+                    p: 2, 
+                    textAlign: 'center',
+                    bgcolor: alpha(theme.palette.background.paper, 0.5),
+                    border: `1px dashed ${alpha(theme.palette.divider, 0.5)}`,
+                    borderRadius: 1
+                  }}
+                >
+                  <Typography variant="body2" color="text.secondary">
+                    No payment schedule defined
                       </Typography>
-                    )}
-                  </>
-                )}
-              </Box>
-              
-              {/* Documents Tab */}
-              <Box role="tabpanel" hidden={activeTab !== 2} sx={{ p: 2 }}>
-                {activeTab === 2 && (
-                  <>
-                    <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-                      <Typography variant="subtitle1">Documents</Typography>
                       <Button 
-                        size="small" 
                         startIcon={<AddIcon />}
+                    size="small"
+                    sx={{ mt: 1 }}
                         onClick={(e) => {
                           e.stopPropagation();
-                          onView(bid); // Navigate to detail view for document upload
+                      onAddPayment && onAddPayment(bid);
                         }}
+                    variant="outlined"
                       >
-                        Add Document
+                    Add Payment Schedule
                       </Button>
-                    </Box>
-                    
-                    {documents.length > 0 ? (
-                      <Stack spacing={1} sx={{ maxHeight: 220, overflow: 'auto' }}>
-                        {documents.map((doc: any, index: number) => (
+                </Paper>
+              )}
+            </Grid>
+            
+            {/* Description */}
+            {(bid as any).description && (
+              <Grid item xs={12}>
+                <Divider sx={{ my: 1 }} />
+                <Typography variant="subtitle1" fontWeight={600} gutterBottom sx={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 1
+                }}>
+                  <DescriptionIcon fontSize="small" color="primary" />
+                  Description
+                </Typography>
                           <Paper
-                            key={doc.id || doc.url || index}
                             variant="outlined"
                             sx={{
-                              p: 1.5, 
-                              display: 'flex', 
-                              justifyContent: 'space-between', 
-                              alignItems: 'center',
-                              '&:hover': { bgcolor: 'action.hover' },
-                            }}
-                          >
-                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                              <DescriptionIcon color="primary" fontSize="small" />
-                              <Box>
-                                <Typography variant="body2" fontWeight={500}>{doc.name || `Document ${index + 1}`}</Typography>
-                                <Typography variant="caption" color="text.secondary">
-                                  {doc.type || 'File'} • {doc.createdAt ? formatDate(new Date(doc.createdAt)) : formatDate(new Date(bid.createdAt))}
-                                </Typography>
-                              </Box>
-                            </Box>
-                            <Box>
-                              {onViewDocument && doc.id && (
-                                <IconButton 
-                                  size="small" 
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    onViewDocument(doc.id);
-                                  }}
-                                >
-                                  <DownloadIcon fontSize="small" />
-                                </IconButton>
-                              )}
-                              {!doc.id && doc.url && (
-                                <IconButton 
-                                  size="small" 
-                                  component="a"
-                                  href={doc.url}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  onClick={(e) => e.stopPropagation()}
-                                >
-                                  <DownloadIcon fontSize="small" />
-                                </IconButton>
-                              )}
-                            </Box>
+                    p: 2,
+                    bgcolor: alpha(theme.palette.background.paper, 0.5),
+                    maxHeight: 120,
+                    overflow: 'auto',
+                    borderColor: alpha(theme.palette.divider, 0.5)
+                  }}
+                >
+                  <Typography variant="body2">{(bid as any).description}</Typography>
                           </Paper>
-                        ))}
-                      </Stack>
-                    ) : (
-                      <Typography variant="body2" color="text.secondary" sx={{ textAlign: 'center', p: 2 }}>
-                        No documents attached.
-                      </Typography>
-                    )}
-                  </>
-                )}
-              </Box>
-              
-              {/* Notes Tab */}
-              <Box role="tabpanel" hidden={activeTab !== 3} sx={{ p: 2 }}>
-                {activeTab === 3 && (
-                  <>
-                    <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-                      <Typography variant="subtitle1">Notes</Typography>
-                      <Button 
-                        size="small" 
-                        startIcon={<AddIcon />}
-                        onClick={handleShowNoteDialog}
-                      >
-                        Add Note
-                      </Button>
-                    </Box>
-                    
-                    {notesList.length > 0 ? (
-                      <Stack spacing={1} sx={{ maxHeight: 220, overflow: 'auto' }}>
-                        {notesList.map((note: any, index: number) => (
-                          <Paper
-                            key={note.id || index}
-                            variant="outlined"
-                            sx={{ p: 1.5 }}
-                          >
-                            <Typography variant="body2">{note.content || note}</Typography>
-                            <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 1 }}>
-                              <Typography variant="caption" color="text.secondary">
-                                By: {note.createdBy || 'System'}
-                              </Typography>
-                              <Typography variant="caption" color="text.secondary">
-                                {note.createdAt ? formatDate(new Date(note.createdAt)) : formatDate(new Date(bid.createdAt))}
-                              </Typography>
-                            </Box>
-                          </Paper>
-                        ))}
-                      </Stack>
-                    ) : (
-                      <Typography variant="body2" color="text.secondary" sx={{ textAlign: 'center', p: 2 }}>
-                        No notes added.
-                      </Typography>
-                    )}
-                  </>
-                )}
-              </Box>
-            </Paper>
-            
-            {bid.status === 'accepted' && hasFull && (
-              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5, mb: 1 }}>
-                <Typography variant="caption" color="text.secondary">Key Dates</Typography>
-                <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
-                  <Chip 
-                    size="small" 
-                    icon={<ScheduleIcon fontSize="small" />} 
-                    label={`Accepted: ${formatDate(new Date(bid.updatedAt))}`} 
-                  />
-                  {bidDetails.startDate && (
-                    <Chip 
-                      size="small" 
-                      icon={<ScheduleIcon fontSize="small" />} 
-                      label={`Start: ${safeFormatDate(bidDetails.startDate)}`} 
-                    />
-                  )}
-                  {bidDetails.completionDate && (
-                    <Chip 
-                      size="small" 
-                      icon={<ScheduleIcon fontSize="small" />} 
-                      label={`Completion: ${safeFormatDate(bidDetails.completionDate)}`} 
-                    />
-                  )}
-                </Box>
-              </Box>
+              </Grid>
             )}
-          </Box>
-        </Collapse>
-      </CardContent>
+          </Grid>
+        </CardContent>
+      </Collapse>
+
+      {/* Floating Action Speed Dial */}
+      {expanded && (
+        <SpeedDial
+          ariaLabel="Bid actions"
+          sx={{
+            position: 'absolute',
+            bottom: 16,
+            right: 16,
+          }}
+          icon={<SpeedDialIcon />}
+          FabProps={{
+            size: "medium",
+            sx: { 
+              bgcolor: getPaletteColor(theme, bidStatusColors[bid.status] as string || 'primary'),
+              '&:hover': {
+                bgcolor: getPaletteColor(theme, bidStatusColors[bid.status] as string || 'primary', 'dark')
+              }
+            }
+          }}
+        >
+          {/* Draft actions */}
+          {bid.status === 'draft' && [
+            <SpeedDialAction
+              key="edit"
+              icon={<EditIcon />}
+              tooltipTitle="Edit Bid"
+              onClick={(e) => {
+                e.stopPropagation();
+                onEdit(bid);
+              }}
+            />,
+            <SpeedDialAction
+              key="submit"
+              icon={<SendIcon />}
+              tooltipTitle="Submit Bid"
+              onClick={(e) => {
+                e.stopPropagation();
+                onStatusChange && onStatusChange(bid, 'submitted');
+              }}
+            />,
+            <SpeedDialAction
+              key="delete"
+              icon={<DeleteIcon />}
+              tooltipTitle="Delete Bid"
+              onClick={(e) => {
+                e.stopPropagation();
+                onDeleteRequest(bid);
+              }}
+            />
+          ]}
+          
+          {/* Submitted actions */}
+          {bid.status === 'submitted' && [
+            <SpeedDialAction
+              key="accept"
+              icon={<CheckCircleIcon />}
+              tooltipTitle="Accept Bid"
+              onClick={(e) => {
+                e.stopPropagation();
+                onStatusChange && onStatusChange(bid, 'accepted');
+              }}
+            />,
+            <SpeedDialAction
+              key="reject"
+              icon={<CancelIcon />}
+              tooltipTitle="Reject Bid"
+              onClick={(e) => {
+                e.stopPropagation();
+                onStatusChange && onStatusChange(bid, 'rejected');
+              }}
+            />,
+            <SpeedDialAction
+              key="email"
+              icon={<EmailIcon />}
+              tooltipTitle="Send Email"
+              onClick={(e) => {
+                e.stopPropagation();
+                onSendEmail && onSendEmail(bid);
+              }}
+            />
+          ]}
+          
+          {/* Accepted actions */}
+          {bid.status === 'accepted' && [
+            <SpeedDialAction
+              key="payment"
+              icon={<PaymentsIcon />}
+              tooltipTitle="Record Payment"
+              onClick={(e) => {
+                e.stopPropagation();
+                onAddPayment && onAddPayment(bid);
+              }}
+            />,
+            <SpeedDialAction
+              key="contract"
+              icon={<DescriptionIcon />}
+              tooltipTitle="Generate Contract"
+              onClick={(e) => {
+                e.stopPropagation();
+                onGenerateContract && onGenerateContract(bid);
+              }}
+            />,
+            <SpeedDialAction
+              key="note"
+              icon={<NoteIcon />}
+              tooltipTitle="Add Note"
+              onClick={(e) => {
+                e.stopPropagation();
+                handleShowNoteDialog(e);
+              }}
+            />
+          ]}
+          
+          {/* Rejected actions */}
+          {bid.status === 'rejected' && [
+            <SpeedDialAction
+              key="edit"
+              icon={<EditIcon />}
+              tooltipTitle="Edit Bid"
+              onClick={(e) => {
+                e.stopPropagation();
+                onEdit(bid);
+              }}
+            />,
+            <SpeedDialAction
+              key="email"
+              icon={<EmailIcon />}
+              tooltipTitle="Send Email"
+              onClick={(e) => {
+                e.stopPropagation();
+                onSendEmail && onSendEmail(bid);
+              }}
+            />,
+            <SpeedDialAction
+              key="delete"
+              icon={<DeleteIcon />}
+              tooltipTitle="Delete Bid"
+              onClick={(e) => {
+                e.stopPropagation();
+                onDeleteRequest(bid);
+              }}
+            />
+          ]}
+        </SpeedDial>
+      )}
       
-      {/* Note Dialog */}
-      <Dialog open={showNoteDialog} onClose={() => setShowNoteDialog(false)} maxWidth="sm" fullWidth>
-        <DialogTitle>Add Note to Bid</DialogTitle>
+      {/* Notes Dialog */}
+      <Dialog open={showNoteDialog} onClose={() => setShowNoteDialog(false)} onClick={(e) => e.stopPropagation()}>
+        <DialogTitle>Add Note</DialogTitle>
         <DialogContent>
           <TextField
             autoFocus
@@ -935,22 +1250,87 @@ const BidCard: React.FC<BidCardProps> = ({
             label="Note"
             type="text"
             fullWidth
-            variant="outlined"
-            value={note}
-            onChange={(e) => setNote(e.target.value)}
             multiline
             rows={4}
+            value={note}
+            onChange={(e) => setNote(e.target.value)}
+            variant="outlined"
           />
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setShowNoteDialog(false)}>Cancel</Button>
-          <Button onClick={handleAddNote} variant="contained" disabled={!note.trim()}>
-            Add Note
+          <Button onClick={() => setShowNoteDialog(false)} color="inherit">
+            Cancel
+          </Button>
+          <Button onClick={handleInternalAddNote} color="primary" disabled={!note.trim()}>
+            Add
           </Button>
         </DialogActions>
       </Dialog>
+
+      {/* Actions Menu */}
+      <Menu
+        anchorEl={anchorEl}
+        open={menuOpen}
+        onClose={handleMenuClose}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <MenuItem onClick={(e) => handleAction(onView, e)}>
+          <ListItemIcon>
+            <ViewIcon fontSize="small" />
+          </ListItemIcon>
+          <ListItemText>View Details</ListItemText>
+        </MenuItem>
+        <MenuItem onClick={(e) => handleAction(onEdit, e)}>
+          <ListItemIcon>
+            <EditIcon fontSize="small" />
+          </ListItemIcon>
+          <ListItemText>Edit</ListItemText>
+        </MenuItem>
+        <MenuItem onClick={(e) => handleAction(onDuplicate, e)}>
+          <ListItemIcon>
+            <DuplicateIcon fontSize="small" />
+          </ListItemIcon>
+          <ListItemText>Duplicate</ListItemText>
+        </MenuItem>
+        {onAddNote && (
+          <MenuItem onClick={handleShowNoteDialog}>
+            <ListItemIcon>
+              <NoteIcon fontSize="small" />
+            </ListItemIcon>
+            <ListItemText>Add Note</ListItemText>
+          </MenuItem>
+        )}
+        {onSendEmail && (
+          <MenuItem onClick={handleSendEmail}>
+            <ListItemIcon>
+              <EmailIcon fontSize="small" />
+            </ListItemIcon>
+            <ListItemText>Send Email</ListItemText>
+          </MenuItem>
+        )}
+        <Divider />
+        <MenuItem onClick={(e) => handleAction(onDeleteRequest, e)} sx={{ color: 'error.main' }}>
+          <ListItemIcon sx={{ color: 'error.main' }}>
+            <DeleteIcon fontSize="small" />
+          </ListItemIcon>
+          <ListItemText>Delete</ListItemText>
+        </MenuItem>
+      </Menu>
     </Card>
   );
+};
+
+// Helper to check if a date is coming up soon (within 7 days)
+const isNearDueDate = (dateStr: string | Date | undefined): boolean => {
+  if (!dateStr) return false;
+
+  const now = new Date();
+  const date = new Date(dateStr);
+  if (isNaN(date.getTime())) return false;
+  
+  const diffTime = date.getTime() - now.getTime();
+  const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+  return diffDays <= 7 && diffDays >= 0;
 };
 
 export default BidCard;
