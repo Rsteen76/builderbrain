@@ -39,6 +39,9 @@ import {
   TableRow,
   TableCell,
   TableBody,
+  Menu,
+  MenuItem,
+  ListItemIcon,
 } from '@mui/material';
 import {
   TrendingUp as TrendingUpIcon,
@@ -61,10 +64,9 @@ import {
   Add as AddIcon,
   House as HouseIcon,
   Construction as ConstructionIcon,
+  Landscape as LandscapeIcon,
   ClearAll as ClearAllIcon,
   AddCircleOutline as AddCircleOutlineIcon,
-  Business as CommercialIcon,
-  Landscape as LandscapeIcon,
   ArrowUpward as ArrowUpwardIcon,
   AccessTime as AccessTimeIcon,
   Star as StarIcon,
@@ -79,7 +81,6 @@ import {
   InsertChart as InsertChartIcon,
   TrendingDown as TrendingDownIcon,
   Receipt as ReceiptIcon,
-  AddBusiness as AddBusinessIcon,
 } from '@mui/icons-material';
 import { useNavigate, Link } from 'react-router-dom';
 import { Project, Task as ProjectTask } from '../../types';
@@ -283,35 +284,41 @@ interface RecentActivity {
 
 // Helper function to convert Project to DashboardProject
 const convertToDashboardProject = (project: Project): DashboardProject => {
+  const safeDateToString = (date: string | Date | null | undefined): string => {
+    if (!date) return '';
+    if (typeof date === 'string') return date;
+    try {
+      return date.toISOString();
+    } catch (e) {
+      console.error("Error converting date to ISO string:", date, e);
+      return '';
+    }
+  };
+
   return {
-    id: project.id,
+    id: project.id || '',
     name: project.name,
-    status: project.status,
-    endDate: project.endDate instanceof Date ? project.endDate.toISOString() : 
-             typeof project.endDate === 'string' ? project.endDate : '',
-    budget: project.budget,
+    status: project.status || 'draft',
+    endDate: safeDateToString(project.endDate),
+    budget: project.budget || 0,
     team: project.team || [],
-    location: project.location,
-    updatedAt: project.updatedAt instanceof Date ? project.updatedAt.toISOString() : 
-               typeof project.updatedAt === 'string' ? project.updatedAt : new Date().toISOString(),
-    tasks: project.tasks?.map(task => ({
-      id: task.id,
-      title: task.title || `Task ${task.id}`,
-      status: task.status,
-      dueDate: task.dueDate instanceof Date ? task.dueDate.toISOString() : 
-               typeof task.dueDate === 'string' ? task.dueDate : '',
-      priority: task.priority || 'medium'
-    })) || [],
-    keyMilestones: project.keyMilestones?.map(milestone => ({
-      id: `milestone-${milestone.name}`, // Generate an ID since it doesn't exist in the original type
-      name: milestone.name,
-      date: milestone.date instanceof Date ? milestone.date.toISOString() : 
-            typeof milestone.date === 'string' ? milestone.date : '',
-      completed: false // Default to false since it doesn't exist in the original type
+    location: project.location || '',
+    updatedAt: safeDateToString(project.updatedAt),
+    tasks: (project.tasks || []).map(task => ({
+      id: task.id || '',
+      title: task.title || 'Untitled Task',
+      status: task.status || 'pending',
+      dueDate: safeDateToString(task.dueDate),
+      priority: task.priority || 'medium',
     })),
-    // Initialize with empty arrays since these don't exist in the Project type
+    keyMilestones: (project.keyMilestones || []).map((milestone, index) => ({
+      id: `milestone-${project.id}-${index}`,
+      name: milestone.name || 'Untitled Milestone',
+      date: safeDateToString(milestone.date),
+      completed: false,
+    })),
     materials: [],
-    payments: []
+    payments: [],
   };
 };
 
@@ -330,7 +337,9 @@ const Dashboard: React.FC = () => {
   const [recentActivity, setRecentActivity] = useState<RecentActivity[]>([]);
   const [activeTab, setActiveTab] = useState(0);
   const [stats, setStats] = useState({
+    totalProjects: 0,
     activeProjects: 0,
+    completedProjects: 0,
     totalBudget: 0,
     teamMembers: 0,
     tasksDue: 0,
@@ -339,6 +348,9 @@ const Dashboard: React.FC = () => {
     budgetVariance: 0,
     materialsToOrder: 0
   });
+
+  // State for the New Project dropdown menu
+  const [newProjectMenuAnchor, setNewProjectMenuAnchor] = useState<null | HTMLElement>(null);
 
   useEffect(() => {
     const fetchDashboardData = async () => {
@@ -495,7 +507,9 @@ const Dashboard: React.FC = () => {
         setOverduePayments(overduePaymentsList);
         
         setStats({
+          totalProjects: dashboardProjects.length,
           activeProjects,
+          completedProjects: dashboardProjects.filter(p => p.status === 'completed').length,
           totalBudget,
           teamMembers: uniqueTeamMembers.size,
           tasksDue,
@@ -675,7 +689,9 @@ const Dashboard: React.FC = () => {
           setOverduePayments(overduePaymentsList);
           
           setStats({
+            totalProjects: dashboardProjects.length,
             activeProjects,
+            completedProjects: dashboardProjects.filter(p => p.status === 'completed').length,
             totalBudget,
             teamMembers: uniqueTeamMembers.size,
             tasksDue,
@@ -746,124 +762,69 @@ const Dashboard: React.FC = () => {
     };
   };
 
-  // Add a templates section to the dashboard
-  const renderTemplatesSection = () => {
-    const templates = [
-      {
-        id: 'residential',
-        name: 'Residential Construction',
-        icon: <HouseIcon fontSize="large" />,
-        description: 'Single-family homes, multi-family units, renovations, and additions.',
-        route: '/projects/new-residential',
-        color: theme.palette.primary.main,
-      },
-      {
-        id: 'commercial',
-        name: 'Commercial Building',
-        icon: <CommercialIcon fontSize="large" />,
-        description: 'Office buildings, retail spaces, warehouses, and industrial facilities.',
-        route: '/projects/new-custom',
-        params: { template: 'commercial' },
-        color: theme.palette.secondary.main,
-      },
-      {
-        id: 'renovation',
-        name: 'Renovation Project',
-        icon: <ConstructionIcon fontSize="large" />,
-        description: 'Remodeling existing structures, tenant improvements, and historic renovations.',
-        route: '/projects/new-custom',
-        params: { template: 'renovation' },
-        color: '#ff9800', // Orange
-      },
-      {
-        id: 'landscaping',
-        name: 'Landscaping Project',
-        icon: <LandscapeIcon fontSize="large" />,
-        description: 'Outdoor spaces, hardscaping, softscaping, and landscape construction.',
-        route: '/projects/new-custom',
-        params: { template: 'landscaping' },
-        color: '#4caf50', // Green
-      },
-      {
-        id: 'custom',
-        name: 'Custom Project',
-        icon: <BusinessIcon fontSize="large" />,
-        description: 'Create your own project structure with custom phases tailored to your specific needs.',
-        route: '/projects/new-custom',
-        color: '#9c27b0', // Purple
-      },
-    ];
+  // Define templates for the New Project dropdown
+  const templates = useMemo(() => [
+    {
+      id: 'residential',
+      name: 'Residential Construction',
+      icon: <HouseIcon fontSize="small" />,
+      description: 'Single-family homes, multi-family units, renovations, and additions.',
+      route: '/projects/new-residential',
+      color: theme.palette.primary.main,
+    },
+    {
+      id: 'commercial',
+      name: 'Commercial Building',
+      icon: <BusinessIcon fontSize="small" />,
+      description: 'Office buildings, retail spaces, warehouses, and industrial facilities.',
+      route: '/projects/new-custom',
+      params: { template: 'commercial' },
+      color: theme.palette.secondary.main,
+    },
+    {
+      id: 'renovation',
+      name: 'Kitchen Remodel',
+      icon: <HomeIcon fontSize="small" />,
+      description: 'Specialized kitchen renovation with industry-standard phases and timelines.',
+      route: '/projects/new-custom',
+      params: { template: 'kitchen-remodel' },
+      color: '#e91e63',
+    },
+    {
+      id: 'landscaping',
+      name: 'Landscaping Project',
+      icon: <LandscapeIcon fontSize="small" />,
+      description: 'Outdoor spaces, hardscaping, softscaping, and landscape construction.',
+      route: '/projects/new-custom',
+      params: { template: 'landscaping' },
+      color: '#4caf50',
+    },
+    {
+      id: 'custom',
+      name: 'Custom Project',
+      icon: <AddCircleOutlineIcon fontSize="small" />,
+      description: 'Create your own project structure with custom phases tailored to your specific needs.',
+      route: '/projects/new-custom',
+      color: '#9c27b0',
+    },
+  ], [theme]);
 
-    return (
-      <Box sx={{ mb: 3 }}>
-        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-          <Typography variant="h5" component="h2" sx={{ fontWeight: 600 }}>
-            Project Templates
-          </Typography>
-          <Button 
-            component={Link} 
-            to="/projects/new-custom"
-            variant="outlined" 
-            startIcon={<AddCircleOutlineIcon />}
-          >
-            New Custom Project
-          </Button>
-        </Box>
-        
-        <Grid container spacing={2}>
-          {templates.map((template) => (
-            <Grid item xs={12} sm={6} md={4} lg={2.4} key={template.id}>
-              <Card 
-                sx={{ 
-                  height: '100%',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  transition: 'transform 0.2s',
-                  '&:hover': {
-                    transform: 'translateY(-4px)',
-                    boxShadow: 4,
-                  },
-                  cursor: 'pointer',
-                }}
-                onClick={() => {
-                  if (template.params) {
-                    navigate(template.route, { state: template.params });
-                  } else {
-                    navigate(template.route);
-                  }
-                }}
-              >
-                <Box 
-                  sx={{ 
-                    p: 2, 
-                    display: 'flex', 
-                    justifyContent: 'center', 
-                    alignItems: 'center',
-                    color: 'white',
-                    bgcolor: template.color,
-                  }}
-                >
-                  {template.icon}
-                </Box>
-                <CardContent sx={{ flexGrow: 1 }}>
-                  <Typography variant="h6" component="h3" gutterBottom>
-                    {template.name}
-                  </Typography>
-                  <Typography variant="body2" color="text.secondary">
-                    {template.description}
-                  </Typography>
-                </CardContent>
-                <CardActions>
-                  <Button size="small" fullWidth>
-                    Start Project
-                  </Button>
-                </CardActions>
-              </Card>
-            </Grid>
-          ))}
-        </Grid>
-      </Box>
-    );
+  // New project dropdown handlers (copied/adapted from Projects.tsx)
+  const handleNewProjectClick = (event: React.MouseEvent<HTMLElement>) => {
+    setNewProjectMenuAnchor(event.currentTarget);
+  };
+
+  const handleNewProjectMenuClose = () => {
+    setNewProjectMenuAnchor(null);
+  };
+
+  const handleTemplateSelect = (template: typeof templates[0]) => {
+    if (template.params) {
+      navigate(template.route, { state: template.params });
+    } else {
+      navigate(template.route);
+    }
+    handleNewProjectMenuClose();
   };
 
   if (loading && projects.length === 0) {
@@ -907,40 +868,75 @@ const Dashboard: React.FC = () => {
       icon={DashboardIcon}
     >
       <Container maxWidth="lg" sx={{ py: { xs: 1, sm: 2 } }}>
-        {/* Quick Actions Section */}
-        <QuickActions />
-        
-        {/* Project Insights Section */}
-        <ProjectInsights 
-          stats={stats}
-          onRefresh={() => {
-            // Trigger a refresh of the dashboard data
-            if (user?.uid) {
-              const fetchDashboardData = async () => {
-                try {
-                  setLoading(true);
-                  setError(null);
-                  
-                  const projectsData = await ProjectService.getProjects(user.uid);
-                  const dashboardProjects = projectsData.map(convertToDashboardProject);
-                  setProjects(dashboardProjects);
-                  
-                  // Recalculate all stats...
-                  // (Same calculation logic as in useEffect)
-                  
-                } catch (err) {
-                  console.error('Error refreshing dashboard data:', err);
-                  setError('Failed to refresh dashboard data. Please try again.');
-                } finally {
-                  setLoading(false);
-                }
-              };
-              
-              fetchDashboardData();
+        {/* Pass the handler to QuickActions */}
+        <QuickActions onNewProjectClick={handleNewProjectClick} />
+
+        {/* Add the New Project Templates Menu here */}
+        <Menu
+          anchorEl={newProjectMenuAnchor}
+          open={Boolean(newProjectMenuAnchor)}
+          onClose={handleNewProjectMenuClose}
+          anchorOrigin={{
+            vertical: 'bottom',
+            horizontal: 'right',
+          }}
+          transformOrigin={{
+            vertical: 'top',
+            horizontal: 'right',
+          }}
+          PaperProps={{
+            elevation: 2,
+            sx: {
+              minWidth: 220,
+              maxWidth: 280,
+              borderRadius: 1.5,
+              boxShadow: '0 4px 20px rgba(0,0,0,0.1)',
+              pb: 1,
+              mt: 1,
             }
           }}
+        >
+          <Typography
+            variant="subtitle2"
+            sx={{ px: 2, py: 1.5, fontWeight: 600, color: 'text.primary' }}
+          >
+            Choose Project Type
+          </Typography>
+
+          {templates.map((template) => (
+            <MenuItem
+              key={template.id}
+              onClick={() => handleTemplateSelect(template)}
+              sx={{
+                py: 1.25,
+                px: 2,
+                '&:hover': {
+                  backgroundColor: alpha(template.color, 0.08),
+                }
+              }}
+            >
+              <ListItemIcon sx={{ color: template.color, minWidth: 36 }}>
+                {template.icon}
+              </ListItemIcon>
+              <ListItemText
+                primary={template.name}
+                sx={{
+                  '& .MuiTypography-root': {
+                    fontWeight: 600,
+                    fontSize: '0.9rem',
+                  }
+                }}
+              />
+            </MenuItem>
+          ))}
+        </Menu>
+
+        {/* Project Insights Section */}
+        <ProjectInsights
+          stats={stats}
+          onRefresh={refreshData}
         />
-        
+
         {/* Upcoming Deadlines Section */}
         <UpcomingDeadlines 
           nextMilestone={stats.nextMilestone}
@@ -955,9 +951,6 @@ const Dashboard: React.FC = () => {
         
         {/* Recent Projects Section */}
         <RecentProjects projects={projects} />
-
-        {/* Project Templates Section */}
-        {renderTemplatesSection()}
       </Container>
     </PageLayout>
   );

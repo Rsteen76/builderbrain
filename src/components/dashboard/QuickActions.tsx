@@ -13,6 +13,9 @@ import {
   useMediaQuery,
   IconButton,
   Zoom,
+  Card,
+  CardActionArea,
+  Avatar,
 } from '@mui/material';
 import {
   Construction as ConstructionIcon,
@@ -26,6 +29,7 @@ import {
   People as TeamIcon,
   ReceiptLong as ExpenseIcon,
   CalendarToday as CalendarIcon,
+  Build as BuildIcon,
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
@@ -39,7 +43,7 @@ interface ActionCardProps {
   icon: React.ReactNode;
   primaryIcon: React.ReactNode;
   path?: string;
-  onClick?: () => void;
+  onClick?: (event?: React.MouseEvent<HTMLElement>) => void;
   color: string;
   delay: number;
 }
@@ -60,9 +64,9 @@ const ActionCard: React.FC<ActionCardProps> = ({
   const [isHovered, setIsHovered] = useState(false);
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
   
-  const handleClick = () => {
+  const handleClick = (event: React.MouseEvent<HTMLElement>) => {
     if (onClick) {
-      onClick();
+      onClick(event);
     } else if (path) {
       navigate(path);
     }
@@ -195,7 +199,12 @@ const ActionCard: React.FC<ActionCardProps> = ({
   );
 };
 
-const QuickActions: React.FC = () => {
+// Define the props for QuickActions
+interface QuickActionsProps {
+  onNewProjectClick?: (event: React.MouseEvent<HTMLElement>) => void;
+}
+
+const QuickActions: React.FC<QuickActionsProps> = ({ onNewProjectClick }) => {
   const theme = useTheme();
   const navigate = useNavigate();
   const { user } = useAuth();
@@ -233,6 +242,7 @@ const QuickActions: React.FC = () => {
     }
   };
 
+  // Define actions - Adjust New Project onClick wrapper
   const actions = [
     {
       title: 'New Project',
@@ -242,6 +252,15 @@ const QuickActions: React.FC = () => {
       path: '/projects/new',
       color: theme.palette.primary.main,
       delay: 0,
+      // Wrap onNewProjectClick to match the optional event signature
+      onClick: onNewProjectClick 
+        ? (event?: React.MouseEvent<HTMLElement>) => { 
+            // Check if event exists before passing, though it should in a click
+            if (event) { 
+              onNewProjectClick(event); 
+            }
+          } 
+        : undefined, // Keep undefined if handler doesn't exist
     },
     {
       title: 'Create Task',
@@ -251,6 +270,9 @@ const QuickActions: React.FC = () => {
       path: '/tasks',
       color: theme.palette.success.main,
       delay: 1,
+      // Ensure other simple navigates also match the optional signature if needed
+      // but () => void is assignable to (event?: T) => void
+      onClick: () => navigate('/tasks/new'), 
     },
     {
       title: 'Calendar',
@@ -260,6 +282,7 @@ const QuickActions: React.FC = () => {
       path: '/calendar',
       color: theme.palette.secondary.main,
       delay: 2,
+      onClick: () => navigate('/calendar'),
     },
     {
       title: 'Add Team Member',
@@ -269,13 +292,14 @@ const QuickActions: React.FC = () => {
       path: '/team',
       color: theme.palette.warning.main,
       delay: 3,
+      onClick: () => navigate('/team'),
     },
     {
       title: 'Add Expense',
       description: 'Track costs and manage budget',
       icon: <ReceiptIcon sx={{ fontSize: 24 }} />,
       primaryIcon: <ExpenseIcon sx={{ fontSize: 24 }} />,
-      onClick: handleAddExpense,
+      onClick: handleAddExpense, // Assuming handleAddExpense matches () => void or (event?:...) => void
       color: theme.palette.info.main,
       delay: 4,
     },
