@@ -705,64 +705,20 @@ const Expenses: React.FC<{ projectId?: string }> = ({ projectId }) => {
         
         await ExpenseService.updateExpense(expenseData.id, expenseData);
         
-        // Update in local state
-        setExpenses(prevExpenses => {
-          const updatedExpenses = prevExpenses.map(exp => {
-            if (exp.id === expenseData.id) {
-              // Find the updated project name if the project has changed
-              let updatedProjectName = exp.projectName;
-              if (expenseData.projectId && expenseData.projectId !== exp.projectId) {
-                // Project changed, get the new project name
-                const newProject = projects.find(p => p.id === expenseData.projectId);
-                if (newProject) {
-                  updatedProjectName = newProject.name;
-                }
-              }
-              
-              // Create a complete updated expense object
-              const updatedExp = {
-                ...exp,              // Keep all original fields
-                ...expenseData,      // Apply all updates
-                projectName: updatedProjectName, // Use correct project name
-              };
-              
-              // Ensure subcontractorName is preserved if it exists in the form data
-              // This handles the case where a subcontractor was added or changed
-              if (expenseData.subcontractorId && !expenseData.subcontractorName) {
-                console.log('Found subcontractorId but no name, trying to look it up:', expenseData.subcontractorId);
-                
-                // If we have the ID but not the name, try to find it
-                // The subcontractorName might be missing if only the ID was sent from the form
-                // This can happen especially when selecting from a dropdown
-                
-                // First check if the expense being updated already has the same subcontractor
-                if (exp.subcontractorId === expenseData.subcontractorId && exp.subcontractorName) {
-                  updatedExp.subcontractorName = exp.subcontractorName;
-                }
-                // Otherwise, we need to fetch the subcontractor on the next render
-                // For now, set a placeholder
-                else {
-                  updatedExp.subcontractorName = 'Loading...';
-                  
-                  // This will trigger a re-fetch of expenses which should include the correct name
-                  setTimeout(() => {
-                    setSubmitting(prev => !prev); // Toggle submitting to trigger a refresh
-                  }, 500);
-                }
-              }
-              
-              console.log('After update - updated expense:', updatedExp);
-              return updatedExp;
-            }
-            return exp;
-          });
-          
-          console.log('After update - all expenses:', updatedExpenses);
-          return updatedExpenses;
-        });
+        // Instead of complex local state updates that can cause inconsistencies,
+        // trigger a complete refresh of the expenses data from the server
+        // This ensures we always have the latest data directly from the database
+        await fetchExpenses();
         
-        console.log('Updated expense in local state', expenseData.id);
+        console.log('Updated expense in the database and refreshed all expense data');
         savedExpense = { ...expenseData } as Expense;
+        
+        // Show success message
+        setSnackbar({
+          open: true,
+          message: 'Expense updated successfully',
+          severity: 'success'
+        });
         
         // Check if this expense is being marked as paid and has payment details
         if (expenseData.status === 'paid' && expenseData.paymentDetails && 

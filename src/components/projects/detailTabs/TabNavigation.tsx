@@ -3,6 +3,8 @@ import {
   Box,
   Tabs,
   Tab,
+  useTheme,
+  useMediaQuery,
 } from '@mui/material';
 import {
   Business as BusinessIcon,
@@ -23,14 +25,21 @@ const TabNavigation: React.FC<TabNavigationProps> = ({
   tabValue,
   onTabChange,
 }) => {
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
+
+  const appBarHeight = isMobile 
+    ? 56
+    : (theme.mixins.toolbar?.minHeight || 64);
+
   return (
     <Box sx={{ 
       borderBottom: 1, 
       borderColor: 'divider', 
       mb: 3,
       position: 'sticky',
-      top: 0,
-      zIndex: 1100,
+      top: `${appBarHeight}px`, 
+      zIndex: theme.zIndex.appBar - 1,
       bgcolor: 'background.paper',
     }}>
       <Tabs

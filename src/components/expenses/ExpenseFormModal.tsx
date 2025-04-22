@@ -693,6 +693,9 @@ const ExpenseFormModal: React.FC<ExpenseFormModalProps> = ({
         status: expense.status || 'pending',
         notes: expense.notes || '',
         tags: expense.tags || [],
+        // Preserve payment information
+        amountPaid: expense.amountPaid || 0,
+        paymentDetails: expense.paymentDetails || null,
       });
       
       // Phase list initialization
@@ -727,8 +730,8 @@ const ExpenseFormModal: React.FC<ExpenseFormModalProps> = ({
       // Initialize receipt preview
       setReceiptPreview(expense.receiptUrl || null);
       
-      // Initialize payment details if status is 'paid'
-      if (expense.status === 'paid' && expense.paymentDetails) {
+      // Initialize payment details if status is 'paid' or 'partially_paid'
+      if ((expense.status === 'paid' || expense.status === 'partially_paid') && expense.paymentDetails) {
         setPaymentMethod(expense.paymentDetails.method || 'other');
         const paymentDateObj = expense.paymentDetails.date ? new Date(expense.paymentDetails.date) : new Date();
         setPaymentDate(paymentDateObj.toISOString().split('T')[0]);
@@ -736,6 +739,10 @@ const ExpenseFormModal: React.FC<ExpenseFormModalProps> = ({
         setPaymentNotes(expense.paymentDetails.notes || '');
       }
       
+      // Set selectedBid if there's a bidId
+      if (expense.bidId) {
+        setSelectedBid(expense.bidId);
+      }
     } else if (open) {
       // Reset logic
       console.log(`[Phase Init] Resetting form for new expense.`);
@@ -753,6 +760,7 @@ const ExpenseFormModal: React.FC<ExpenseFormModalProps> = ({
         status: 'pending',
         notes: '',
         tags: [],
+        amountPaid: 0,
       });
       setLineItems([]);
       setShowLineItems(false);
@@ -773,10 +781,12 @@ const ExpenseFormModal: React.FC<ExpenseFormModalProps> = ({
     setDuplicateExpenses([]);
     setTabValue(0);
     setExpenseDescriptionOptions([]);
-    setPaymentMethod('');
-    setReferenceNumber('');
-    setPaymentDate(new Date().toISOString().split('T')[0]);
-    setPaymentNotes('');
+    if (!(expense?.status === 'paid' || expense?.status === 'partially_paid')) {
+      setPaymentMethod('');
+      setReferenceNumber('');
+      setPaymentDate(new Date().toISOString().split('T')[0]);
+      setPaymentNotes('');
+    }
   }, [open, expense, projects]);
 
   // Effect to fetch available bids when projectId changes
@@ -1250,6 +1260,9 @@ const ExpenseFormModal: React.FC<ExpenseFormModalProps> = ({
             <Tab label="Main Info" />
             <Tab label="Line Items" />
             <Tab label="Receipt" />
+            {(formData.status === 'paid' || formData.status === 'partially_paid' || (formData.amountPaid ?? 0) > 0) && (
+              <Tab label="Payment Info" />
+            )}
           </Tabs>
 
           {tabValue === 0 && (
@@ -1464,25 +1477,54 @@ const ExpenseFormModal: React.FC<ExpenseFormModalProps> = ({
             </Box>
 
             {!showLineItems ? (
-              <TextField
-                fullWidth
-                id="amount"
-                name="amount"
-                label="Amount"
-                type="number"
-                value={formData.amount || ''}
-                onChange={(e) => handleChange('amount', parseFloat(e.target.value))}
-                error={!!errors.amount}
-                helperText={errors.amount || null}
-                size="small"
-                InputProps={{
-                  startAdornment: (
-                    <InputAdornment position="start">
-                      <MoneyIcon fontSize="small" color="primary" />
-                    </InputAdornment>
-                  )
-                }}
-              />
+              <Box>
+                <TextField
+                  fullWidth
+                  id="amount"
+                  name="amount"
+                  label="Amount"
+                  type="number"
+                  value={formData.amount || ''}
+                  onChange={(e) => handleChange('amount', parseFloat(e.target.value))}
+                  error={!!errors.amount}
+                  helperText={errors.amount || null}
+                  size="small"
+                  InputProps={{
+                    startAdornment: (
+                      <InputAdornment position="start">
+                        <MoneyIcon fontSize="small" color="primary" />
+                      </InputAdornment>
+                    )
+                  }}
+                />
+                
+                {/* Show payment status if paid or partially paid */}
+                {(formData.amountPaid ?? 0) > 0 && (
+                  <Box sx={{ mt: 1, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                      <CheckCircleIcon 
+                        fontSize="small" 
+                        color={formData.status === 'paid' ? 'success' : 'info'} 
+                        sx={{ mr: 0.5 }}
+                      />
+                      <Typography variant="body2" color={formData.status === 'paid' ? 'success.main' : 'info.main'}>
+                        {formData.status === 'paid' ? 'Fully Paid' : 'Partially Paid'}
+                      </Typography>
+                    </Box>
+                    
+                    <Box>
+                      <Typography variant="body2" color="text.secondary">
+                        Paid: <strong>${(formData.amountPaid ?? 0).toFixed(2)}</strong> | 
+                        {((formData.amount ?? 0) > (formData.amountPaid ?? 0)) ? (
+                          <> Remaining: <strong style={{ color: theme.palette.warning.main }}>${((formData.amount ?? 0) - (formData.amountPaid ?? 0)).toFixed(2)}</strong></>
+                        ) : (
+                          <> <span style={{ color: theme.palette.success.main }}>No Balance</span></>
+                        )}
+                      </Typography>
+                    </Box>
+                  </Box>
+                )}
+              </Box>
             ) : (
               <Box>
                 <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
@@ -1608,6 +1650,7 @@ const ExpenseFormModal: React.FC<ExpenseFormModalProps> = ({
                 value={formData.status || 'pending'}
                 onChange={handleStatusChange}
                 label="Status"
+                disabled={(formData.amountPaid ?? 0) > 0} // Disable status change if there are payments
                 startAdornment={
                   <InputAdornment position="start">
                     <PaymentIcon fontSize="small" color="primary" />
@@ -1626,8 +1669,19 @@ const ExpenseFormModal: React.FC<ExpenseFormModalProps> = ({
                     Paid
                   </Box>
                 </MenuItem>
-                    </Select>
-                  </FormControl>
+                <MenuItem value="partially_paid">
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                    <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: 'info.main' }} />
+                    Partially Paid
+                  </Box>
+                </MenuItem>
+              </Select>
+              {(formData.amountPaid ?? 0) > 0 && (
+                <FormHelperText>
+                  Status is managed automatically based on payments. Use "Mark as Paid" from the expenses list to record payments.
+                </FormHelperText>
+              )}
+            </FormControl>
           </Grid>
 
           <Grid item xs={12} sm={6}>
@@ -1826,6 +1880,131 @@ const ExpenseFormModal: React.FC<ExpenseFormModalProps> = ({
         {tabValue === 2 && (
           <Box sx={{ display: 'block', p: 3 }}>
             {/* ... Receipt Tab Content ... */}
+          </Box>
+        )}
+
+        {tabValue === 3 && (
+          <Box sx={{ display: 'block', p: 3 }}>
+            <Typography variant="h6" gutterBottom>
+              Payment History
+            </Typography>
+            
+            {(formData.amountPaid ?? 0) > 0 ? (
+              <Box>
+                <Grid container spacing={3}>
+                  <Grid item xs={12} md={6}>
+                    <Paper
+                      elevation={0}
+                      sx={{
+                        p: 2,
+                        border: '1px solid',
+                        borderColor: 'divider',
+                        borderRadius: 1,
+                        bgcolor: alpha(theme.palette.success.main, 0.05),
+                      }}
+                    >
+                      <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
+                        <Typography variant="subtitle2">Amount Paid:</Typography>
+                        <Typography variant="subtitle1" fontWeight="bold" color="success.main">
+                          ${(formData.amountPaid ?? 0).toFixed(2)}
+                        </Typography>
+                      </Box>
+                      
+                      <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
+                        <Typography variant="subtitle2">Original Amount:</Typography>
+                        <Typography variant="subtitle1">
+                          ${(formData.amount ?? 0).toFixed(2)}
+                        </Typography>
+                      </Box>
+                      
+                      {((formData.amount ?? 0) > (formData.amountPaid ?? 0)) && (
+                        <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
+                          <Typography variant="subtitle2">Remaining:</Typography>
+                          <Typography variant="subtitle1" fontWeight="bold" color="warning.main">
+                            ${((formData.amount ?? 0) - (formData.amountPaid ?? 0)).toFixed(2)}
+                          </Typography>
+                        </Box>
+                      )}
+                      
+                      <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                        <Typography variant="subtitle2">Status:</Typography>
+                        <Chip
+                          label={formData.status === 'paid' ? 'Paid' : formData.status === 'partially_paid' ? 'Partially Paid' : formData.status}
+                          color={formData.status === 'paid' ? 'success' : formData.status === 'partially_paid' ? 'info' : 'default'}
+                          size="small"
+                        />
+                      </Box>
+                    </Paper>
+                  </Grid>
+                  
+                  <Grid item xs={12} md={6}>
+                    <Paper
+                      elevation={0}
+                      sx={{
+                        p: 2,
+                        border: '1px solid',
+                        borderColor: 'divider',
+                        borderRadius: 1,
+                      }}
+                    >
+                      <Typography variant="subtitle2" gutterBottom>Payment Details:</Typography>
+                      
+                      {formData.paymentDetails ? (
+                        <>
+                          <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
+                            <Typography variant="body2" color="text.secondary">Method:</Typography>
+                            <Typography variant="body2">
+                              {formData.paymentDetails.method?.charAt(0).toUpperCase() + formData.paymentDetails.method?.slice(1) || 'Not specified'}
+                            </Typography>
+                          </Box>
+                          
+                          {formData.paymentDetails.date && (
+                            <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
+                              <Typography variant="body2" color="text.secondary">Date:</Typography>
+                              <Typography variant="body2">
+                                {new Date(formData.paymentDetails.date).toLocaleDateString()}
+                              </Typography>
+                            </Box>
+                          )}
+                          
+                          {formData.paymentDetails.referenceNumber && (
+                            <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
+                              <Typography variant="body2" color="text.secondary">Reference:</Typography>
+                              <Typography variant="body2">
+                                {formData.paymentDetails.referenceNumber}
+                              </Typography>
+                            </Box>
+                          )}
+                          
+                          {formData.paymentDetails.notes && (
+                            <Box sx={{ mt: 1 }}>
+                              <Typography variant="body2" color="text.secondary">Notes:</Typography>
+                              <Typography variant="body2" sx={{ mt: 0.5 }}>
+                                {formData.paymentDetails.notes}
+                              </Typography>
+                            </Box>
+                          )}
+                        </>
+                      ) : (
+                        <Typography variant="body2" color="text.secondary">
+                          No detailed payment information available
+                        </Typography>
+                      )}
+                    </Paper>
+                  </Grid>
+                </Grid>
+                
+                <Box sx={{ mt: 3 }}>
+                  <Typography variant="body2" color="text.secondary">
+                    Note: To record additional payments, use the "Mark as Paid" action from the expense list. This payment information is read-only in the edit form.
+                  </Typography>
+                </Box>
+              </Box>
+            ) : (
+              <Typography variant="body1" color="text.secondary">
+                No payments have been recorded for this expense yet.
+              </Typography>
+            )}
           </Box>
         )}
       </DialogContent>
