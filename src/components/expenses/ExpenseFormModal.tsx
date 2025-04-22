@@ -546,7 +546,6 @@ const ExpenseFormModal: React.FC<ExpenseFormModalProps> = ({
 
   // State to hold available bids for the selected project
   const [availableBids, setAvailableBids] = useState<Bid[]>([]);
-  const [selectedBid, setSelectedBid] = useState<string>('');
   const [loadingBids, setLoadingBids] = useState<boolean>(false);
 
   const isEditMode = useMemo(() => !!expense?.id, [expense]);
@@ -696,6 +695,9 @@ const ExpenseFormModal: React.FC<ExpenseFormModalProps> = ({
         // Preserve payment information
         amountPaid: expense.amountPaid || 0,
         paymentDetails: expense.paymentDetails || null,
+        // Preserve bid information
+        bidId: expense.bidId || '',
+        paymentStageId: expense.paymentStageId || '',
       });
       
       // Phase list initialization
@@ -738,11 +740,6 @@ const ExpenseFormModal: React.FC<ExpenseFormModalProps> = ({
         setReferenceNumber(expense.paymentDetails.referenceNumber || '');
         setPaymentNotes(expense.paymentDetails.notes || '');
       }
-      
-      // Set selectedBid if there's a bidId
-      if (expense.bidId) {
-        setSelectedBid(expense.bidId);
-      }
     } else if (open) {
       // Reset logic
       console.log(`[Phase Init] Resetting form for new expense.`);
@@ -761,6 +758,8 @@ const ExpenseFormModal: React.FC<ExpenseFormModalProps> = ({
         notes: '',
         tags: [],
         amountPaid: 0,
+        bidId: '',
+        paymentStageId: '',
       });
       setLineItems([]);
       setShowLineItems(false);
@@ -794,7 +793,6 @@ const ExpenseFormModal: React.FC<ExpenseFormModalProps> = ({
     const fetchProjectBids = async () => {
       if (!formData.projectId || !user?.uid) {
         setAvailableBids([]);
-        setSelectedBid('');
         setLoadingBids(false);
         return;
       }
@@ -1160,7 +1158,7 @@ const ExpenseFormModal: React.FC<ExpenseFormModalProps> = ({
         notes: paymentNotes
       } : null,
       ...(expense?.id && { id: expense.id }),
-      bidId: selectedBid || null, // Include bidId if selected
+      bidId: formData.bidId || null, // Include bidId if selected
     });
     
     if (user?.uid) {
@@ -1461,7 +1459,7 @@ const ExpenseFormModal: React.FC<ExpenseFormModalProps> = ({
               <Typography variant="subtitle2" fontWeight={600} color="text.primary">
                 Amount Details
               </Typography>
-         
+               
               <FormControlLabel
                 control={
                   <Switch
@@ -1476,25 +1474,49 @@ const ExpenseFormModal: React.FC<ExpenseFormModalProps> = ({
               />
             </Box>
 
+            {/* Amount summary - clearer distinction between original and remaining */}
+            {(formData.amountPaid ?? 0) > 0 && (
+              <Box sx={{ mb: 2, p: 1, bgcolor: 'background.paper', borderRadius: 1, border: '1px solid', borderColor: 'divider' }}>
+                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <Typography variant="body2" color="text.secondary">Original Amount:</Typography>
+                  <Typography variant="body2" fontWeight="bold">${(formData.amount ?? 0).toFixed(2)}</Typography>
+                </Box>
+                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <Typography variant="body2" color="text.secondary">Amount Paid:</Typography>
+                  <Typography variant="body2" fontWeight="bold" color="success.main">${(formData.amountPaid ?? 0).toFixed(2)}</Typography>
+                </Box>
+                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mt: 0.5, pt: 0.5, borderTop: '1px dashed', borderColor: 'divider' }}>
+                  <Typography variant="body2" fontWeight="bold">Remaining:</Typography>
+                  <Typography variant="body2" fontWeight="bold" color="warning.main">
+                    ${((formData.amount ?? 0) - (formData.amountPaid ?? 0)).toFixed(2)}
+                  </Typography>
+                </Box>
+              </Box>
+            )}
+
             {!showLineItems ? (
               <Box>
                 <TextField
                   fullWidth
                   id="amount"
                   name="amount"
-                  label="Amount"
+                  label={(formData.amountPaid ?? 0) > 0 ? "Original Total Amount" : "Amount"}
                   type="number"
                   value={formData.amount || ''}
                   onChange={(e) => handleChange('amount', parseFloat(e.target.value))}
                   error={!!errors.amount}
-                  helperText={errors.amount || null}
+                  helperText={(formData.amountPaid ?? 0) > 0 
+                    ? "Original amount cannot be changed after payments are recorded" 
+                    : errors.amount || null}
                   size="small"
+                  disabled={(formData.amountPaid ?? 0) > 0} // Disable if partly paid
                   InputProps={{
                     startAdornment: (
                       <InputAdornment position="start">
                         <MoneyIcon fontSize="small" color="primary" />
                       </InputAdornment>
-                    )
+                    ),
+                    readOnly: (formData.amountPaid ?? 0) > 0, // Make it read-only if partly paid
                   }}
                 />
                 
@@ -1511,21 +1533,10 @@ const ExpenseFormModal: React.FC<ExpenseFormModalProps> = ({
                         {formData.status === 'paid' ? 'Fully Paid' : 'Partially Paid'}
                       </Typography>
                     </Box>
-                    
-                    <Box>
-                      <Typography variant="body2" color="text.secondary">
-                        Paid: <strong>${(formData.amountPaid ?? 0).toFixed(2)}</strong> | 
-                        {((formData.amount ?? 0) > (formData.amountPaid ?? 0)) ? (
-                          <> Remaining: <strong style={{ color: theme.palette.warning.main }}>${((formData.amount ?? 0) - (formData.amountPaid ?? 0)).toFixed(2)}</strong></>
-                        ) : (
-                          <> <span style={{ color: theme.palette.success.main }}>No Balance</span></>
-                        )}
-                      </Typography>
-                    </Box>
                   </Box>
                 )}
-              </Box>
-            ) : (
+                </Box>
+              ) : (
               <Box>
                 <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
                   <Button
@@ -1628,125 +1639,6 @@ const ExpenseFormModal: React.FC<ExpenseFormModalProps> = ({
             )}
           </Grid>
 
-          <Grid item xs={12}>
-                  <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
-                    <Typography variant="subtitle2" fontWeight={600} color="text.primary">
-                      Amount
-                    </Typography>
-               
-                    <Typography variant="subtitle2" fontWeight={600} color="success.main">
-                      ${formData.amount?.toFixed(2) || '0.00'}
-            </Typography>
-                  </Box>
-                </Grid>
-           
-                <Grid item xs={12} sm={6}>
-            <FormControl fullWidth sx={{ mb: 1.5 }} size="small">
-              <InputLabel id="status-label">Status</InputLabel>
-              <Select
-                labelId="status-label"
-                id="status"
-                name="status"
-                value={formData.status || 'pending'}
-                onChange={handleStatusChange}
-                label="Status"
-                disabled={(formData.amountPaid ?? 0) > 0} // Disable status change if there are payments
-                startAdornment={
-                  <InputAdornment position="start">
-                    <PaymentIcon fontSize="small" color="primary" />
-                  </InputAdornment>
-                }
-              >
-                <MenuItem value="pending">
-                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                    <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: 'warning.main' }} />
-                    Pending
-                  </Box>
-                </MenuItem>
-                <MenuItem value="paid">
-                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                    <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: 'success.main' }} />
-                    Paid
-                  </Box>
-                </MenuItem>
-                <MenuItem value="partially_paid">
-                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                    <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: 'info.main' }} />
-                    Partially Paid
-                  </Box>
-                </MenuItem>
-              </Select>
-              {(formData.amountPaid ?? 0) > 0 && (
-                <FormHelperText>
-                  Status is managed automatically based on payments. Use "Mark as Paid" from the expenses list to record payments.
-                </FormHelperText>
-              )}
-            </FormControl>
-          </Grid>
-
-          <Grid item xs={12} sm={6}>
-            <Typography variant="subtitle2" fontWeight={600} color="text.primary" gutterBottom>
-              Receipt
-            </Typography>
-           
-            {receiptPreview ? (
-              <Box sx={{ position: 'relative', height: 120, display: 'flex', justifyContent: 'center' }}>
-                <img
-                  src={receiptPreview}
-                  alt="Receipt preview"
-                  style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }}
-                />
-                <IconButton
-                  onClick={handleRemoveReceipt}
-                  size="small"
-                  sx={{
-                    position: 'absolute',
-                    top: 0,
-                    right: 0,
-                    bgcolor: 'error.main',
-                    color: 'white',
-                    '&:hover': { bgcolor: 'error.dark' },
-                  }}
-                >
-                  <DeleteIcon fontSize="small" />
-                </IconButton>
-              </Box>
-            ) : (
-              <Box sx={{ 
-                display: 'flex',
-                flexDirection: 'column',
-                alignItems: 'center',
-                justifyContent: 'center',
-                border: '2px dashed',
-                borderColor: alpha(theme.palette.primary.main, 0.2),
-                borderRadius: '6px',
-                p: 2,
-                height: 120,
-                backgroundColor: alpha(theme.palette.primary.main, 0.03),
-              }}>
-              <input
-                  accept="image/*,application/pdf"
-                  id="receipt-file"
-                type="file"
-                  style={{ display: 'none' }}
-                  onChange={handleFileChange}
-                />
-                <label htmlFor="receipt-file" style={{ width: '100%', textAlign: 'center' }}>
-                  <Button
-                    component="span"
-                    startIcon={<UploadIcon />}
-                    sx={{ textTransform: 'none' }}
-                  >
-                    Upload Receipt
-                  </Button>
-                  <Typography variant="caption" display="block" color="text.secondary">
-                    Drag & drop or click to browse
-                  </Typography>
-                </label>
-              </Box>
-            )}
-          </Grid>
-
           <Grid item xs={12} sm={6}>
             <FormControl fullWidth size="small" error={!!errors.bidId}>
               <InputLabel id="bid-label">Link to Bid</InputLabel>
@@ -1754,8 +1646,8 @@ const ExpenseFormModal: React.FC<ExpenseFormModalProps> = ({
                 labelId="bid-label"
                 id="bidId"
                 name="bidId"
-                value={selectedBid}
-                onChange={(e) => setSelectedBid(e.target.value)}
+                value={formData.bidId || ''}
+                onChange={(e) => handleChange('bidId', e.target.value)}
                 label="Link to Bid"
                 startAdornment={
                   <InputAdornment position="start">
@@ -1777,7 +1669,7 @@ const ExpenseFormModal: React.FC<ExpenseFormModalProps> = ({
                 ))}
               </Select>
               <FormHelperText>
-                {selectedBid ? 'This expense will be linked to the selected bid' : 'Linking to a bid will update its payment progress'}
+                {formData.bidId ? 'This expense will be linked to the selected bid' : 'Linking to a bid will update its payment progress'}
               </FormHelperText>
             </FormControl>
           </Grid>
@@ -1910,9 +1802,9 @@ const ExpenseFormModal: React.FC<ExpenseFormModalProps> = ({
                         </Typography>
                       </Box>
                       
-                      <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
-                        <Typography variant="subtitle2">Original Amount:</Typography>
-                        <Typography variant="subtitle1">
+                      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <Typography variant="body2" color="text.secondary">Original Amount:</Typography>
+                        <Typography variant="body2">
                           ${(formData.amount ?? 0).toFixed(2)}
                         </Typography>
                       </Box>
