@@ -392,21 +392,18 @@ const Expenses: React.FC<{ projectId?: string }> = ({ projectId }) => {
   const handleMarkAsPaid = async (expenseId: string, actualAmountPaid: number, paymentDetails?: any) => {
     if (!user?.uid) return;
     
+    console.log(`[handleMarkAsPaid START] ID: ${expenseId}, Amount Paid Now: ${actualAmountPaid}`, paymentDetails);
     setSubmitting(true);
     
     try {
-      // Get the expense data before updating
       const expenseToUpdate = expenses.find(e => e.id === expenseId);
       if (!expenseToUpdate) {
         throw new Error('Expense not found locally');
       }
+      console.log(`[handleMarkAsPaid] Found local expense before update:`, JSON.parse(JSON.stringify(expenseToUpdate))); // Log initial local state
       
-      // Use the passed actualAmountPaid instead of expenseToUpdate.amount
-      console.log(`[handleMarkAsPaid] Expense ${expenseId} - Actual Amount Paid: ${actualAmountPaid}`);
-
-      // Update expense status to paid in Firestore
       await ExpenseService.markAsPaid(expenseId, actualAmountPaid, paymentDetails);
-      console.log(`[handleMarkAsPaid] Expense ${expenseId} marked as paid in Firestore.`);
+      console.log(`[handleMarkAsPaid] Service call success. Firestore should be updated.`);
 
       // --- Start Bid Payment Schedule Adjustment Logic ---
       const paymentStageId = expenseToUpdate.paymentStageId; // Assuming this field exists
@@ -634,37 +631,45 @@ const Expenses: React.FC<{ projectId?: string }> = ({ projectId }) => {
       }
       // --- End Bid Payment Schedule Adjustment Logic ---
 
-      // Update local state for the expense list - ENSURE AMOUNT IS UPDATED HERE TOO
-      setExpenses(prev => prev.map(e => 
-        e.id === expenseId 
-          ? { ...e, status: 'paid', amount: actualAmountPaid, paymentDetails: paymentDetails } // *** Update amount and payment details in local state ***
-          : e
-      ));
-      console.log(`[handleMarkAsPaid] Updated local expense state for ${expenseId} to 'paid' with amount ${actualAmountPaid} and payment details`, paymentDetails);
-
-      // If we have project-related expense, trigger a refresh using a custom event
-      if (expenseToUpdate?.projectId) {
-        // Create and dispatch a custom event to notify ProjectDetailPage
-        const event = new CustomEvent('expense-status-changed', {
-          detail: {
-            expenseId,
-            projectId: expenseToUpdate.projectId,
-            phaseId: expenseToUpdate.phaseId,
-            oldStatus: expenseToUpdate.status,
-            newStatus: 'paid'
-          }
-        });
-        window.dispatchEvent(event);
+      // --- Update Local State Correctly ---
+      const originalExpense = expenses.find(e => e.id === expenseId);
+      if (originalExpense) {
+        const originalTotalAmount = originalExpense.amount;
+        const currentPaid = originalExpense.amountPaid || 0;
+        const newTotalPaid = currentPaid + actualAmountPaid;
+        const newStatus = (newTotalPaid >= originalTotalAmount - 0.001) ? 'paid' : 'partially_paid';
+        
+        console.log(`[handleMarkAsPaid LOCAL UPDATE] Expense ID: ${expenseId}, Original Amt: ${originalTotalAmount}, Current Paid (Local): ${currentPaid}, Amount Paid Now: ${actualAmountPaid}, New Total Paid: ${newTotalPaid}, New Status: ${newStatus}`);
+        
+        setExpenses(prev => prev.map(e => 
+          e.id === expenseId 
+            ? { 
+                ...e, 
+                status: newStatus, 
+                amountPaid: newTotalPaid, 
+                paymentDetails: paymentDetails
+              } 
+            : e
+        ));
+        console.log(`[handleMarkAsPaid LOCAL UPDATE] setExpenses called.`);
+      } else {
+        console.warn(`[handleMarkAsPaid] Expense ${expenseId} not found in local state for update.`);
+        fetchExpenses(); 
       }
-    } catch (err) {
-      console.error('Error marking expense as paid:', err);
+      
+      setSnackbar({ open: true, message: 'Expense payment recorded!', severity: 'success' });
+      
+    } catch (err: any) {
+      console.error("[handleMarkAsPaid] Error marking expense as paid:", err);
+      setError(err.message || 'Failed to mark expense as paid. Please try again.');
       setSnackbar({
         open: true,
-        message: 'Failed to mark expense as paid',
+        message: err.message || 'Failed to record payment',
         severity: 'error'
       });
     } finally {
       setSubmitting(false);
+      handleClosePaymentModal(); // Close the payment modal
     }
   };
   
@@ -1184,6 +1189,40 @@ const Expenses: React.FC<{ projectId?: string }> = ({ projectId }) => {
   }, [groupedExpenses, expenses]);
 
   const renderExpenseRow = (expense: Expense) => {
+    const amountPaid = expense.amountPaid || 0;
+    const remainingAmount = expense.amount - amountPaid;
+    
+    // Add log inside render function
+    console.log(`[renderExpenseRow] ID: ${expense.id}, Status: ${expense.status}, Amount: ${expense.amount}, AmountPaid: ${amountPaid}, Remaining: ${remainingAmount}`);
+
+    let statusLabel: string;
+    let statusColor: 'success' | 'warning' | 'info' | 'error' | 'default' = 'warning'; 
+
+    switch (expense.status) {
+      case 'paid':
+        statusLabel = 'Paid';
+        statusColor = 'success';
+        break;
+      case 'partially_paid':
+        statusLabel = 'Partially Paid';
+        statusColor = 'info'; 
+        break;
+      case 'pending':
+        statusLabel = 'Pending';
+        statusColor = 'warning';
+        break;
+      case 'approved':
+        statusLabel = 'Approved'; 
+        statusColor = 'default'; // Use default color for approved
+        break;
+      case 'rejected':
+        statusLabel = 'Rejected';
+        statusColor = 'error';
+        break;
+      default:
+        statusLabel = expense.status; // Fallback
+    }
+    
     return (
       <TableRow 
         key={expense.id}
@@ -1192,9 +1231,13 @@ const Expenses: React.FC<{ projectId?: string }> = ({ projectId }) => {
         sx={{ 
           cursor: 'pointer',
           '&:last-child td, &:last-child th': { border: 0 },
+          // Optional: different styling for partially paid?
           ...(expense.status === 'paid' && { 
-            bgcolor: alpha(theme.palette.success.light, 0.1),
-          })
+            bgcolor: alpha(theme.palette.success.light, 0.08),
+          }),
+          ...(expense.status === 'partially_paid' && { 
+            bgcolor: alpha(theme.palette.info.light, 0.08),
+          }),
         }}
       >
         <TableCell component="th" scope="row">
@@ -1236,6 +1279,8 @@ const Expenses: React.FC<{ projectId?: string }> = ({ projectId }) => {
             />
           )}
         </TableCell>
+        
+        {/* Amount Cell - Show Paid / Remaining */}
         <TableCell 
           align="right" 
           onClick={(e) => {
@@ -1247,17 +1292,27 @@ const Expenses: React.FC<{ projectId?: string }> = ({ projectId }) => {
             '&:hover': { color: theme.palette.primary.main }
           }}
         >
-          <Tooltip title={`Sort by amount (${sortField === 'amount' && sortDirection === 'asc' ? 'lowest first' : 'highest first'})`}>
-            <span>
-              {formatCurrency(expense.amount)}
+          <Tooltip title={`Total: ${formatCurrency(expense.amount)}`}>
+            <Box sx={{ textAlign: 'right' }}>
+              <Typography variant="body2" fontWeight="medium">
+                {formatCurrency(remainingAmount)}
+              </Typography>
+              {expense.status === 'partially_paid' && (
+                <Typography variant="caption" color="text.secondary">
+                  Paid: {formatCurrency(amountPaid)}
+                </Typography>
+              )}
+              {/* Sorting Indicator */}
               {sortField === 'amount' && (
-                <span style={{ marginLeft: '4px', verticalAlign: 'middle' }}>
+                <span style={{ marginLeft: '4px', verticalAlign: 'middle', display: 'inline-block' }}>
                   {sortDirection === 'asc' ? <ArrowDropUpIcon fontSize="small" /> : <ArrowDropDownIcon fontSize="small" />}
                 </span>
               )}
-            </span>
+            </Box>
           </Tooltip>
         </TableCell>
+
+        {/* Date Cell - Unchanged */}
         <TableCell 
           onClick={(e) => {
             e.stopPropagation();
@@ -1268,10 +1323,8 @@ const Expenses: React.FC<{ projectId?: string }> = ({ projectId }) => {
             '&:hover': { color: theme.palette.primary.main }
           }}
         >
-          {/* Don't wrap the date text in a tooltip - only the sort indicator */}
-          {(() => {
-            return formatDate(expense.date);
-          })()}
+          {formatDate(expense.date)}
+          {/* Sorting Indicator */}
           {sortField === 'date' && (
             <Tooltip title={`Sort by date (${sortDirection === 'asc' ? 'oldest first' : 'newest first'})`}>
               <span style={{ marginLeft: '4px', display: 'inline-block', verticalAlign: 'middle' }}>
@@ -1280,21 +1333,25 @@ const Expenses: React.FC<{ projectId?: string }> = ({ projectId }) => {
             </Tooltip>
           )}
         </TableCell>
+
+        {/* Status Cell - Updated */}
         <TableCell>
           <Chip 
-            label={expense.status === 'paid' ? 'Paid' : 'Needs Payment'} 
+            label={statusLabel} 
             size="small"
-            color={expense.status === 'paid' ? 'success' : 'warning'}
+            color={statusColor}
+            // Optional: Add variant for different statuses?
+            // variant={expense.status === 'partially_paid' ? 'outlined' : 'filled'}
           />
         </TableCell>
+
+        {/* Other Cells (Project, Category, Vendor, Subcontractor) - Unchanged */}
         {groupBy !== 'project' && <TableCell>{expense.projectName}</TableCell>}
-        {groupBy !== 'category' && (
-          <TableCell>
-            {expense.category.charAt(0).toUpperCase() + expense.category.slice(1)}
-          </TableCell>
-        )}
+        {groupBy !== 'category' && <TableCell>{expense.category.charAt(0).toUpperCase() + expense.category.slice(1)}</TableCell>}
         {groupBy !== 'vendor' && <TableCell>{expense.vendor || '-'}</TableCell>}
         {groupBy !== 'subcontractor' && <TableCell>{expense.subcontractorName || '-'}</TableCell>}
+
+        {/* Actions Cell - Unchanged */}
         <TableCell align="center">
           <Box sx={{ display: 'flex', justifyContent: 'center' }}>
             <IconButton 

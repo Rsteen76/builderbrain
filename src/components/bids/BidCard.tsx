@@ -724,6 +724,22 @@ const BidCard: React.FC<BidCardProps> = ({
         action={
           <Stack direction="row" spacing={1} alignItems="center">
             <IconButton 
+              onClick={(e) => {
+                e.stopPropagation();
+                handleMenuClick(e);
+              }}
+              aria-label="more actions"
+              size="small"
+              sx={{
+                bgcolor: alpha(getPaletteColor(theme, bidStatusColors[bid.status] as string || 'grey'), 0.1),
+                '&:hover': {
+                  bgcolor: alpha(getPaletteColor(theme, bidStatusColors[bid.status] as string || 'grey'), 0.2),
+                }
+              }}
+            >
+              <MoreVertIcon fontSize="small" />
+            </IconButton>
+            <IconButton 
               onClick={handleToggleExpand}
               aria-expanded={expanded}
               aria-label="show more"

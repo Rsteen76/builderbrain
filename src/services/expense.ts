@@ -13,7 +13,7 @@ import {
   Timestamp,
   QueryDocumentSnapshot,
 } from 'firebase/firestore';
-import { Expense } from '../types';
+import { Expense, ExpenseStatus } from '../types';
 
 interface FirestoreExpense extends Omit<Expense, 'id' | 'date' | 'createdAt' | 'updatedAt'> {
   userId: string;
@@ -310,28 +310,60 @@ export class ExpenseService {
     });
   }
 
-  // Mark an expense as paid
-  static async markAsPaid(id: string, actualAmount?: number, paymentDetails?: {
+  // Mark an expense as paid or partially paid
+  static async markAsPaid(id: string, actualAmountPaidNow: number, paymentDetails: {
     method: string;
     referenceNumber?: string;
     date: string;
     notes?: string;
   }): Promise<void> {
-    const updateData: Partial<Expense> = { 
-      status: 'paid',
-    };
+    const expenseRef = doc(this.collection, id);
 
-    // If an actual amount is provided, update the expense amount
-    if (actualAmount !== undefined) {
-      updateData.amount = actualAmount;
+    try {
+      const expenseDoc = await getDoc(expenseRef);
+      if (!expenseDoc.exists()) {
+        throw new Error(`Expense with ID ${id} not found.`);
+      }
+
+      const currentData = expenseDoc.data() as FirestoreExpense; // Assuming FirestoreExpense structure
+      const originalAmount = currentData.amount; // The total amount of the expense
+      const currentAmountPaid = currentData.amountPaid || 0; // Get already paid amount, default to 0
+
+      // Validate payment amount (optional, but good practice)
+      if (actualAmountPaidNow <= 0) {
+        throw new Error("Payment amount must be positive.");
+      }
+
+      const newTotalAmountPaid = currentAmountPaid + actualAmountPaidNow;
+      
+      // Determine the new status
+      let newStatus: ExpenseStatus;
+      // Use a small tolerance for floating point comparisons
+      if (newTotalAmountPaid >= originalAmount - 0.001) {
+        newStatus = 'paid';
+        // Optional: Adjust total paid to match original amount if it slightly exceeds
+        // newTotalAmountPaid = originalAmount; 
+      } else {
+        newStatus = 'partially_paid';
+      }
+
+      // Prepare update data - DO NOT update original 'amount'
+      const updateData: Partial<FirestoreExpense> & { updatedAt: Timestamp } = {
+        amountPaid: newTotalAmountPaid, // Update the total amount paid
+        status: newStatus,             // Set the new status
+        paymentDetails: paymentDetails, // Store the details of this payment
+        updatedAt: Timestamp.fromDate(new Date()),
+      };
+
+      console.log(`ExpenseService.markAsPaid: Updating expense ${id}. Original: ${originalAmount}, Paid Now: ${actualAmountPaidNow}, New Total Paid: ${newTotalAmountPaid}, New Status: ${newStatus}`);
+
+      await updateDoc(expenseRef, updateData);
+      console.log(`ExpenseService.markAsPaid: Successfully updated expense ${id}`);
+
+    } catch (error) {
+      console.error(`ExpenseService.markAsPaid: Error updating expense ${id}:`, error);
+      throw error; // Re-throw the error to be handled by the caller
     }
-
-    // If payment details are provided, include them in the update
-    if (paymentDetails) {
-      updateData.paymentDetails = paymentDetails;
-    }
-
-    return this.updateExpense(id, updateData);
   }
 
   // Check for potential duplicate expenses

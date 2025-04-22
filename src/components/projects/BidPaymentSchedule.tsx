@@ -27,6 +27,10 @@ import {
   Select,
   MenuItem,
   SelectChangeEvent,
+  FormControlLabel,
+  Switch,
+  AlertTitle,
+  Box as MuiBox,
 } from '@mui/material';
 import {
   ExpandLess as ExpandLessIcon,
@@ -36,6 +40,7 @@ import {
   Receipt as ReceiptIcon,
   Payment as PaymentIcon,
   Add as AddIcon,
+  Info as InfoIcon,
 } from '@mui/icons-material';
 import { LocalizationProvider, DatePicker } from '@mui/x-date-pickers';
 import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns';
@@ -102,6 +107,16 @@ const BidPaymentSchedule: React.FC<BidPaymentScheduleProps> = ({ bid, userId, pr
   };
   
   const handleEditStage = (stage: BidPaymentStage) => {
+    // If the stage is already paid and we're trying to mark it as paid again,
+    // show a warning and do nothing to prevent double payments
+    if (stage.status === 'paid') {
+      const existingStage = paymentSchedule.find(s => s.id === stage.id);
+      if (existingStage && existingStage.status === 'paid') {
+        setError('This payment has already been marked as paid. To avoid double payments, no changes were made.');
+        return;
+      }
+    }
+    
     setSelectedStage(stage);
     setModalOpen(true);
   };
@@ -230,7 +245,7 @@ const BidPaymentSchedule: React.FC<BidPaymentScheduleProps> = ({ bid, userId, pr
           
           if (totalAmount > 0) {
             updatedSchedule.forEach(s => {
-              const amount = typeof s.amount === 'string' ? parseFloat(s.amount) : s.amount;
+              const amount = typeof s.amount === 'string' ? parseFloat(s.amount) : (s.amount || 0);
               s.percentage = Math.round((amount / totalAmount) * 100 * 10) / 10; // Round to 1 decimal
             });
           }
@@ -277,6 +292,16 @@ const BidPaymentSchedule: React.FC<BidPaymentScheduleProps> = ({ bid, userId, pr
     setError(null);
     
     try {
+      // Validation: If marking as paid, check if it's already paid to prevent duplicate payments
+      if (stage.status === 'paid' && selectedStage) {
+        const originalStage = paymentSchedule.find(s => s.id === stage.id);
+        if (originalStage && originalStage.status === 'paid') {
+          setError('This payment has already been marked as paid. To avoid double payments, no changes were made.');
+          setLoading(false);
+          return;
+        }
+      }
+      
       let updatedSchedule: BidPaymentStage[];
       const now = new Date();
       const originalBidAmount = bid.totalAmount;
@@ -303,17 +328,66 @@ const BidPaymentSchedule: React.FC<BidPaymentScheduleProps> = ({ bid, userId, pr
       let newStageId: string | null = null;
       let isNewStage = false;
       
+      // Check if this is a partial payment
+      const isPartialPayment = cleanStage.partialPayment === true;
+      let remainingStageId: string | null = null;
+      
       if (selectedStage) {
         // Editing existing stage - keep track of original amount for adjustment
         const originalStage = paymentSchedule.find(s => s.id === cleanStage.id);
         const originalAmount = originalStage ? originalStage.amount : 0;
-        const amountDifference = (typeof cleanStage.amount === 'string' ? 
-          parseFloat(cleanStage.amount) : cleanStage.amount) - originalAmount;
         
-        // Update the stage
-        updatedSchedule = paymentSchedule.map(s => 
-          s.id === cleanStage.id ? { ...s, ...cleanStage, updatedAt: now } : s
-        );
+        // For partial payments, we need to handle differently
+        if (isPartialPayment && cleanStage.status === 'paid') {
+          // Get the amount that will remain unpaid
+          const remainingAmount = cleanStage.remainingAmount || 0;
+          
+          // Update the stage with the partial amount (this is the amount being paid now)
+          updatedSchedule = paymentSchedule.map(s => 
+            s.id === cleanStage.id ? { 
+              ...s, 
+              ...cleanStage, 
+              updatedAt: now,
+              amount: cleanStage.amount, // This is now the partial amount
+              partialPayment: true,
+              originalAmount: originalAmount,
+            } : s
+          );
+          
+          // Create a new stage for the remaining amount
+          if (remainingAmount > 0) {
+            const remainingStage: BidPaymentStage = {
+              id: uuidv4(),
+              name: `${originalStage?.name || cleanStage.name} (Remaining)`,
+              description: `Remaining amount from partially paid stage: ${originalStage?.name || cleanStage.name}`,
+              percentage: isFixedAmountBid ? 0 : Math.round((remainingAmount / bid.totalAmount) * 100 * 10) / 10,
+              amount: remainingAmount,
+              status: 'pending',
+              completionRequirements: originalStage?.completionRequirements || cleanStage.completionRequirements || '',
+              dueDate: originalStage?.dueDate || cleanStage.dueDate,
+              createdAt: now,
+              updatedAt: now,
+              // Copy over phase information if it exists
+              ...(originalStage?.phaseId ? { phaseId: originalStage.phaseId } : {}),
+              ...(originalStage?.phaseName ? { phaseName: originalStage.phaseName } : {}),
+              // Link to original stage
+              parentStageId: cleanStage.id
+            };
+            
+            // Add the remaining stage to the schedule
+            updatedSchedule = [...updatedSchedule, remainingStage];
+            remainingStageId = remainingStage.id;
+          }
+        } else {
+          // Regular non-partial payment update
+          const amountDifference = (typeof cleanStage.amount === 'string' ? 
+            parseFloat(cleanStage.amount) : cleanStage.amount) - originalAmount;
+          
+          // Update the stage
+          updatedSchedule = paymentSchedule.map(s => 
+            s.id === cleanStage.id ? { ...s, ...cleanStage, updatedAt: now } : s
+          );
+        }
         
         // If expense exists for this stage, update it with the new amount
         if (originalStage?.expenseId) {
@@ -327,9 +401,20 @@ const BidPaymentSchedule: React.FC<BidPaymentScheduleProps> = ({ bid, userId, pr
             if (cleanStage.status === 'paid' && originalStage.status !== 'paid') {
               updatedExpenseData.status = 'paid';
               updatedExpenseData.date = cleanStage.paymentDate || new Date();
-              updatedExpenseData.notes = `Paid expense for payment stage: ${cleanStage.name} (${cleanStage.percentage}%) for bid: ${bid.title || bid.scope || 'Unnamed bid'}. Payment processed on ${(cleanStage.paymentDate || new Date()).toLocaleDateString()}`;
+              
+              // Add partial payment information if applicable
+              if (isPartialPayment) {
+                updatedExpenseData.notes = `Partial payment: $${cleanStage.amount.toFixed(2)} of $${cleanStage.originalAmount?.toFixed(2) || originalAmount.toFixed(2)} for payment stage: ${cleanStage.name} for bid: ${bid.title || bid.scope || 'Unnamed bid'}. Payment processed on ${(cleanStage.paymentDate || new Date()).toLocaleDateString()}`;
+              } else {
+                updatedExpenseData.notes = `Paid expense for payment stage: ${cleanStage.name} (${cleanStage.percentage}%) for bid: ${bid.title || bid.scope || 'Unnamed bid'}. Payment processed on ${(cleanStage.paymentDate || new Date()).toLocaleDateString()}`;
+              }
             } else {
-              updatedExpenseData.notes = `Updated expense for payment stage: ${cleanStage.name} (${cleanStage.percentage}%) for bid: ${bid.title || bid.scope || 'Unnamed bid'}`;
+              // For updated non-paid expenses
+              if (isPartialPayment) {
+                updatedExpenseData.notes = `Updated partial payment expense for payment stage: ${cleanStage.name} for bid: ${bid.title || bid.scope || 'Unnamed bid'}`;
+              } else {
+                updatedExpenseData.notes = `Updated expense for payment stage: ${cleanStage.name} (${cleanStage.percentage}%) for bid: ${bid.title || bid.scope || 'Unnamed bid'}`;
+              }
             }
             
             // Update expense with new amount and description
@@ -425,52 +510,30 @@ const BidPaymentSchedule: React.FC<BidPaymentScheduleProps> = ({ bid, userId, pr
       });
       
       // For new stages, automatically create an expense
-      if (newStageId) {
-        const newStageData = updatedSchedule.find(s => s.id === newStageId);
-        if (newStageData) {
-          try {
-            // Create an expense for this payment stage
-            const expenseData: Omit<Expense, 'id' | 'userId' | 'createdBy' | 'createdAt' | 'updatedAt'> & { bidId?: string | null; paymentStageId?: string | null } = {
-              projectId: projectId,
-              category: 'subcontractor' as ExpenseCategory,
-              description: `${newStageData.name} (${newStageData.percentage}%) - ${bid.title || 'Untitled Bid'}`,
-              amount: newStageData.amount,
-              date: newStageData.status === 'paid' ? (newStageData.paymentDate || new Date()) : new Date(),
-              status: newStageData.status === 'paid' ? 'paid' : 'pending',
-              subcontractorId: bid.subcontractorId || '',
-              subcontractorName: bid.subcontractorName || '',
-              notes: newStageData.status === 'paid' 
-                ? `Paid expense for payment stage: ${newStageData.name} (${newStageData.percentage}%) for bid: ${bid.title || bid.scope || 'Unnamed bid'}. Payment processed on ${(newStageData.paymentDate || new Date()).toLocaleDateString()}`
-                : `This expense is for payment stage: ${newStageData.name} (${newStageData.percentage}%) for bid: ${bid.title || bid.scope || 'Unnamed bid'}`,
-              phaseId: newStageData.phaseId || bid.phaseId || '',
-              phaseName: newStageData.phaseName || bid.phaseName || '',
-              bidId: bid.id,
-              paymentStageId: newStageData.id,
-              vendor: bid.subcontractorName || '',
-              tags: [],
-              receiptUrl: ''
-            };
-            
-            // Create the expense
-            const expense = await ExpenseService.createExpense(userId, expenseData);
-            
-            // Update the payment stage with the expense ID
-            if (expense) {
-              const stageWithExpense = updatedSchedule.map(s => 
-                s.id === newStageId ? { ...s, expenseId: expense.id } : s
-              );
-              
-              // Update the bid with the updated payment schedule
-              await BidService.updateBid(bid.id, {
-                paymentSchedule: stageWithExpense
-              });
-              
-              // Update local reference
-              updatedSchedule = stageWithExpense;
+      if (newStageId || remainingStageId) {
+        // Create expense for the originally created new stage
+        if (newStageId) {
+          const newStageData = updatedSchedule.find(s => s.id === newStageId);
+          if (newStageData) {
+            try {
+              await createExpenseForStage(newStageData, bid);
+            } catch (expenseError) {
+              console.error('Error creating expense for new payment stage:', expenseError);
+              // We'll continue even if expense creation fails
             }
-          } catch (expenseError) {
-            console.error('Error creating expense for new payment stage:', expenseError);
-            // We'll continue even if expense creation fails
+          }
+        }
+        
+        // Create expense for the remaining amount stage (in case of partial payment)
+        if (remainingStageId) {
+          const remainingStageData = updatedSchedule.find(s => s.id === remainingStageId);
+          if (remainingStageData) {
+            try {
+              await createExpenseForStage(remainingStageData, bid);
+            } catch (expenseError) {
+              console.error('Error creating expense for remaining amount stage:', expenseError);
+              // We'll continue even if expense creation fails
+            }
           }
         }
       }
@@ -479,7 +542,20 @@ const BidPaymentSchedule: React.FC<BidPaymentScheduleProps> = ({ bid, userId, pr
       const updatedBid = await BidService.getBid(userId, bid.id);
       if (updatedBid) {
         onBidUpdate?.(updatedBid);
-        setSuccess(selectedStage ? 'Payment stage updated successfully' : 'New payment stage added successfully');
+        
+        // Success message based on action performed
+        let successMessage = '';
+        if (selectedStage) {
+          if (isPartialPayment) {
+            successMessage = 'Partial payment recorded successfully';
+          } else {
+            successMessage = 'Payment stage updated successfully';
+          }
+        } else {
+          successMessage = 'New payment stage added successfully';
+        }
+        
+        setSuccess(successMessage);
         setTimeout(() => setSuccess(null), 3000);
       }
       
@@ -490,6 +566,54 @@ const BidPaymentSchedule: React.FC<BidPaymentScheduleProps> = ({ bid, userId, pr
     } finally {
       setLoading(false);
     }
+  };
+  
+  // Helper function to create an expense for a payment stage
+  const createExpenseForStage = async (stageData: BidPaymentStage, bid: Bid) => {
+    const expenseData: Omit<Expense, 'id' | 'userId' | 'createdBy' | 'createdAt' | 'updatedAt'> & { bidId?: string | null; paymentStageId?: string | null } = {
+      projectId: projectId,
+      category: 'subcontractor' as ExpenseCategory,
+      description: stageData.partialPayment ? 
+        `${stageData.name} (Partial: $${stageData.amount}) - ${bid.title || 'Untitled Bid'}` :
+        `${stageData.name} (${stageData.percentage}%) - ${bid.title || 'Untitled Bid'}`,
+      amount: stageData.amount,
+      date: stageData.status === 'paid' ? (stageData.paymentDate || new Date()) : new Date(),
+      status: stageData.status === 'paid' ? 'paid' : 'pending',
+      subcontractorId: bid.subcontractorId || '',
+      subcontractorName: bid.subcontractorName || '',
+      notes: stageData.partialPayment ?
+        `This expense is for a partial payment of stage: ${stageData.name} for bid: ${bid.title || bid.scope || 'Unnamed bid'}` :
+        stageData.status === 'paid' ? 
+          `Paid expense for payment stage: ${stageData.name} (${stageData.percentage}%) for bid: ${bid.title || bid.scope || 'Unnamed bid'}. Payment processed on ${(stageData.paymentDate || new Date()).toLocaleDateString()}` :
+          `This expense is for payment stage: ${stageData.name} (${stageData.percentage}%) for bid: ${bid.title || bid.scope || 'Unnamed bid'}`,
+      phaseId: stageData.phaseId || bid.phaseId || '',
+      phaseName: stageData.phaseName || bid.phaseName || '',
+      bidId: bid.id,
+      paymentStageId: stageData.id,
+      vendor: bid.subcontractorName || '',
+      tags: [],
+      receiptUrl: ''
+    };
+    
+    // Create the expense
+    const expense = await ExpenseService.createExpense(userId, expenseData);
+    
+    // Update the payment stage with the expense ID
+    if (expense) {
+      const stageWithExpense = paymentSchedule.map(s => 
+        s.id === stageData.id ? { ...s, expenseId: expense.id } : s
+      ).concat(
+        // Add the stage if it's not in the payment schedule yet
+        paymentSchedule.find(s => s.id === stageData.id) ? [] : [{...stageData, expenseId: expense.id}]
+      );
+      
+      // Update the bid with the updated payment schedule
+      await BidService.updateBid(bid.id, {
+        paymentSchedule: stageWithExpense
+      });
+    }
+    
+    return expense;
   };
   
   const handleCreateExpenseSubmit = async (expenseData: Partial<Expense>) => {
@@ -595,12 +719,30 @@ const BidPaymentSchedule: React.FC<BidPaymentScheduleProps> = ({ bid, userId, pr
       return sum + (isNaN(amount) ? 0 : amount);
     }, 0);
     
-    const pending = total - paid;
+    // Validate the calculated values to prevent inconsistencies
+    let validatedPaid = Math.min(paid, total); // Paid should never exceed total
+    validatedPaid = Math.max(0, validatedPaid); // Paid should never be negative
+    
+    const validatedPending = Math.max(0, total - validatedPaid); // Pending should never be negative
+    
+    // If total is 0, both paid and pending should be 0
+    if (total === 0) {
+      return {
+        paid: 0,
+        pending: 0,
+        remaining: 0
+      };
+    }
+    
+    // Log any corrections made to help with debugging
+    if (validatedPaid !== paid) {
+      console.warn(`Payment calculation corrected: original paid ${paid} -> corrected to ${validatedPaid}`);
+    }
     
     return {
-      paid,
-      pending,
-      remaining: pending
+      paid: validatedPaid,
+      pending: validatedPending,
+      remaining: validatedPending
     };
   };
   
@@ -871,6 +1013,20 @@ const PaymentStageForm: React.FC<PaymentStageFormProps> = ({ initialData, bidTot
   
   // Track if status is changing to paid
   const [isChangingToPaid, setIsChangingToPaid] = useState(false);
+  // Add state for partial payment
+  const [isPartialPayment, setIsPartialPayment] = useState(false);
+  const [partialAmount, setPartialAmount] = useState<number>(0);
+  const [remainingAmount, setRemainingAmount] = useState<number>(0);
+  
+  // Initialize partial amount when a stage is selected
+  useEffect(() => {
+    if (initialData) {
+      const stageAmount = typeof initialData.amount === 'string' ? 
+        parseFloat(initialData.amount) : initialData.amount;
+      setPartialAmount(stageAmount);
+      setRemainingAmount(0);
+    }
+  }, [initialData]);
   
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | { name?: string; value: unknown }>) => {
     const { name, value } = e.target;
@@ -881,6 +1037,11 @@ const PaymentStageForm: React.FC<PaymentStageFormProps> = ({ initialData, bidTot
       const percentage = parseFloat(value as string) || 0;
       const amount = Math.round((percentage / 100) * bidTotalAmount * 100) / 100;
       setFormData(prev => ({ ...prev, amount }));
+      
+      // Update partial amount if partial payment is enabled
+      if (isPartialPayment) {
+        setPartialAmount(amount);
+      }
     }
     
     // If amount changes, update percentage
@@ -888,6 +1049,11 @@ const PaymentStageForm: React.FC<PaymentStageFormProps> = ({ initialData, bidTot
       const amount = parseFloat(value as string) || 0;
       const percentage = bidTotalAmount > 0 ? Math.round((amount / bidTotalAmount) * 100 * 100) / 100 : 0;
       setFormData(prev => ({ ...prev, percentage }));
+      
+      // Update partial amount if partial payment is enabled
+      if (isPartialPayment) {
+        setPartialAmount(amount);
+      }
     }
   };
 
@@ -910,6 +1076,35 @@ const PaymentStageForm: React.FC<PaymentStageFormProps> = ({ initialData, bidTot
   
   const handleDateChange = (field: 'dueDate' | 'paymentDate') => (date: Date | null) => {
     setFormData(prev => ({ ...prev, [field]: date || undefined }));
+  };
+
+  // Add handler for partial payment toggle
+  const handlePartialPaymentToggle = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setIsPartialPayment(e.target.checked);
+    
+    // Initialize partial amount with the full amount
+    if (e.target.checked) {
+      const fullAmount = typeof formData.amount === 'string' ? 
+        parseFloat(formData.amount) : (formData.amount || 0);
+      setPartialAmount(fullAmount / 2); // Default to 50% for partial payments
+      setRemainingAmount(fullAmount / 2);
+    }
+  };
+  
+  // Add handler for partial amount change
+  const handlePartialAmountChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const newPartialAmount = parseFloat(e.target.value) || 0;
+    const fullAmount = typeof formData.amount === 'string' ? 
+      parseFloat(formData.amount) : (formData.amount || 0);
+    
+    // Calculate remaining amount
+    const newRemainingAmount = Math.max(0, fullAmount - newPartialAmount);
+    
+    // Make sure partial amount doesn't exceed the full amount
+    const validatedPartialAmount = Math.min(newPartialAmount, fullAmount);
+    
+    setPartialAmount(validatedPartialAmount);
+    setRemainingAmount(newRemainingAmount);
   };
   
   const handleSubmit = () => {
@@ -937,6 +1132,19 @@ const PaymentStageForm: React.FC<PaymentStageFormProps> = ({ initialData, bidTot
       ...(formData.phaseName ? { phaseName: formData.phaseName } : {}),
       ...(formData.expenseId ? { expenseId: formData.expenseId } : {}),
     };
+    
+    // Handle partial payment
+    if (isPartialPayment && formData.status === 'paid') {
+      // For partial payment, modify the stage amount to be the partial amount
+      cleanedData.partialPayment = true;
+      cleanedData.originalAmount = cleanedData.amount;
+      cleanedData.amount = partialAmount;
+      cleanedData.remainingAmount = remainingAmount;
+      
+      // Add note about partial payment
+      cleanedData.description = (cleanedData.description || '') + 
+        `\nPartial payment: $${partialAmount.toFixed(2)} of $${cleanedData.originalAmount.toFixed(2)}`;
+    }
     
     onSubmit(cleanedData);
   };
@@ -1000,6 +1208,61 @@ const PaymentStageForm: React.FC<PaymentStageFormProps> = ({ initialData, bidTot
             }}
           />
         </Grid>
+        
+        {/* Add partial payment option for paid status */}
+        {formData.status === 'paid' && (
+          <>
+            <Grid item xs={12}>
+              <Box sx={{ display: 'flex', alignItems: 'center', mt: 1 }}>
+                <FormControlLabel
+                  control={
+                    <Switch
+                      checked={isPartialPayment}
+                      onChange={handlePartialPaymentToggle}
+                      color="primary"
+                    />
+                  }
+                  label="Make a partial payment"
+                />
+                {isPartialPayment && (
+                  <Tooltip title="Record a partial payment instead of marking the entire stage as paid">
+                    <IconButton size="small">
+                      <InfoIcon fontSize="small" />
+                    </IconButton>
+                  </Tooltip>
+                )}
+              </Box>
+            </Grid>
+            
+            {isPartialPayment && (
+              <>
+                <Grid item xs={12} sm={6}>
+                  <TextField
+                    fullWidth
+                    label="Amount to Pay Now"
+                    type="number"
+                    value={partialAmount}
+                    onChange={handlePartialAmountChange}
+                    InputProps={{
+                      startAdornment: <InputAdornment position="start">$</InputAdornment>,
+                    }}
+                    helperText={`Remaining: $${remainingAmount.toFixed(2)}`}
+                  />
+                </Grid>
+                
+                <Grid item xs={12} sm={6}>
+                  <Box sx={{ mt: 2 }}>
+                    <Alert severity="info" sx={{ display: 'flex', alignItems: 'center' }}>
+                      <Box>
+                        This will create a new payment stage for the remaining amount.
+                      </Box>
+                    </Alert>
+                  </Box>
+                </Grid>
+              </>
+            )}
+          </>
+        )}
         
         <Grid item xs={12}>
           <TextField

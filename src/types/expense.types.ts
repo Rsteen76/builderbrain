@@ -1,7 +1,7 @@
 import { LineItem } from './project.types';
 
 export type ExpenseCategory = 'labor' | 'materials' | 'equipment' | 'permits' | 'subcontractor' | 'other';
-export type ExpenseStatus = 'pending' | 'approved' | 'rejected' | 'paid';
+export type ExpenseStatus = 'pending' | 'approved' | 'rejected' | 'paid' | 'partially_paid';
 
 export interface PaymentDetails {
   method: string;
@@ -24,6 +24,7 @@ export interface Expense {
   categoryId?: string;
   description: string;
   amount: number;
+  amountPaid?: number;
   date: Date | string;
   receiptUrl?: string;
   vendor?: string | null;

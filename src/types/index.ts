@@ -253,6 +253,10 @@ export interface BidPaymentStage {
   isFixedAmount?: boolean;
   fixedAmount?: number;
   isPaid?: boolean;
+  partialPayment?: boolean; // Whether this is a partial payment
+  originalAmount?: number; // Original amount before partial payment
+  remainingAmount?: number; // Amount remaining after partial payment
+  parentStageId?: string; // Reference to the original stage (for stages created from partial payments)
 }
 
 // Add or enhance the Phase interface

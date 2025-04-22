@@ -49,7 +49,7 @@ import {
   Category as CategoryIcon,
   Delete as DeleteIcon
 } from '@mui/icons-material';
-import { Expense, Bid, ProjectPhase, Project, BudgetProjection } from '../../../types';
+import { Expense, Bid, ProjectPhase, Project, BudgetProjection, ExpenseStatus, BidStatus } from '../../../types';
 import { formatCurrency, formatPercentage } from '../../../utils/formatters';
 import { getProjectById, updateProject } from '../../../services/project';
 import { useAuth } from '../../../contexts/AuthContext';
@@ -1441,7 +1441,3 @@ const BudgetAllocationTracker: React.FC<BudgetAllocationTrackerProps> = ({
 };
 
 export default BudgetAllocationTracker; 
-
-// Define BidStatus and ExpenseStatus if not globally available
-type ExpenseStatus = 'pending' | 'approved' | 'rejected' | 'paid';
-type BidStatus = 'draft' | 'submitted' | 'accepted' | 'rejected' | 'expired' | 'withdrawn' | 'revision_requested';

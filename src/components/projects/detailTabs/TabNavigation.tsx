@@ -24,7 +24,15 @@ const TabNavigation: React.FC<TabNavigationProps> = ({
   onTabChange,
 }) => {
   return (
-    <Box sx={{ borderBottom: 1, borderColor: 'divider', mb: 3 }}>
+    <Box sx={{ 
+      borderBottom: 1, 
+      borderColor: 'divider', 
+      mb: 3,
+      position: 'sticky',
+      top: 0,
+      zIndex: 1100,
+      bgcolor: 'background.paper',
+    }}>
       <Tabs
         value={tabValue}
         onChange={onTabChange}
