@@ -33,7 +33,10 @@ import {
   DialogActions,
   Autocomplete,
   Snackbar,
-  CircularProgress
+  CircularProgress,
+  ToggleButtonGroup,
+  ToggleButton,
+  TableFooter
 } from '@mui/material';
 import {
   CheckCircle as CheckCircleIcon,
@@ -47,7 +50,10 @@ import {
   ExpandLess as ExpandLessIcon,
   Edit as EditIcon,
   Category as CategoryIcon,
-  Delete as DeleteIcon
+  Delete as DeleteIcon,
+  ViewList as ViewListIcon,
+  Timeline as TimelineIcon,
+  TableChart as TableChartIcon
 } from '@mui/icons-material';
 import { Expense, Bid, ProjectPhase, Project, BudgetProjection, ExpenseStatus, BidStatus } from '../../../types';
 import { formatCurrency, formatPercentage } from '../../../utils/formatters';
@@ -146,6 +152,12 @@ const BudgetAllocationTracker: React.FC<BudgetAllocationTrackerProps> = ({
   const [editingProjection, setEditingProjection] = useState<BudgetProjection | null>(null);
   const [editProjectionAmount, setEditProjectionAmount] = useState<number | string>('');
   const [editProjectionNotes, setEditProjectionNotes] = useState<string>('');
+  
+  // Add new state for projections view mode
+  const [projectionsViewMode, setProjectionsViewMode] = useState<'integrated' | 'summary'>('integrated');
+  
+  // Add new state for overall display view mode
+  const [displayViewMode, setDisplayViewMode] = useState<'hierarchical' | 'overview'>('hierarchical');
 
   useEffect(() => {
     if (project?.id) {
@@ -1018,344 +1030,847 @@ const BudgetAllocationTracker: React.FC<BudgetAllocationTrackerProps> = ({
           </Card>
       )}
 
-      <TableContainer component={Paper} elevation={2}>
-        <Table stickyHeader aria-label="budget allocation table">
-                    <TableHead>
-            <TableRow sx={{ '& th': { fontWeight: 'bold', bgcolor: 'background.default' } }}>
-              <TableCell>Category / Item</TableCell>
-                        <TableCell align="right">Paid</TableCell>
-              <TableCell align="right">Pending/Projected</TableCell>
-              <TableCell align="right">Total</TableCell>
-              <TableCell align="right">Actions</TableCell>
-                      </TableRow>
-                    </TableHead>
-                    <TableBody>
-            {prefsLoading ? (
-              <TableRow>
-                <TableCell colSpan={5} align="center">Loading categories...</TableCell>
-              </TableRow>
-            ) : filteredCategories.length === 0 ? (
-                 <TableRow>
-                    <TableCell colSpan={5} align="center">
-                        {searchTerm ? 'No categories match your search.' : 'No budget items found.'}
-                    </TableCell>
-                 </TableRow>
-             ) : (
-              filteredCategories.map((mainCategoryData) => {
-                const { mainCategoryDetails, subCategories } = mainCategoryData;
-                
-                // Calculate totals for the main category
-                let totalMainPaid = 0, totalMainPending = 0, totalMainTotal = 0;
-                let hasItemsNeedingReview = false;
-                
-                subCategories.forEach(sub => {
-                  totalMainPaid += sub.paid;
-                  totalMainPending += sub.pending;
-                  totalMainTotal += sub.total;
-                  if (sub.needsReview) hasItemsNeedingReview = true;
-                });
-                
-                const isMainExpanded = expandedSection === mainCategoryDetails.id;
+      {/* Projections View Mode Toggle */}
+      {localProjections.length > 0 && (
+        <Box sx={{ display: 'flex', justifyContent: 'flex-end', mb: 2 }}>
+          <ToggleButtonGroup
+            value={projectionsViewMode}
+            exclusive
+            onChange={(e, newMode) => newMode && setProjectionsViewMode(newMode)}
+            size="small"
+            aria-label="projections view mode"
+          >
+            <ToggleButton value="integrated" aria-label="integrated view">
+              <Tooltip title="View projections within categories">
+                <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                  <ViewListIcon sx={{ mr: 0.5 }} fontSize="small" />
+                  <Typography variant="caption">Integrated</Typography>
+                </Box>
+              </Tooltip>
+            </ToggleButton>
+            <ToggleButton value="summary" aria-label="summary view">
+              <Tooltip title="View all projections in a summary table">
+                <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                  <TimelineIcon sx={{ mr: 0.5 }} fontSize="small" />
+                  <Typography variant="caption">Projections Summary</Typography>
+                </Box>
+              </Tooltip>
+            </ToggleButton>
+          </ToggleButtonGroup>
+        </Box>
+      )}
 
-                return (
-                  <React.Fragment key={mainCategoryDetails.id}>
-                    {/* Main Category Row - Access via mainCategoryDetails */}
-                        <TableRow 
-                      hover 
-                      onClick={() => toggleSection(mainCategoryDetails.id)}
-                          sx={{ 
-                        cursor: 'pointer',
+      {/* View Mode Toggle for overall display */}
+      <Box sx={{ display: 'flex', justifyContent: 'flex-end', mb: 2 }}>
+        <ToggleButtonGroup
+          value={displayViewMode}
+          exclusive
+          onChange={(e, newMode) => newMode && setDisplayViewMode(newMode)}
+          size="small"
+          aria-label="display view mode"
+        >
+          <ToggleButton value="hierarchical" aria-label="hierarchical view">
+            <Tooltip title="View budget in expandable categories">
+              <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                <ExpandMoreIcon sx={{ mr: 0.5 }} fontSize="small" />
+                <Typography variant="caption">Hierarchical</Typography>
+              </Box>
+            </Tooltip>
+          </ToggleButton>
+          <ToggleButton value="overview" aria-label="overview">
+            <Tooltip title="View all budget items in a flat table">
+              <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                <TableChartIcon sx={{ mr: 0.5 }} fontSize="small" />
+                <Typography variant="caption">Budget Overview</Typography>
+              </Box>
+            </Tooltip>
+          </ToggleButton>
+        </ToggleButtonGroup>
+      </Box>
+
+      {/* Projections Summary View */}
+      {projectionsViewMode === 'summary' && localProjections.length > 0 && (
+        <Card elevation={3} sx={{ mb: 4, borderRadius: 2, overflow: 'hidden' }}>
+          <CardHeader
+            title="Projections Summary"
+            titleTypographyProps={{ variant: 'h6' }}
+            action={
+              <Button
+                startIcon={<AddIcon />}
+                variant="outlined"
+                size="small"
+                onClick={() => {
+                  // Default to first category or handle differently
+                  const firstCategory = getAllHierarchicalCategories()[0];
+                  if (firstCategory) {
+                    handleOpenProjectionDialog(firstCategory.id, firstCategory.name);
+                  }
+                }}
+              >
+                Add Projection
+              </Button>
+            }
+          />
+          <Divider />
+          <TableContainer>
+            <Table size="small">
+              <TableHead>
+                <TableRow sx={{ '& th': { fontWeight: 'bold', bgcolor: 'background.default' } }}>
+                  <TableCell>Category</TableCell>
+                  <TableCell>Description</TableCell>
+                  <TableCell align="right">Amount</TableCell>
+                  <TableCell align="right">Actions</TableCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {localProjections.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={4} align="center">No projections added yet.</TableCell>
+                  </TableRow>
+                ) : (
+                  localProjections.map(projection => {
+                    // Find category details
+                    const category = getCategoryById(projection.categoryId || '');
+                    const parentCategory = category ? getParentCategory(category.id) : null;
+                    const mainCategory = parentCategory || category;
+                    
+                    return (
+                      <TableRow 
+                        key={projection.id} 
+                        hover
+                        sx={{ 
+                          '&:hover': { bgcolor: alpha(theme.palette.primary.main, 0.04) },
+                        }}
+                      >
+                        <TableCell>
+                          <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                            {mainCategory && (
+                              <Box 
+                                component="span" 
+                                sx={{ 
+                                  width: 8, 
+                                  height: 8, 
+                                  borderRadius: '50%', 
+                                  bgcolor: mainCategory.color || theme.palette.grey[500], 
+                                  mr: 1,
+                                  display: 'inline-block'
+                                }} 
+                              />
+                            )}
+                            <Typography variant="body2">
+                              {category?.name || 'Uncategorized'}
+                              {parentCategory && (
+                                <Typography component="span" variant="caption" color="text.secondary" sx={{ ml: 0.5 }}>
+                                  ({parentCategory.name})
+                                </Typography>
+                              )}
+                            </Typography>
+                          </Box>
+                        </TableCell>
+                        <TableCell>
+                          <Typography variant="body2">
+                            {projection.notes || <Typography variant="caption" color="text.secondary">(No description)</Typography>}
+                          </Typography>
+                        </TableCell>
+                        <TableCell align="right">
+                          <Typography variant="body2" fontWeight="medium">
+                            {formatCurrency(projection.amount)}
+                          </Typography>
+                        </TableCell>
+                        <TableCell align="right">
+                          <Tooltip title="Edit Projection">
+                            <IconButton 
+                              size="small" 
+                              onClick={() => handleOpenEditProjectionDialog(projection)}
+                              sx={{ opacity: updatingItemId === projection.id ? 0.5 : 1 }}
+                              disabled={updatingItemId === projection.id}
+                            >
+                              <EditIcon fontSize="small" />
+                            </IconButton>
+                          </Tooltip>
+                          <Tooltip title="Delete Projection">
+                            <IconButton 
+                              size="small" 
+                              onClick={(e) => handleDeleteProjection(projection.id, e)}
+                              sx={{ opacity: updatingItemId === projection.id ? 0.5 : 1 }}
+                              disabled={updatingItemId === projection.id}
+                            >
+                              <DeleteIcon fontSize="small" />
+                            </IconButton>
+                          </Tooltip>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })
+                )}
+              </TableBody>
+              <TableFooter>
+                <TableRow sx={{ bgcolor: alpha(theme.palette.primary.main, 0.04) }}>
+                  <TableCell colSpan={2}>
+                    <Typography variant="subtitle2">Total Projected Costs</Typography>
+                  </TableCell>
+                  <TableCell align="right">
+                    <Typography variant="subtitle1" fontWeight="bold">
+                      {formatCurrency(localProjections.reduce((sum, p) => sum + p.amount, 0))}
+                    </Typography>
+                  </TableCell>
+                  <TableCell />
+                </TableRow>
+              </TableFooter>
+            </Table>
+          </TableContainer>
+        </Card>
+      )}
+
+      {/* Budget Overview View */}
+      {displayViewMode === 'overview' && (
+        <Card elevation={3} sx={{ mb: 4, borderRadius: 2, overflow: 'hidden' }}>
+          <CardHeader
+            title="Budget Overview"
+            titleTypographyProps={{ variant: 'h6' }}
+            subheader="Full budget breakdown with projections"
+          />
+          <Divider />
+          <TableContainer>
+            <Table size="small">
+              <TableHead>
+                <TableRow sx={{ '& th': { fontWeight: 'bold', bgcolor: 'background.default' } }}>
+                  <TableCell>Main Category</TableCell>
+                  <TableCell>Subcategory</TableCell>
+                  <TableCell align="right">Paid</TableCell>
+                  <TableCell align="right">Pending</TableCell>
+                  <TableCell align="right">Projected</TableCell>
+                  <TableCell align="right">Total</TableCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {costsByCategory.map(mainCategoryData => {
+                  const { mainCategoryDetails, subCategories } = mainCategoryData;
+                  
+                  // Skip if all subcategories are filtered out
+                  if (Array.from(subCategories.values()).length === 0) return null;
+                  
+                  let totalPaid = 0;
+                  let totalPending = 0;
+                  let totalProjected = 0;
+                  
+                  // First, render each subcategory
+                  const subcategoryRows = Array.from(subCategories.values()).map(subCategoryData => {
+                    // Calculate projected amount specifically for this subcategory
+                    const projectedAmount = subCategoryData.items
+                      .filter(item => item.type === 'projection')
+                      .reduce((sum, item) => sum + item.amount, 0);
+                    
+                    // Calculate pending amount (without including projections)
+                    const pendingAmount = subCategoryData.pending - projectedAmount;
+                    
+                    // Update overall totals
+                    totalPaid += subCategoryData.paid;
+                    totalPending += pendingAmount;
+                    totalProjected += projectedAmount;
+                    
+                    return (
+                      <TableRow key={`sub-${subCategoryData.id}`} hover>
+                        <TableCell>
+                          <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                            <Box 
+                              component="span" 
+                              sx={{ 
+                                width: 8, 
+                                height: 8, 
+                                borderRadius: '50%', 
+                                bgcolor: mainCategoryDetails.color || theme.palette.grey[500], 
+                                mr: 1,
+                                display: 'inline-block'
+                              }} 
+                            />
+                            <Typography variant="caption" color="text.secondary">
+                              {mainCategoryDetails.name}
+                            </Typography>
+                          </Box>
+                        </TableCell>
+                        <TableCell>
+                          <Typography variant="body2">
+                            {subCategoryData.name}
+                            {subCategoryData.needsReview && (
+                              <Tooltip title="Items need category review">
+                                <WarningIcon 
+                                  fontSize="small" 
+                                  color="warning" 
+                                  sx={{ ml: 1, opacity: 0.7, width: 16, height: 16 }} 
+                                />
+                              </Tooltip>
+                            )}
+                          </Typography>
+                        </TableCell>
+                        <TableCell align="right">{formatCurrency(subCategoryData.paid)}</TableCell>
+                        <TableCell align="right">{formatCurrency(pendingAmount)}</TableCell>
+                        <TableCell align="right">
+                          {projectedAmount > 0 ? (
+                            <Typography sx={{ color: 'info.main' }}>
+                              {formatCurrency(projectedAmount)}
+                            </Typography>
+                          ) : '-'}
+                        </TableCell>
+                        <TableCell align="right">{formatCurrency(subCategoryData.paid + pendingAmount + projectedAmount)}</TableCell>
+                      </TableRow>
+                    );
+                  });
+                  
+                  // Calculate total for this main category
+                  const mainCategoryTotal = totalPaid + totalPending + totalProjected;
+                  
+                  // Return subcategory rows followed by a summary row for the main category
+                  return [
+                    ...subcategoryRows,
+                    // Summary row for the main category
+                    <TableRow 
+                      key={`main-${mainCategoryDetails.id}`} 
+                      sx={{ 
                         bgcolor: alpha(mainCategoryDetails.color || theme.palette.grey[500], 0.08),
-                        borderBottom: isMainExpanded ? 'none' : `1px solid ${theme.palette.divider}`,
-                        '&:hover': {
-                          bgcolor: alpha(mainCategoryDetails.color || theme.palette.grey[500], 0.15),
-                        }
+                        '& > td': { borderTop: `1px solid ${theme.palette.divider}` }
                       }}
                     >
-                      <TableCell component="th" scope="row">
-                        <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                          <IconButton size="small" sx={{ mr: 1 }} aria-label={isMainExpanded ? 'Collapse section' : 'Expand section'}>
-                            {isMainExpanded ? <ExpandLessIcon /> : <ExpandMoreIcon />}
-                          </IconButton>
-                          <Box 
-                            component="span" 
-                            sx={{ 
-                              width: 12, 
-                              height: 12, 
-                              borderRadius: '50%', 
-                              bgcolor: mainCategoryDetails.color || theme.palette.grey[500], 
-                              mr: 1,
-                              display: 'inline-block'
-                            }} 
-                          />
-                          <Typography variant="subtitle1" fontWeight="bold">{mainCategoryDetails.name}</Typography>
-                          {hasItemsNeedingReview && (
-                            <Tooltip title="Contains items needing category review">
-                              <WarningIcon 
-                                fontSize="small" 
-                                color="warning" 
-                                sx={{ ml: 1, opacity: 0.7 }} 
-                              />
-                            </Tooltip>
-                          )}
-                        </Box>
-                      </TableCell>
-                      <TableCell align="right" sx={{ fontWeight: 'medium' }}>{formatCurrency(totalMainPaid)}</TableCell>
-                      <TableCell align="right" sx={{ fontWeight: 'medium' }}>{formatCurrency(totalMainPending)}</TableCell>
-                          <TableCell align="right">
-                        <Typography variant="subtitle1" fontWeight="bold">{formatCurrency(totalMainTotal)}</Typography>
+                      <TableCell colSpan={2}>
+                        <Typography variant="subtitle2">
+                          {mainCategoryDetails.name} Total
+                        </Typography>
                       </TableCell>
                       <TableCell align="right">
-                        <Tooltip title="Add Projection">
-                          <IconButton 
-                            size="small" 
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleOpenProjectionDialog(mainCategoryDetails.id, mainCategoryDetails.name);
-                            }}
-                          >
-                            <AddIcon fontSize="small" />
-                          </IconButton>
-                        </Tooltip>
+                        <Typography variant="subtitle2">{formatCurrency(totalPaid)}</Typography>
+                      </TableCell>
+                      <TableCell align="right">
+                        <Typography variant="subtitle2">{formatCurrency(totalPending)}</Typography>
+                      </TableCell>
+                      <TableCell align="right">
+                        <Typography variant="subtitle2" sx={{ color: 'info.main' }}>
+                          {formatCurrency(totalProjected)}
+                        </Typography>
+                      </TableCell>
+                      <TableCell align="right">
+                        <Typography variant="subtitle2" fontWeight="bold">
+                          {formatCurrency(mainCategoryTotal)}
+                        </Typography>
                       </TableCell>
                     </TableRow>
+                  ];
+                })}
+              </TableBody>
+              <TableFooter>
+                <TableRow sx={{ bgcolor: alpha(theme.palette.primary.main, 0.04) }}>
+                  <TableCell colSpan={2}>
+                    <Typography variant="subtitle1" fontWeight="bold">Project Total</Typography>
+                  </TableCell>
+                  <TableCell align="right">
+                    <Typography variant="subtitle1" fontWeight="bold">
+                      {formatCurrency(costsByCategory.reduce((sum, mainCat) => 
+                        sum + Array.from(mainCat.subCategories.values()).reduce((subSum, sub) => subSum + sub.paid, 0), 0))}
+                    </Typography>
+                  </TableCell>
+                  <TableCell align="right">
+                    <Typography variant="subtitle1" fontWeight="bold">
+                      {formatCurrency(costsByCategory.reduce((sum, mainCat) => 
+                        sum + Array.from(mainCat.subCategories.values()).reduce((subSum, sub) => 
+                          subSum + (sub.pending - sub.items.filter(item => item.type === 'projection').reduce((itemSum, item) => itemSum + item.amount, 0)), 0), 0))}
+                    </Typography>
+                  </TableCell>
+                  <TableCell align="right">
+                    <Typography variant="subtitle1" fontWeight="bold" sx={{ color: 'info.main' }}>
+                      {formatCurrency(localProjections.reduce((sum, p) => sum + p.amount, 0))}
+                    </Typography>
+                  </TableCell>
+                  <TableCell align="right">
+                    <Typography variant="subtitle1" fontWeight="bold">
+                      {formatCurrency(costsByCategory.reduce((sum, mainCat) => 
+                        sum + Array.from(mainCat.subCategories.values()).reduce((subSum, sub) => subSum + sub.total, 0), 0))}
+                    </Typography>
+                  </TableCell>
+                </TableRow>
+              </TableFooter>
+            </Table>
+          </TableContainer>
+        </Card>
+      )}
 
-                    {/* Subcategory Rows (Expanded) - Iterate over subCategories map */}
-                    {isMainExpanded && Array.from(subCategories.values()).map(subCategoryData => {
-                       const hasItems = subCategoryData.items.length > 0;
-                       const isSubExpanded = expandedSubcategories.has(subCategoryData.id);
-                       
-                       return (
-                         <React.Fragment key={subCategoryData.id}>
-                           <TableRow 
-                             hover
-                             sx={{ 
-                               bgcolor: alpha(theme.palette.background.paper, 0.5),
-                               '& > td': { borderBottom: '1px solid rgba(224, 224, 224, 0.5)'},
-                               '&:hover': { bgcolor: alpha(mainCategoryDetails.color || theme.palette.grey[500], 0.05) }
-                             }}
-                           >
-                             <TableCell sx={{ pl: 6 }}> {/* Indent */}
-                               <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                                 <IconButton 
-                                   size="small" 
-                                   sx={{ mr: 1 }} 
-                                   aria-label={isSubExpanded ? 'Collapse subcategory' : 'Expand subcategory'}
-                                   onClick={(e) => toggleSubcategory(subCategoryData.id, e)}
-                                 >
-                                   {isSubExpanded ? <ExpandLessIcon /> : <ExpandMoreIcon />}
-                                 </IconButton>
-                                 <Box 
-                                   component="span"
-                                   sx={{ 
-                                     width: 4, 
-                                     height: 16, 
-                                     bgcolor: mainCategoryDetails.color || theme.palette.grey[500], 
-                                     mr: 2,
-                                     display: 'inline-block' 
-                                   }} 
-                                 />
-                                 <Typography 
-                                   variant="body2" 
-                                   fontWeight={hasItems ? 'medium' : 'normal'}
-                                   sx={{ display: 'flex', alignItems: 'center' }}
-                                 >
-                                   {subCategoryData.name} 
-                                   {hasItems && (
-                              <Chip 
-                                size="small"
-                                       label={`${subCategoryData.items.length}`} 
-                                       sx={{ ml: 1, height: 20, fontSize: '0.7rem' }} 
-                                     />
-                                   )}
-                                   {subCategoryData.needsReview && (
-                                     <Tooltip title="Items need category review">
-                                       <WarningIcon 
-                                         fontSize="small" 
-                                         color="warning" 
-                                         sx={{ ml: 1, opacity: 0.7, width: 18, height: 18 }} 
-                                       />
-                                     </Tooltip>
-                                   )}
-                                 </Typography>
-                               </Box>
-                               {subCategoryData.description && (
-                                 <Typography variant="caption" color="text.secondary" sx={{ display: 'block', ml: 6 }}>
-                                   {subCategoryData.description}
-                                 </Typography>
-                               )}
-                             </TableCell>
-                             <TableCell align="right">{formatCurrency(subCategoryData.paid)}</TableCell>
-                             <TableCell align="right">{formatCurrency(subCategoryData.pending)}</TableCell>
-                             <TableCell align="right" sx={{ fontWeight: 'medium' }}>{formatCurrency(subCategoryData.total)}</TableCell>
-                             <TableCell align="right">
-                               {/* ---> SHOW Add Button if NO projections exist for this subcategory <---- */}
-                               {!subCategoryData.items.some(item => item.type === 'projection') && (
-                                <Tooltip title={`Add Projection to ${subCategoryData.name}`}>
-                                  <IconButton 
-                                    size="small" 
-                                    onClick={(e) => {
-                                      e.stopPropagation(); // Prevent row expansion toggle
-                                      handleOpenProjectionDialog(subCategoryData.id, subCategoryData.name);
-                                    }}
-                                    sx={{ mr: 0.5 }} // Add some margin if needed
-                                  >
-                                    <AddIcon fontSize="small" />
-                                  </IconButton>
-                                </Tooltip>
-                               )}
-                               
-                               {/* Existing View/Review Items Button */}
-                               {subCategoryData.items.length > 0 && (
-                                 <Tooltip title={subCategoryData.needsReview ? "Review Categories" : "View Items"}>
-                                   <IconButton 
-                                     size="small" 
-                                     onClick={(e) => toggleSubcategory(subCategoryData.id, e)}
-                                   >
-                                     {subCategoryData.needsReview ? (
-                                       <EditIcon fontSize="small" />
-                                     ) : (
-                                       <InfoIcon fontSize="small" />
-                                     )}
-                                   </IconButton>
-                                 </Tooltip>
-                               )}
-                             </TableCell>
-                           </TableRow>
+      {/* Main table (show only if in hierarchical view) */}
+      {displayViewMode === 'hierarchical' && (
+        <>
+          {/* Projections Summary View */}
+          {projectionsViewMode === 'summary' && localProjections.length > 0 && (
+            <Card elevation={3} sx={{ mb: 4, borderRadius: 2, overflow: 'hidden' }}>
+              <CardHeader
+                title="Projections Summary"
+                titleTypographyProps={{ variant: 'h6' }}
+                action={
+                  <Button
+                    startIcon={<AddIcon />}
+                    variant="outlined"
+                    size="small"
+                    onClick={() => {
+                      // Default to first category or handle differently
+                      const firstCategory = getAllHierarchicalCategories()[0];
+                      if (firstCategory) {
+                        handleOpenProjectionDialog(firstCategory.id, firstCategory.name);
+                      }
+                    }}
+                  >
+                    Add Projection
+                  </Button>
+                }
+              />
+              <Divider />
+              <TableContainer>
+                <Table size="small">
+                  <TableHead>
+                    <TableRow sx={{ '& th': { fontWeight: 'bold', bgcolor: 'background.default' } }}>
+                      <TableCell>Category</TableCell>
+                      <TableCell>Description</TableCell>
+                      <TableCell align="right">Amount</TableCell>
+                      <TableCell align="right">Actions</TableCell>
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
+                    {localProjections.length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={4} align="center">No projections added yet.</TableCell>
+                      </TableRow>
+                    ) : (
+                      localProjections.map(projection => {
+                        // Find category details
+                        const category = getCategoryById(projection.categoryId || '');
+                        const parentCategory = category ? getParentCategory(category.id) : null;
+                        const mainCategory = parentCategory || category;
+                        
+                        return (
+                          <TableRow 
+                            key={projection.id} 
+                            hover
+                            sx={{ 
+                              '&:hover': { bgcolor: alpha(theme.palette.primary.main, 0.04) },
+                            }}
+                          >
+                            <TableCell>
+                              <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                                {mainCategory && (
+                                  <Box 
+                                    component="span" 
+                                    sx={{ 
+                                      width: 8, 
+                                      height: 8, 
+                                      borderRadius: '50%', 
+                                      bgcolor: mainCategory.color || theme.palette.grey[500], 
+                                      mr: 1,
+                                      display: 'inline-block'
+                                    }} 
+                                  />
+                                )}
+                                <Typography variant="body2">
+                                  {category?.name || 'Uncategorized'}
+                                  {parentCategory && (
+                                    <Typography component="span" variant="caption" color="text.secondary" sx={{ ml: 0.5 }}>
+                                      ({parentCategory.name})
+                                    </Typography>
+                                  )}
+                                </Typography>
+                              </Box>
+                            </TableCell>
+                            <TableCell>
+                              <Typography variant="body2">
+                                {projection.notes || <Typography variant="caption" color="text.secondary">(No description)</Typography>}
+                              </Typography>
+                            </TableCell>
+                            <TableCell align="right">
+                              <Typography variant="body2" fontWeight="medium">
+                                {formatCurrency(projection.amount)}
+                              </Typography>
+                            </TableCell>
+                            <TableCell align="right">
+                              <Tooltip title="Edit Projection">
+                                <IconButton 
+                                  size="small" 
+                                  onClick={() => handleOpenEditProjectionDialog(projection)}
+                                  sx={{ opacity: updatingItemId === projection.id ? 0.5 : 1 }}
+                                  disabled={updatingItemId === projection.id}
+                                >
+                                  <EditIcon fontSize="small" />
+                                </IconButton>
+                              </Tooltip>
+                              <Tooltip title="Delete Projection">
+                                <IconButton 
+                                  size="small" 
+                                  onClick={(e) => handleDeleteProjection(projection.id, e)}
+                                  sx={{ opacity: updatingItemId === projection.id ? 0.5 : 1 }}
+                                  disabled={updatingItemId === projection.id}
+                                >
+                                  <DeleteIcon fontSize="small" />
+                                </IconButton>
+                              </Tooltip>
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })
+                    )}
+                  </TableBody>
+                  <TableFooter>
+                    <TableRow sx={{ bgcolor: alpha(theme.palette.primary.main, 0.04) }}>
+                      <TableCell colSpan={2}>
+                        <Typography variant="subtitle2">Total Projected Costs</Typography>
+                      </TableCell>
+                      <TableCell align="right">
+                        <Typography variant="subtitle1" fontWeight="bold">
+                          {formatCurrency(localProjections.reduce((sum, p) => sum + p.amount, 0))}
+                        </Typography>
+                      </TableCell>
+                      <TableCell />
+                    </TableRow>
+                  </TableFooter>
+                </Table>
+              </TableContainer>
+            </Card>
+          )}
 
-                           {/* Subcategory Items (Expanded) */}
-                           {isSubExpanded && subCategoryData.items.length > 0 && (
-                             <>
-                               {/* Items header row */}
-                               <TableRow sx={{ bgcolor: alpha(theme.palette.grey[100], 0.5) }}>
-                                 <TableCell colSpan={5} sx={{ py: 1 }}>
-                                   <Typography variant="caption" fontWeight="medium" color="text.secondary">
-                                     {subCategoryData.items.length} ITEM{subCategoryData.items.length !== 1 ? 'S' : ''} IN {subCategoryData.name.toUpperCase()}
-                                   </Typography>
-                                 </TableCell>
-                               </TableRow>
-                               
-                               {/* Individual items */}
-                               {subCategoryData.items.map(item => (
-                                 <TableRow 
-                                   key={item.id} 
-                                   hover
-                                   sx={{ 
-                                     bgcolor: 'background.paper',
-                                     '&:hover': { bgcolor: alpha(theme.palette.grey[100], 0.7) },
-                                     '& > td': { 
-                                       py: 1,
-                                       borderBottom: `1px dashed ${alpha(theme.palette.divider, 0.3)}` 
-                                     }
-                                   }}
-                                 >
-                                   <TableCell sx={{ pl: 10 }}>
-                                     <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                              <Chip 
-                                size="small"
-                                         label={item.type === 'expense' ? 'Expense' : 
-                                                item.type === 'bid' ? 'Bid' : 'Projection'} 
-                                         color={item.type === 'expense' ? 'primary' : 
-                                                item.type === 'bid' ? 'secondary' : 'info'}
-                                         variant={item.type === 'projection' ? 'outlined' : 'filled'}
-                                         sx={{ fontSize: '0.7rem', mr: 1 }}
-                                       />
-                                       <Box>
-                                         <Typography variant="body2">{item.description}</Typography>
-                                         {item.vendor && (
-                                           <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
-                                             Vendor: {item.vendor}
-                                           </Typography>
-                                         )}
-                                         {item.subcontractorName && (
-                                           <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
-                                             Subcontractor: {item.subcontractorName}
-                                           </Typography>
-                                         )}
-                                         {item.date && (
-                                           <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
-                                             Date: {formatDisplayDate(item.date)}
-                                           </Typography>
-                                         )}
-                                         {item.notes && (
-                                           <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
-                                             Notes: {item.notes}
-                                           </Typography>
-                                         )}
-                                         {item.phaseId && (
-                                           <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
-                                             Phase: {phases.find(p => p.id === item.phaseId)?.name || 'Unknown'}
-                                           </Typography>
-                                         )}
-                                       </Box>
-                                     </Box>
-                                   </TableCell>
-                                   <TableCell align="right">
-                                     {item.type === 'expense' && (item.status === 'paid') ? 
-                                       formatCurrency(item.amount) : '-'}
-                                   </TableCell>
-                                   <TableCell align="right">
-                                     {(item.type === 'expense' && item.status !== 'paid') || 
-                                      item.type === 'bid' || 
-                                      item.type === 'projection' ? 
-                                       formatCurrency(item.amount) : '-'}
-                                   </TableCell>
-                                   <TableCell align="right">{formatCurrency(item.amount)}</TableCell>
-                                   <TableCell align="right">
-                                     {getStatusChip(item)}
-                                     {item.type === 'expense' && item.id && (
-                                       <Tooltip title="Recategorize Item">
-                                         <IconButton 
-                                           size="small" 
-                                           onClick={() => setEditingItemId(item.id)}
-                                           sx={{ ml: 1, opacity: 0.6 }}
-                                         >
-                                           <CategoryIcon fontSize="small" sx={{ fontSize: '1rem' }} />
-                                         </IconButton>
-                                       </Tooltip>
-                                     )}
-                                     {item.type === 'projection' && item.id && (
-                                       <>
-                                         <Tooltip title="Edit Projection">
-                                           <IconButton 
-                                             size="small" 
-                                             onClick={(e) => {
-                                               e.stopPropagation();
-                                               const projectionItem = getProjectionFromDisplayableItem(item);
-                                               handleOpenEditProjectionDialog(projectionItem);
-                                             }}
-                                             sx={{ ml: 1, opacity: 0.6 }}
-                                           >
-                                             <EditIcon fontSize="small" sx={{ fontSize: '1rem' }} />
-                                           </IconButton>
-                                         </Tooltip>
-                                         <Tooltip title="Delete Projection">
-                                           <IconButton 
-                                             size="small" 
-                                             onClick={(e) => handleDeleteProjection(item.id, e)}
-                                             sx={{ ml: 1, opacity: 0.6 }}
-                                           >
-                                             <DeleteIcon fontSize="small" sx={{ fontSize: '1rem' }} />
-                                           </IconButton>
-                                         </Tooltip>
-                                       </>
-                            )}
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                             </>
-                           )}
-                         </React.Fragment>
-                       );
-                     })
-                    }
-                  </React.Fragment>
-                );
-              })
-            )}
-                    </TableBody>
-                  </Table>
-                </TableContainer>
+          {/* Main hierarchical table (show only if in integrated view or no projections exist) */}
+          {(projectionsViewMode === 'integrated' || localProjections.length === 0) && (
+            <TableContainer component={Paper} elevation={2}>
+              <Table stickyHeader aria-label="budget allocation table">
+                <TableHead>
+                  <TableRow sx={{ '& th': { fontWeight: 'bold', bgcolor: 'background.default' } }}>
+                    <TableCell>Category / Item</TableCell>
+                    <TableCell align="right">Paid</TableCell>
+                    <TableCell align="right">Pending/Projected</TableCell>
+                    <TableCell align="right">Total</TableCell>
+                    <TableCell align="right">Actions</TableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {prefsLoading ? (
+                    <TableRow>
+                      <TableCell colSpan={5} align="center">Loading categories...</TableCell>
+                    </TableRow>
+                  ) : filteredCategories.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={5} align="center">
+                        {searchTerm ? 'No categories match your search.' : 'No budget items found.'}
+                      </TableCell>
+                    </TableRow>
+                  ) : (
+                    filteredCategories.map((mainCategoryData) => {
+                      const { mainCategoryDetails, subCategories } = mainCategoryData;
+                      
+                      // Calculate totals for the main category
+                      let totalMainPaid = 0, totalMainPending = 0, totalMainTotal = 0;
+                      let hasItemsNeedingReview = false;
+                      
+                      subCategories.forEach(sub => {
+                        totalMainPaid += sub.paid;
+                        totalMainPending += sub.pending;
+                        totalMainTotal += sub.total;
+                        if (sub.needsReview) hasItemsNeedingReview = true;
+                      });
+                      
+                      const isMainExpanded = expandedSection === mainCategoryDetails.id;
+
+                      return (
+                        <React.Fragment key={mainCategoryDetails.id}>
+                          {/* Main Category Row - Access via mainCategoryDetails */}
+                          <TableRow 
+                            hover 
+                            onClick={() => toggleSection(mainCategoryDetails.id)}
+                            sx={{ 
+                              cursor: 'pointer',
+                              bgcolor: alpha(mainCategoryDetails.color || theme.palette.grey[500], 0.08),
+                              borderBottom: isMainExpanded ? 'none' : `1px solid ${theme.palette.divider}`,
+                              '&:hover': {
+                                bgcolor: alpha(mainCategoryDetails.color || theme.palette.grey[500], 0.15),
+                              }
+                            }}
+                          >
+                            <TableCell component="th" scope="row">
+                              <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                                <IconButton size="small" sx={{ mr: 1 }} aria-label={isMainExpanded ? 'Collapse section' : 'Expand section'}>
+                                  {isMainExpanded ? <ExpandLessIcon /> : <ExpandMoreIcon />}
+                                </IconButton>
+                                <Box 
+                                  component="span" 
+                                  sx={{ 
+                                    width: 12, 
+                                    height: 12, 
+                                    borderRadius: '50%', 
+                                    bgcolor: mainCategoryDetails.color || theme.palette.grey[500], 
+                                    mr: 1,
+                                    display: 'inline-block'
+                                  }} 
+                                />
+                                <Typography variant="subtitle1" fontWeight="bold">{mainCategoryDetails.name}</Typography>
+                                {hasItemsNeedingReview && (
+                                  <Tooltip title="Contains items needing category review">
+                                    <WarningIcon 
+                                      fontSize="small" 
+                                      color="warning" 
+                                      sx={{ ml: 1, opacity: 0.7 }} 
+                                    />
+                                  </Tooltip>
+                                )}
+                              </Box>
+                            </TableCell>
+                            <TableCell align="right" sx={{ fontWeight: 'medium' }}>{formatCurrency(totalMainPaid)}</TableCell>
+                            <TableCell align="right" sx={{ fontWeight: 'medium' }}>{formatCurrency(totalMainPending)}</TableCell>
+                            <TableCell align="right">
+                              <Typography variant="subtitle1" fontWeight="bold">{formatCurrency(totalMainTotal)}</Typography>
+                            </TableCell>
+                            <TableCell align="right">
+                              <Tooltip title="Add Projection">
+                                <IconButton 
+                                  size="small" 
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleOpenProjectionDialog(mainCategoryDetails.id, mainCategoryDetails.name);
+                                  }}
+                                >
+                                  <AddIcon fontSize="small" />
+                                </IconButton>
+                              </Tooltip>
+                            </TableCell>
+                          </TableRow>
+
+                          {/* Subcategory Rows (Expanded) - Iterate over subCategories map */}
+                          {isMainExpanded && Array.from(subCategories.values()).map(subCategoryData => {
+                            const hasItems = subCategoryData.items.length > 0;
+                            const isSubExpanded = expandedSubcategories.has(subCategoryData.id);
+                            
+                            return (
+                              <React.Fragment key={subCategoryData.id}>
+                                <TableRow 
+                                  hover
+                                  sx={{ 
+                                    bgcolor: alpha(theme.palette.background.paper, 0.5),
+                                    '& > td': { borderBottom: '1px solid rgba(224, 224, 224, 0.5)'},
+                                    '&:hover': { bgcolor: alpha(mainCategoryDetails.color || theme.palette.grey[500], 0.05) }
+                                  }}
+                                >
+                                  <TableCell sx={{ pl: 6 }}> {/* Indent */}
+                                    <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                                      <IconButton 
+                                        size="small" 
+                                        sx={{ mr: 1 }} 
+                                        aria-label={isSubExpanded ? 'Collapse subcategory' : 'Expand subcategory'}
+                                        onClick={(e) => toggleSubcategory(subCategoryData.id, e)}
+                                      >
+                                        {isSubExpanded ? <ExpandLessIcon /> : <ExpandMoreIcon />}
+                                      </IconButton>
+                                      <Box 
+                                        component="span"
+                                        sx={{ 
+                                          width: 4, 
+                                          height: 16, 
+                                          bgcolor: mainCategoryDetails.color || theme.palette.grey[500], 
+                                          mr: 2,
+                                          display: 'inline-block' 
+                                        }} 
+                                      />
+                                      <Typography 
+                                        variant="body2" 
+                                        fontWeight={hasItems ? 'medium' : 'normal'}
+                                        sx={{ display: 'flex', alignItems: 'center' }}
+                                      >
+                                        {subCategoryData.name} 
+                                        {hasItems && (
+                                          <Chip 
+                                            size="small"
+                                            label={`${subCategoryData.items.length}`} 
+                                            sx={{ ml: 1, height: 20, fontSize: '0.7rem' }} 
+                                          />
+                                        )}
+                                        {subCategoryData.needsReview && (
+                                          <Tooltip title="Items need category review">
+                                            <WarningIcon 
+                                              fontSize="small" 
+                                              color="warning" 
+                                              sx={{ ml: 1, opacity: 0.7, width: 18, height: 18 }} 
+                                            />
+                                          </Tooltip>
+                                        )}
+                                      </Typography>
+                                    </Box>
+                                    {subCategoryData.description && (
+                                      <Typography variant="caption" color="text.secondary" sx={{ display: 'block', ml: 6 }}>
+                                        {subCategoryData.description}
+                                      </Typography>
+                                    )}
+                                  </TableCell>
+                                  <TableCell align="right">{formatCurrency(subCategoryData.paid)}</TableCell>
+                                  <TableCell align="right">{formatCurrency(subCategoryData.pending)}</TableCell>
+                                  <TableCell align="right" sx={{ fontWeight: 'medium' }}>{formatCurrency(subCategoryData.total)}</TableCell>
+                                  <TableCell align="right">
+                                    {/* ---> SHOW Add Button if NO projections exist for this subcategory <---- */}
+                                    {!subCategoryData.items.some(item => item.type === 'projection') && (
+                                      <Tooltip title={`Add Projection to ${subCategoryData.name}`}>
+                                        <IconButton 
+                                          size="small" 
+                                          onClick={(e) => {
+                                            e.stopPropagation(); // Prevent row expansion toggle
+                                            handleOpenProjectionDialog(subCategoryData.id, subCategoryData.name);
+                                          }}
+                                          sx={{ mr: 0.5 }} // Add some margin if needed
+                                        >
+                                          <AddIcon fontSize="small" />
+                                        </IconButton>
+                                      </Tooltip>
+                                    )}
+                                    
+                                    {/* Existing View/Review Items Button */}
+                                    {subCategoryData.items.length > 0 && (
+                                      <Tooltip title={subCategoryData.needsReview ? "Review Categories" : "View Items"}>
+                                        <IconButton 
+                                          size="small" 
+                                          onClick={(e) => toggleSubcategory(subCategoryData.id, e)}
+                                        >
+                                          {subCategoryData.needsReview ? (
+                                            <EditIcon fontSize="small" />
+                                          ) : (
+                                            <InfoIcon fontSize="small" />
+                                          )}
+                                        </IconButton>
+                                      </Tooltip>
+                                    )}
+                                  </TableCell>
+                                </TableRow>
+
+                                {/* Subcategory Items (Expanded) */}
+                                {isSubExpanded && subCategoryData.items.length > 0 && (
+                                  <>
+                                    {/* Items header row */}
+                                    <TableRow sx={{ bgcolor: alpha(theme.palette.grey[100], 0.5) }}>
+                                      <TableCell colSpan={5} sx={{ py: 1 }}>
+                                        <Typography variant="caption" fontWeight="medium" color="text.secondary">
+                                          {subCategoryData.items.length} ITEM{subCategoryData.items.length !== 1 ? 'S' : ''} IN {subCategoryData.name.toUpperCase()}
+                                        </Typography>
+                                      </TableCell>
+                                    </TableRow>
+                                    
+                                    {/* Individual items */}
+                                    {subCategoryData.items.map(item => (
+                                      <TableRow 
+                                        key={item.id} 
+                                        hover
+                                        sx={{ 
+                                          bgcolor: 'background.paper',
+                                          '&:hover': { bgcolor: alpha(theme.palette.grey[100], 0.7) },
+                                          '& > td': { 
+                                            py: 1,
+                                            borderBottom: `1px dashed ${alpha(theme.palette.divider, 0.3)}` 
+                                          }
+                                        }}
+                                      >
+                                        <TableCell sx={{ pl: 10 }}>
+                                          <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                                            <Chip 
+                                              size="small"
+                                              label={item.type === 'expense' ? 'Expense' : 
+                                                    item.type === 'bid' ? 'Bid' : 'Projection'} 
+                                              color={item.type === 'expense' ? 'primary' : 
+                                                    item.type === 'bid' ? 'secondary' : 'info'}
+                                              variant={item.type === 'projection' ? 'outlined' : 'filled'}
+                                              sx={{ fontSize: '0.7rem', mr: 1 }}
+                                            />
+                                            <Box>
+                                              <Typography variant="body2">{item.description}</Typography>
+                                              {item.vendor && (
+                                                <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
+                                                  Vendor: {item.vendor}
+                                                </Typography>
+                                              )}
+                                              {item.subcontractorName && (
+                                                <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
+                                                  Subcontractor: {item.subcontractorName}
+                                                </Typography>
+                                              )}
+                                              {item.date && (
+                                                <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
+                                                  Date: {formatDisplayDate(item.date)}
+                                                </Typography>
+                                              )}
+                                              {item.notes && (
+                                                <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
+                                                  Notes: {item.notes}
+                                                </Typography>
+                                              )}
+                                              {item.phaseId && (
+                                                <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
+                                                  Phase: {phases.find(p => p.id === item.phaseId)?.name || 'Unknown'}
+                                                </Typography>
+                                              )}
+                                            </Box>
+                                          </Box>
+                                        </TableCell>
+                                        <TableCell align="right">
+                                          {item.type === 'expense' && (item.status === 'paid') ? 
+                                            formatCurrency(item.amount) : '-'}
+                                        </TableCell>
+                                        <TableCell align="right">
+                                          {(item.type === 'expense' && item.status !== 'paid') || 
+                                          item.type === 'bid' || 
+                                          item.type === 'projection' ? 
+                                            formatCurrency(item.amount) : '-'}
+                                        </TableCell>
+                                        <TableCell align="right">{formatCurrency(item.amount)}</TableCell>
+                                        <TableCell align="right">
+                                          {getStatusChip(item)}
+                                          {item.type === 'expense' && item.id && (
+                                            <Tooltip title="Recategorize Item">
+                                              <IconButton 
+                                                size="small" 
+                                                onClick={() => setEditingItemId(item.id)}
+                                                sx={{ ml: 1, opacity: 0.6 }}
+                                              >
+                                                <CategoryIcon fontSize="small" sx={{ fontSize: '1rem' }} />
+                                              </IconButton>
+                                            </Tooltip>
+                                          )}
+                                          {item.type === 'projection' && item.id && (
+                                            <>
+                                              <Tooltip title="Edit Projection">
+                                                <IconButton 
+                                                  size="small" 
+                                                  onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    const projectionItem = getProjectionFromDisplayableItem(item);
+                                                    handleOpenEditProjectionDialog(projectionItem);
+                                                  }}
+                                                  sx={{ ml: 1, opacity: 0.6 }}
+                                                >
+                                                  <EditIcon fontSize="small" sx={{ fontSize: '1rem' }} />
+                                                </IconButton>
+                                              </Tooltip>
+                                              <Tooltip title="Delete Projection">
+                                                <IconButton 
+                                                  size="small" 
+                                                  onClick={(e) => handleDeleteProjection(item.id, e)}
+                                                  sx={{ ml: 1, opacity: 0.6 }}
+                                                >
+                                                  <DeleteIcon fontSize="small" sx={{ fontSize: '1rem' }} />
+                                                </IconButton>
+                                              </Tooltip>
+                                            </>
+                                          )}
+                                        </TableCell>
+                                      </TableRow>
+                                    ))}
+                                  </>
+                                )}
+                              </React.Fragment>
+                            );
+                          })}
+                        </React.Fragment>
+                      );
+                    })
+                  )}
+                </TableBody>
+              </Table>
+            </TableContainer>
+          )}
+        </>
+      )}
 
       <Dialog open={projectionDialogOpen} onClose={() => setProjectionDialogOpen(false)} maxWidth="xs" fullWidth>
         <DialogTitle>Add Projection for {currentProjectionCategory?.name}</DialogTitle>
