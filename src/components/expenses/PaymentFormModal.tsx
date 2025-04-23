@@ -18,6 +18,10 @@ import {
   IconButton,
   FormHelperText,
   InputAdornment,
+  Alert,
+  Paper,
+  alpha,
+  useTheme,
 } from '@mui/material';
 import {
   Close as CloseIcon,
@@ -27,9 +31,12 @@ import {
   CalendarToday as DateIcon,
   Receipt as PaymentIcon,
   CheckCircle as ConfirmIcon,
+  Info as InfoIcon,
 } from '@mui/icons-material';
 import { formatCurrency, formatDate } from '../../utils/formatters';
 import { Expense } from '../../types';
+import { BidService } from '../../services/bid';
+import { useAuth } from '../../contexts/AuthContext';
 
 interface PaymentFormModalProps {
   open: boolean;
@@ -57,6 +64,8 @@ const PaymentFormModal: React.FC<PaymentFormModalProps> = ({
   expense,
   onSave,
 }) => {
+  const theme = useTheme();
+  const { user } = useAuth();
   const [loading, setLoading] = useState(false);
   const [paymentMethod, setPaymentMethod] = useState('');
   const [referenceNumber, setReferenceNumber] = useState('');
@@ -64,14 +73,52 @@ const PaymentFormModal: React.FC<PaymentFormModalProps> = ({
   const [notes, setNotes] = useState('');
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [actualAmount, setActualAmount] = useState<number | string>('');
+  const [bidData, setBidData] = useState<{
+    totalAmount: number;
+    amountPaid: number;
+    remainingAmount: number;
+    title: string;
+    subcontractorName?: string;
+  } | null>(null);
+  const [loadingBidData, setLoadingBidData] = useState(false);
 
   useEffect(() => {
-    if (expense) {
-      setActualAmount(expense.amount || '');
-    } else {
-      setActualAmount('');
-    }
-  }, [expense]);
+    if (!expense) return;
+
+    // Set the initial amount from the expense
+    setActualAmount('');
+    
+    // If the expense is linked to a bid, fetch the bid data to show payment information
+    const fetchBidData = async () => {
+      if (expense?.bidId && open && user?.uid) {
+        setLoadingBidData(true);
+        try {
+          const bid = await BidService.getBid(user.uid, expense.bidId);
+          if (bid) {
+            const totalAmount = bid.totalAmount || 0;
+            const amountPaid = bid.paymentProgress?.paid || 0;
+            const remainingAmount = bid.paymentProgress?.remaining || totalAmount - amountPaid;
+
+            setBidData({
+              totalAmount,
+              amountPaid,
+              remainingAmount,
+              title: bid.title || 'Untitled Bid',
+              subcontractorName: bid.subcontractorName
+            });
+
+            // Don't auto-set the amount for bid-related expenses
+          }
+        } catch (error) {
+          console.error('Error fetching bid data:', error);
+        } finally {
+          setLoadingBidData(false);
+        }
+      }
+    };
+
+    fetchBidData();
+  }, [expense, open, user?.uid]);
 
   const resetForm = () => {
     setPaymentMethod('');
@@ -79,7 +126,8 @@ const PaymentFormModal: React.FC<PaymentFormModalProps> = ({
     setPaymentDate(new Date().toISOString().split('T')[0]);
     setNotes('');
     setErrors({});
-    setActualAmount(expense?.amount || '');
+    setActualAmount('');
+    setBidData(null);
   };
 
   const handleClose = () => {
@@ -228,6 +276,76 @@ const PaymentFormModal: React.FC<PaymentFormModalProps> = ({
           </Box>
         </Box>
         
+        {/* Bid Payment Information */}
+        {expense.bidId && (
+          <Box sx={{ mb: 3 }}>
+            <Typography variant="subtitle1" fontWeight="medium" gutterBottom>
+              Bid Payment Status
+            </Typography>
+            
+            {loadingBidData ? (
+              <Box display="flex" alignItems="center" justifyContent="center" p={2}>
+                <CircularProgress size={24} sx={{ mr: 1 }} />
+                <Typography variant="body2">Loading bid information...</Typography>
+              </Box>
+            ) : !user?.uid ? (
+              <Alert severity="warning">
+                Authentication required to load bid details. Please try again.
+              </Alert>
+            ) : bidData ? (
+              <Paper 
+                elevation={0} 
+                sx={{ 
+                  p: 2, 
+                  bgcolor: alpha(theme.palette.info.main, 0.05),
+                  border: '1px solid',
+                  borderColor: 'divider',
+                  borderRadius: 1,
+                }}
+              >
+                <Typography variant="subtitle2">
+                  {bidData.title} {bidData.subcontractorName ? `- ${bidData.subcontractorName}` : ''}
+                </Typography>
+                
+                <Grid container spacing={2} sx={{ mt: 1 }}>
+                  <Grid item xs={4}>
+                    <Typography variant="body2" color="text.secondary">Total Bid</Typography>
+                    <Typography variant="body1" fontWeight="medium">
+                      {formatCurrency(bidData.totalAmount)}
+                    </Typography>
+                  </Grid>
+                  
+                  <Grid item xs={4}>
+                    <Typography variant="body2" color="text.secondary">Already Paid</Typography>
+                    <Typography variant="body1" fontWeight="medium" color={bidData.amountPaid > 0 ? 'success.main' : 'text.primary'}>
+                      {formatCurrency(bidData.amountPaid)}
+                    </Typography>
+                  </Grid>
+                  
+                  <Grid item xs={4}>
+                    <Typography variant="body2" color="text.secondary">Remaining</Typography>
+                    <Typography variant="body1" fontWeight="bold" color="primary">
+                      {formatCurrency(bidData.remainingAmount)}
+                    </Typography>
+                  </Grid>
+                </Grid>
+                
+                <Alert 
+                  severity="info" 
+                  icon={<InfoIcon fontSize="small" />}
+                  sx={{ mt: 2, bgcolor: 'transparent' }}
+                >
+                  The amount you enter below will be deducted from the remaining balance.
+                </Alert>
+              </Paper>
+            ) : (
+              <Alert severity="warning">
+                This expense is linked to a bid, but the bid details could not be loaded.
+              </Alert>
+            )}
+          </Box>
+        )}
+        
         <Box sx={{ mb: 2 }}>
           <Typography variant="subtitle1" fontWeight="medium" gutterBottom>
             Payment Information
@@ -239,7 +357,7 @@ const PaymentFormModal: React.FC<PaymentFormModalProps> = ({
             <TextField
               required
               fullWidth
-              label="Actual Amount Paid"
+              label="Payment"
               type="number"
               value={actualAmount}
               onChange={(e) => setActualAmount(e.target.value)}
@@ -286,31 +404,30 @@ const PaymentFormModal: React.FC<PaymentFormModalProps> = ({
               type="date"
               value={paymentDate}
               onChange={(e) => setPaymentDate(e.target.value)}
+              error={!!errors.paymentDate}
+              helperText={errors.paymentDate}
               InputProps={{
                 startAdornment: (
                   <InputAdornment position="start">
                     <DateIcon fontSize="small" />
                   </InputAdornment>
-                ),
+                )
               }}
-              error={!!errors.paymentDate}
-              helperText={errors.paymentDate}
             />
           </Grid>
           
           <Grid item xs={12}>
             <TextField
               fullWidth
-              label="Reference Number (Optional)"
+              label="Reference/Confirmation Number"
               value={referenceNumber}
               onChange={(e) => setReferenceNumber(e.target.value)}
-              placeholder="E.g., Check #, Transaction ID, etc."
               InputProps={{
                 startAdornment: (
                   <InputAdornment position="start">
-                    <BankIcon fontSize="small" />
+                    <ReceiptIcon fontSize="small" />
                   </InputAdornment>
-                ),
+                )
               }}
             />
           </Grid>
@@ -318,36 +435,28 @@ const PaymentFormModal: React.FC<PaymentFormModalProps> = ({
           <Grid item xs={12}>
             <TextField
               fullWidth
-              label="Notes (Optional)"
-              value={notes}
-              onChange={(e) => setNotes(e.target.value)}
+              label="Payment Notes"
               multiline
               rows={2}
-              placeholder="Add any additional payment details..."
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
             />
           </Grid>
         </Grid>
       </DialogContent>
       
-      <DialogActions sx={{ justifyContent: 'space-between', p: 2 }}>
+      <DialogActions sx={{ px: 3, py: 2 }}>
         <Button onClick={handleClose} disabled={loading}>
           Cancel
         </Button>
         <Button
           variant="contained"
+          color="primary"
           onClick={handleSubmit}
           disabled={loading}
           startIcon={loading ? <CircularProgress size={20} /> : <ConfirmIcon />}
-          sx={{ 
-            backgroundImage: (theme) => 
-              `linear-gradient(45deg, ${theme.palette.success.main}, ${theme.palette.success.dark})`,
-            boxShadow: '0 4px 10px rgba(0,0,0,0.15)',
-            '&:hover': {
-              boxShadow: '0 6px 12px rgba(0,0,0,0.2)',
-            }
-          }}
         >
-          {loading ? 'Processing...' : 'Confirm Payment'}
+          {loading ? 'Processing...' : 'Mark as Paid'}
         </Button>
       </DialogActions>
     </Dialog>
