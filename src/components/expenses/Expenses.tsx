@@ -34,6 +34,7 @@ import {
   TableCell,
   alpha,
   Tooltip,
+  LinearProgress,
 } from '@mui/material';
 import MuiAlert, { AlertProps } from '@mui/material/Alert';
 import {
@@ -1146,7 +1147,8 @@ const Expenses: React.FC<{ projectId?: string }> = ({ projectId }) => {
 
   const renderExpenseRow = (expense: Expense) => {
     const amountPaid = expense.amountPaid || 0;
-    const remainingAmount = expense.amount - amountPaid;
+    // When an expense is paid, we should use the original amount, not the remaining amount
+    const remainingAmount = expense.status === 'paid' ? expense.amount : expense.amount - amountPaid;
     
     // Add log inside render function
     console.log(`[renderExpenseRow] ID: ${expense.id}, Status: ${expense.status}, Amount: ${expense.amount}, AmountPaid: ${amountPaid}, Remaining: ${remainingAmount}`);
@@ -1392,6 +1394,7 @@ const Expenses: React.FC<{ projectId?: string }> = ({ projectId }) => {
       
       {/* Summary cards */}
       <Grid container spacing={3} sx={{ mb: 4 }}>
+        {/* Primary summary row */}
         <Grid item xs={12} md={4}>
           <Paper sx={{ p: 3, bgcolor: 'primary.light', color: 'primary.contrastText', borderRadius: 2 }}>
             <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
@@ -1403,6 +1406,9 @@ const Expenses: React.FC<{ projectId?: string }> = ({ projectId }) => {
             ) : (
               <Typography variant="h4" fontWeight="bold">{formatCurrency(totalExpenses)}</Typography>
             )}
+            <Typography variant="caption" sx={{ mt: 1, display: 'block' }}>
+              {expenses.length} expense entries
+            </Typography>
           </Paper>
         </Grid>
         
@@ -1415,7 +1421,12 @@ const Expenses: React.FC<{ projectId?: string }> = ({ projectId }) => {
             {loading ? (
               <CircularProgress size={24} color="inherit" />
             ) : (
-              <Typography variant="h4" fontWeight="bold">{formatCurrency(needsPaymentExpenses)}</Typography>
+              <>
+                <Typography variant="h4" fontWeight="bold">{formatCurrency(needsPaymentExpenses)}</Typography>
+                <Typography variant="caption" sx={{ mt: 1, display: 'block' }}>
+                  {expenses.filter(e => e.status !== 'paid').length} unpaid expenses
+                </Typography>
+              </>
             )}
           </Paper>
         </Grid>
@@ -1429,7 +1440,303 @@ const Expenses: React.FC<{ projectId?: string }> = ({ projectId }) => {
             {loading ? (
               <CircularProgress size={24} color="inherit" />
             ) : (
-              <Typography variant="h4" fontWeight="bold">{formatCurrency(paidExpenses)}</Typography>
+              <>
+                <Typography variant="h4" fontWeight="bold">{formatCurrency(paidExpenses)}</Typography>
+                <Typography variant="caption" sx={{ mt: 1, display: 'block' }}>
+                  {Math.round((paidExpenses / (totalExpenses || 1)) * 100)}% of total budget paid
+                </Typography>
+              </>
+            )}
+          </Paper>
+        </Grid>
+
+        {/* Category breakdown row */}
+        <Grid item xs={12}>
+          <Paper sx={{ p: 3, borderRadius: 2 }}>
+            <Typography variant="h6" sx={{ mb: 2 }}>Expense Breakdown by Category</Typography>
+            
+            <Grid container spacing={2}>
+              {loading ? (
+                <Grid item xs={12} sx={{ display: 'flex', justifyContent: 'center', p: 3 }}>
+                  <CircularProgress size={30} />
+                </Grid>
+              ) : Object.keys(categoryBreakdown).length === 0 ? (
+                <Grid item xs={12}>
+                  <Typography variant="body2" color="text.secondary">No category data available</Typography>
+                </Grid>
+              ) : (
+                Object.entries(categoryBreakdown).map(([category, amount]) => {
+                  // Calculate percentage of the total
+                  const percentage = totalExpenses > 0 ? (amount / totalExpenses) * 100 : 0;
+                  const categoryName = category.charAt(0).toUpperCase() + category.slice(1);
+                  
+                  return (
+                    <Grid item xs={12} key={category}>
+                      <Box sx={{ mb: 0.5 }}>
+                        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 0.5 }}>
+                          <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                            {CATEGORY_ICONS[category as keyof typeof CATEGORY_ICONS] || CATEGORY_ICONS.other}
+                            <Typography variant="body2" sx={{ ml: 1 }}>{categoryName}</Typography>
+                          </Box>
+                          <Box sx={{ textAlign: 'right' }}>
+                            <Typography variant="body2" fontWeight="medium">{formatCurrency(amount)}</Typography>
+                            <Typography variant="caption" color="text.secondary">
+                              {Math.round(percentage)}% of total
+                            </Typography>
+                          </Box>
+                        </Box>
+                        <LinearProgress
+                          variant="determinate"
+                          value={percentage}
+                          sx={{ 
+                            height: 8, 
+                            borderRadius: 4,
+                            bgcolor: alpha(theme.palette.primary.light, 0.2),
+                            '& .MuiLinearProgress-bar': {
+                              bgcolor: category === 'materials' ? theme.palette.success.main :
+                                      category === 'labor' ? theme.palette.info.main :
+                                      category === 'equipment' ? theme.palette.warning.main :
+                                      category === 'permits' ? theme.palette.error.main :
+                                      theme.palette.primary.main
+                            }
+                          }}
+                        />
+                      </Box>
+                    </Grid>
+                  );
+                })
+              )}
+            </Grid>
+          </Paper>
+        </Grid>
+
+        {/* Project breakdown */}
+        {!projectId && expenses.length > 0 && (
+          <Grid item xs={12} md={6}>
+            <Paper sx={{ p: 3, borderRadius: 2, height: '100%' }}>
+              <Typography variant="h6" sx={{ mb: 2 }}>Top Projects by Expense</Typography>
+              
+              {loading ? (
+                <Box sx={{ display: 'flex', justifyContent: 'center', p: 3 }}>
+                  <CircularProgress size={30} />
+                </Box>
+              ) : (
+                (() => {
+                  // Calculate project totals
+                  const projectTotals = expenses.reduce((acc, expense) => {
+                    const projectName = expense.projectName || 'Unknown Project';
+                    acc[projectName] = (acc[projectName] || 0) + expense.amount;
+                    return acc;
+                  }, {} as Record<string, number>);
+                  
+                  // Sort projects by expense amount and take top 5
+                  const topProjects = Object.entries(projectTotals)
+                    .sort(([, amountA], [, amountB]) => amountB - amountA)
+                    .slice(0, 5);
+                  
+                  return (
+                    <Box>
+                      {topProjects.map(([projectName, amount], index) => {
+                        const percentage = totalExpenses > 0 ? (amount / totalExpenses) * 100 : 0;
+                        
+                        return (
+                          <Box key={projectName} sx={{ mb: 2 }}>
+                            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 0.5 }}>
+                              <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                                <Avatar sx={{ width: 28, height: 28, fontSize: '0.875rem', bgcolor: `hsl(${index * 50}, 70%, 50%)` }}>
+                                  {projectName.charAt(0)}
+                                </Avatar>
+                                <Typography variant="body2" sx={{ ml: 1 }}>{projectName}</Typography>
+                              </Box>
+                              <Typography variant="body2" fontWeight="medium">{formatCurrency(amount)}</Typography>
+                            </Box>
+                            <LinearProgress
+                              variant="determinate"
+                              value={percentage}
+                              sx={{ 
+                                height: 6, 
+                                borderRadius: 3,
+                                bgcolor: alpha(theme.palette.primary.light, 0.15),
+                                '& .MuiLinearProgress-bar': {
+                                  bgcolor: `hsl(${index * 50}, 70%, 50%)`
+                                }
+                              }}
+                            />
+                          </Box>
+                        );
+                      })}
+                    </Box>
+                  );
+                })()
+              )}
+            </Paper>
+          </Grid>
+        )}
+
+        {/* Status breakdown */}
+        <Grid item xs={12} md={projectId ? 12 : 6}>
+          <Paper sx={{ p: 3, borderRadius: 2, height: '100%' }}>
+            <Typography variant="h6" sx={{ mb: 2 }}>Expense Status Summary</Typography>
+            
+            {loading ? (
+              <Box sx={{ display: 'flex', justifyContent: 'center', p: 3 }}>
+                <CircularProgress size={30} />
+              </Box>
+            ) : (
+              <Grid container spacing={2}>
+                {/* Status counts */}
+                <Grid item xs={12} md={6}>
+                  <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                    {['pending', 'approved', 'partially_paid', 'paid', 'rejected'].map((status) => {
+                      const statusCount = expenses.filter(e => e.status === status).length;
+                      const statusAmount = expenses.filter(e => e.status === status).reduce((sum, e) => sum + e.amount, 0);
+                      const statusLabel = status.split('_').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ');
+                      
+                      // Skip if no expenses with this status
+                      if (statusCount === 0) return null;
+                      
+                      // Determine color based on status
+                      let color: string;
+                      let icon: JSX.Element;
+                      switch(status) {
+                        case 'paid':
+                          color = theme.palette.success.main;
+                          icon = <PaidIcon fontSize="small" />;
+                          break;
+                        case 'partially_paid':
+                          color = theme.palette.info.main;
+                          icon = <PaidIcon fontSize="small" />;
+                          break;
+                        case 'pending':
+                          color = theme.palette.warning.main;
+                          icon = <DescriptionIcon fontSize="small" />;
+                          break;
+                        case 'approved':
+                          color = theme.palette.primary.main;
+                          icon = <CheckCircleIcon fontSize="small" />;
+                          break;
+                        case 'rejected':
+                          color = theme.palette.error.main;
+                          icon = <DeleteIcon fontSize="small" />;
+                          break;
+                        default:
+                          color = theme.palette.text.secondary;
+                          icon = <DescriptionIcon fontSize="small" />;
+                      }
+                      
+                      return (
+                        <Box key={status} sx={{ display: 'flex', alignItems: 'center' }}>
+                          <Avatar 
+                            sx={{ 
+                              width: 32, 
+                              height: 32, 
+                              bgcolor: alpha(color, 0.2),
+                              color: color,
+                              mr: 1.5 
+                            }}
+                          >
+                            {icon}
+                          </Avatar>
+                          <Box>
+                            <Typography variant="body2" fontWeight="medium">{statusLabel}</Typography>
+                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                              <Typography variant="body2" color="text.secondary">
+                                {statusCount} {statusCount === 1 ? 'expense' : 'expenses'}
+                              </Typography>
+                              <Typography variant="body2" fontWeight="medium">
+                                {formatCurrency(statusAmount)}
+                              </Typography>
+                            </Box>
+                          </Box>
+                        </Box>
+                      );
+                    })}
+                  </Box>
+                </Grid>
+                
+                {/* Visualization */}
+                <Grid item xs={12} md={6} sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
+                  {(() => {
+                    const statuses = ['pending', 'approved', 'partially_paid', 'paid', 'rejected'];
+                    const statusAmounts = statuses.map(status => 
+                      expenses.filter(e => e.status === status).reduce((sum, e) => sum + e.amount, 0)
+                    );
+                    
+                    // Calculate percentages
+                    const total = statusAmounts.reduce((a, b) => a + b, 0);
+                    let startPercentage = 0;
+                    
+                    return (
+                      <Box sx={{ position: 'relative', width: '100%', maxWidth: 200 }}>
+                        <Box
+                          sx={{
+                            position: 'relative',
+                            width: '100%',
+                            paddingBottom: '100%',
+                            borderRadius: '50%',
+                            overflow: 'hidden',
+                            bgcolor: '#f5f5f5',
+                          }}
+                        >
+                          {statusAmounts.map((amount, index) => {
+                            if (amount === 0) return null;
+                            
+                            const percentage = total > 0 ? (amount / total) * 100 : 0;
+                            const color = index === 0 ? theme.palette.warning.main :
+                                        index === 1 ? theme.palette.primary.main :
+                                        index === 2 ? theme.palette.info.main :
+                                        index === 3 ? theme.palette.success.main :
+                                        theme.palette.error.main;
+                            
+                            const slice = (
+                              <Box
+                                key={statuses[index]}
+                                sx={{
+                                  position: 'absolute',
+                                  width: '100%',
+                                  height: '100%',
+                                  top: 0,
+                                  left: 0,
+                                  background: `conic-gradient(
+                                    ${color} ${startPercentage}%, 
+                                    ${color} ${startPercentage + percentage}%, 
+                                    transparent ${startPercentage + percentage}%, 
+                                    transparent 100%
+                                  )`,
+                                }}
+                              />
+                            );
+                            
+                            startPercentage += percentage;
+                            return slice;
+                          })}
+                          
+                          {/* Center circle to create donut */}
+                          <Box
+                            sx={{
+                              position: 'absolute',
+                              top: '50%',
+                              left: '50%',
+                              transform: 'translate(-50%, -50%)',
+                              width: '60%',
+                              height: '60%',
+                              borderRadius: '50%',
+                              bgcolor: 'background.paper',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              flexDirection: 'column',
+                            }}
+                          >
+                            <Typography variant="caption" color="text.secondary">Total</Typography>
+                            <Typography variant="body2" fontWeight="bold">{formatCurrency(total)}</Typography>
+                          </Box>
+                        </Box>
+                      </Box>
+                    );
+                  })()}
+                </Grid>
+              </Grid>
             )}
           </Paper>
         </Grid>

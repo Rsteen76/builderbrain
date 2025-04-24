@@ -1313,6 +1313,16 @@ const BudgetAllocationTracker: React.FC<BudgetAllocationTrackerProps> = ({
                           ) : '-'}
                         </TableCell>
                         <TableCell align="right">{formatCurrency(subCategoryData.paid + pendingAmount + projectedAmount)}</TableCell>
+                        <TableCell align="right">
+                          <Tooltip title={`Add Projection to ${subCategoryData.name}`}>
+                            <IconButton 
+                              size="small" 
+                              onClick={() => handleOpenProjectionDialog(subCategoryData.id, subCategoryData.name)}
+                            >
+                              <AddIcon fontSize="small" />
+                            </IconButton>
+                          </Tooltip>
+                        </TableCell>
                       </TableRow>
                     );
                   });
@@ -1352,6 +1362,16 @@ const BudgetAllocationTracker: React.FC<BudgetAllocationTrackerProps> = ({
                           {formatCurrency(mainCategoryTotal)}
                         </Typography>
                       </TableCell>
+                      <TableCell align="right">
+                        <Tooltip title={`Add Projection to ${mainCategoryDetails.name}`}>
+                          <IconButton 
+                            size="small" 
+                            onClick={() => handleOpenProjectionDialog(mainCategoryDetails.id, mainCategoryDetails.name)}
+                          >
+                            <AddIcon fontSize="small" />
+                          </IconButton>
+                        </Tooltip>
+                      </TableCell>
                     </TableRow>
                   ];
                 })}
@@ -1384,6 +1404,21 @@ const BudgetAllocationTracker: React.FC<BudgetAllocationTrackerProps> = ({
                       {formatCurrency(costsByCategory.reduce((sum, mainCat) => 
                         sum + Array.from(mainCat.subCategories.values()).reduce((subSum, sub) => subSum + sub.total, 0), 0))}
                     </Typography>
+                  </TableCell>
+                  <TableCell align="right">
+                    <Button
+                      startIcon={<AddIcon />}
+                      size="small"
+                      variant="outlined"
+                      onClick={() => {
+                        const firstCategory = getAllHierarchicalCategories()[0];
+                        if (firstCategory) {
+                          handleOpenProjectionDialog(firstCategory.id, firstCategory.name);
+                        }
+                      }}
+                    >
+                      Add Projection
+                    </Button>
                   </TableCell>
                 </TableRow>
               </TableFooter>
@@ -1817,18 +1852,54 @@ const BudgetAllocationTracker: React.FC<BudgetAllocationTrackerProps> = ({
                                         <TableCell align="right">
                                           {getStatusChip(item)}
                                           {item.type === 'expense' && item.id && (
-                                            <Tooltip title="Recategorize Item">
-                                              <IconButton 
-                                                size="small" 
-                                                onClick={() => setEditingItemId(item.id)}
-                                                sx={{ ml: 1, opacity: 0.6 }}
-                                              >
-                                                <CategoryIcon fontSize="small" sx={{ fontSize: '1rem' }} />
-                                              </IconButton>
-                                            </Tooltip>
+                                            editingItemId === item.id ? (
+                                              <CategorySelector 
+                                                value={categoryMappings[item.id] || ''}
+                                                onChange={async (newCatId) => {
+                                                  if (!item.id || !newCatId) return;
+                                                  
+                                                  const currentItemId = item.id;
+                                                  setEditingItemId(null);
+                                                  setUpdatingItemId(currentItemId);
+                                                  
+                                                  try {
+                                                    await handleRecategorizeItem(currentItemId, newCatId);
+                                                  } catch (error) {
+                                                    console.error("Error during category update:", error);
+                                                    setSnackbar({ open: true, message: 'Failed to update category.', severity: 'error' });
+                                                  } finally {
+                                                    setUpdatingItemId(null);
+                                                  }
+                                                }}
+                                                size="small"
+                                                fullWidth={false}
+                                                variant="standard"
+                                                disabled={!!updatingItemId}
+                                              />
+                                            ) : (
+                                              <Tooltip title="Recategorize Item">
+                                                <IconButton 
+                                                  size="small" 
+                                                  onClick={() => setEditingItemId(item.id)}
+                                                  sx={{ ml: 1, opacity: 0.6 }}
+                                                  disabled={!!updatingItemId}
+                                                >
+                                                  <CategoryIcon fontSize="small" sx={{ fontSize: '1rem' }} />
+                                                </IconButton>
+                                              </Tooltip>
+                                            )
                                           )}
                                           {item.type === 'projection' && item.id && (
                                             <>
+                                              <Tooltip title="Recategorize Projection">
+                                                <IconButton 
+                                                  size="small" 
+                                                  onClick={() => setEditingItemId(item.id)}
+                                                  sx={{ ml: 1, opacity: 0.6 }}
+                                                >
+                                                  <CategoryIcon fontSize="small" sx={{ fontSize: '1rem' }} />
+                                                </IconButton>
+                                              </Tooltip>
                                               <Tooltip title="Edit Projection">
                                                 <IconButton 
                                                   size="small" 
