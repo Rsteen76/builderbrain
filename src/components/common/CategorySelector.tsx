@@ -1,144 +1,179 @@
 import React, { useState, useEffect } from 'react';
 import {
-  Box,
   FormControl,
   InputLabel,
   Select,
   MenuItem,
+  SelectChangeEvent,
+  Box,
   Typography,
-  Autocomplete,
-  TextField,
   Chip,
-  ListSubheader,
-  InputAdornment,
-  FormHelperText
+  Tooltip
 } from '@mui/material';
-import { CategoryWithChildren, Category } from '../../types/category.types';
-import { MAIN_CATEGORIES, getAllCategories } from '../../data/hierarchicalCategories';
-import CategoryIcon from '@mui/icons-material/Category';
+import { getAllCategories } from '../../data/hierarchicalCategories';
+import { alpha, useTheme } from '@mui/material/styles';
 
 interface CategorySelectorProps {
-  value: string;
-  onChange: (categoryId: string) => void;
+  value?: string;
+  onChange?: (event: SelectChangeEvent) => void;
+  onCategorySelected?: (categoryId: string) => Promise<void> | void;
   label?: string;
-  error?: string;
+  required?: boolean;
   fullWidth?: boolean;
   size?: 'small' | 'medium';
-  variant?: 'outlined' | 'filled' | 'standard';
+  error?: boolean;
+  variant?: 'standard' | 'outlined' | 'filled';
   disabled?: boolean;
-  required?: boolean;
+  color?: 'primary' | 'secondary' | 'error' | 'info' | 'success' | 'warning';
+  categoryFilter?: (categoryId: string) => boolean;
+  hideMainCategories?: boolean;
 }
 
 const CategorySelector: React.FC<CategorySelectorProps> = ({
   value,
   onChange,
+  onCategorySelected,
   label = 'Category',
-  error,
+  required = false,
   fullWidth = true,
-  size = 'small',
+  size = 'medium',
+  error = false,
   variant = 'outlined',
   disabled = false,
-  required = false,
+  color = 'primary',
+  categoryFilter,
+  hideMainCategories = false,
 }) => {
-  const [selectedCategory, setSelectedCategory] = useState<Category | null>(null);
-  const [allCategories, setAllCategories] = useState<Category[]>([]);
+  const theme = useTheme();
+  const [categories, setCategories] = useState<any[]>([]);
+  const [selectedValue, setSelectedValue] = useState<string>(value || '');
 
   useEffect(() => {
-    // Load all categories
-    const categories = getAllCategories();
-    setAllCategories(categories);
-
-    // Set initial selected category if value exists
-    if (value) {
-      const category = categories.find(cat => cat.id === value);
-      if (category) {
-        setSelectedCategory(category);
+    // Get all categories from the hierarchical data structure
+    let allCategories = getAllCategories();
+    
+    // Filter categories if a filter function is provided
+    if (categoryFilter) {
+      allCategories = allCategories.filter(cat => categoryFilter(cat.id));
+    }
+    
+    // Filter out main categories if hideMainCategories is true
+    if (hideMainCategories) {
+      allCategories = allCategories.filter(cat => !!cat.parentId);
+    }
+    
+    // Sort categories alphabetically by name within each level
+    allCategories.sort((a, b) => {
+      // First sort by parent (null parents come first)
+      if ((!a.parentId && b.parentId) || (a.parentId && !b.parentId)) {
+        return !a.parentId ? -1 : 1;
       }
+      
+      // If both have same parent status, sort by name
+      return a.name.localeCompare(b.name);
+    });
+    
+    setCategories(allCategories);
+  }, [categoryFilter, hideMainCategories]);
+
+  useEffect(() => {
+    if (value !== undefined) {
+      setSelectedValue(value);
     }
   }, [value]);
 
-  const handleChange = (event: React.SyntheticEvent, newValue: Category | null) => {
-    setSelectedCategory(newValue);
-    if (newValue) {
-      onChange(newValue.id);
-    } else {
-      onChange('');
+  const handleChange = (event: SelectChangeEvent) => {
+    const newValue = event.target.value as string;
+    setSelectedValue(newValue);
+    
+    if (onChange) {
+      onChange(event);
+    }
+    
+    if (onCategorySelected) {
+      onCategorySelected(newValue);
     }
   };
 
-  // Helper function to determine the group for a category
-  const getCategoryGroup = (option: Category): string => {
-    // Find the parent category for this subcategory
-    const parentCategory = MAIN_CATEGORIES.find(cat => 
-      cat.children?.some(child => child.id === option.id)
-    );
-    
-    return parentCategory?.name || 'Other';
-  };
-
-  // Prepare options for the autocomplete - ONLY use subcategories
-  const subcategoryOptions = getAllCategories()
-    .filter(cat => cat.level === 'sub')
-    .sort((a, b) => {
-      // Sort first by group name
-      const groupA = getCategoryGroup(a);
-      const groupB = getCategoryGroup(b);
-      
-      // If groups are different, sort by group
-      if (groupA !== groupB) {
-        return groupA.localeCompare(groupB);
+  // Group categories by their parent category
+  const groupedCategories: { [key: string]: any[] } = {};
+  const mainCategories: any[] = [];
+  
+  categories.forEach(category => {
+    if (!category.parentId) {
+      mainCategories.push(category);
+    } else {
+      if (!groupedCategories[category.parentId]) {
+        groupedCategories[category.parentId] = [];
       }
-      
-      // If in same group, sort alphabetically by name
-      return a.name.localeCompare(b.name);
-    });
+      groupedCategories[category.parentId].push(category);
+    }
+  });
 
   return (
-    <FormControl fullWidth={fullWidth} error={!!error} variant={variant} size={size} required={required}>
-      <Autocomplete
-        value={selectedCategory}
+    <FormControl 
+      fullWidth={fullWidth} 
+      size={size} 
+      required={required} 
+      error={error} 
+      variant={variant} 
+      disabled={disabled}
+    >
+      <InputLabel id={`category-selector-label`}>{label}</InputLabel>
+      <Select
+        labelId={`category-selector-label`}
+        value={selectedValue}
+        label={label}
         onChange={handleChange}
-        disabled={disabled}
-        options={subcategoryOptions}
-        getOptionLabel={(option) => option.name}
-        isOptionEqualToValue={(option, value) => option.id === value.id}
-        renderInput={(params) => (
-          <TextField
-            {...params}
-            label={label}
-            error={!!error}
-            helperText={error}
-            InputProps={{
-              ...params.InputProps,
-              startAdornment: (
-                <>
-                  <InputAdornment position="start">
-                    <CategoryIcon color="action" />
-                  </InputAdornment>
-                  {params.InputProps.startAdornment}
-                </>
-              ),
-            }}
-          />
-        )}
-        renderOption={(props, option) => (
-          <MenuItem
-            {...props}
-            key={option.id}
-            sx={{
-              pl: 4,
-              borderLeft: `4px solid ${option.color || '#ccc'}`
-            }}
-          >
-            <Box display="flex" alignItems="center">
-              {option.name}
+        color={color}
+      >
+        {!hideMainCategories && mainCategories.map(category => (
+          <MenuItem key={category.id} value={category.id} sx={{ fontWeight: 'bold' }}>
+            <Box sx={{ display: 'flex', alignItems: 'center' }}>
+              <Box 
+                component="span" 
+                sx={{ 
+                  width: 10, 
+                  height: 10, 
+                  borderRadius: '50%', 
+                  bgcolor: category.color || theme.palette.grey[500], 
+                  mr: 1 
+                }} 
+              />
+              {category.name}
             </Box>
           </MenuItem>
-        )}
-        groupBy={getCategoryGroup}
-      />
+        ))}
+        
+        {mainCategories.map(mainCategory => {
+          const subCategories = groupedCategories[mainCategory.id] || [];
+          if (subCategories.length === 0) return null;
+          
+          return (
+            <React.Fragment key={`group-${mainCategory.id}`}>
+              {subCategories.map(subCategory => (
+                <MenuItem key={subCategory.id} value={subCategory.id} sx={{ pl: 4 }}>
+                  <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                    <Box 
+                      component="span" 
+                      sx={{ 
+                        width: 8, 
+                        height: 8, 
+                        borderRadius: '50%', 
+                        bgcolor: alpha(mainCategory.color || theme.palette.grey[500], 0.8), 
+                        mr: 1 
+                      }} 
+                    />
+                    <Typography variant="body2">{subCategory.name}</Typography>
+                  </Box>
+                </MenuItem>
+              ))}
+            </React.Fragment>
+          );
+        })}
+      </Select>
     </FormControl>
   );
 };
 
-export default CategorySelector; 
+export default CategorySelector;

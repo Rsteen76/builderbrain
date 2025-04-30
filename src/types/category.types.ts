@@ -22,6 +22,7 @@ export interface Category {
  */
 export interface CategoryWithChildren extends Category {
   children: CategoryWithChildren[];
+  budgetPercentage?: number; // Add budget percentage for category budget tracking
 }
 
 /**
@@ -120,4 +121,4 @@ export interface CategoryFormData {
   level: CategoryLevel;
   parentId?: string;
   keywords?: string[];
-} 
+}

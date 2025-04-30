@@ -1382,7 +1382,7 @@ const ExpenseFormModal: React.FC<ExpenseFormModalProps> = ({
                 <Grid item xs={12} sm={6}>
                   <CategorySelector
                     value={formData.categoryId || ''} 
-                    onChange={handleDetailedCategoryChange}
+                    onCategorySelected={handleDetailedCategoryChange}
                     label="Specific Construction Category"
                     size="small"
                   />

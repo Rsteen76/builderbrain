@@ -35,6 +35,7 @@ export interface Project {
     total: number;
     spent: number;
     remaining: number;
+    contingency?: number;
   } | number;
   actualCost?: number;
   location: {
@@ -358,8 +359,10 @@ export interface BudgetProjection {
   id: string;
   categoryId: string;
   amount: number;
-  notes?: string | null; // Allow null for notes
-  createdAt: Date; // Consider Timestamp for Firestore consistency if preferred
+  notes: string | null;
+  createdAt: Date | Timestamp;
+  userId: string;
+  projectId: string;
 }
 
 // Ensure all relevant types are exported
