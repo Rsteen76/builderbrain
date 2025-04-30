@@ -126,7 +126,7 @@ const BudgetAllocationTracker: React.FC<BudgetAllocationTrackerProps> = ({
   const [categoryMappings, setCategoryMappings] = useState<Record<string, string>>({});
   const [editingItemId, setEditingItemId] = useState<string | null>(null);
   const [updatingItemId, setUpdatingItemId] = useState<string | null>(null);
-  const [prefsLoading, setPrefsLoading] = useState<boolean>(true);
+  const [prefsLoading, setPrefsLoading] = useState<boolean>(false);
   const [showOrphanedExpenses, setShowOrphanedExpenses] = useState(false);
   const [snackbar, setSnackbar] = useState<{ open: boolean, message: string, severity: 'success' | 'error' | 'info' }>({ open: false, message: '', severity: 'success' });
 

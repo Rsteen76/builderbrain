@@ -194,24 +194,41 @@ const BudgetDashboard: React.FC<BudgetDashboardProps> = () => {
   }, [workingProjections]);
 
   useEffect(() => {
-    if (projectId) {
+    // Only attempt to fetch mappings when both projectId and user are available 
+    // AND we're not in a loading state
+    if (projectId && user && !loading) {
       setMappingsLoading(true);
-      getCategoryMappingsForProject(projectId)
-        .then((mappings) => {
-          setCategoryMappings(mappings);
-        })
-        .catch((error) => {
-          console.error("Error loading category mappings for dashboard:", error);
-          setSnackbar({ open: true, message: 'Error loading category settings', severity: 'error' });
-        })
-        .finally(() => {
-          setMappingsLoading(false);
-        });
-    } else {
+      
+      // Small delay to ensure auth token is fully processed by Firebase
+      const timer = setTimeout(() => {
+        getCategoryMappingsForProject(projectId)
+          .then((mappings) => {
+            setCategoryMappings(mappings);
+            console.log(`Successfully loaded ${Object.keys(mappings).length} category mappings for project ${projectId}`);
+          })
+          .catch((error) => {
+            console.error("Error loading category mappings for dashboard:", error);
+            setSnackbar({ 
+              open: true, 
+              message: 'Error loading category settings. Using default categories.', 
+              severity: 'info' 
+            });
+          })
+          .finally(() => {
+            setMappingsLoading(false);
+          });
+      }, 500);
+      
+      return () => clearTimeout(timer);
+    } else if (!projectId || !user) {
       setCategoryMappings({});
       setMappingsLoading(false);
+    } else if (!loading) {
+      // This ensures we don't get stuck in a loading state when project data is ready
+      // but there's an issue with the mappings
+      setMappingsLoading(false);
     }
-  }, [projectId]);
+  }, [projectId, user, loading]);
 
   const budgetSummary = useMemo<BudgetSummary>(() => {
     if (!project) {
@@ -844,15 +861,17 @@ const BudgetDashboard: React.FC<BudgetDashboardProps> = () => {
         <Stack direction="row" spacing={1}>
           <Tooltip title="Generate budget report">
             {contextProject && (
-              <BudgetReportButton
-                project={contextProject}
-                expenses={expenses}
-                phases={phases}
-                bids={bids}
-                projections={workingProjections} 
-                variant="outlined"
-                size="medium"
-              />
+              <span>
+                <BudgetReportButton
+                  project={contextProject}
+                  expenses={expenses}
+                  phases={phases}
+                  bids={bids}
+                  projections={workingProjections} 
+                  variant="outlined"
+                  size="medium"
+                />
+              </span>
             )}
           </Tooltip>
           

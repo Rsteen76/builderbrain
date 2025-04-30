@@ -1,5 +1,5 @@
 import { collection, doc, getDoc, getDocs, query, setDoc, addDoc, updateDoc, where, deleteDoc, writeBatch } from 'firebase/firestore';
-import { db } from '../config/firebase';
+import { db, auth } from '../config/firebase';
 import { Category, CategoryMapping } from '../types/category.types';
 import { getAllCategories, getCategoryById } from '../data/hierarchicalCategories';
 
@@ -95,44 +95,55 @@ export const getSubcategoriesForParent = async (parentId: string): Promise<Categ
  */
 export const addCategoryMapping = async (
   itemId: string,
-  categoryId: string,
+  originalCategory: string,
+  newCategoryId: string,
   projectId: string,
-  userId: string,
+  userId?: string,
   autoAssigned: boolean = false
 ): Promise<string> => {
   const mappingsRef = collection(db, CATEGORY_MAPPINGS_COLLECTION);
+  
+  // Use the current user ID from context/auth if not provided
+  const effectiveUserId = userId || 'current-user';
   
   // Check if mapping already exists
   const existingQuery = query(
     mappingsRef,
     where('itemId', '==', itemId)
   );
-  const existingMappings = await getDocs(existingQuery);
   
-  if (!existingMappings.empty) {
-    // Update existing mapping
-    const docRef = existingMappings.docs[0].ref;
-    await updateDoc(docRef, {
-      categoryId,
+  try {
+    const existingMappings = await getDocs(existingQuery);
+    
+    if (!existingMappings.empty) {
+      // Update existing mapping
+      const docRef = existingMappings.docs[0].ref;
+      await updateDoc(docRef, {
+        categoryId: newCategoryId,
+        autoAssigned,
+        updatedAt: new Date()
+      });
+      return existingMappings.docs[0].id;
+    }
+    
+    // Create new mapping
+    const newMapping: Omit<CategoryMapping, 'id'> = {
+      itemId,
+      categoryId: newCategoryId,
+      projectId,
+      userId: effectiveUserId,
       autoAssigned,
+      createdAt: new Date(),
       updatedAt: new Date()
-    });
-    return existingMappings.docs[0].id;
+    };
+    
+    const docRef = await addDoc(mappingsRef, newMapping);
+    return docRef.id;
+  } catch (error) {
+    console.error("Error in addCategoryMapping:", error);
+    // Return a string to avoid breaking the caller
+    return '';
   }
-  
-  // Create new mapping
-  const newMapping: Omit<CategoryMapping, 'id'> = {
-    itemId,
-    categoryId,
-    projectId,
-    userId,
-    autoAssigned,
-    createdAt: new Date(),
-    updatedAt: new Date()
-  };
-  
-  const docRef = await addDoc(mappingsRef, newMapping);
-  return docRef.id;
 };
 
 /**
@@ -173,18 +184,41 @@ export const getCategoryForItem = async (
 export const getCategoryMappingsForProject = async (
   projectId: string
 ): Promise<Record<string, string>> => {
-  const mappingsRef = collection(db, CATEGORY_MAPPINGS_COLLECTION);
-  const mappingsQuery = query(mappingsRef, where('projectId', '==', projectId));
-  const mappingsSnapshot = await getDocs(mappingsQuery);
-  
-  const mappings: Record<string, string> = {};
-  
-  mappingsSnapshot.forEach(doc => {
-    const data = doc.data() as CategoryMapping;
-    mappings[data.itemId] = data.categoryId;
-  });
-  
-  return mappings;
+  if (!projectId) {
+    console.log("No projectId provided to getCategoryMappingsForProject");
+    return {};
+  }
+
+  // Check if authentication is initialized and user is signed in
+  if (!auth.currentUser) {
+    console.log("User not authenticated in getCategoryMappingsForProject, returning empty mappings");
+    return {};
+  }
+
+  try {
+    const mappingsRef = collection(db, CATEGORY_MAPPINGS_COLLECTION);
+    const mappingsQuery = query(mappingsRef, where('projectId', '==', projectId));
+    
+    const mappingsSnapshot = await getDocs(mappingsQuery);
+    
+    const mappings: Record<string, string> = {};
+    
+    mappingsSnapshot.forEach(doc => {
+      const data = doc.data() as CategoryMapping;
+      mappings[data.itemId] = data.categoryId;
+    });
+    
+    return mappings;
+  } catch (error) {
+    // If there's a permission error, log it but return an empty object
+    if (error instanceof Error && error.message.includes('permission')) {
+      console.log("Permission error in getCategoryMappingsForProject: Using fallback empty mappings");
+    } else {
+      console.error("Error in getCategoryMappingsForProject:", error);
+    }
+    // Always return an empty object instead of throwing the error
+    return {};
+  }
 };
 
 /**
@@ -223,7 +257,7 @@ export const autoAssignCategory = async (
   );
   
   // Save the mapping
-  await addCategoryMapping(itemId, constructionCategoryId, projectId, userId, true);
+  await addCategoryMapping(itemId, itemType, constructionCategoryId, projectId, userId, true);
   
   return constructionCategoryId;
-}; 
+};

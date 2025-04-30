@@ -8,7 +8,8 @@ import {
   Box,
   Typography,
   Chip,
-  Tooltip
+  Tooltip,
+  Divider
 } from '@mui/material';
 import { getAllCategories } from '../../data/hierarchicalCategories';
 import { alpha, useTheme } from '@mui/material/styles';
@@ -27,6 +28,8 @@ interface CategorySelectorProps {
   color?: 'primary' | 'secondary' | 'error' | 'info' | 'success' | 'warning';
   categoryFilter?: (categoryId: string) => boolean;
   hideMainCategories?: boolean;
+  phaseId?: string;  // Added prop for current phase ID
+  projectPhases?: any[]; // Added prop for project phases
 }
 
 const CategorySelector: React.FC<CategorySelectorProps> = ({
@@ -43,10 +46,13 @@ const CategorySelector: React.FC<CategorySelectorProps> = ({
   color = 'primary',
   categoryFilter,
   hideMainCategories = false,
+  phaseId,
+  projectPhases = [],
 }) => {
   const theme = useTheme();
   const [categories, setCategories] = useState<any[]>([]);
   const [selectedValue, setSelectedValue] = useState<string>(value || '');
+  const [phaseRelevantCategories, setPhaseRelevantCategories] = useState<string[]>([]);
 
   useEffect(() => {
     // Get all categories from the hierarchical data structure
@@ -82,6 +88,60 @@ const CategorySelector: React.FC<CategorySelectorProps> = ({
     }
   }, [value]);
 
+  // Determine phase-relevant categories based on the current phase
+  useEffect(() => {
+    if (!phaseId) {
+      setPhaseRelevantCategories([]);
+      return;
+    }
+
+    // Find the current phase
+    const currentPhase = projectPhases.find(phase => phase.id === phaseId);
+    if (!currentPhase) {
+      setPhaseRelevantCategories([]);
+      return;
+    }
+
+    // Determine relevant categories based on phase name
+    const phaseName = currentPhase.name.toLowerCase();
+    const relevantCategoryIds: string[] = [];
+
+    // Map phase names to relevant category IDs
+    // This mapping is based on common construction workflow logic
+    if (phaseName.includes('site') || phaseName.includes('demolition') || phaseName.includes('excavation')) {
+      relevantCategoryIds.push('site-work-demolition', 'site-work-excavation', 'site-work-utilities');
+    } 
+    else if (phaseName.includes('foundation') || phaseName.includes('concrete') || phaseName.includes('footings')) {
+      relevantCategoryIds.push('foundation-concrete', 'foundation-footings', 'foundation-waterproofing');
+    } 
+    else if (phaseName.includes('framing') || phaseName.includes('structure')) {
+      relevantCategoryIds.push('framing-lumber', 'framing-labor', 'framing-trusses');
+    } 
+    else if (phaseName.includes('rough') || phaseName.includes('plumbing') || phaseName.includes('electrical') || phaseName.includes('hvac')) {
+      relevantCategoryIds.push('mechanical-plumbing', 'mechanical-electrical', 'mechanical-hvac');
+    } 
+    else if (phaseName.includes('exterior') || phaseName.includes('siding') || phaseName.includes('roofing')) {
+      relevantCategoryIds.push('exterior-roofing', 'exterior-siding', 'exterior-windows');
+    } 
+    else if (phaseName.includes('interior')) {
+      relevantCategoryIds.push('interior-rough-insulation', 'interior-rough-drywall');
+    } 
+    else if (phaseName.includes('finish') || phaseName.includes('paint') || phaseName.includes('flooring')) {
+      relevantCategoryIds.push('interior-finishes-flooring', 'interior-finishes-paint', 'interior-finishes-trim');
+    } 
+    else if (phaseName.includes('cabinet') || phaseName.includes('appliances') || phaseName.includes('fixtures')) {
+      relevantCategoryIds.push('interior-finishes-cabinets', 'interior-finishes-countertops', 'specialty-fixtures');
+    }
+    else if (phaseName.includes('landscape')) {
+      relevantCategoryIds.push('landscape-plants', 'landscape-hardscape', 'landscape-irrigation');
+    }
+    else if (phaseName.includes('cleanup') || phaseName.includes('final')) {
+      relevantCategoryIds.push('cleanup-final', 'cleanup-hauling');
+    }
+    
+    setPhaseRelevantCategories(relevantCategoryIds);
+  }, [phaseId, projectPhases]);
+
   const handleChange = (event: SelectChangeEvent) => {
     const newValue = event.target.value as string;
     setSelectedValue(newValue);
@@ -110,6 +170,11 @@ const CategorySelector: React.FC<CategorySelectorProps> = ({
     }
   });
 
+  // Extract phase-relevant categories so they can be displayed at the top
+  const relevantCategories = phaseRelevantCategories.length > 0 
+    ? categories.filter(cat => phaseRelevantCategories.includes(cat.id))
+    : [];
+
   return (
     <FormControl 
       fullWidth={fullWidth} 
@@ -127,6 +192,50 @@ const CategorySelector: React.FC<CategorySelectorProps> = ({
         onChange={handleChange}
         color={color}
       >
+        {/* Show phase-relevant categories first if available */}
+        {relevantCategories.length > 0 && (
+          <>
+            <MenuItem disabled>
+              <Typography variant="caption" color="primary" sx={{ fontWeight: 'bold' }}>
+                Recommended for Current Phase
+              </Typography>
+            </MenuItem>
+            {relevantCategories.map(category => {
+              const parentCategory = mainCategories.find(c => c.id === category.parentId);
+              return (
+                <MenuItem key={`relevant-${category.id}`} value={category.id} sx={{ pl: 4 }}>
+                  <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                    <Box 
+                      component="span" 
+                      sx={{ 
+                        width: 8, 
+                        height: 8, 
+                        borderRadius: '50%', 
+                        bgcolor: alpha(parentCategory?.color || theme.palette.primary.main, 0.8), 
+                        mr: 1 
+                      }} 
+                    />
+                    <Typography variant="body2" sx={{ fontWeight: 'medium' }}>{category.name}</Typography>
+                    <Chip 
+                      label={parentCategory?.name} 
+                      size="small" 
+                      sx={{ ml: 1, height: 18, fontSize: '0.65rem' }} 
+                      variant="outlined"
+                    />
+                  </Box>
+                </MenuItem>
+              );
+            })}
+            <Divider sx={{ my: 1 }} />
+            <MenuItem disabled>
+              <Typography variant="caption" color="text.secondary">
+                All Categories
+              </Typography>
+            </MenuItem>
+          </>
+        )}
+        
+        {/* Original categories */}
         {!hideMainCategories && mainCategories.map(category => (
           <MenuItem key={category.id} value={category.id} sx={{ fontWeight: 'bold' }}>
             <Box sx={{ display: 'flex', alignItems: 'center' }}>

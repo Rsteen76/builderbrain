@@ -1385,6 +1385,8 @@ const ExpenseFormModal: React.FC<ExpenseFormModalProps> = ({
                     onCategorySelected={handleDetailedCategoryChange}
                     label="Specific Construction Category"
                     size="small"
+                    phaseId={formData.phaseId}
+                    projectPhases={currentProjectPhases}
                   />
                   <Typography variant="caption" color="text.secondary">
                     Select a construction-specific classification
