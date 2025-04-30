@@ -46,4 +46,6 @@ export interface Expense {
   bidId?: string | null;
   /** Reference to the payment stage this expense corresponds to */
   paymentStageId?: string | null;
-} 
+  /** Reference to the original expense if this is a payment record */
+  originalExpenseId?: string | null;
+}
