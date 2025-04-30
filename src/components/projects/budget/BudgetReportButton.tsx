@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, forwardRef } from 'react';
 import { 
   Button, 
   Dialog, 
@@ -27,7 +27,7 @@ interface BudgetReportButtonProps {
   showIcon?: boolean;
 }
 
-const BudgetReportButton: React.FC<BudgetReportButtonProps> = ({
+const BudgetReportButton = forwardRef<HTMLButtonElement, BudgetReportButtonProps>(({
   project,
   expenses,
   phases,
@@ -37,7 +37,7 @@ const BudgetReportButton: React.FC<BudgetReportButtonProps> = ({
   color = 'primary',
   size = 'medium',
   showIcon = true
-}) => {
+}, ref) => {
   const [open, setOpen] = useState(false);
   const theme = useTheme();
   const fullScreen = useMediaQuery(theme.breakpoints.down('md'));
@@ -53,6 +53,7 @@ const BudgetReportButton: React.FC<BudgetReportButtonProps> = ({
   return (
     <>
       <Button
+        ref={ref}
         variant={variant}
         color={color}
         size={size}
@@ -108,6 +109,8 @@ const BudgetReportButton: React.FC<BudgetReportButtonProps> = ({
       </Dialog>
     </>
   );
-};
+});
 
-export default BudgetReportButton; 
+BudgetReportButton.displayName = 'BudgetReportButton';
+
+export default BudgetReportButton;
