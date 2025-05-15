@@ -1363,15 +1363,12 @@ const BudgetDashboard: React.FC<BudgetDashboardProps> = () => {
 
       <div id="budget-allocation-tracker" style={{ scrollMarginTop: '80px' }}>
         <BudgetAllocationTracker 
-          project={contextProject} 
-          phases={phases}
+          projectId={contextProject.id}
           expenses={expenses}
           bids={bids}
-          projections={workingProjections} 
-          onAddProjection={handleAddProjection}
-          onUpdateProjectionCategory={handleUpdateProjectionCategory} 
-          onDeleteProjection={handleDeleteProjection}
-          onEditProjection={handleEditProjection}
+          phases={phases}
+          allowEdit={true}
+          isEmbedded={false}
         />
       </div>
 

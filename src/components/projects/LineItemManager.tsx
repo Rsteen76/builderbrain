@@ -59,6 +59,8 @@ interface LineItemManagerProps {
   onProjectUpdate: (project: Project) => void;
 }
 
+
+
 const LineItemManager: React.FC<LineItemManagerProps> = ({ project, userId, onProjectUpdate }) => {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));

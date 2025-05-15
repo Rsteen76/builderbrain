@@ -49,7 +49,7 @@ export interface Project {
   team?: string[];
   projectType?: string;
   estimatedDuration?: string;
-  phases?: Phase[];
+  phases: Phase[];
   keyMilestones?: {
     name: string;
     date: Date | null;
@@ -66,6 +66,7 @@ export interface Project {
   expenses?: Expense[];
   budgetPreferences?: CategoryMappingPreferences;
   projections?: BudgetProjection[];
+  progress: number;
 }
 
 export interface Bid {
@@ -262,17 +263,17 @@ export interface BidPaymentStage {
 
 // Add or enhance the Phase interface
 export interface Phase {
-  id?: string;
-  projectId?: string;
+  id: string;
   name: string;
-  startDate: Date | string | { toDate(): Date } | null;
-  endDate: Date | string | { toDate(): Date } | null;
-  status: 'not_started' | 'planning' | 'in_progress' | 'completed' | 'delayed' | 'on_hold';
+  description?: string;
+  startDate?: Date | null | Timestamp;
+  endDate?: Date | null | Timestamp;
+  status: 'not_started' | 'in_progress' | 'completed' | 'on_hold' | 'planning' | 'delayed';
   progress: number;
+  order?: number;
+  tasks?: string[];
   budget: number;
   actualCost: number;
-  description?: string;
-  tasks?: Task[];
 }
 
 // Add the ProjectPhase interface (or enhance existing Phase if preferred)

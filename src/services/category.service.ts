@@ -1,7 +1,8 @@
-import { collection, doc, getDoc, getDocs, query, setDoc, addDoc, updateDoc, where, deleteDoc, writeBatch } from 'firebase/firestore';
+import { collection, doc, getDoc, getDocs, query, setDoc, addDoc, updateDoc, where, deleteDoc, writeBatch, arrayUnion, Timestamp } from 'firebase/firestore';
 import { db, auth } from '../config/firebase';
 import { Category, CategoryMapping } from '../types/category.types';
 import { getAllCategories, getCategoryById } from '../data/hierarchicalCategories';
+import { DEFAULT_CATEGORY_MAPPINGS } from '../utils/categoryMappingUtils';
 
 // Collection references
 const CATEGORIES_COLLECTION = 'categories';
@@ -184,40 +185,139 @@ export const getCategoryForItem = async (
 export const getCategoryMappingsForProject = async (
   projectId: string
 ): Promise<Record<string, string>> => {
-  if (!projectId) {
-    console.log("No projectId provided to getCategoryMappingsForProject");
-    return {};
-  }
-
-  // Check if authentication is initialized and user is signed in
-  if (!auth.currentUser) {
-    console.log("User not authenticated in getCategoryMappingsForProject, returning empty mappings");
-    return {};
-  }
-
   try {
-    const mappingsRef = collection(db, CATEGORY_MAPPINGS_COLLECTION);
-    const mappingsQuery = query(mappingsRef, where('projectId', '==', projectId));
+    const docRef = doc(db, 'projectSettings', projectId);
+    const docSnap = await getDoc(docRef);
     
-    const mappingsSnapshot = await getDocs(mappingsQuery);
-    
-    const mappings: Record<string, string> = {};
-    
-    mappingsSnapshot.forEach(doc => {
-      const data = doc.data() as CategoryMapping;
-      mappings[data.itemId] = data.categoryId;
-    });
-    
-    return mappings;
-  } catch (error) {
-    // If there's a permission error, log it but return an empty object
-    if (error instanceof Error && error.message.includes('permission')) {
-      console.log("Permission error in getCategoryMappingsForProject: Using fallback empty mappings");
-    } else {
-      console.error("Error in getCategoryMappingsForProject:", error);
+    if (docSnap.exists() && docSnap.data().categoryMappings) {
+      return docSnap.data().categoryMappings;
     }
-    // Always return an empty object instead of throwing the error
+    
+    // If no mappings exist yet, create default mappings
+    await setDoc(docRef, { 
+      categoryMappings: DEFAULT_CATEGORY_MAPPINGS,
+      updatedAt: Timestamp.now() 
+    }, { merge: true });
+    
+    return DEFAULT_CATEGORY_MAPPINGS;
+  } catch (error) {
+    console.error('Error getting category mappings:', error);
     return {};
+  }
+};
+
+/**
+ * Save a single category mapping for a project
+ * @param projectId - Project ID
+ * @param legacyCategoryId - Legacy category ID
+ * @param enhancedCategoryId - Enhanced category ID
+ */
+export const saveCategoryMapping = async (
+  projectId: string, 
+  legacyCategoryId: string, 
+  enhancedCategoryId: string
+): Promise<void> => {
+  try {
+    const docRef = doc(db, 'projectSettings', projectId);
+    const docSnap = await getDoc(docRef);
+    
+    if (docSnap.exists()) {
+      // Update existing mappings
+      await updateDoc(docRef, {
+        [`categoryMappings.${legacyCategoryId}`]: enhancedCategoryId,
+        updatedAt: Timestamp.now()
+      });
+    } else {
+      // Create new settings document with initial mapping
+      await setDoc(docRef, {
+        categoryMappings: { [legacyCategoryId]: enhancedCategoryId },
+        updatedAt: Timestamp.now()
+      });
+    }
+  } catch (error) {
+    console.error('Error saving category mapping:', error);
+    throw error;
+  }
+};
+
+/**
+ * Add multiple category mappings at once
+ * @param projectId - Project ID
+ * @param mappings - Record of legacy category IDs to enhanced category IDs
+ */
+export const addCategoryMappingBatch = async (
+  projectId: string, 
+  mappings: Record<string, string>
+): Promise<void> => {
+  try {
+    const docRef = doc(db, 'projectSettings', projectId);
+    const docSnap = await getDoc(docRef);
+    
+    if (docSnap.exists()) {
+      // Get existing mappings
+      const existingMappings = docSnap.data().categoryMappings || {};
+      
+      // Merge with new mappings
+      const updatedMappings = { ...existingMappings, ...mappings };
+      
+      // Update document
+      await updateDoc(docRef, {
+        categoryMappings: updatedMappings,
+        updatedAt: Timestamp.now()
+      });
+    } else {
+      // Create new settings document with initial mappings
+      await setDoc(docRef, {
+        categoryMappings: mappings,
+        updatedAt: Timestamp.now()
+      });
+    }
+  } catch (error) {
+    console.error('Error adding category mappings:', error);
+    throw error;
+  }
+};
+
+/**
+ * Get the category system preference for a specific project
+ * @param projectId - Project ID
+ * @returns 'legacy' or 'enhanced'
+ */
+export const getProjectCategorySystem = async (
+  projectId: string
+): Promise<'legacy' | 'enhanced'> => {
+  try {
+    const projectDoc = await getDoc(doc(db, 'projects', projectId));
+    if (!projectDoc.exists()) {
+      throw new Error('Project not found');
+    }
+    
+    const data = projectDoc.data();
+    // Default to legacy unless explicitly set to enhanced
+    return data.categorySystem === 'enhanced' ? 'enhanced' : 'legacy';
+  } catch (error) {
+    console.error('Error getting project category system:', error);
+    return 'legacy'; // Default to legacy on error
+  }
+};
+
+/**
+ * Update the category system for a project
+ * @param projectId - Project ID
+ * @param system - 'legacy' or 'enhanced'
+ */
+export const updateProjectCategorySystem = async (
+  projectId: string, 
+  system: 'legacy' | 'enhanced'
+): Promise<void> => {
+  try {
+    await updateDoc(doc(db, 'projects', projectId), {
+      categorySystem: system,
+      updatedAt: Timestamp.now()
+    });
+  } catch (error) {
+    console.error('Error updating project category system:', error);
+    throw error;
   }
 };
 
@@ -225,39 +325,49 @@ export const getCategoryMappingsForProject = async (
  * Auto-categorize an item based on its metadata
  */
 export const autoAssignCategory = async (
-  itemId: string,
-  projectId: string,
-  userId: string,
-  itemType: string,
-  vendorOrSubcontractor?: string,
-  description?: string
-): Promise<string> => {
-  // Check if a manual mapping already exists
-  const mappingsRef = collection(db, CATEGORY_MAPPINGS_COLLECTION);
-  const existingQuery = query(
-    mappingsRef,
-    where('itemId', '==', itemId),
-    where('autoAssigned', '==', false)
-  );
-  const existingMappings = await getDocs(existingQuery);
-  
-  if (!existingMappings.empty) {
-    // Manual mapping exists, don't override it
-    return existingMappings.docs[0].data().categoryId;
+  projectId: string
+): Promise<void> => {
+  try {
+    // Get existing category mappings for the project
+    const mappings = await getCategoryMappingsForProject(projectId);
+    
+    // Get all expenses for the project
+    const expensesRef = collection(db, 'expenses');
+    const q = query(expensesRef, where('projectId', '==', projectId));
+    const querySnapshot = await getDocs(q);
+    
+    // Process each expense
+    const updates = [];
+    for (const expenseDoc of querySnapshot.docs) {
+      const expense = expenseDoc.data();
+      
+      // Skip if expense already has a category
+      if (expense.categoryId) continue;
+      
+      // Add expense to updates
+      updates.push({
+        ref: doc(db, 'expenses', expenseDoc.id),
+        data: {
+          categoryId: 'CATEGORY_ID', // This is a placeholder, you would implement logic to determine the category
+          updatedAt: Timestamp.now()
+        }
+      });
+    }
+    
+    // Apply batch updates (limited to Firestore batch size)
+    const MAX_BATCH_SIZE = 500;
+    for (let i = 0; i < updates.length; i += MAX_BATCH_SIZE) {
+      const batchChunk = updates.slice(i, i + MAX_BATCH_SIZE);
+      
+      // Create and commit a new batch for each chunk
+      const batch = writeBatch(db);
+      batchChunk.forEach((item: { ref: any; data: any }) => {
+        batch.update(item.ref, item.data);
+      });
+      await batch.commit();
+    }
+  } catch (error) {
+    console.error('Error auto-assigning categories:', error);
+    throw error;
   }
-  
-  // Import the mapSimpleToDetailedCategory function
-  const { mapSimpleToDetailedCategory } = await import('../data/hierarchicalCategories');
-  
-  // Map to construction category
-  const constructionCategoryId = mapSimpleToDetailedCategory(
-    itemType,
-    vendorOrSubcontractor,
-    description
-  );
-  
-  // Save the mapping
-  await addCategoryMapping(itemId, itemType, constructionCategoryId, projectId, userId, true);
-  
-  return constructionCategoryId;
 };

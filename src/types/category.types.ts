@@ -15,14 +15,16 @@ export interface Category {
   order?: number;
   createdAt?: Date;
   updatedAt?: Date;
+  children?: Category[]; // Optional children array
+  userDefined?: boolean; // Indicates if this is a user-defined category
+  budgetPercentage?: number; // Optional budget percentage for category budget tracking
 }
 
 /**
  * Interface for main categories with children
  */
 export interface CategoryWithChildren extends Category {
-  children: CategoryWithChildren[];
-  budgetPercentage?: number; // Add budget percentage for category budget tracking
+  children: Category[];
 }
 
 /**

@@ -11,8 +11,12 @@ import {
   Tooltip,
   Divider
 } from '@mui/material';
-import { getAllCategories } from '../../data/hierarchicalCategories';
 import { alpha, useTheme } from '@mui/material/styles';
+import { 
+  getUserCategorySystemPreference, 
+  getCategoriesBySystem, 
+  convertCategoryId 
+} from '../../utils/categoryMappingUtils';
 
 interface CategorySelectorProps {
   value?: string;
@@ -30,6 +34,7 @@ interface CategorySelectorProps {
   hideMainCategories?: boolean;
   phaseId?: string;  // Added prop for current phase ID
   projectPhases?: any[]; // Added prop for project phases
+  categorySystem?: 'legacy' | 'enhanced'; // New prop for category system
 }
 
 const CategorySelector: React.FC<CategorySelectorProps> = ({
@@ -48,15 +53,19 @@ const CategorySelector: React.FC<CategorySelectorProps> = ({
   hideMainCategories = false,
   phaseId,
   projectPhases = [],
+  categorySystem,
 }) => {
   const theme = useTheme();
   const [categories, setCategories] = useState<any[]>([]);
   const [selectedValue, setSelectedValue] = useState<string>(value || '');
   const [phaseRelevantCategories, setPhaseRelevantCategories] = useState<string[]>([]);
+  
+  // Use the provided system or get user preference
+  const activeCategorySystem = categorySystem || getUserCategorySystemPreference();
 
   useEffect(() => {
-    // Get all categories from the hierarchical data structure
-    let allCategories = getAllCategories();
+    // Get all categories based on the active system
+    let allCategories = getCategoriesBySystem(activeCategorySystem);
     
     // Filter categories if a filter function is provided
     if (categoryFilter) {
@@ -80,8 +89,9 @@ const CategorySelector: React.FC<CategorySelectorProps> = ({
     });
     
     setCategories(allCategories);
-  }, [categoryFilter, hideMainCategories]);
+  }, [categoryFilter, hideMainCategories, activeCategorySystem]);
 
+  // Handle value coming from parent component, convert if needed
   useEffect(() => {
     if (value !== undefined) {
       setSelectedValue(value);
@@ -106,41 +116,74 @@ const CategorySelector: React.FC<CategorySelectorProps> = ({
     const phaseName = currentPhase.name.toLowerCase();
     const relevantCategoryIds: string[] = [];
 
-    // Map phase names to relevant category IDs
-    // This mapping is based on common construction workflow logic
-    if (phaseName.includes('site') || phaseName.includes('demolition') || phaseName.includes('excavation')) {
-      relevantCategoryIds.push('site-work-demolition', 'site-work-excavation', 'site-work-utilities');
-    } 
-    else if (phaseName.includes('foundation') || phaseName.includes('concrete') || phaseName.includes('footings')) {
-      relevantCategoryIds.push('foundation-concrete', 'foundation-footings', 'foundation-waterproofing');
-    } 
-    else if (phaseName.includes('framing') || phaseName.includes('structure')) {
-      relevantCategoryIds.push('framing-lumber', 'framing-labor', 'framing-trusses');
-    } 
-    else if (phaseName.includes('rough') || phaseName.includes('plumbing') || phaseName.includes('electrical') || phaseName.includes('hvac')) {
-      relevantCategoryIds.push('mechanical-plumbing', 'mechanical-electrical', 'mechanical-hvac');
-    } 
-    else if (phaseName.includes('exterior') || phaseName.includes('siding') || phaseName.includes('roofing')) {
-      relevantCategoryIds.push('exterior-roofing', 'exterior-siding', 'exterior-windows');
-    } 
-    else if (phaseName.includes('interior')) {
-      relevantCategoryIds.push('interior-rough-insulation', 'interior-rough-drywall');
-    } 
-    else if (phaseName.includes('finish') || phaseName.includes('paint') || phaseName.includes('flooring')) {
-      relevantCategoryIds.push('interior-finishes-flooring', 'interior-finishes-paint', 'interior-finishes-trim');
-    } 
-    else if (phaseName.includes('cabinet') || phaseName.includes('appliances') || phaseName.includes('fixtures')) {
-      relevantCategoryIds.push('interior-finishes-cabinets', 'interior-finishes-countertops', 'specialty-fixtures');
-    }
-    else if (phaseName.includes('landscape')) {
-      relevantCategoryIds.push('landscape-plants', 'landscape-hardscape', 'landscape-irrigation');
-    }
-    else if (phaseName.includes('cleanup') || phaseName.includes('final')) {
-      relevantCategoryIds.push('cleanup-final', 'cleanup-hauling');
+    // Enhanced phase-to-category mapping
+    if (activeCategorySystem === 'enhanced') {
+      if (phaseName.includes('site') || phaseName.includes('demolition') || phaseName.includes('excavation')) {
+        relevantCategoryIds.push('04-site-demolition', '04-site-earthwork', '04-site-utilities', '04-site-environmental');
+      } 
+      else if (phaseName.includes('foundation') || phaseName.includes('concrete') || phaseName.includes('footings')) {
+        relevantCategoryIds.push('05-structural-foundation', '05-structural-concrete', '06-envelope-waterproofing');
+      } 
+      else if (phaseName.includes('framing') || phaseName.includes('structure')) {
+        relevantCategoryIds.push('05-structural-framing', '05-structural-steel', '05-structural-masonry');
+      } 
+      else if (phaseName.includes('rough') || phaseName.includes('plumbing') || phaseName.includes('electrical') || phaseName.includes('hvac')) {
+        relevantCategoryIds.push('07-systems-plumbing', '07-systems-electrical', '07-systems-hvac');
+      } 
+      else if (phaseName.includes('exterior') || phaseName.includes('siding') || phaseName.includes('roofing')) {
+        relevantCategoryIds.push('06-envelope-roofing', '06-envelope-walls', '06-envelope-windows', '06-envelope-doors');
+      } 
+      else if (phaseName.includes('interior') && phaseName.includes('rough')) {
+        relevantCategoryIds.push('08-interior-insulation', '08-interior-drywall');
+      } 
+      else if (phaseName.includes('interior') || phaseName.includes('finish') || phaseName.includes('paint') || phaseName.includes('flooring')) {
+        relevantCategoryIds.push('08-interior-flooring', '08-interior-finishes', '08-interior-cabinetry');
+      } 
+      else if (phaseName.includes('cabinet') || phaseName.includes('appliances') || phaseName.includes('fixtures')) {
+        relevantCategoryIds.push('09-specialties-fixtures', '09-specialties-appliances');
+      }
+      else if (phaseName.includes('landscape')) {
+        relevantCategoryIds.push('10-exterior-landscaping', '10-exterior-hardscaping', '10-exterior-irrigation');
+      }
+      else if (phaseName.includes('cleanup') || phaseName.includes('final') || phaseName.includes('complete')) {
+        relevantCategoryIds.push('11-completion-cleaning', '11-completion-punchlist', '11-completion-documentation');
+      }
+    } else {
+      // Legacy phase-to-category mapping (original code)
+      if (phaseName.includes('site') || phaseName.includes('demolition') || phaseName.includes('excavation')) {
+        relevantCategoryIds.push('site-work-demolition', 'site-work-excavation', 'site-work-utilities');
+      } 
+      else if (phaseName.includes('foundation') || phaseName.includes('concrete') || phaseName.includes('footings')) {
+        relevantCategoryIds.push('foundation-concrete', 'foundation-footings', 'foundation-waterproofing');
+      } 
+      else if (phaseName.includes('framing') || phaseName.includes('structure')) {
+        relevantCategoryIds.push('framing-lumber', 'framing-labor', 'framing-trusses');
+      } 
+      else if (phaseName.includes('rough') || phaseName.includes('plumbing') || phaseName.includes('electrical') || phaseName.includes('hvac')) {
+        relevantCategoryIds.push('mechanical-plumbing', 'mechanical-electrical', 'mechanical-hvac');
+      } 
+      else if (phaseName.includes('exterior') || phaseName.includes('siding') || phaseName.includes('roofing')) {
+        relevantCategoryIds.push('exterior-roofing', 'exterior-siding', 'exterior-windows');
+      } 
+      else if (phaseName.includes('interior')) {
+        relevantCategoryIds.push('interior-rough-insulation', 'interior-rough-drywall');
+      } 
+      else if (phaseName.includes('finish') || phaseName.includes('paint') || phaseName.includes('flooring')) {
+        relevantCategoryIds.push('interior-finishes-flooring', 'interior-finishes-paint', 'interior-finishes-trim');
+      } 
+      else if (phaseName.includes('cabinet') || phaseName.includes('appliances') || phaseName.includes('fixtures')) {
+        relevantCategoryIds.push('interior-finishes-cabinets', 'interior-finishes-countertops', 'specialty-fixtures');
+      }
+      else if (phaseName.includes('landscape')) {
+        relevantCategoryIds.push('landscape-hardscape', 'landscape-softscape', 'landscape-irrigation');
+      }
+      else if (phaseName.includes('cleanup') || phaseName.includes('final')) {
+        relevantCategoryIds.push('cleanup-final', 'cleanup-hauling');
+      }
     }
     
     setPhaseRelevantCategories(relevantCategoryIds);
-  }, [phaseId, projectPhases]);
+  }, [phaseId, projectPhases, activeCategorySystem]);
 
   const handleChange = (event: SelectChangeEvent) => {
     const newValue = event.target.value as string;

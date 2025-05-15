@@ -1,6 +1,6 @@
 import { collection, doc, getDoc, setDoc, addDoc, updateDoc, deleteDoc, getDocs, query, where } from 'firebase/firestore';
 import { db } from '../config/firebase';
-import { LineItem } from '../types';
+import { LineItem } from '../types/project.types';
 
 export const LineItemService = {
   /**
