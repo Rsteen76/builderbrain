@@ -1,11 +1,12 @@
 import { LineItem } from './project.types';
 
 export type ExpenseCategory = 'labor' | 'materials' | 'equipment' | 'permits' | 'subcontractor' | 'other';
-export type ExpenseStatus = 'pending' | 'approved' | 'rejected' | 'paid' | 'partially_paid';
+export type ExpenseStatus = 'pending' | 'approved' | 'rejected' | 'paid' | 'partially_paid' | 'processing' | 'requires_action';
 
 export interface PaymentDetails {
   method: string;
-  date: string;
+  /** The date the payment was made. */
+  date: Date; 
   referenceNumber?: string;
   notes?: string;
 }
@@ -26,7 +27,8 @@ export interface Expense {
   amount: number;
   amountPaid?: number;
   amountRemaining?: number;
-  date: Date | string;
+  /** The primary date of the expense record. */
+  date: Date;
   receiptUrl?: string;
   vendor?: string | null;
   subcontractorId?: string | null;
@@ -34,8 +36,10 @@ export interface Expense {
   status: ExpenseStatus;
   createdBy: string;
   approvedBy?: string;
-  createdAt: Date | string;
-  updatedAt: Date | string;
+  /** Timestamp of when the expense record was created. */
+  createdAt: Date;
+  /** Timestamp of the last update to the expense record. */
+  updatedAt: Date;
   notes?: string;
   /** @deprecated Use phaseName instead */
   buildingPhase?: string;
@@ -51,8 +55,8 @@ export interface Expense {
   paymentStageId?: string | null;
   /** Reference to the original expense if this is a payment record */
   originalExpenseId?: string | null;
-  /** Due date for this expense */
-  dueDate?: Date | string | null;
-  /** Last payment date */
-  lastPaymentDate?: Date | string | null;
+  /** Due date for this expense, if applicable. */
+  dueDate?: Date | null;
+  /** Date of the last payment made towards this expense. */
+  lastPaymentDate?: Date | null;
 }

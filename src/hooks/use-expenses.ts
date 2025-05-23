@@ -6,14 +6,15 @@ import { expenseService } from '../api';
 const EXPENSES_QUERY_KEY = 'expenses';
 
 // Debug function to check for undefined values in expense data
-function logExpenseData(method: string, expense: any) {
+function logExpenseData(method: string, expense: Record<string, unknown>) { // Changed 'any' to 'Record<string, unknown>'
   console.log(`[useExpenses] ${method} - Checking expense data structure:`);
   console.log('  - Has paymentDetails?', Object.prototype.hasOwnProperty.call(expense, 'paymentDetails'));
-  console.log('  - paymentDetails value:', expense.paymentDetails);
+  // Accessing expense.paymentDetails might require a type assertion or check if expense is Record<string, unknown>
+  console.log('  - paymentDetails value:', (expense as { paymentDetails?: unknown }).paymentDetails);
   console.log('  - paymentDetails type:', expense.paymentDetails !== undefined ? typeof expense.paymentDetails : 'undefined');
   
   // Check for undefined values in top-level fields
-  const undefinedFields = [];
+  const undefinedFields: string[] = []; // Explicitly type undefinedFields
   for (const [key, value] of Object.entries(expense)) {
     if (value === undefined) {
       undefinedFields.push(key);
@@ -151,12 +152,16 @@ export const useCreateExpense = () => {
       // Explicitly ensure paymentDetails is never undefined
       if (expense.paymentDetails === undefined) {
         console.log('[useExpenses] Setting undefined paymentDetails to null before API call');
-        (expense as any).paymentDetails = null;
+        // Cast to Partial<Expense> to allow setting an optional property
+        (expense as Partial<Expense>).paymentDetails = null; 
       }
       
-      const response = await expenseService.create(expense as any);
+      // Assuming expenseService.create is typed to accept Omit<Expense, 'id' | 'createdAt' | 'updatedAt'>
+      // or a compatible type where JS Dates are acceptable (service handles conversion).
+      // If expenseService.create strictly expects Firestore Timestamps, a conversion step would be needed here.
+      const response = await expenseService.create(expense); 
       if (response.status === 'error') {
-        throw new Error(response.error);
+        throw new Error(response.error || 'Failed to create expense'); // Ensure error message exists
       }
       return response.data;
     },
@@ -199,12 +204,15 @@ export const useUpdateExpense = () => {
       // Explicitly ensure paymentDetails is never undefined
       if (expense.paymentDetails === undefined) {
         console.log('[useExpenses] Setting undefined paymentDetails to null before API call');
-        (expense as any).paymentDetails = null;
+        // Cast to Partial<Expense> to allow setting an optional property
+        (expense as Partial<Expense>).paymentDetails = null;
       }
       
+      // Assuming expenseService.update is typed to accept Partial<Expense>
+      // where JS Dates are acceptable (service handles conversion).
       const response = await expenseService.update(id, expense);
       if (response.status === 'error') {
-        throw new Error(response.error);
+        throw new Error(response.error || `Failed to update expense ${id}`); // Ensure error message exists
       }
       return response.data;
     },
@@ -318,3 +326,41 @@ export const useDeleteExpense = () => {
     }
   );
 }; 
+
+// New Comprehensive Hook for fetching expenses with various filters
+export interface UseExpensesFilters {
+  status?: Expense['status'] | Expense['status'][];
+  category?: Expense['category'];
+  projectId?: string;
+  phaseId?: string;
+  subcontractorId?: string;
+  // Add other filters as supported by expenseService.getExpenses
+  // dateFrom?: Date;
+  // dateTo?: Date;
+}
+
+export const useGetExpenses = (
+  userId: string,
+  filters?: UseExpensesFilters,
+  enabled: boolean = true
+) => {
+  return useQuery<Expense[], Error>( // Explicitly type the return data and error
+    [EXPENSES_QUERY_KEY, 'list', userId, filters], // Add 'list' for better key specificity
+    async () => {
+      // Assuming expenseService.getExpenses is the intended service method
+      // This method should be part of your API client (e.g., ../api/expenseService)
+      // and internally call the Firestore ExpenseService.getExpenses
+      const response = await expenseService.getExpenses(userId, filters); 
+      if (response.status === 'error' || !response.data) {
+        throw new Error(response.error || 'Failed to fetch expenses');
+      }
+      return response.data;
+    },
+    {
+      enabled: !!userId && enabled,
+      keepPreviousData: true,
+      staleTime: 5 * 60 * 1000, // 5 minutes
+      // Consider adding onError for centralized error handling if desired
+    }
+  );
+};

@@ -34,7 +34,7 @@ import {
   Info as InfoIcon,
 } from '@mui/icons-material';
 import { formatCurrency, formatDate } from '../../utils/formatters';
-import { Expense } from '../../types';
+import { Expense, PaymentDetails as ExpensePaymentDetails } from '../../types'; // Import PaymentDetails
 import { BidService } from '../../services/bid';
 import { useAuth } from '../../contexts/AuthContext';
 
@@ -42,12 +42,7 @@ interface PaymentFormModalProps {
   open: boolean;
   onClose: () => void;
   expense: Expense | null;
-  onSave: (actualAmountPaid: number, paymentDetails: {
-    method: string;
-    referenceNumber: string;
-    date: string;
-    notes: string;
-  }) => void;
+  onSave: (actualAmountPaid: number, paymentDetails: ExpensePaymentDetails) => void;
 }
 
 const PAYMENT_METHODS = [
@@ -168,11 +163,11 @@ const PaymentFormModal: React.FC<PaymentFormModalProps> = ({
     console.log(`[PaymentFormModal] Processing payment - Amount: ${finalAmount}`);
     
     // Create the payment details object
-    const paymentDetailsObj = {
+    const paymentDetailsObj: ExpensePaymentDetails = {
       method: paymentMethod,
-      referenceNumber: referenceNumber,
-      date: paymentDate,
-      notes: notes
+      referenceNumber: referenceNumber || undefined, // Ensure undefined if empty
+      date: new Date(paymentDate), // Convert string date to Date object
+      notes: notes || undefined // Ensure undefined if empty
     };
     
     if (expense?.projectId) {

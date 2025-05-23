@@ -23,8 +23,11 @@ import {
     Bid, 
     BidVersion, 
     LineItem,
-    BidPaymentStage
+    BidPaymentStage,
+    Expense // Added Expense type
 } from '../types';
+import { formatCurrency } from '../utils/formatters'; // Added formatCurrency
+import { toTimestamp, toDate } from '../../utils/firestoreConverter'; // Added converter imports
 
 // Define Firestore-specific Bid type extending the main Bid type
 // Handles Timestamps and ensures userId is present
@@ -364,7 +367,7 @@ export class BidService {
         versions: firestoreVersions,
         currentVersionId: versionId,
         totalAmount: newVersion.totalAmount,
-        updatedAt: Timestamp.fromDate(now),
+        updatedAt: toTimestamp(now), // Use toTimestamp
         status: 'revision_requested', // Example status update
       });
     }
@@ -375,10 +378,11 @@ export class BidService {
   // Update bid (Input uses imported Bid type)
   static async updateBid(id: string, bidData: Partial<Omit<Bid, 'id' | 'userId' | 'versions' | 'currentVersionId' | 'createdAt' | 'updatedAt'>>): Promise<void> {
     const bidRef = doc(this.collection, id);
-    const updatePayload: any = { 
+    // Use Partial<FirestoreBid> for more specific typing of the update payload
+    const updatePayload: Partial<FirestoreBid> = { 
       ...bidData, 
-      updatedAt: Timestamp.fromDate(new Date()) 
-    };
+      updatedAt: toTimestamp(new Date()) // Use toTimestamp
+    } as Partial<FirestoreBid>; // Cast if spread isn't directly compatible
 
     // Explicitly handle paymentSchedule conversion
     if (bidData.paymentSchedule && Array.isArray(bidData.paymentSchedule)) {
@@ -391,17 +395,17 @@ export class BidService {
           percentage: typeof stage.percentage === 'string' ? parseFloat(stage.percentage) : stage.percentage
         };
 
-        const firestoreStage: any = { ...processedStage };
+        const firestoreStage: Partial<FirestoreBidPaymentStage> = { ...processedStage }; // Type more specifically
         
         // Convert date fields within the stage to Timestamps
-        if (stage.createdAt instanceof Date) {
-          firestoreStage.createdAt = Timestamp.fromDate(stage.createdAt);
+        if (stage.createdAt) { // Check if createdAt exists before converting
+          firestoreStage.createdAt = toTimestamp(toDate(stage.createdAt)); // Ensure it's a Date then convert
         }
-        if (stage.updatedAt instanceof Date) {
-          firestoreStage.updatedAt = Timestamp.fromDate(stage.updatedAt);
+        if (stage.updatedAt) { // Check if updatedAt exists
+          firestoreStage.updatedAt = toTimestamp(toDate(stage.updatedAt));
         }
-        if (stage.dueDate instanceof Date) {
-          firestoreStage.dueDate = Timestamp.fromDate(stage.dueDate);
+        if (stage.dueDate) {
+          firestoreStage.dueDate = toTimestamp(toDate(stage.dueDate));
         } else if (stage.dueDate === null) {
           firestoreStage.dueDate = null; // Allow null
         } else if (stage.dueDate === undefined) {
@@ -409,8 +413,8 @@ export class BidService {
           delete firestoreStage.dueDate;
         }
         
-        if (stage.paymentDate instanceof Date) {
-          firestoreStage.paymentDate = Timestamp.fromDate(stage.paymentDate);
+        if (stage.paymentDate) {
+          firestoreStage.paymentDate = toTimestamp(toDate(stage.paymentDate));
         } else if (stage.paymentDate === null) {
           firestoreStage.paymentDate = null; // Allow null
         } else if (stage.paymentDate === undefined) {
@@ -453,11 +457,8 @@ export class BidService {
     for (const key in updatePayload) {
       // Check if it's a direct property and needs conversion
       if (Object.prototype.hasOwnProperty.call(updatePayload, key)) {
-        if (updatePayload[key] instanceof Date && ['submissionDeadline', 'startDate', 'completionDate'].includes(key)) {
-          updatePayload[key] = Timestamp.fromDate(updatePayload[key]);
-        } else if (updatePayload[key] === null && ['submissionDeadline', 'startDate', 'completionDate'].includes(key)) {
-          // Ensure null dates are passed correctly
-          updatePayload[key] = null;
+        if (['submissionDeadline', 'startDate', 'completionDate'].includes(key)) {
+          updatePayload[key] = toTimestamp(toDate(updatePayload[key])); // Handles Date, Timestamp, null, undefined
         }
       }
     }
@@ -516,7 +517,7 @@ export class BidService {
     await updateDoc(bidRef, { 
         versions: firestoreVersions, 
         totalAmount: currentVersion.totalAmount, // Update the bid's main totalAmount as well
-        updatedAt: Timestamp.fromDate(new Date()) 
+        updatedAt: toTimestamp(new Date()) // Use toTimestamp
     });
   }
 
@@ -552,7 +553,7 @@ export class BidService {
     await updateDoc(bidRef, { 
         versions: firestoreVersions, 
         totalAmount: currentVersion.totalAmount, 
-        updatedAt: Timestamp.fromDate(new Date()) 
+        updatedAt: toTimestamp(new Date()) // Use toTimestamp
     });
   }
 
@@ -634,16 +635,16 @@ export class BidService {
         queryConstraints.push(where('totalAmount', '<=', filters.maxAmount));
       }
       if (filters.submissionDeadlineFrom) {
-        queryConstraints.push(where('submissionDeadline', '>=', Timestamp.fromDate(filters.submissionDeadlineFrom)));
+        queryConstraints.push(where('submissionDeadline', '>=', toTimestamp(filters.submissionDeadlineFrom)));
       }
       if (filters.submissionDeadlineTo) {
-        queryConstraints.push(where('submissionDeadline', '<=', Timestamp.fromDate(filters.submissionDeadlineTo)));
+        queryConstraints.push(where('submissionDeadline', '<=', toTimestamp(filters.submissionDeadlineTo)));
       }
       if (filters.createdFrom) {
-        queryConstraints.push(where('createdAt', '>=', Timestamp.fromDate(filters.createdFrom)));
+        queryConstraints.push(where('createdAt', '>=', toTimestamp(filters.createdFrom)));
       }
       if (filters.createdTo) {
-        queryConstraints.push(where('createdAt', '<=', Timestamp.fromDate(filters.createdTo)));
+        queryConstraints.push(where('createdAt', '<=', toTimestamp(filters.createdTo)));
       }
       if (filters.tags && filters.tags.length > 0) {
         queryConstraints.push(where('tags', 'array-contains-any', filters.tags));
@@ -712,7 +713,7 @@ export class BidService {
 
   // Get upcoming bids (Returns BidSummary[])
   static async getUpcomingBids(userId: string, limitCount: number = 5): Promise<Bid[]> {
-    const now = Timestamp.now();
+    const now = toTimestamp(new Date()); // Use toTimestamp
     const q = query(
       this.collection,
       where('userId', '==', userId),
@@ -752,15 +753,14 @@ export class BidService {
                   Array.isArray(paymentSchedule));
       
       // Handle array-like objects for paymentSchedule
-      let paymentScheduleArray = paymentSchedule;
+      let paymentScheduleArray: BidPaymentStage[] | undefined = paymentSchedule; // Ensure type
       if (paymentSchedule && typeof paymentSchedule === 'object' && !Array.isArray(paymentSchedule)) {
         console.log('Converting paymentSchedule object to array in convertToFirestoreFormat');
-        if ('0' in paymentSchedule && '1' in paymentSchedule) {
-          // It looks like an object with numeric keys, likely an array-like object
-          paymentScheduleArray = Object.values(paymentSchedule);
+        if ('0' in paymentSchedule && typeof (paymentSchedule as any)['0'] === 'object') { // Basic check for array-like object
+          paymentScheduleArray = Object.values(paymentSchedule as Record<string, BidPaymentStage>);
           console.log('Converted to array:', paymentScheduleArray);
         } else {
-          // Not an array-like object, create an empty array
+          // Not an array-like object, create an empty array or handle as error
           paymentScheduleArray = [];
         }
       }
@@ -768,14 +768,14 @@ export class BidService {
       // Convert payment schedule date fields - ensure it's an array first
       const convertedPaymentSchedule = paymentScheduleArray && Array.isArray(paymentScheduleArray) 
         ? paymentScheduleArray.map(payment => {
-            const result: any = {
+            const result: Partial<FirestoreBidPaymentStage> = { // Type more specifically
                 id: payment.id,
                 name: payment.name,
                 percentage: payment.percentage || 0,
                 amount: payment.amount || 0,
                 status: payment.status || 'pending',
-                createdAt: payment.createdAt instanceof Date ? Timestamp.fromDate(payment.createdAt) : Timestamp.now(),
-                updatedAt: payment.updatedAt instanceof Date ? Timestamp.fromDate(payment.updatedAt) : Timestamp.now(),
+                createdAt: toTimestamp(toDate(payment.createdAt)) || toTimestamp(new Date()), // Use toTimestamp & toDate
+                updatedAt: toTimestamp(toDate(payment.updatedAt)) || toTimestamp(new Date()), // Use toTimestamp & toDate
             };
 
             // Only add optional fields if they exist and are valid
@@ -785,11 +785,11 @@ export class BidService {
             if (payment.completionRequirements) result.completionRequirements = payment.completionRequirements;
             if (payment.expenseId) result.expenseId = payment.expenseId;
             if (payment.invoiceId) result.invoiceId = payment.invoiceId;
-            if (payment.dueDate instanceof Date) result.dueDate = Timestamp.fromDate(payment.dueDate);
-            if (payment.paymentDate instanceof Date) result.paymentDate = Timestamp.fromDate(payment.paymentDate);
+            if (payment.dueDate) result.dueDate = toTimestamp(toDate(payment.dueDate)); // Use toTimestamp & toDate
+            if (payment.paymentDate) result.paymentDate = toTimestamp(toDate(payment.paymentDate)); // Use toTimestamp & toDate
             
             return result as FirestoreBidPaymentStage;
-        }) 
+        })
         : [];
       
       // Ensure tags is a string array
@@ -832,11 +832,11 @@ export class BidService {
           projectId: rest.projectId,
           totalAmount: rest.totalAmount || 0,
           status: rest.status || 'draft',
-          createdAt: createdAt instanceof Date ? Timestamp.fromDate(createdAt) : Timestamp.now(),
-          updatedAt: updatedAt instanceof Date ? Timestamp.fromDate(updatedAt) : Timestamp.now(),
-          submissionDeadline: submissionDeadline ? (submissionDeadline instanceof Date ? Timestamp.fromDate(submissionDeadline) : null) : null,
-          startDate: startDate ? (startDate instanceof Date ? Timestamp.fromDate(startDate) : null) : null,
-          completionDate: completionDate ? (completionDate instanceof Date ? Timestamp.fromDate(completionDate) : null) : null,
+          createdAt: toTimestamp(toDate(createdAt)) || toTimestamp(new Date()), // Use toTimestamp & toDate
+          updatedAt: toTimestamp(toDate(updatedAt)) || toTimestamp(new Date()), // Use toTimestamp & toDate
+          submissionDeadline: toTimestamp(toDate(submissionDeadline)), // Use toTimestamp & toDate
+          startDate: toTimestamp(toDate(startDate)), // Use toTimestamp & toDate
+          completionDate: toTimestamp(toDate(completionDate)), // Use toTimestamp & toDate
           versions: versions ? versions.map(v => this.convertVersionToFirestoreFormat(v)) : [],
           tags: convertedTags,
           attachments: convertedAttachments,
@@ -856,28 +856,26 @@ export class BidService {
   }
   
   // Utility function to remove undefined values from an object
-  private static removeUndefined(obj: any): any {
-    const result: any = {};
-    
+  private static removeUndefined<T extends Record<string, any>>(obj: T): Partial<T> {
+    const result: Partial<T> = {};
     for (const key in obj) {
-      if (obj[key] !== undefined) {
+      if (Object.prototype.hasOwnProperty.call(obj, key) && obj[key] !== undefined) {
         result[key] = obj[key];
       }
     }
-    
     return result;
   }
 
-  // Helper function to safely convert Firestore Timestamp to Date
-  private static toDate(timestamp: any): Date | undefined {
-    if (timestamp && typeof timestamp === 'object' && 'toDate' in timestamp && typeof timestamp.toDate === 'function') {
-      return timestamp.toDate();
-    }
-    if (timestamp instanceof Date) {
-      return timestamp;
-    }
-    return undefined;
-  }
+  // Helper function to safely convert Firestore Timestamp to Date - REMOVED as it's now in firestoreConverter.ts
+  // private static toDate(timestamp: any): Date | undefined {
+  //   if (timestamp && typeof timestamp === 'object' && 'toDate' in timestamp && typeof timestamp.toDate === 'function') {
+  //     return timestamp.toDate();
+  //   }
+  //   if (timestamp instanceof Date) {
+  //     return timestamp;
+  //   }
+  //   return undefined;
+  // }
 
   // Convert from Firestore format to app format (Used by getBid, getBids)
   private static convertFromFirestoreFormat(data: FirestoreBid, id: string): Bid {
@@ -888,7 +886,7 @@ export class BidService {
       // Convert each version, handling lineItems and Timestamp
       const versions = firestoreVersions?.map(v => ({
         ...v,
-        createdAt: this.toDate(v.createdAt) || new Date(),
+        createdAt: toDate(v.createdAt) || new Date(), // Use toDate
         // Ensure lineItems is an array
         lineItems: Array.isArray(v.lineItems) ? v.lineItems : [],
       })) || [];
@@ -910,14 +908,14 @@ export class BidService {
             completionRequirements: payment.completionRequirements,
             expenseId: payment.expenseId,
             invoiceId: payment.invoiceId,
-            createdAt: this.toDate(payment.createdAt) || new Date(),
-            updatedAt: this.toDate(payment.updatedAt) || new Date(),
-            dueDate: payment.dueDate ? this.toDate(payment.dueDate) : undefined
+            createdAt: toDate(payment.createdAt) || new Date(), // Use toDate
+            updatedAt: toDate(payment.updatedAt) || new Date(), // Use toDate
+            dueDate: payment.dueDate ? toDate(payment.dueDate) : undefined // Use toDate
           };
           
           // Explicitly handle paymentDate conversion if it exists
           if (payment.paymentDate) {
-            converted.paymentDate = this.toDate(payment.paymentDate);
+            converted.paymentDate = toDate(payment.paymentDate); // Use toDate
           }
           
           return converted;
@@ -935,11 +933,11 @@ export class BidService {
       return {
         id,
         ...otherData,
-        submissionDeadline: this.toDate(data.submissionDeadline),
-        startDate: this.toDate(data.startDate),
-        completionDate: this.toDate(data.completionDate),
-        createdAt: this.toDate(data.createdAt) || new Date(),
-        updatedAt: this.toDate(data.updatedAt) || new Date(),
+        submissionDeadline: toDate(data.submissionDeadline), // Use toDate
+        startDate: toDate(data.startDate), // Use toDate
+        completionDate: toDate(data.completionDate), // Use toDate
+        createdAt: toDate(data.createdAt) || new Date(), // Use toDate
+        updatedAt: toDate(data.updatedAt) || new Date(), // Use toDate
         versions,
         paymentSchedule,
         paymentProgress,
@@ -959,7 +957,7 @@ export class BidService {
       // Create clean version object with no undefined values
       const cleanVersion: FirestoreBidVersion = {
           ...this.removeUndefined(rest),
-          createdAt: Timestamp.fromDate(createdAt || new Date()),
+          createdAt: toTimestamp(createdAt || new Date())!, // Use toTimestamp, non-null assertion as createdAt is required
       };
       
       // Only add lineItems if it's a valid array
@@ -985,10 +983,10 @@ export class BidService {
       title: data.title,
       status: data.status, // Should match the union type
       priority: data.priority, // Should match the union type
-      submissionDeadline: data.submissionDeadline ? data.submissionDeadline.toDate() : undefined,
+      submissionDeadline: data.submissionDeadline ? toDate(data.submissionDeadline) : undefined, // Use toDate
       totalAmount: data.totalAmount,
-      createdAt: data.createdAt.toDate(),
-      updatedAt: data.updatedAt.toDate(),
+      createdAt: toDate(data.createdAt)!, // Use toDate, non-null assertion
+      updatedAt: toDate(data.updatedAt)!, // Use toDate, non-null assertion
     };
   }
 
@@ -1044,7 +1042,7 @@ export class BidService {
         subcontractorId: bid.subcontractorId,
         subcontractorName: bid.subcontractorName,
         notes: `This expense is for payment stage: ${stageName} for accepted bid: ${bid.title}`,
-        dueDate: paymentStage.dueDate instanceof Date ? paymentStage.dueDate : paymentStage.dueDate ? new Date(paymentStage.dueDate) : undefined,
+        dueDate: toDate(paymentStage.dueDate), // Use toDate
       });
       
       // Update the payment stage with the expense ID
@@ -1101,16 +1099,12 @@ export class BidService {
         const firestoreStage: any = { ...stage };
         
         // Convert dates to Timestamps
-        if (stage.dueDate instanceof Date) {
-          firestoreStage.dueDate = Timestamp.fromDate(stage.dueDate);
-        } else if (typeof stage.dueDate === 'string') {
-          firestoreStage.dueDate = Timestamp.fromDate(new Date(stage.dueDate));
+        if (stage.dueDate) { // Check if dueDate exists
+          firestoreStage.dueDate = toTimestamp(toDate(stage.dueDate)); // Use toTimestamp & toDate
         }
         
-        if (stage.paidDate instanceof Date) {
-          firestoreStage.paidDate = Timestamp.fromDate(stage.paidDate);
-        } else if (typeof stage.paidDate === 'string') {
-          firestoreStage.paidDate = Timestamp.fromDate(new Date(stage.paidDate));
+        if (stage.paidDate) { // Check if paidDate exists
+          firestoreStage.paidDate = toTimestamp(toDate(stage.paidDate)); // Use toTimestamp & toDate
         }
         
         return firestoreStage;
@@ -1119,7 +1113,7 @@ export class BidService {
       // Update the bid document
       await updateDoc(bidRef, {
         paymentSchedule: firestorePaymentSchedule,
-        updatedAt: Timestamp.fromDate(new Date())
+        updatedAt: toTimestamp(new Date()) // Use toTimestamp
       });
       
       // Update the payment progress
@@ -1174,7 +1168,7 @@ export class BidService {
       // Update the bid document
       await updateDoc(bidRef, {
         paymentProgress,
-        updatedAt: Timestamp.fromDate(new Date())
+        updatedAt: toTimestamp(new Date()) // Use toTimestamp
       });
     } catch (error) {
       console.error(`BidService: Error updating payment progress:`, error);
@@ -1226,15 +1220,17 @@ export class BidService {
       if (expense.status === 'paid') {
         stageUpdate.status = 'paid';
         stageUpdate.paidAmount = expense.amount;
-        stageUpdate.paidDate = expense.lastPaymentDate || expense.updatedAt;
+        stageUpdate.paidDate = toDate(expense.lastPaymentDate) || toDate(expense.updatedAt); // Use toDate
       } else if (expense.status === 'partially_paid' && expense.amountPaid) {
         stageUpdate.status = 'partially_paid';
         stageUpdate.paidAmount = expense.amountPaid;
-        stageUpdate.paidDate = expense.lastPaymentDate;
+        stageUpdate.paidDate = toDate(expense.lastPaymentDate); // Use toDate
       } else if (expense.dueDate && expense.status === 'pending') {
         const now = new Date();
-        const dueDate = expense.dueDate instanceof Date ? expense.dueDate : new Date(expense.dueDate);
-        stageUpdate.status = now > dueDate ? 'overdue' : 'pending';
+        const dueDate = toDate(expense.dueDate); // Use toDate
+        if (dueDate) { // Ensure dueDate is valid after conversion
+            stageUpdate.status = now > dueDate ? 'overdue' : 'pending';
+        }
       }
       
       // Update the payment stage
@@ -1248,3 +1244,118 @@ export class BidService {
     }
   }
 }
+
+// Helper function to update bid payment schedule with new payment information
+export const adjustBidPaymentSchedule = async (
+  userId: string,
+  originalExpense: Expense,
+  paymentExpense: Expense, // The newly created expense record for the payment itself
+  amountPaid: number
+): Promise<void> => {
+  console.log(`[adjustBidPaymentSchedule Service] INVOKED with userId: ${userId}, originalExpenseId: ${originalExpense.id}, paymentExpenseId: ${paymentExpense.id}, amountPaid: ${formatCurrency(amountPaid)}`);
+  console.log(`[adjustBidPaymentSchedule Service] Original Expense Details: bidId=${originalExpense.bidId}, paymentStageId=${originalExpense.paymentStageId}, amount=${originalExpense.amount}`);
+
+  if (!originalExpense.bidId) {
+    console.warn(`[adjustBidPaymentSchedule Service] ABORTING: Original expense ${originalExpense.id} is missing 'bidId'.`);
+    return;
+  }
+  if (!originalExpense.paymentStageId) {
+    console.warn(`[adjustBidPaymentSchedule Service] ABORTING: Original expense ${originalExpense.id} is missing 'paymentStageId'.`);
+    return;
+  }
+
+  let bid: Bid | null = null;
+  try {
+    bid = await BidService.getBid(userId, originalExpense.bidId);
+  } catch (error) {
+    console.error(`[adjustBidPaymentSchedule Service] CRITICAL: Error fetching bid ${originalExpense.bidId}:`, error);
+    throw new Error(`Failed to fetch bid ${originalExpense.bidId}: ${error instanceof Error ? error.message : String(error)}`);
+  }
+
+  if (!bid) {
+    console.warn(`[adjustBidPaymentSchedule Service] ABORTING: Bid ${originalExpense.bidId} not found for user ${userId}.`);
+    return;
+  }
+
+  console.log(`[adjustBidPaymentSchedule Service] Successfully fetched Bid ID: ${bid.id}. Current totalAmount: ${formatCurrency(bid.totalAmount)}`);
+
+  if (!bid.paymentSchedule || !bid.paymentProgress) {
+    console.warn(`[adjustBidPaymentSchedule Service] ABORTING: Bid ${bid.id} is missing 'paymentSchedule' or 'paymentProgress'.`);
+    return;
+  }
+
+  console.log(`[adjustBidPaymentSchedule Service] Bid has payment schedule. Processing stageId: ${originalExpense.paymentStageId}.`);
+  
+  const schedule = [...bid.paymentSchedule]; 
+  const progress = { ...bid.paymentProgress }; 
+  const stageIndex = schedule.findIndex(stage => stage.id === originalExpense.paymentStageId);
+
+  if (stageIndex === -1) {
+    console.warn(`[adjustBidPaymentSchedule Service] ABORTING: Payment Stage ${originalExpense.paymentStageId} not found in bid ${bid.id}.`);
+    return;
+  }
+
+  const stageToUpdate = { ...schedule[stageIndex] }; // Operate on a copy for logging clarity
+  const initialStageStateForLogging = JSON.stringify(stageToUpdate);
+  console.log(`[adjustBidPaymentSchedule Service] Found stage ${stageToUpdate.id} (status: ${stageToUpdate.status}, amount: ${formatCurrency(stageToUpdate.amount || 0)}, paidAmount: ${formatCurrency(stageToUpdate.paidAmount || 0)}).`);
+
+  const remainingStageAmount = (stageToUpdate.amount || 0) - (stageToUpdate.paidAmount || 0);
+  
+  if (amountPaid >= remainingStageAmount) {
+    // Full payment for the remaining amount of the stage
+    stageToUpdate.status = 'paid';
+    stageToUpdate.paidAmount = (stageToUpdate.paidAmount || 0) + remainingStageAmount; // Should equal stage.amount
+    stageToUpdate.paymentDate = new Date();
+    stageToUpdate.expenseId = paymentExpense.id; // Link to this specific payment expense
+    stageToUpdate.isPaid = true;
+    console.log(`[adjustBidPaymentSchedule Service] Stage ${stageToUpdate.id} fully paid. New paidAmount: ${formatCurrency(stageToUpdate.paidAmount)}. Linked to paymentExpense: ${paymentExpense.id}`);
+  } else {
+    // Partial payment for the remaining amount of the stage
+    stageToUpdate.status = 'partially_paid';
+    stageToUpdate.paidAmount = (stageToUpdate.paidAmount || 0) + amountPaid;
+    stageToUpdate.paymentDate = new Date(); // Update to date of last payment
+    stageToUpdate.expenseId = paymentExpense.id; // Link to this specific payment expense
+    console.log(`[adjustBidPaymentSchedule Service] Stage ${stageToUpdate.id} partially paid. New paidAmount: ${formatCurrency(stageToUpdate.paidAmount)}.`);
+  }
+  
+  schedule[stageIndex] = stageToUpdate; // Put the modified stage back into the copied schedule
+  console.log(`[adjustBidPaymentSchedule Service] Stage ${stageToUpdate.id} state before update: ${initialStageStateForLogging}`);
+  console.log(`[adjustBidPaymentSchedule Service] Stage ${stageToUpdate.id} state after update: ${JSON.stringify(stageToUpdate)}`);
+  
+  // Recalculate overall bid payment progress
+  let totalPaidForBid = 0;
+  schedule.forEach(s => {
+    // If a stage is marked 'paid', its full amount is considered paid.
+    // If 'partially_paid', its 'paidAmount' field reflects the sum of payments towards it.
+    if (s.status === 'paid') {
+       // Ensure s.amount is a number, default to 0 if not
+      totalPaidForBid += Number(s.amount || 0);
+    } else if (s.status === 'partially_paid' && s.paidAmount) {
+      totalPaidForBid += Number(s.paidAmount);
+    }
+  });
+
+  progress.paid = totalPaidForBid;
+  progress.remaining = bid.totalAmount - totalPaidForBid;
+  // Pending should be the sum of (stage.amount - stage.paidAmount) for all non-paid stages
+  progress.pending = schedule.reduce((acc, s) => {
+    if (s.status !== 'paid') {
+      return acc + (Number(s.amount || 0) - Number(s.paidAmount || 0));
+    }
+    return acc;
+  },0);
+
+
+  console.log(`[adjustBidPaymentSchedule Service] Recalculated Bid Progress: Paid=${formatCurrency(progress.paid)}, Remaining=${formatCurrency(progress.remaining)}, Pending=${formatCurrency(progress.pending)}`);
+
+  try {
+    await BidService.updateBid(bid.id, {
+      paymentSchedule: schedule,
+      paymentProgress: progress,
+    });
+    console.log(`[adjustBidPaymentSchedule Service] Successfully updated Bid ${bid.id} with new schedule and progress.`);
+  } catch (error) {
+    console.error(`[adjustBidPaymentSchedule Service] CRITICAL: Error updating bid ${bid.id}:`, error);
+    throw new Error(`Failed to update bid ${bid.id} after payment adjustment: ${error instanceof Error ? error.message : String(error)}`);
+  }
+};

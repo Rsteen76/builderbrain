@@ -104,9 +104,17 @@ interface ExpenseFormModalProps {
 
 // Interface for errors
 interface FormErrors {
-  [key: string]: any;
+  projectId?: string;
+  description?: string;
+  amount?: string;
+  date?: string;
+  category?: string;
+  categoryId?: string;
+  vendor?: string;
+  subcontractorId?: string;
+  general?: string; // For a general form error not tied to a specific field
   lineItems?: {
-    [id: string]: {
+    [id: string]: { // id here is the line item's id
   description?: string;
       quantity?: string;
       unitCost?: string;
@@ -147,9 +155,9 @@ const formatCategoryName = (category: string): string => {
 };
 
 // Add this utility function at the top of the file, outside of component
-const cleanForFirestore = (data: any): any => {
+const cleanForFirestore = (data: unknown): unknown => {
   // If null or primitive, return as is
-  if (data === null || typeof data !== 'object') {
+  if (data === null || typeof data !== 'object' || data instanceof Date || data instanceof import('firebase/firestore').Timestamp) {
     return data;
   }
   
@@ -165,16 +173,17 @@ const cleanForFirestore = (data: any): any => {
   }
   
   // Handle objects
-  const result: any = {};
+  const result: Record<string, unknown> = {}; // More specific type for result
   
-  Object.entries(data).forEach(([key, value]) => {
+  // Type assertion for Object.entries if data is unknown but guarded by typeof data === 'object'
+  Object.entries(data as Record<string, unknown>).forEach(([key, value]) => {
     // Skip undefined values entirely
     if (value === undefined) {
       return;
     }
     
     // Recursively clean nested values
-    result[key] = cleanForFirestore(value);
+    result[key] = cleanForFirestore(value); // value is unknown here, which is fine for recursive call
   });
   
   return result;
@@ -825,7 +834,7 @@ const ExpenseFormModal: React.FC<ExpenseFormModalProps> = ({
   }, [formData.phaseId, currentProjectPhases, getExpenseDescriptionOptions]);
 
   // Handle basic form input changes
-  const handleChange = (name: string, value: any) => {
+  const handleChange = (name: string, value: string | number | boolean | Date | null | string[]) => {
     setFormData(prev => ({ ...prev, [name]: value }));
     // Clear specific errors when field changes
     if (errors[name]) {
