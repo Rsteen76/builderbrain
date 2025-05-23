@@ -1095,19 +1095,42 @@ export class BidService {
       };
       
       // Convert to Firestore format for updating
-      const firestorePaymentSchedule = updatedPaymentSchedule.map(stage => {
-        const firestoreStage: any = { ...stage };
+      const firestorePaymentSchedule = updatedPaymentSchedule.map((stage: BidPaymentStage): Partial<FirestoreBidPaymentStage> => {
+        const firestoreStageUpdate: Partial<FirestoreBidPaymentStage> = { 
+          // Spread only known properties from BidPaymentStage to avoid issues if stage has extra runtime props
+          id: stage.id,
+          name: stage.name,
+          description: stage.description,
+          percentage: stage.percentage,
+          amount: stage.amount,
+          status: stage.status,
+          paidAmount: stage.paidAmount,
+          expenseId: stage.expenseId,
+          invoiceId: stage.invoiceId,
+          isPaid: stage.isPaid,
+          completionRequirements: stage.completionRequirements,
+          // createdAt and updatedAt are already Timestamps in FirestoreBidPaymentStage if they come from there
+          // If they are Dates in BidPaymentStage, they need conversion
+          createdAt: stage.createdAt ? toTimestamp(stage.createdAt) : undefined,
+          updatedAt: stage.updatedAt ? toTimestamp(stage.updatedAt) : undefined,
+        };
         
-        // Convert dates to Timestamps
-        if (stage.dueDate) { // Check if dueDate exists
-          firestoreStage.dueDate = toTimestamp(toDate(stage.dueDate)); // Use toTimestamp & toDate
+        // Convert dates to Timestamps, handling null/undefined
+        if (stage.dueDate !== undefined) {
+          firestoreStageUpdate.dueDate = toTimestamp(stage.dueDate);
         }
         
-        if (stage.paidDate) { // Check if paidDate exists
-          firestoreStage.paidDate = toTimestamp(toDate(stage.paidDate)); // Use toTimestamp & toDate
+        if (stage.paidDate !== undefined) {
+          firestoreStageUpdate.paidDate = toTimestamp(stage.paidDate);
         }
         
-        return firestoreStage;
+        // Remove any keys that ended up with undefined values, if necessary,
+        // though toTimestamp(null) = null, which is fine for Firestore.
+        // This step might be redundant if toTimestamp handles undefined by returning undefined,
+        // and the spread of ...stage into a typed object handles this.
+        // However, being explicit for date fields is safer.
+        
+        return firestoreStageUpdate;
       });
       
       // Update the bid document
