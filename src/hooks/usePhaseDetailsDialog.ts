@@ -1,11 +1,11 @@
 import { useState, useCallback } from 'react';
-import { Phase } from '../types'; // Assuming a Phase type exists
+import { ProjectPhase } from '../types'; // Assuming a Phase type exists
 
 // Define the return type for the hook
 interface UsePhaseDetailsDialogReturn {
   isPhaseDetailsOpen: boolean;
-  selectedPhase: Phase | null;
-  openPhaseDetailsDialog: (phase: Phase) => void;
+  selectedPhase: ProjectPhase | null;
+  openPhaseDetailsDialog: (phase: ProjectPhase) => void;
   closePhaseDetailsDialog: () => void;
 }
 
@@ -14,9 +14,9 @@ interface UsePhaseDetailsDialogReturn {
  */
 export const usePhaseDetailsDialog = (): UsePhaseDetailsDialogReturn => {
   const [isPhaseDetailsOpen, setIsPhaseDetailsOpen] = useState(false);
-  const [selectedPhase, setSelectedPhase] = useState<Phase | null>(null);
+  const [selectedPhase, setSelectedPhase] = useState<ProjectPhase | null>(null);
 
-  const openPhaseDetailsDialog = useCallback((phase: Phase) => {
+  const openPhaseDetailsDialog = useCallback((phase: ProjectPhase) => {
     setSelectedPhase(phase);
     setIsPhaseDetailsOpen(true);
   }, []);

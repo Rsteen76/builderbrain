@@ -11,7 +11,7 @@ import {
   InputAdornment,
   CircularProgress,
 } from '@mui/material';
-import { Phase, Subcontractor } from '../../types';
+import { ProjectPhase, Subcontractor } from '../../types';
 import ReusableBidForm from '../bids/ReusableBidForm';
 import QuickAddSubcontractorDialog from './QuickAddSubcontractorDialog';
 import { SubcontractorService } from '../../services/subcontractor';
@@ -33,7 +33,7 @@ interface QuickBidDialogProps {
   onSubmit: (bid: QuickBidData) => void;
   phaseId: string | null;
   isSaving: boolean;
-  phases: Phase[];
+  phases: ProjectPhase[];
   subcontractors: Subcontractor[];
   projectId?: string;
   projectName?: string;

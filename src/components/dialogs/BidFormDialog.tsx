@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Dialog } from '@mui/material';
-import { Bid, Phase, Subcontractor, Project, BidFormData } from '../../types';
+import { Bid, ProjectPhase, Subcontractor, Project, BidFormData } from '../../types';
 import ReusableBidForm from '../bids/ReusableBidForm';
 import { SubcontractorService } from '../../services/subcontractor';
 import { ProjectService } from '../../services/project';
@@ -13,7 +13,7 @@ interface BidFormDialogProps {
   onClose: () => void;
   onSubmitSuccess: (bid: Bid) => void; // Callback on successful save
   projectId?: string; // Optional: If provided, assumes context of a specific project
-  phases?: Phase[]; // Make optional again
+  phases?: ProjectPhase[]; // Make optional again
   subcontractors: Subcontractor[]; // <-- ADD PROP
   initialBidData?: Partial<BidFormData>; // For editing
   editingBidId?: string | null;

@@ -706,9 +706,9 @@ const ExpenseFormModal: React.FC<ExpenseFormModalProps> = ({
         const currentProject = projects.find(p => p.id === expense.projectId);
         // Log if project was found and its phases
         console.log(`[Phase Init] Found project: ${currentProject ? `'${currentProject.name}'` : 'Not Found'}`);
-        const phasesToSet = (currentProject?.phases || []).filter((p): p is ProjectPhase => typeof p.id === 'string' && p.id !== '');
+        const phasesToSet = (currentProject?.phases || []).filter(p => typeof p.id === 'string' && p.id !== '');
         console.log(`[Phase Init] Setting currentProjectPhases to:`, phasesToSet.map(p => ({ id: p.id, name: p.name }))); // Log concise phase info
-        setCurrentProjectPhases(phasesToSet);
+        setCurrentProjectPhases(phasesToSet as ProjectPhase[]);
     } else {
         console.log(`[Phase Init] No expense.projectId, clearing phases.`);
         setCurrentProjectPhases([]);
@@ -848,10 +848,10 @@ const ExpenseFormModal: React.FC<ExpenseFormModalProps> = ({
       console.log(`[Project Changed] Selected Project: ${selectedProject?.name}, with ${selectedProject?.phases?.length || 0} phases`);
       
       if (selectedProject?.phases) {
-        const phasesToSet = (selectedProject.phases || []).filter((p): p is ProjectPhase => 
+        const phasesToSet = (selectedProject.phases || []).filter(p => 
           typeof p.id === 'string' && p.id !== '');
         console.log(`[Project Changed] Setting phases: `, phasesToSet.map(p => ({ id: p.id, name: p.name })));
-        setCurrentProjectPhases(phasesToSet);
+        setCurrentProjectPhases(phasesToSet as ProjectPhase[]);
         
         // Reset phase selection when project changes
         setFormData(prev => ({

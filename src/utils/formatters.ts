@@ -158,10 +158,10 @@ export const truncateText = (text: string, maxLength: number): string => {
 
 /**
  * Safely parse a date value from any of the possible Phase date types
- * Handles Date objects, strings, Firestore Timestamps, and nulls
+ * Handles Date objects, strings, Firestore Timestamps, nulls and undefined
  */
-export const safelyParseDate = (dateInput: Date | string | { toDate(): Date } | null): Date => {
-  if (!dateInput) return new Date(); // Default to current date if null
+export const safelyParseDate = (dateInput: Date | string | { toDate(): Date } | null | undefined): Date => {
+  if (!dateInput) return new Date(); // Default to current date if null or undefined
   
   try {
     // If it's already a Date object
@@ -169,7 +169,7 @@ export const safelyParseDate = (dateInput: Date | string | { toDate(): Date } | 
       return isNaN(dateInput.getTime()) ? new Date() : dateInput;
     }
     
-    // If it's a Firestore Timestamp
+    // If it's a Firestore Timestamp or has a toDate method
     if (typeof dateInput === 'object' && 'toDate' in dateInput && typeof dateInput.toDate === 'function') {
       return dateInput.toDate();
     }

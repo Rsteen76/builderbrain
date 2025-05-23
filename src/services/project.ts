@@ -161,7 +161,7 @@ class ProjectService {
     }
   }
 
-  private static async getProjectById(id: string): Promise<Project | null> {
+  static async getProjectById(id: string): Promise<Project | null> {
     try {
       const docRef = doc(this.collection, id);
       const docSnap = await getDoc(docRef);
@@ -326,11 +326,13 @@ class ProjectService {
 
   private static convertFirestoreData(data: FirestoreProject, id: string): Project {
     // Convert Firestore Timestamps to Date objects
-    const convertedPhases = data.phases?.map(phase => ({
-      ...phase,
-      startDate: phase.startDate ? this.dateToTimestamp(phase.startDate).toDate() : null,
-      endDate: phase.endDate ? this.dateToTimestamp(phase.endDate).toDate() : null,
-    })) || [];
+    const convertedPhases = data.phases?.map(phase => {
+      const convertedPhase = {
+        ...phase,
+        startDate: phase.startDate ? this.dateToTimestamp(phase.startDate).toDate() : null,
+        endDate: phase.endDate ? this.dateToTimestamp(phase.endDate).toDate() : null,
+      };
+      
       if (convertedPhase.endDate instanceof Timestamp) {
         convertedPhase.endDate = convertedPhase.endDate.toDate();
       } else if (typeof convertedPhase.endDate === 'string') {

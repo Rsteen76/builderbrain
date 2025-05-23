@@ -30,12 +30,13 @@ import {
   Refresh as RefreshIcon,
   Warning as WarningIcon
 } from '@mui/icons-material';
-import { Project, Phase } from '../../types';
+import { Project, ProjectPhase } from '../../types';
 import { ProjectService } from '../../services/project';
 import { safelyParseDate } from '../../utils/formatters';
+import { v4 as uuidv4 } from 'uuid';
 
 // Extend Phase to include percentage for template editing
-interface PhaseWithPercentage extends Phase {
+interface PhaseWithPercentage extends ProjectPhase {
   percentage?: number;
 }
 
@@ -63,7 +64,7 @@ const TemplateAdjuster: React.FC<TemplateAdjusterProps> = ({
   useEffect(() => {
     if (open && project && project.phases) {
       // Deep clone to avoid reference issues
-      const phasesWithPercentage: PhaseWithPercentage[] = (JSON.parse(JSON.stringify(project.phases || [])) as Phase[]).map((phase, index, array) => {
+      const phasesWithPercentage: PhaseWithPercentage[] = (JSON.parse(JSON.stringify(project.phases || [])) as ProjectPhase[]).map((phase, index, array) => {
         // For existing phases, calculate a default percentage if not already present
         return {
           ...phase,
@@ -142,6 +143,7 @@ const TemplateAdjuster: React.FC<TemplateAdjusterProps> = ({
     }
     
     const newPhase: PhaseWithPercentage = {
+      id: uuidv4(),
       name: `New Phase ${phases.length + 1}`,
       percentage: 0,
       status: 'not_started',
@@ -274,7 +276,7 @@ const TemplateAdjuster: React.FC<TemplateAdjusterProps> = ({
     
     try {
       // Remove percentage property before saving to match Phase interface
-      const phasesToSave: Phase[] = phases.map(({ percentage, ...phaseData }) => phaseData);
+      const phasesToSave: ProjectPhase[] = phases.map(({ percentage, ...phaseData }) => phaseData);
       
       // Create updated project with new phases
       const updatedProject = {

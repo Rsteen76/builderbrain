@@ -31,12 +31,24 @@ export const getStatusText = (status: string): string => {
  * @param date - The date value (Date, string, Firestore Timestamp-like, null).
  * @returns A formatted date string (e.g., "Apr 9, 2025") or 'N/A' or 'Invalid Date'.
  */
-export const formatPhaseDate = (date: Date | string | { toDate(): Date } | null): string => {
+export const formatPhaseDate = (date: Date | string | { toDate(): Date } | null | undefined): string => {
   try {
-    const parsedDate = safelyParseDate(date);
+    if (!date) return 'N/A';
+    
+    let parsedDate: Date | null = null;
+    
+    if (date instanceof Date) {
+      parsedDate = date;
+    } else if (typeof date === 'string') {
+      parsedDate = new Date(date);
+    } else if (date && typeof date === 'object' && 'toDate' in date && typeof date.toDate === 'function') {
+      // Handle Timestamp objects (which have toDate method)
+      parsedDate = date.toDate();
+    }
+    
     if (parsedDate && !isNaN(parsedDate.getTime())) {
-        // Example format, adjust as needed
-        return parsedDate.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
+      // Example format, adjust as needed
+      return parsedDate.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
     }
     return 'N/A';
   } catch (error) {

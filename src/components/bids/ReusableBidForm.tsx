@@ -40,7 +40,7 @@ import {
 } from '@mui/icons-material';
 import { v4 as uuidv4 } from 'uuid';
 import { formatCurrency } from '../../utils/formatters';
-import { Bid, BidPaymentStage, Project, Subcontractor, Phase, BidFormData } from '../../types';
+import { Bid, BidPaymentStage, Project, Subcontractor, ProjectPhase, BidFormData } from '../../types';
 import { ProjectService } from '../../services/project';
 import { useAuth } from '../../contexts/AuthContext';
 import { getProject } from '../../services/project';
@@ -357,7 +357,7 @@ interface ReusableBidFormProps {
   open?: boolean;
   onClose?: () => void;
   onSubmit: (bidForm: BidFormData) => Promise<void>;
-  phases?: Phase[]; // Optional: If projectId is provided
+  phases?: ProjectPhase[]; // Optional: If projectId is provided
   subcontractors: Subcontractor[];
   initialBidData?: Partial<BidFormData>;
   editingBidId?: string | null;
@@ -432,7 +432,7 @@ const ReusableBidForm: React.FC<ReusableBidFormProps> = ({
   // Add projects state
   const [projects, setProjects] = useState<Project[]>([]);
   const [isLoadingProjects, setIsLoadingProjects] = useState(false);
-  const [currentProjectPhases, setCurrentProjectPhases] = useState<Phase[]>([]);
+  const [currentProjectPhases, setCurrentProjectPhases] = useState<ProjectPhase[]>([]);
 
   // Log initial mounting for debugging
   console.log('ReusableBidForm mounted/updated with props:', {
@@ -938,7 +938,7 @@ const ReusableBidForm: React.FC<ReusableBidFormProps> = ({
   };
 
   // Modify the helper function to handle multiple keyword matches
-  const getBidTitleOptions = (phaseId: string | undefined, phases: Phase[]): string[] => {
+  const getBidTitleOptions = (phaseId: string | undefined, phases: ProjectPhase[]): string[] => {
     const applicableKeys: string[] = ["common"]; // Start with common
     let phaseNameForLog = "(No Phase Selected)";
 

@@ -152,26 +152,30 @@ const Expenses: React.FC<{ projectId?: string }> = ({ projectId }) => {
     const id = phaseData.id!;
     const name = phaseData.name!;
 
-    // *** USER TODO: YOU MUST ADD ALL OTHER REQUIRED FIELDS FROM src/types/index.ts ProjectPhase HERE ***
-    // Provide default values if necessary.
-    // Example defaults (VERIFY AGAINST YOUR ACTUAL TYPE DEFINITION):
+    // Provide default values for required fields
     const startDate = phaseData.startDate ? new Date(phaseData.startDate) : new Date();
     const endDate = phaseData.endDate ? new Date(phaseData.endDate) : new Date();
-    const status = phaseData.status || 'Planned'; 
+    const status = phaseData.status || 'not_started'; 
     const progress = typeof phaseData.progress === 'number' ? phaseData.progress : 0; 
     const budget = typeof phaseData.budget === 'number' ? phaseData.budget : 0; 
     const actualCost = typeof phaseData.actualCost === 'number' ? phaseData.actualCost : 0; 
+    const description = phaseData.description || '';
+    // Preserve tasks if they exist or provide empty array
+    const tasks = phaseData.tasks || [];
+    const order = phaseData.order || 0;
 
     return {
       id,
       name,
-      startDate, // TODO: Verify field name and type
-      endDate,   // TODO: Verify field name and type
-      status,    // TODO: Verify field name and type
-      progress,  // TODO: Verify field name and type
-      budget,    // TODO: Verify field name and type
-      actualCost,// TODO: Verify field name and type
-      // ... add ALL OTHER required fields from ProjectPhase in src/types/index.ts
+      description,
+      startDate,
+      endDate,
+      status,
+      progress,
+      budget,
+      actualCost,
+      tasks,
+      order
     };
   };
   // --- End Helper Function ---

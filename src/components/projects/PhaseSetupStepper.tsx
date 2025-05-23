@@ -30,12 +30,12 @@ import {
 import { DatePicker } from '@mui/x-date-pickers/DatePicker';
 import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
 import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns';
-import { Phase } from '../../types';
+import { ProjectPhase } from '../../types';
 import { safelyParseDate } from '../../utils/formatters';
 
 interface PhaseSetupStepperProps {
-  phases: Phase[];
-  onChange: (phases: Phase[]) => void;
+  phases: ProjectPhase[];
+  onChange: (phases: ProjectPhase[]) => void;
   projectStartDate: Date;
   projectEndDate: Date | null;
   projectBudget: number;
@@ -80,7 +80,7 @@ const PhaseSetupStepper: React.FC<PhaseSetupStepperProps> = ({
     const remainingBudget = projectBudget - usedBudget;
     const defaultBudget = remainingBudget > 0 ? Math.round(remainingBudget * 0.2) : 0;
     
-    const newPhase: Phase = {
+    const newPhase: ProjectPhase = {
       id: generateId(),
       name: `Phase ${phases.length + 1}`,
       description: '',
@@ -90,6 +90,7 @@ const PhaseSetupStepper: React.FC<PhaseSetupStepperProps> = ({
       progress: 0,
       budget: defaultBudget,
       actualCost: 0,
+      tasks: []
     };
     
     onChange([...phases, newPhase]);
@@ -135,7 +136,7 @@ const PhaseSetupStepper: React.FC<PhaseSetupStepperProps> = ({
   };
   
   // Handle changes to a phase field
-  const handlePhaseChange = (index: number, field: keyof Phase, value: any) => {
+  const handlePhaseChange = (index: number, field: keyof ProjectPhase, value: any) => {
     const updatedPhases = phases.map((phase, i) => {
       if (i === index) {
         return { ...phase, [field]: value };

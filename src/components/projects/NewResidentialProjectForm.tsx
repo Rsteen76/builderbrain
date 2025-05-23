@@ -151,6 +151,7 @@ const NewResidentialProjectForm: React.FC = () => {
         },
         location: formData.location,
         projectType: formData.residentialType,
+        progress: 0,
         // Additional metadata for the project
         metadata: {
           squareFeet,

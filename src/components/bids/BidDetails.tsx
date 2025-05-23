@@ -36,7 +36,7 @@ import {
   GetApp as DownloadIcon,
   AddCircleOutline as AddVersionIcon,
 } from '@mui/icons-material';
-import { Bid, BidVersion, LineItem, Subcontractor, Phase, Project, BidFormData } from '../../types';
+import { Bid, BidVersion, LineItem, Subcontractor, Phase, Project, BidFormData, ProjectPhase } from '../../types';
 import { BidService } from '../../services/bid';
 import { ProjectService } from '../../services/project';
 import LineItemsTable from './LineItemsTable';
@@ -194,7 +194,7 @@ const BidDetails: React.FC = () => {
   const [isEditing, setIsEditing] = useState<boolean>(false);
   const [subcontractors, setSubcontractors] = useState<Subcontractor[]>([]);
   const [loadingSubcontractors, setLoadingSubcontractors] = useState<boolean>(false);
-  const [projectPhases, setProjectPhases] = useState<Phase[]>([]);
+  const [projectPhases, setProjectPhases] = useState<ProjectPhase[]>([]);
   const [loadingProject, setLoadingProject] = useState<boolean>(false);
   
   // Callback for when bid is updated (for BidPaymentSchedule component)

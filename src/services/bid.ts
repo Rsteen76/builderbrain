@@ -77,11 +77,11 @@ interface FirestoreBidVersion extends Omit<BidVersion, 'createdAt' | 'lineItems'
 }
 
 // Define Firestore-specific BidPaymentStage type
-interface FirestoreBidPaymentStage extends Omit<BidPaymentStage, 'createdAt' | 'updatedAt' | 'dueDate' | 'paymentDate'> {
+interface FirestoreBidPaymentStage extends Omit<BidPaymentStage, 'createdAt' | 'updatedAt' | 'dueDate' | 'paidDate'> {
     createdAt: Timestamp;
     updatedAt: Timestamp;
     dueDate?: Timestamp;
-    paymentDate?: Timestamp;
+    paidDate?: Timestamp;
 }
 
 // --- BidSummary (If needed, define locally or import if added to types/index.ts) ---
@@ -990,5 +990,261 @@ export class BidService {
       createdAt: data.createdAt.toDate(),
       updatedAt: data.updatedAt.toDate(),
     };
+  }
+
+  /**
+   * Create an expense from a bid payment stage
+   */
+  static async createExpenseFromPaymentStage(
+    userId: string, 
+    bidId: string, 
+    paymentStageId: string
+  ): Promise<string | null> {
+    try {
+      // Import here to avoid circular dependency
+      const { ExpenseService } = await import('./expense');
+      
+      // Get the bid
+      const bid = await this.getBid(userId, bidId);
+      if (!bid) {
+        console.error(`BidService: Could not find bid with ID ${bidId}`);
+        return null;
+      }
+      
+      // Find the payment stage
+      const paymentStage = bid.paymentSchedule?.find(stage => stage.id === paymentStageId);
+      if (!paymentStage) {
+        console.error(`BidService: Could not find payment stage with ID ${paymentStageId}`);
+        return null;
+      }
+      
+      // Check if an expense already exists for this payment stage
+      if (paymentStage.expenseId) {
+        console.warn(`BidService: Expense already exists for payment stage ${paymentStageId}`);
+        return paymentStage.expenseId;
+      }
+      
+      // Create expense description
+      const stageName = paymentStage.name || 'Payment';
+      const description = `${stageName} - ${bid.title || 'Bid Payment'}`;
+      
+      // Create the expense
+      const expense = await ExpenseService.createExpense(userId, {
+        projectId: bid.projectId,
+        phaseId: bid.phaseId,
+        phaseName: bid.phaseName,
+        projectName: bid.projectName,
+        category: 'subcontractor',
+        description,
+        amount: paymentStage.amount,
+        date: new Date(),
+        status: 'pending',
+        bidId,
+        paymentStageId,
+        subcontractorId: bid.subcontractorId,
+        subcontractorName: bid.subcontractorName,
+        notes: `This expense is for payment stage: ${stageName} for accepted bid: ${bid.title}`,
+        dueDate: paymentStage.dueDate instanceof Date ? paymentStage.dueDate : paymentStage.dueDate ? new Date(paymentStage.dueDate) : undefined,
+      });
+      
+      // Update the payment stage with the expense ID
+      await this.updateBidPaymentStage(bidId, paymentStageId, {
+        expenseId: expense.id
+      });
+      
+      return expense.id || null;
+    } catch (error) {
+      console.error(`BidService: Error creating expense from payment stage:`, error);
+      return null;
+    }
+  }
+  
+  /**
+   * Update a payment stage within a bid
+   */
+  static async updateBidPaymentStage(
+    bidId: string,
+    stageId: string,
+    stageData: Partial<Omit<BidPaymentStage, 'id'>>
+  ): Promise<void> {
+    try {
+      const bidRef = doc(this.collection, bidId);
+      const bidDoc = await getDoc(bidRef);
+      
+      if (!bidDoc.exists()) {
+        throw new Error(`Bid with ID ${bidId} not found`);
+      }
+      
+      const bid = this.convertFromFirestoreFormat(bidDoc.data() as FirestoreBid, bidId);
+      
+      if (!bid.paymentSchedule) {
+        throw new Error(`Bid ${bidId} does not have a payment schedule`);
+      }
+      
+      // Find the index of the payment stage to update
+      const stageIndex = bid.paymentSchedule.findIndex(stage => stage.id === stageId);
+      if (stageIndex === -1) {
+        throw new Error(`Payment stage ${stageId} not found in bid ${bidId}`);
+      }
+      
+      // Create a copy of the payment schedule
+      const updatedPaymentSchedule = [...bid.paymentSchedule];
+      
+      // Update the payment stage with new data
+      updatedPaymentSchedule[stageIndex] = {
+        ...updatedPaymentSchedule[stageIndex],
+        ...stageData,
+      };
+      
+      // Convert to Firestore format for updating
+      const firestorePaymentSchedule = updatedPaymentSchedule.map(stage => {
+        const firestoreStage: any = { ...stage };
+        
+        // Convert dates to Timestamps
+        if (stage.dueDate instanceof Date) {
+          firestoreStage.dueDate = Timestamp.fromDate(stage.dueDate);
+        } else if (typeof stage.dueDate === 'string') {
+          firestoreStage.dueDate = Timestamp.fromDate(new Date(stage.dueDate));
+        }
+        
+        if (stage.paidDate instanceof Date) {
+          firestoreStage.paidDate = Timestamp.fromDate(stage.paidDate);
+        } else if (typeof stage.paidDate === 'string') {
+          firestoreStage.paidDate = Timestamp.fromDate(new Date(stage.paidDate));
+        }
+        
+        return firestoreStage;
+      });
+      
+      // Update the bid document
+      await updateDoc(bidRef, {
+        paymentSchedule: firestorePaymentSchedule,
+        updatedAt: Timestamp.fromDate(new Date())
+      });
+      
+      // Update the payment progress
+      await this.updatePaymentProgress(bidId);
+    } catch (error) {
+      console.error(`BidService: Error updating payment stage:`, error);
+      throw error;
+    }
+  }
+  
+  /**
+   * Update payment progress for a bid
+   */
+  static async updatePaymentProgress(bidId: string): Promise<void> {
+    try {
+      const bidRef = doc(this.collection, bidId);
+      const bidDoc = await getDoc(bidRef);
+      
+      if (!bidDoc.exists()) {
+        throw new Error(`Bid with ID ${bidId} not found`);
+      }
+      
+      const bid = this.convertFromFirestoreFormat(bidDoc.data() as FirestoreBid, bidId);
+      
+      if (!bid.paymentSchedule) {
+        return; // Nothing to update
+      }
+      
+      // Calculate payment progress
+      let paid = 0;
+      let pending = 0;
+      
+      bid.paymentSchedule.forEach(stage => {
+        if (stage.status === 'paid') {
+          paid += stage.amount;
+        } else if (stage.status === 'partially_paid' && stage.paidAmount) {
+          paid += stage.paidAmount;
+          pending += stage.amount - stage.paidAmount;
+        } else {
+          pending += stage.amount;
+        }
+      });
+      
+      const remaining = bid.totalAmount - paid;
+      
+      const paymentProgress: BidPaymentProgress = {
+        paid,
+        pending,
+        remaining
+      };
+      
+      // Update the bid document
+      await updateDoc(bidRef, {
+        paymentProgress,
+        updatedAt: Timestamp.fromDate(new Date())
+      });
+    } catch (error) {
+      console.error(`BidService: Error updating payment progress:`, error);
+      throw error;
+    }
+  }
+
+  /**
+   * Sync a bid payment stage with its associated expense
+   */
+  static async syncPaymentStageWithExpense(
+    userId: string, 
+    bidId: string, 
+    stageId: string
+  ): Promise<void> {
+    try {
+      // Import here to avoid circular dependency
+      const { ExpenseService } = await import('./expense');
+      
+      // Get the bid
+      const bid = await this.getBid(userId, bidId);
+      if (!bid) {
+        throw new Error(`Bid with ID ${bidId} not found`);
+      }
+      
+      // Find the payment stage
+      const paymentStage = bid.paymentSchedule?.find(stage => stage.id === stageId);
+      if (!paymentStage) {
+        throw new Error(`Payment stage ${stageId} not found in bid ${bidId}`);
+      }
+      
+      // If no expense is linked, create one
+      if (!paymentStage.expenseId) {
+        await this.createExpenseFromPaymentStage(userId, bidId, stageId);
+        return;
+      }
+      
+      // Get the expense
+      const expense = await ExpenseService.getExpense(userId, paymentStage.expenseId);
+      if (!expense) {
+        // Expense not found, create a new one
+        await this.createExpenseFromPaymentStage(userId, bidId, stageId);
+        return;
+      }
+      
+      // Update the payment stage based on expense
+      const stageUpdate: Partial<BidPaymentStage> = {};
+      
+      if (expense.status === 'paid') {
+        stageUpdate.status = 'paid';
+        stageUpdate.paidAmount = expense.amount;
+        stageUpdate.paidDate = expense.lastPaymentDate || expense.updatedAt;
+      } else if (expense.status === 'partially_paid' && expense.amountPaid) {
+        stageUpdate.status = 'partially_paid';
+        stageUpdate.paidAmount = expense.amountPaid;
+        stageUpdate.paidDate = expense.lastPaymentDate;
+      } else if (expense.dueDate && expense.status === 'pending') {
+        const now = new Date();
+        const dueDate = expense.dueDate instanceof Date ? expense.dueDate : new Date(expense.dueDate);
+        stageUpdate.status = now > dueDate ? 'overdue' : 'pending';
+      }
+      
+      // Update the payment stage
+      await this.updateBidPaymentStage(bidId, stageId, stageUpdate);
+      
+      // Update the payment progress
+      await this.updatePaymentProgress(bidId);
+    } catch (error) {
+      console.error(`BidService: Error syncing payment stage with expense:`, error);
+      throw error;
+    }
   }
 }

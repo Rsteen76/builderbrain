@@ -31,8 +31,9 @@ import {
 import { useNavigate } from 'react-router-dom';
 import { ProjectService } from '../../services/project';
 import { useAuth } from '../../contexts/AuthContext';
-import { Project, Phase } from '../../types';
+import { Project, ProjectPhase } from '../../types';
 import { safelyParseDate } from '../../utils/formatters';
+import { v4 as uuidv4 } from 'uuid';
 
 // Predefined options for various fields
 const projectTypes = [
@@ -214,7 +215,7 @@ const ProjectSetupWizard: React.FC = () => {
   };
 
   // Fix the addPhase function to include all required fields
-  const addPhase = (phaseData?: Partial<Phase>) => {
+  const addPhase = (phaseData?: Partial<ProjectPhase>) => {
     console.log('Adding phase with project data:', {
       projectStartDate: projectData.startDate,
       projectEndDate: projectData.endDate,
@@ -298,7 +299,8 @@ const ProjectSetupWizard: React.FC = () => {
       phaseEndDate.setDate(phaseStartDate.getDate() + 14);
     }
     
-    const defaultPhase: Phase = {
+    const defaultPhase: ProjectPhase = {
+      id: uuidv4(),
       name: '',
       startDate: phaseStartDate,
       endDate: phaseEndDate,
@@ -442,6 +444,7 @@ const ProjectSetupWizard: React.FC = () => {
         lineItems: projectData.lineItems || [],
         bids: projectData.bids || [],
         tasks: projectData.tasks || [],
+        progress: 0,
       };
 
       // Debug log final project payload including dates

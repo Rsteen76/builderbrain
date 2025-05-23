@@ -46,13 +46,40 @@ export class ProjectService extends BaseService<Project> {
           // Handle complex arrays
           phases: project.phases?.map(phase => ({
             ...phase,
-            startDate: phase.startDate ? this.dateToTimestamp(phase.startDate instanceof Date ? phase.startDate : new Date(phase.startDate as string)) : null,
-            endDate: phase.endDate ? this.dateToTimestamp(phase.endDate instanceof Date ? phase.endDate : new Date(phase.endDate as string)) : null,
+            startDate: phase.startDate ? (
+              // If it's already a Timestamp, use it directly
+              phase.startDate instanceof Timestamp ? phase.startDate :
+              // Otherwise, convert to Date first, then to Timestamp
+              typeof phase.startDate === 'string' ? 
+                Timestamp.fromDate(new Date(phase.startDate)) : 
+                phase.startDate instanceof Date ? 
+                  this.dateToTimestamp(phase.startDate) : 
+                  null
+            ) : null,
+            endDate: phase.endDate ? (
+              // If it's already a Timestamp, use it directly
+              phase.endDate instanceof Timestamp ? phase.endDate :
+              // Otherwise, convert to Date first, then to Timestamp  
+              typeof phase.endDate === 'string' ? 
+                Timestamp.fromDate(new Date(phase.endDate)) : 
+                phase.endDate instanceof Date ? 
+                  this.dateToTimestamp(phase.endDate) : 
+                  null
+            ) : null,
           })),
           
           keyMilestones: project.keyMilestones?.map(milestone => ({
             ...milestone,
-            date: milestone.date ? this.dateToTimestamp(milestone.date) : null,
+            date: milestone.date ? (
+              // If it's already a Timestamp, use it directly
+              milestone.date instanceof Timestamp ? milestone.date :
+              // Otherwise, convert appropriately
+              typeof milestone.date === 'string' ?
+                Timestamp.fromDate(new Date(milestone.date)) :
+                milestone.date instanceof Date ?
+                  this.dateToTimestamp(milestone.date) :
+                  null
+            ) : null,
           })),
           
           // Simple arrays
@@ -102,10 +129,19 @@ export class ProjectService extends BaseService<Project> {
         const updatedAt = this.timestampToDate(data.updatedAt) || new Date();
         
         // Convert phases if they exist
-        const phases: Phase[] = data.phases?.map((phase: any) => ({
+        const phases = data.phases?.map((phase: any) => ({
           ...phase,
           startDate: this.timestampToDate(phase.startDate),
           endDate: this.timestampToDate(phase.endDate),
+          // Ensure tasks is properly handled as an array of objects
+          tasks: Array.isArray(phase.tasks) ? phase.tasks.map((task: any) => ({
+            ...task,
+            // Convert any date fields if needed
+            dueDate: this.timestampToDate(task.dueDate),
+            completedAt: this.timestampToDate(task.completedAt),
+            createdAt: this.timestampToDate(task.createdAt) || new Date(),
+            updatedAt: this.timestampToDate(task.updatedAt) || new Date(),
+          })) : []
         })) || [];
         
         // Convert milestones if they exist
@@ -140,6 +176,7 @@ export class ProjectService extends BaseService<Project> {
           expenses: data.expenses || [],
           bids: data.bids || [],
           actualCost: data.actualCost,
+          progress: data.progress || 0,
         };
       }
     });

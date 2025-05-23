@@ -13,15 +13,15 @@ export type BidPriority = 'low' | 'medium' | 'high' | 'urgent';
 
 export interface BidPaymentStage {
   id: string;
+  name?: string;
   description: string;
   percentage: number;
   amount: number;
   dueDate?: Date | string;
-  status?: 'pending' | 'paid' | 'overdue';
+  status?: 'pending' | 'paid' | 'partially_paid' | 'overdue';
+  paidAmount?: number;
   paidDate?: Date | string;
-  paid?: boolean;
-  isFixedAmount?: boolean;
-  fixedAmount?: number;
+  expenseId?: string; // Link to the associated expense
 }
 
 export interface BidVersion {

@@ -1,7 +1,9 @@
 import { Timestamp } from 'firebase/firestore';
 import { Expense, ExpenseCategory, ExpenseStatus, PaymentDetails } from './expense.types';
+import { ExpenseTransaction, TransactionStatus, PaymentMethod } from './expense-transaction.types';
 import { CategoryMappingPreferences } from './budget.types';
 export * from './bids.types';
+export * from './expense-transaction.types';
 
 export interface User {
   id: string;
@@ -49,7 +51,7 @@ export interface Project {
   team?: string[];
   projectType?: string;
   estimatedDuration?: string;
-  phases: Phase[];
+  phases: ProjectPhase[];
   keyMilestones?: {
     name: string;
     date: Date | null;
@@ -282,6 +284,8 @@ export interface ProjectPhase extends Phase {
   // id is already optional in Phase, but often required in components
   // Ensure you handle potential undefined id if extending base Phase
   id: string; 
+  // Override tasks to be Task[] instead of string[]
+  tasks?: Task[];
   // Other properties are inherited from Phase
   // Add any ProjectDetailPage specific enhancements here if needed
   // e.g., tasks: Task[]; // Ensure Task type is imported/defined

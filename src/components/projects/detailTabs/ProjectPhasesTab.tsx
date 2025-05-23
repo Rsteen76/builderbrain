@@ -68,7 +68,7 @@ import {
   calculatePhaseActualCosts 
 } from '../../../utils/phaseCalculations';
 import { useAuth } from '../../../hooks/useAuth';
-import PhaseDetailsDialog from '../../../dialogs/PhaseDetailsDialog';
+import PhaseDetailsDialog from '../dialogs/PhaseDetailsDialog';
 
 // Define the subset of statuses the hook currently supports
 type PhaseStatusType = 'not_started' | 'in_progress' | 'completed' | 'on_hold';
@@ -187,6 +187,12 @@ const ProjectPhasesTab: React.FC = () => {
       showNotification("Could not find phase details to open.", "error");
     }
   }, [phases, phaseDetailsDialog, showNotification]);
+
+  const handleUpdatePhase = useCallback((phaseId: string) => {
+    // Implement the logic to update the phase
+    console.log("Updating phase:", phaseId);
+    // You can implement the actual update logic here or navigate to edit page
+  }, []);
 
   if (loading) return <CircularProgress sx={{ display: 'block', margin: 'auto', mt: 2 }} />;
   if (error) return <Alert severity="error">Error loading phases: {error}</Alert>;
@@ -390,7 +396,13 @@ const ProjectPhasesTab: React.FC = () => {
         <PhaseDetailsDialog 
           open={phaseDetailsDialog.isPhaseDetailsOpen} 
           onClose={phaseDetailsDialog.closePhaseDetailsDialog}
-          phase={phaseDetailsDialog.selectedPhase} 
+          selectedPhaseId={phaseDetailsDialog.selectedPhase?.id || null}
+          phases={phases}
+          bids={bids || []}
+          expenses={expenses || []}
+          theme={theme}
+          getStatusColor={getStatusColor}
+          handleUpdatePhase={handleUpdatePhase} 
         />
       )}
     </Box>

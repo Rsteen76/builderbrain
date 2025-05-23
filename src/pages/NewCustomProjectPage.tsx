@@ -42,7 +42,7 @@ import PhaseSetupStepper from '../components/projects/PhaseSetupStepper';
 import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns';
 import { DatePicker } from '@mui/x-date-pickers/DatePicker';
 import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
-import { ProjectStatus, Phase, Project } from '../types';
+import { ProjectStatus, ProjectPhase, Project } from '../types';
 import { formatCurrency, formatDate, safelyParseDate } from '../utils/formatters';
 
 // Define the project data interface
@@ -202,7 +202,7 @@ const NewCustomProjectPage: React.FC = () => {
       zipCode: ''
     }
   });
-  const [customPhases, setCustomPhases] = useState<Phase[]>([]);
+  const [customPhases, setCustomPhases] = useState<ProjectPhase[]>([]);
   
   // Add a constant for project types
   const PROJECT_TYPE_OPTIONS = [
@@ -238,7 +238,7 @@ const NewCustomProjectPage: React.FC = () => {
     
     if (template) {
       // Initialize phases from template
-      const initialPhases: Phase[] = template.phases.map((phaseName, index) => ({
+      const initialPhases: ProjectPhase[] = template.phases.map((phaseName, index) => ({
         id: `phase-${index}`,
         name: phaseName,
         description: `Description for ${phaseName}`,
@@ -273,7 +273,7 @@ const NewCustomProjectPage: React.FC = () => {
   };
   
   // Handle phase customization
-  const handlePhaseChange = (updatedPhases: Phase[]) => {
+  const handlePhaseChange = (updatedPhases: ProjectPhase[]) => {
     setCustomPhases(updatedPhases);
   };
   
