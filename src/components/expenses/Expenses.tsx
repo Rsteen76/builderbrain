@@ -175,7 +175,8 @@ const Expenses: React.FC<{ projectId?: string }> = ({ projectId }) => {
       budget,
       actualCost,
       tasks,
-      order
+      order,
+      projectId: phaseData.projectId // Add the projectId from the project data
     };
   };
   // --- End Helper Function ---

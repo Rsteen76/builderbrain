@@ -23,7 +23,8 @@ import {
     Bid, 
     BidVersion, 
     LineItem,
-    BidPaymentStage
+    BidPaymentStage,
+    BidPaymentProgress
 } from '../types';
 
 // Define Firestore-specific Bid type extending the main Bid type
@@ -77,11 +78,11 @@ interface FirestoreBidVersion extends Omit<BidVersion, 'createdAt' | 'lineItems'
 }
 
 // Define Firestore-specific BidPaymentStage type
-interface FirestoreBidPaymentStage extends Omit<BidPaymentStage, 'createdAt' | 'updatedAt' | 'dueDate' | 'paidDate'> {
+interface FirestoreBidPaymentStage extends Omit<BidPaymentStage, 'createdAt' | 'updatedAt' | 'dueDate' | 'paymentDate'> {
     createdAt: Timestamp;
     updatedAt: Timestamp;
     dueDate?: Timestamp;
-    paidDate?: Timestamp;
+    paymentDate?: Timestamp;
 }
 
 // --- BidSummary (If needed, define locally or import if added to types/index.ts) ---
@@ -1107,10 +1108,10 @@ export class BidService {
           firestoreStage.dueDate = Timestamp.fromDate(new Date(stage.dueDate));
         }
         
-        if (stage.paidDate instanceof Date) {
-          firestoreStage.paidDate = Timestamp.fromDate(stage.paidDate);
-        } else if (typeof stage.paidDate === 'string') {
-          firestoreStage.paidDate = Timestamp.fromDate(new Date(stage.paidDate));
+        if (stage.paymentDate instanceof Date) {
+          firestoreStage.paymentDate = Timestamp.fromDate(stage.paymentDate);
+        } else if (typeof stage.paymentDate === 'string') {
+          firestoreStage.paymentDate = Timestamp.fromDate(new Date(stage.paymentDate));
         }
         
         return firestoreStage;
@@ -1226,11 +1227,22 @@ export class BidService {
       if (expense.status === 'paid') {
         stageUpdate.status = 'paid';
         stageUpdate.paidAmount = expense.amount;
-        stageUpdate.paidDate = expense.lastPaymentDate || expense.updatedAt;
+        // Convert date properly
+        if (expense.lastPaymentDate) {
+          stageUpdate.paymentDate = expense.lastPaymentDate instanceof Date ? 
+            expense.lastPaymentDate : new Date(expense.lastPaymentDate);
+        } else if (expense.updatedAt) {
+          stageUpdate.paymentDate = expense.updatedAt instanceof Date ? 
+            expense.updatedAt : new Date(expense.updatedAt);
+        }
       } else if (expense.status === 'partially_paid' && expense.amountPaid) {
         stageUpdate.status = 'partially_paid';
         stageUpdate.paidAmount = expense.amountPaid;
-        stageUpdate.paidDate = expense.lastPaymentDate;
+        // Convert date properly
+        if (expense.lastPaymentDate) {
+          stageUpdate.paymentDate = expense.lastPaymentDate instanceof Date ? 
+            expense.lastPaymentDate : new Date(expense.lastPaymentDate);
+        }
       } else if (expense.dueDate && expense.status === 'pending') {
         const now = new Date();
         const dueDate = expense.dueDate instanceof Date ? expense.dueDate : new Date(expense.dueDate);

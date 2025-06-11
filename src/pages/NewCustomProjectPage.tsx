@@ -47,6 +47,7 @@ import { formatCurrency, formatDate, safelyParseDate } from '../utils/formatters
 
 // Define the project data interface
 interface ProjectData {
+  id?: string;
   name: string;
   description: string;
   projectType: string;
@@ -238,16 +239,29 @@ const NewCustomProjectPage: React.FC = () => {
     
     if (template) {
       // Initialize phases from template
+      const projectData: Partial<Project> = {
+        name: projectBasicData.name,
+        description: projectBasicData.description,
+        status: projectBasicData.status,
+        startDate: projectBasicData.startDate,
+        endDate: projectBasicData.endDate,
+        budget: projectBasicData.budget,
+        location: projectBasicData.location,
+        projectType: selectedTemplate || 'custom', // Set project type based on selected template
+      };
+      
       const initialPhases: ProjectPhase[] = template.phases.map((phaseName, index) => ({
         id: `phase-${index}`,
+        projectId: projectData.id || 'temp-project-id', // Provide a temporary ID
         name: phaseName,
-        description: `Description for ${phaseName}`,
+        description: '',
         budget: 0,
         actualCost: 0,
         progress: 0,
         status: 'not_started' as const,
         startDate: new Date(),
-        endDate: new Date(new Date().setDate(new Date().getDate() + 30)),
+        endDate: new Date(),
+        tasks: [] // Add missing required field
       }));
       
       setCustomPhases(initialPhases);
@@ -533,6 +547,7 @@ const NewCustomProjectPage: React.FC = () => {
         projectStartDate={projectBasicData?.startDate || new Date()}
         projectEndDate={projectBasicData?.endDate || null}
         projectBudget={projectBasicData?.budget || 0}
+        project={{ id: 'temp-project-id' }}
       />
       
       <Box sx={{ display: 'flex', justifyContent: 'flex-end', mt: 3 }}>

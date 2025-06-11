@@ -16,7 +16,7 @@ import {
 } from 'firebase/firestore';
 import { ExpenseTransaction, TransactionStatus } from '../types/expense-transaction.types';
 import { ExpenseService } from './expense';
-import { Expense } from '../types';
+import { Expense, ExpenseStatus } from '../types';
 
 interface FirestoreExpenseTransaction extends Omit<ExpenseTransaction, 'id' | 'transactionDate' | 'createdAt' | 'updatedAt'> {
   transactionDate: Timestamp;

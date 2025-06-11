@@ -39,6 +39,7 @@ interface PhaseSetupStepperProps {
   projectStartDate: Date;
   projectEndDate: Date | null;
   projectBudget: number;
+  project: { id: string };
 }
 
 const PhaseSetupStepper: React.FC<PhaseSetupStepperProps> = ({
@@ -47,6 +48,7 @@ const PhaseSetupStepper: React.FC<PhaseSetupStepperProps> = ({
   projectStartDate,
   projectEndDate,
   projectBudget,
+  project,
 }) => {
   // State to track if we're distributing budget automatically
   const [autoBudget, setAutoBudget] = useState(false);
@@ -82,6 +84,7 @@ const PhaseSetupStepper: React.FC<PhaseSetupStepperProps> = ({
     
     const newPhase: ProjectPhase = {
       id: generateId(),
+      projectId: project.id,
       name: `Phase ${phases.length + 1}`,
       description: '',
       startDate,

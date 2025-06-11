@@ -301,6 +301,7 @@ const ProjectSetupWizard: React.FC = () => {
     
     const defaultPhase: ProjectPhase = {
       id: uuidv4(),
+      projectId: projectData.id || 'temp-project-id',
       name: '',
       startDate: phaseStartDate,
       endDate: phaseEndDate,

@@ -247,7 +247,8 @@ export interface BidPaymentStage {
   dueDate?: Date;
   phaseId?: string; // Add phase association
   phaseName?: string; // Add phase name for display
-  status: 'pending' | 'in_progress' | 'completed' | 'paid' | 'overdue';
+  status: 'pending' | 'in_progress' | 'completed' | 'paid' | 'partially_paid' | 'overdue';
+  paidAmount?: number; // Amount that has been paid so far
   completionRequirements?: string;
   expenseId?: string; // Allow string or undefined
   invoiceId?: string; // Link to invoice if created

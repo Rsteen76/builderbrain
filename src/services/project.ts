@@ -73,11 +73,31 @@ class ProjectService {
     return null;
   }
 
+  // Utility function to safely convert Timestamps or Date objects to JavaScript Date
+  private static convertTimestampToDate(value: any): Date | null {
+    if (!value) return null;
+    
+    if (value instanceof Timestamp && typeof value.toDate === 'function') {
+      return value.toDate();
+    } else if (value instanceof Date) {
+      return value;
+    } else if (typeof value === 'string') {
+      try {
+        return new Date(value);
+      } catch (e) {
+        console.error('Failed to convert string to Date:', e);
+        return null;
+      }
+    }
+    
+    return null;
+  }
+
   private static convertToProjectData(data: FirestoreProject): Project {
     const phases = (data.phases || []).map(phase => ({
       ...phase,
-      startDate: phase.startDate ? phase.startDate.toDate() : null,
-      endDate: phase.endDate ? phase.endDate.toDate() : null
+      startDate: this.convertTimestampToDate(phase.startDate),
+      endDate: this.convertTimestampToDate(phase.endDate)
     }));
 
     return {

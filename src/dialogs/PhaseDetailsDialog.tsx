@@ -52,6 +52,7 @@ import { format } from 'date-fns';
 import { Phase, Bid, Expense, Task, ProjectPhase } from '../types';
 import { useProjectDetail } from '../contexts/ProjectDetailContext';
 import { formatCurrency, formatDate, formatPercentage } from '../utils/formatters';
+import { Timestamp } from 'firebase/firestore';
 
 // Helper function to get phase status color
 const getPhaseStatusColor = (status: string | undefined, theme: any): string => {
@@ -160,21 +161,21 @@ const PhaseDetailsDialog: React.FC<PhaseDetailsDialogProps> = ({
   const phaseDateRange = useMemo(() => {
     if (!phase) return 'No dates available';
     
-    const startDate = phase.startDate ? 
-      (typeof phase.startDate === 'string' ? 
-        new Date(phase.startDate) : 
-        phase.startDate instanceof Date ? 
-          phase.startDate : 
-          phase.startDate.toDate?.()) : 
-      null;
-      
-    const endDate = phase.endDate ? 
-      (typeof phase.endDate === 'string' ? 
-        new Date(phase.endDate) : 
-        phase.endDate instanceof Date ? 
-          phase.endDate : 
-          phase.endDate.toDate?.()) : 
-      null;
+    const startDate = phase?.startDate ? (
+      phase.startDate instanceof Date ? 
+        phase.startDate : 
+        typeof phase.startDate === 'object' && phase.startDate && 'toDate' in phase.startDate ?
+          (phase.startDate as Timestamp).toDate() :
+          new Date(String(phase.startDate))
+    ) : null;
+    
+    const endDate = phase?.endDate ? (
+      phase.endDate instanceof Date ? 
+        phase.endDate : 
+        typeof phase.endDate === 'object' && phase.endDate && 'toDate' in phase.endDate ?
+          (phase.endDate as Timestamp).toDate() :
+          new Date(String(phase.endDate))
+    ) : null;
 
     if (startDate && endDate) {
       return `${format(startDate, 'MMM d, yyyy')} - ${format(endDate, 'MMM d, yyyy')}`;

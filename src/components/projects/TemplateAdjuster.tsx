@@ -144,6 +144,7 @@ const TemplateAdjuster: React.FC<TemplateAdjusterProps> = ({
     
     const newPhase: PhaseWithPercentage = {
       id: uuidv4(),
+      projectId: project.id,
       name: `New Phase ${phases.length + 1}`,
       percentage: 0,
       status: 'not_started',
