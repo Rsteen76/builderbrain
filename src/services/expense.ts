@@ -77,12 +77,12 @@ export class ExpenseService {
 
     console.log(`ExpenseService: Updating expense ${id} with data:`, expenseData);
 
-    // Standardize on phaseName field
+    // Standardize on phaseName field (buildingPhase logic removed)
     const standardizedPayload = { ...updatePayload };
-    if (updatePayload.buildingPhase && !updatePayload.phaseName) {
-      console.log(`ExpenseService: Standardizing on phaseName instead of buildingPhase: ${updatePayload.buildingPhase}`);
-      standardizedPayload.phaseName = updatePayload.buildingPhase;
-    }
+    // if (updatePayload.buildingPhase && !updatePayload.phaseName) { // Removed buildingPhase logic
+    //   console.log(`ExpenseService: Standardizing on phaseName instead of buildingPhase: ${updatePayload.buildingPhase}`);
+    //   standardizedPayload.phaseName = updatePayload.buildingPhase;
+    // }
 
     const firestoreUpdateData: any = {
       updatedAt: Timestamp.fromDate(new Date()),
@@ -505,6 +505,10 @@ export class ExpenseService {
     console.log('CONVERT TO FIRESTORE - Final expense object:', firestoreExpense);
     console.log('CONVERT TO FIRESTORE - Final paymentDetails:', firestoreExpense.paymentDetails);
     
+    // Explicitly remove fields that are no longer part of the Expense type
+    delete firestoreExpense.amountRemaining;
+    delete firestoreExpense.buildingPhase;
+
     return firestoreExpense;
   }
   
@@ -512,7 +516,7 @@ export class ExpenseService {
    * Convert a Firestore document to a JavaScript Expense object
    */
   private static convertFromFirestore(doc: QueryDocumentSnapshot): Expense {
-    const data = doc.data();
+    const data = doc.data() as any; // Use 'as any' to access potentially removed fields
     
     // Convert Firestore Timestamps to JavaScript Date objects
     const createdAt = data.createdAt instanceof Timestamp ? data.createdAt.toDate() : data.createdAt;
@@ -525,18 +529,25 @@ export class ExpenseService {
     // Get bid references if they exist
     const bidId = data.bidId || undefined;
     const paymentStageId = data.paymentStageId || undefined;
+
+    // Destructure known fields and exclude removed ones
+    const {
+      amountRemaining,
+      buildingPhase,
+      ...restOfData
+    } = data;
     
-    // Create the full expense object with type assertion to unknown first
+    // Create the full expense object
     return {
       id: doc.id,
-      ...data,
+      ...restOfData, // Spread the rest of the data
       createdAt,
       updatedAt,
       date,
       tags,
       bidId,
       paymentStageId
-    } as unknown as Expense;
+    } as unknown as Expense; // Type assertion at the end
   }
 
   /**
