@@ -23,16 +23,6 @@ import {
 } from 'firebase/firestore';
 import { Expense, ExpenseStatus } from '../types';
 
-interface FirestoreExpense extends Omit<Expense, 'id' | 'date' | 'createdAt' | 'updatedAt'> {
-  userId: string;
-  date: Timestamp;
-  createdAt: Timestamp;
-  updatedAt: Timestamp;
-  bidId?: string;
-  paymentStageId?: string;
-  categoryId?: string;
-}
-
 export class ExpenseService {
   private static collection = collection(db, 'expenses');
 

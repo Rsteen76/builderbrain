@@ -1,7 +1,7 @@
-import { collection, doc, getDoc, getDocs, query, setDoc, addDoc, updateDoc, where, deleteDoc, writeBatch, arrayUnion, Timestamp } from 'firebase/firestore';
-import { db, auth } from '../config/firebase';
+import { collection, doc, getDoc, getDocs, query, setDoc, addDoc, updateDoc, where, writeBatch, Timestamp } from 'firebase/firestore';
+import { db } from '../config/firebase';
 import { Category, CategoryMapping } from '../types/category.types';
-import { getAllCategories, getCategoryById } from '../data/hierarchicalCategories';
+import { getAllCategories } from '../data/hierarchicalCategories';
 import { DEFAULT_CATEGORY_MAPPINGS } from '../utils/categoryMappingUtils';
 
 // Collection references
@@ -328,9 +328,6 @@ export const autoAssignCategory = async (
   projectId: string
 ): Promise<void> => {
   try {
-    // Get existing category mappings for the project
-    const mappings = await getCategoryMappingsForProject(projectId);
-    
     // Get all expenses for the project
     const expensesRef = collection(db, 'expenses');
     const q = query(expensesRef, where('projectId', '==', projectId));

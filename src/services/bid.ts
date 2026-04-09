@@ -21,8 +21,6 @@ import {
   where,
   orderBy,
   Timestamp,
-  DocumentReference,
-  collectionGroup,
   limit,
   startAfter,
   QueryConstraint,
