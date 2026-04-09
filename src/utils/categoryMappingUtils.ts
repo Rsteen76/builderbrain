@@ -1,4 +1,4 @@
-import { Category, CategoryWithChildren } from '../types/category.types';
+import { Category } from '../types/category.types';
 import { ENHANCED_MAIN_CATEGORIES, getAllCategories as getEnhancedCategories } from '../data/newHierarchicalCategories';
 
 // Default category mappings from legacy to enhanced system
@@ -9,11 +9,7 @@ export const DEFAULT_CATEGORY_MAPPINGS: Record<string, string> = {
   'other': 'other'
 };
 
-// Constants for storage and retrieval
 const CATEGORY_SYSTEM_PREFERENCE_KEY = 'categorySystemPreference';
-const CATEGORY_USER_MAPPINGS_PATH = 'categoryMappings';
-const CATEGORY_PROJECT_MAPPINGS_PATH = 'projects/{projectId}/categoryMappings';
-const DEFAULT_MAPPING_CONFIDENCE = 0.75; // Threshold for automatic mapping suggestions
 
 /**
  * Get categories by system type (legacy or enhanced)

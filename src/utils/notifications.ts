@@ -57,4 +57,6 @@ export const showNotification = (
   }
 };
 
-export default { showNotification }; 
+const notifications = { showNotification };
+
+export default notifications;

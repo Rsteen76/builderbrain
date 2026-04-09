@@ -10,7 +10,6 @@ import {
   where,
   orderBy,
   Timestamp,
-  DocumentData,
 } from 'firebase/firestore';
 import { User as FirebaseUser } from 'firebase/auth';
 

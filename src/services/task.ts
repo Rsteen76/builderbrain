@@ -19,7 +19,6 @@ import {
   where,
   orderBy,
   Timestamp,
-  DocumentData,
 } from 'firebase/firestore';
 
 // Import Task, TaskPriority, TaskStatus from the central types file
