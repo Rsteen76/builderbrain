@@ -1,46 +1,186 @@
-# Getting Started with Create React App
+# Builderbrain
 
-This project was bootstrapped with [Create React App](https://github.com/facebook/create-react-app).
+Builderbrain is a React and Firebase construction-management app for tracking projects, phases, bids, expenses, tasks, documents, subcontractors, payments, schedules, and project reporting.
+
+This repository is the frontend application. It uses Firebase Auth, Firestore, and Firebase Storage for app data and file-backed workflows.
+
+## What It Covers
+
+- Project dashboard and portfolio views
+- Custom and residential project setup flows
+- Project detail pages with phases, budgets, bids, tasks, and expenses
+- Bid management and subcontractor tracking
+- Expense and payment workflows
+- Documents, timeline, and calendar views
+- Shared report route support
+
+## Tech Stack
+
+- React 18
+- TypeScript
+- Material UI
+- React Router
+- React Query
+- Firebase Auth
+- Cloud Firestore
+- Firebase Storage
+
+## Current Status
+
+- Public repository
+- Local development works
+- Firebase-backed production-style auth/data flow
+- Local dev auth bypass is available for UI exploration
+- No public deployment configuration is currently included in this repo
+
+## Screenshots
+
+Captured locally using dev auth bypass with the seeded demo dataset.
+
+### Dashboard
+
+![Builderbrain dashboard](./docs/screenshots/dashboard.png)
+
+### Projects
+
+![Builderbrain projects view](./docs/screenshots/projects.png)
+
+### Project Detail
+
+![Builderbrain project detail view](./docs/screenshots/project-detail.png)
+
+### Bids
+
+![Builderbrain bids view](./docs/screenshots/bids.png)
+
+## Quick Start
+
+### 1. Install dependencies
+
+```bash
+npm install
+```
+
+### 2. Create local environment variables
+
+Copy [.env.example](./.env.example) to `.env` and set your Firebase values:
+
+```env
+REACT_APP_FIREBASE_API_KEY=your-api-key
+REACT_APP_FIREBASE_AUTH_DOMAIN=your-auth-domain
+REACT_APP_FIREBASE_PROJECT_ID=your-project-id
+REACT_APP_FIREBASE_STORAGE_BUCKET=your-storage-bucket
+REACT_APP_FIREBASE_MESSAGING_SENDER_ID=your-messaging-sender-id
+REACT_APP_FIREBASE_APP_ID=your-app-id
+REACT_APP_DEV_AUTH_BYPASS=false
+```
+
+### 3. Start the app
+
+```bash
+npm start
+```
+
+The Create React App dev server runs at `http://localhost:3000`.
+
+## Local Demo Mode
+
+For local UI review without real Firebase auth, set:
+
+```env
+REACT_APP_DEV_AUTH_BYPASS=true
+```
+
+When bypass mode is enabled:
+
+- any login/signup credentials will enter the app locally
+- a seeded demo dataset is loaded into browser `localStorage`
+- projects, bids, tasks, expenses, and subcontractors are available for walkthroughs
+
+This mode is intended for development only. Real save/auth behavior still depends on Firebase configuration.
 
 ## Available Scripts
 
-In the project directory, you can run:
+```bash
+npm start
+```
 
-### `npm start`
+Runs the local development server.
 
-Runs the app in the development mode.\
-Open [http://localhost:3000](http://localhost:3000) to view it in the browser.
+```bash
+npm test
+```
 
-The page will reload if you make edits.\
-You will also see any lint errors in the console.
+Runs the test runner.
 
-### `npm test`
+```bash
+npm run build
+```
 
-Launches the test runner in the interactive watch mode.\
-See the section about [running tests](https://facebook.github.io/create-react-app/docs/running-tests) for more information.
+Builds the app for production output in `build/`.
 
-### `npm run build`
+## App Structure
 
-Builds the app for production to the `build` folder.\
-It correctly bundles React in production mode and optimizes the build for the best performance.
+Key areas of the codebase:
 
-The build is minified and the filenames include the hashes.\
-Your app is ready to be deployed!
+- [src/App.tsx](./src/App.tsx): routes and app shell wiring
+- [src/contexts/AuthContext.tsx](./src/contexts/AuthContext.tsx): auth state and dev bypass handling
+- [src/config/firebase.ts](./src/config/firebase.ts): Firebase initialization
+- [src/components/projects](./src/components/projects): project creation, detail, and budget UI
+- [src/components/bids](./src/components/bids): bid workflows
+- [src/components/expenses](./src/components/expenses): expense tracking UI
+- [src/components/tasks](./src/components/tasks): task views and forms
+- [src/components/subcontractors](./src/components/subcontractors): subcontractor management
+- [src/services](./src/services): Firebase-facing and local dev data services
+- [src/api](./src/api): refactor-in-progress API layer
 
-See the section about [deployment](https://facebook.github.io/create-react-app/docs/deployment) for more information.
+## Routing Surface
 
-### `npm run eject`
+The current app includes routes for:
 
-**Note: this is a one-way operation. Once you `eject`, you can’t go back!**
+- dashboard
+- projects
+- tasks
+- expenses
+- documents
+- bids
+- payments
+- subcontractors
+- settings
+- templates
+- timeline
+- calendar
+- shared reports
 
-If you aren’t satisfied with the build tool and configuration choices, you can `eject` at any time. This command will remove the single build dependency from your project.
+See [src/App.tsx](./src/App.tsx) for the current route map.
 
-Instead, it will copy all the configuration files and the transitive dependencies (webpack, Babel, ESLint, etc) right into your project so you have full control over them. All of the commands except `eject` will still work, but they will point to the copied scripts so you can tweak them. At this point you’re on your own.
+## Firebase Notes
 
-You don’t have to ever use `eject`. The curated feature set is suitable for small and middle deployments, and you shouldn’t feel obligated to use this feature. However we understand that this tool wouldn’t be useful if you couldn’t customize it when you are ready for it.
+This repo includes:
 
-## Learn More
+- [firestore.rules](./firestore.rules)
+- [firestore.indexes.json](./firestore.indexes.json)
 
-You can learn more in the [Create React App documentation](https://facebook.github.io/create-react-app/docs/getting-started).
+It does not currently include Firebase Hosting configuration such as `firebase.json` or `.firebaserc`.
 
-To learn React, check out the [React documentation](https://reactjs.org/).
+## Refactoring Docs
+
+The repository also contains active refactoring notes:
+
+- [REFACTORING_README.md](./REFACTORING_README.md)
+- [REFACTORING_PLAN.md](./REFACTORING_PLAN.md)
+- [REFACTORING_PROGRESS.md](./REFACTORING_PROGRESS.md)
+- [docs/refactoring/ProjectDetailPageRefactorPlan.md](./docs/refactoring/ProjectDetailPageRefactorPlan.md)
+- [docs/refactoring/ComponentModularizationPlan.md](./docs/refactoring/ComponentModularizationPlan.md)
+
+These documents are engineering notes, not end-user product docs.
+
+## Gaps To Know Up Front
+
+- The root app documentation was recently updated from the default CRA scaffold, but broader repo docs are still being normalized.
+- Some parts of the codebase are mid-refactor between legacy service usage and the newer `src/api` / hook-based patterns.
+- A public hosted environment is not documented in this repository at this time.
+
+## License
+
+No license file is currently included in this repository.

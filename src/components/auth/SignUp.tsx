@@ -13,6 +13,7 @@ import {
 } from '@mui/material';
 import { Google as GoogleIcon } from '@mui/icons-material';
 import { useNavigate, Link as RouterLink } from 'react-router-dom';
+import { isDevAuthBypassEnabled } from '../../config/devMode';
 import { useAuth } from '../../contexts/AuthContext';
 
 const SignUp: React.FC = () => {
@@ -81,6 +82,12 @@ const SignUp: React.FC = () => {
           {error && (
             <Alert severity="error" sx={{ width: '100%', mb: 2 }}>
               {error}
+            </Alert>
+          )}
+
+          {isDevAuthBypassEnabled && (
+            <Alert severity="info" sx={{ width: '100%', mb: 2 }}>
+              Development auth bypass is enabled. Create any local session here without hitting Firebase Auth.
             </Alert>
           )}
 

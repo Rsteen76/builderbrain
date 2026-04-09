@@ -9,6 +9,12 @@ import {
   signInWithPopup,
 } from 'firebase/auth';
 import { auth } from '../config/firebase';
+import {
+  devBypassAppUser,
+  devBypassFirebaseUser,
+  isDevAuthBypassEnabled,
+} from '../config/devMode';
+import { ensureDevDataSeeded } from '../services/devDataStore';
 import { UserService, User, UserRole } from '../services/user';
 
 interface AuthContextType {
@@ -48,6 +54,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    if (isDevAuthBypassEnabled) {
+      ensureDevDataSeeded();
+      setUser(devBypassFirebaseUser);
+      setUserData(devBypassAppUser);
+      setError(null);
+      setLoading(false);
+      return () => {};
+    }
+
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
       console.log("Auth state changed:", firebaseUser ? `User: ${firebaseUser.uid}` : "User signed out");
       setUser(firebaseUser);
@@ -83,6 +98,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const signIn = async (email: string, password: string) => {
     try {
       setError(null);
+      if (isDevAuthBypassEnabled) {
+        setUser(devBypassFirebaseUser);
+        setUserData({
+          ...devBypassAppUser,
+          email: email || devBypassAppUser.email,
+          updatedAt: new Date(),
+        });
+        return;
+      }
       await signInWithEmailAndPassword(auth, email, password);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to sign in');
@@ -93,6 +117,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const signUp = async (email: string, password: string, displayName?: string) => {
     try {
       setError(null);
+      if (isDevAuthBypassEnabled) {
+        setUser(devBypassFirebaseUser);
+        setUserData({
+          ...devBypassAppUser,
+          email: email || devBypassAppUser.email,
+          displayName: displayName || email.split('@')[0] || devBypassAppUser.displayName,
+          updatedAt: new Date(),
+        });
+        return;
+      }
       const userCredential = await createUserWithEmailAndPassword(auth, email, password);
       
       // Create user document in Firestore
@@ -109,6 +143,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const signInWithGoogle = async () => {
     try {
       setError(null);
+      if (isDevAuthBypassEnabled) {
+        setUser(devBypassFirebaseUser);
+        setUserData(devBypassAppUser);
+        return;
+      }
       const provider = new GoogleAuthProvider();
       const userCredential = await signInWithPopup(auth, provider);
       
@@ -126,6 +165,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const logout = async () => {
     try {
       setError(null);
+      if (isDevAuthBypassEnabled) {
+        setUser(null);
+        setUserData(null);
+        return;
+      }
       await signOut(auth);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to sign out');
@@ -136,6 +180,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const updateUserProfile = async (data: Partial<User>) => {
     try {
       if (!user) throw new Error('No user is authenticated');
+      if (isDevAuthBypassEnabled) {
+        setUserData((current) =>
+          current
+            ? {
+                ...current,
+                ...data,
+                updatedAt: new Date(),
+              }
+            : current
+        );
+        return;
+      }
       
       await UserService.updateUser(user.uid, data);
       

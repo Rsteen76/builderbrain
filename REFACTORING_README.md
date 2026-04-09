@@ -1,8 +1,8 @@
-# Construction Management App - Refactoring Guide
+# Builderbrain Refactoring Guide
 
 ## Overview
 
-This document provides information about the ongoing refactoring of the Construction Management App's frontend codebase. It explains the changes made, how to work with the new patterns, and how the existing code is transitioning to the new architecture.
+This document is an internal engineering guide for the ongoing Builderbrain frontend refactor. It explains the patterns being introduced, how the codebase is transitioning, and how contributors should work with the new architecture during the migration.
 
 ## Key Improvements
 

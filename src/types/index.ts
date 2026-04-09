@@ -127,6 +127,7 @@ export interface BidVersion {
 export interface LineItem {
   id: string;
   projectId?: string;
+  phaseId?: string;
   description: string;
   category: 'material' | 'labor' | 'subcontractor' | 'equipment' | 'permit' | 'other';
   quantity: number;
@@ -267,6 +268,7 @@ export interface BidPaymentStage {
 // Add or enhance the Phase interface
 export interface Phase {
   id: string;
+  projectId?: string;
   name: string;
   description?: string;
   startDate?: Date | null | Timestamp;
@@ -274,7 +276,7 @@ export interface Phase {
   status: 'not_started' | 'in_progress' | 'completed' | 'on_hold' | 'planning' | 'delayed';
   progress: number;
   order?: number;
-  tasks?: string[];
+  tasks?: Task[];
   budget: number;
   actualCost: number;
 }

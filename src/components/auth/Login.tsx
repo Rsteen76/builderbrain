@@ -12,6 +12,7 @@ import {
 } from '@mui/material';
 import { Google as GoogleIcon } from '@mui/icons-material';
 import { useNavigate, Link as RouterLink } from 'react-router-dom';
+import { isDevAuthBypassEnabled } from '../../config/devMode';
 import { useAuth } from '../../contexts/AuthContext';
 
 const Login: React.FC = () => {
@@ -75,6 +76,12 @@ const Login: React.FC = () => {
           {error && (
             <Alert severity="error" sx={{ width: '100%', mb: 2 }}>
               {error}
+            </Alert>
+          )}
+
+          {isDevAuthBypassEnabled && (
+            <Alert severity="info" sx={{ width: '100%', mb: 2 }}>
+              Development auth bypass is enabled. Submit any email and password to enter the local UI.
             </Alert>
           )}
 

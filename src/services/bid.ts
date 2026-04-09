@@ -1,4 +1,14 @@
 import { db } from '../config/firebase';
+import { devBypassAppUser, isDevAuthBypassEnabled } from '../config/devMode';
+import {
+  createDevBid,
+  createDevBidVersion,
+  deleteDevBid,
+  getDevBid,
+  listDevBids,
+  updateDevBid,
+  updateDevBidPaymentStage,
+} from './devDataStore';
 import {
   collection,
   doc,
@@ -152,6 +162,10 @@ export class BidService {
 
   // Create a new bid (Input uses imported Bid type)
   static async createBid(userId: string, bidData: Omit<Bid, 'id' | 'userId' | 'createdAt' | 'updatedAt' | 'currentVersionId' | 'versions'>): Promise<Bid> {
+    if (isDevAuthBypassEnabled) {
+      return createDevBid(userId, bidData);
+    }
+
     const now = new Date();
     const versionId = uuidv4();
     
@@ -336,6 +350,10 @@ export class BidService {
 
   // Create new version (Input/Output uses imported BidVersion type)
   static async createBidVersion(userId: string, bidId: string, versionData: Omit<BidVersion, 'id' | 'createdAt'>, updateBid: boolean = true): Promise<BidVersion> {
+    if (isDevAuthBypassEnabled) {
+      return createDevBidVersion(userId, bidId, versionData, updateBid);
+    }
+
     // Get the bid first
     const bid = await this.getBid(userId, bidId);
     if (!bid) {
@@ -375,6 +393,11 @@ export class BidService {
 
   // Update bid (Input uses imported Bid type)
   static async updateBid(id: string, bidData: Partial<Omit<Bid, 'id' | 'userId' | 'versions' | 'currentVersionId' | 'createdAt' | 'updatedAt'>>): Promise<void> {
+    if (isDevAuthBypassEnabled) {
+      updateDevBid(id, bidData as Partial<Bid>);
+      return;
+    }
+
     const bidRef = doc(this.collection, id);
     const updatePayload: any = { 
       ...bidData, 
@@ -473,6 +496,43 @@ export class BidService {
 
   // Update line item (Input uses imported LineItem type)
   static async updateLineItem(userId: string, bidId: string, lineItem: LineItem): Promise<void> {
+    if (isDevAuthBypassEnabled) {
+      const bid = getDevBid(userId, bidId);
+      if (!bid) {
+        throw new Error(`Bid with ID ${bidId} not found`);
+      }
+
+      const currentVersionIndex = bid.versions?.findIndex(v => v.id === bid.currentVersionId);
+      if (currentVersionIndex === undefined || currentVersionIndex === -1 || !bid.versions) {
+        throw new Error('Current version not found or versions array is missing');
+      }
+
+      const currentVersion = {
+        ...bid.versions[currentVersionIndex],
+        lineItems: [...(bid.versions[currentVersionIndex].lineItems || [])],
+      };
+      const lineItemIndex = currentVersion.lineItems.findIndex(li => li.id === lineItem.id);
+
+      if (lineItemIndex !== -1) {
+        currentVersion.lineItems[lineItemIndex] = lineItem;
+      } else {
+        currentVersion.lineItems.push(lineItem);
+      }
+
+      currentVersion.totalAmount = currentVersion.lineItems.reduce(
+        (sum, li) => sum + (li.totalCost || 0),
+        0
+      );
+
+      const versions = [...bid.versions];
+      versions[currentVersionIndex] = currentVersion;
+      updateDevBid(bidId, {
+        versions,
+        totalAmount: currentVersion.totalAmount,
+      });
+      return;
+    }
+
     const bidRef = doc(this.collection, bidId);
     const bidDoc = await getDoc(bidRef);
     
@@ -523,6 +583,37 @@ export class BidService {
 
   // Delete line item
   static async deleteLineItem(userId: string, bidId: string, lineItemId: string): Promise<void> {
+    if (isDevAuthBypassEnabled) {
+      const bid = getDevBid(userId, bidId);
+      if (!bid) {
+        throw new Error(`Bid with ID ${bidId} not found`);
+      }
+
+      const currentVersionIndex = bid.versions?.findIndex(v => v.id === bid.currentVersionId);
+      if (currentVersionIndex === undefined || currentVersionIndex === -1 || !bid.versions) {
+        throw new Error('Current version not found or versions array is missing');
+      }
+
+      const currentVersion = {
+        ...bid.versions[currentVersionIndex],
+        lineItems: [...(bid.versions[currentVersionIndex].lineItems || [])].filter(
+          (li) => li.id !== lineItemId
+        ),
+      };
+      currentVersion.totalAmount = currentVersion.lineItems.reduce(
+        (sum, li) => sum + (li.totalCost || 0),
+        0
+      );
+
+      const versions = [...bid.versions];
+      versions[currentVersionIndex] = currentVersion;
+      updateDevBid(bidId, {
+        versions,
+        totalAmount: currentVersion.totalAmount,
+      });
+      return;
+    }
+
     const bidRef = doc(this.collection, bidId);
     const bidDoc = await getDoc(bidRef);
     
@@ -559,6 +650,11 @@ export class BidService {
 
   // Delete bid - Added this method
   static async deleteBid(id: string): Promise<void> {
+      if (isDevAuthBypassEnabled) {
+        deleteDevBid(id);
+        return;
+      }
+
       // Ownership check should be handled by security rules
       const bidRef = doc(this.collection, id);
       await deleteDoc(bidRef);
@@ -566,6 +662,10 @@ export class BidService {
 
   // Get a single bid by ID
   static async getBid(userId: string, id: string): Promise<Bid | null> {
+    if (isDevAuthBypassEnabled) {
+      return getDevBid(userId, id);
+    }
+
     try {
       const docRef = doc(this.collection, id);
       const docSnap = await getDoc(docRef);
@@ -599,6 +699,22 @@ export class BidService {
     pageSize: number = 50,
     startAfterId?: string // Changed from startAfterDoc for simplicity
   ): Promise<Bid[]> {
+    if (isDevAuthBypassEnabled) {
+      const allBids = listDevBids(
+        userId,
+        filters,
+        sort,
+        Number.MAX_SAFE_INTEGER
+      );
+      const startIndex = startAfterId
+        ? Math.max(
+            allBids.findIndex((bid) => bid.id === startAfterId) + 1,
+            0
+          )
+        : 0;
+      return allBids.slice(startIndex, startIndex + pageSize);
+    }
+
     console.log('[BidService.getBids] Fetching bids for user:', userId, 'Filters:', filters, 'Sort:', sort, 'PageSize:', pageSize, 'StartAfter:', startAfterId);
     let queryConstraints: QueryConstraint[] = [where('userId', '==', userId)];
 
@@ -699,6 +815,15 @@ export class BidService {
 
   // Get recent bids (Returns BidSummary[])
   static async getRecentBids(userId: string, limitCount: number = 5): Promise<Bid[]> {
+    if (isDevAuthBypassEnabled) {
+      return listDevBids(
+        userId,
+        undefined,
+        { field: 'createdAt', direction: 'desc' },
+        limitCount
+      );
+    }
+
     const q = query(
       this.collection,
       where('userId', '==', userId),
@@ -713,6 +838,13 @@ export class BidService {
 
   // Get upcoming bids (Returns BidSummary[])
   static async getUpcomingBids(userId: string, limitCount: number = 5): Promise<Bid[]> {
+    if (isDevAuthBypassEnabled) {
+      const now = new Date();
+      return listDevBids(userId, undefined, { field: 'submissionDeadline', direction: 'asc' }, Number.MAX_SAFE_INTEGER)
+        .filter((bid) => bid.submissionDeadline instanceof Date && bid.submissionDeadline >= now)
+        .slice(0, limitCount);
+    }
+
     const now = Timestamp.now();
     const q = query(
       this.collection,
@@ -729,6 +861,14 @@ export class BidService {
 
   // Get subcontractor bids (Returns BidSummary[])
   static async getSubcontractorBids(userId: string, subcontractorId: string): Promise<Bid[]> {
+    if (isDevAuthBypassEnabled) {
+      return listDevBids(
+        userId,
+        { subcontractorId },
+        { field: 'updatedAt', direction: 'desc' }
+      );
+    }
+
     const q = query(
       this.collection,
       where('userId', '==', userId),
@@ -1069,6 +1209,12 @@ export class BidService {
     stageData: Partial<Omit<BidPaymentStage, 'id'>>
   ): Promise<void> {
     try {
+      if (isDevAuthBypassEnabled) {
+        updateDevBidPaymentStage(devBypassAppUser.id, bidId, stageId, stageData);
+        await this.updatePaymentProgress(bidId);
+        return;
+      }
+
       const bidRef = doc(this.collection, bidId);
       const bidDoc = await getDoc(bidRef);
       
@@ -1136,6 +1282,36 @@ export class BidService {
    */
   static async updatePaymentProgress(bidId: string): Promise<void> {
     try {
+      if (isDevAuthBypassEnabled) {
+        const bid = getDevBid(devBypassAppUser.id, bidId);
+        if (!bid || !bid.paymentSchedule) {
+          return;
+        }
+
+        let paid = 0;
+        let pending = 0;
+
+        bid.paymentSchedule.forEach(stage => {
+          if (stage.status === 'paid') {
+            paid += stage.amount;
+          } else if (stage.status === 'partially_paid' && stage.paidAmount) {
+            paid += stage.paidAmount;
+            pending += stage.amount - stage.paidAmount;
+          } else {
+            pending += stage.amount;
+          }
+        });
+
+        updateDevBid(bidId, {
+          paymentProgress: {
+            paid,
+            pending,
+            remaining: bid.totalAmount - paid,
+          },
+        });
+        return;
+      }
+
       const bidRef = doc(this.collection, bidId);
       const bidDoc = await getDoc(bidRef);
       

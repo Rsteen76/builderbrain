@@ -1,8 +1,8 @@
-# Construction Management App Refactoring Plan
+# Builderbrain Refactoring Plan
 
 ## Overview
 
-This document outlines a comprehensive plan to refactor the Construction Management App frontend codebase. The goal is to improve code organization, maintainability, performance, and developer experience without breaking existing functionality.
+This document outlines the plan for refactoring the Builderbrain frontend codebase. The goal is to improve code organization, maintainability, performance, and developer experience without breaking existing functionality.
 
 ## 1. Service Layer Refactoring
 

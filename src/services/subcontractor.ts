@@ -1,4 +1,12 @@
 import { db } from '../config/firebase';
+import { isDevAuthBypassEnabled } from '../config/devMode';
+import {
+  createDevSubcontractor,
+  deleteDevSubcontractor,
+  getDevSubcontractor,
+  listDevSubcontractors,
+  updateDevSubcontractor,
+} from './devDataStore';
 import {
   collection,
   doc,
@@ -29,6 +37,10 @@ export class SubcontractorService {
   private static collection = collection(db, 'subcontractors');
 
   static async createSubcontractor(userId: string, subcontractorData: Omit<Subcontractor, 'id' | 'userId' | 'createdAt' | 'updatedAt'>): Promise<Subcontractor> {
+    if (isDevAuthBypassEnabled) {
+      return createDevSubcontractor(userId, subcontractorData);
+    }
+
     const now = new Date();
     
     // Create a clean version of the data without undefined values
@@ -60,6 +72,11 @@ export class SubcontractorService {
   }
 
   static async updateSubcontractor(id: string, subcontractorData: Partial<Omit<Subcontractor, 'id' | 'userId' | 'createdAt'>>): Promise<void> {
+    if (isDevAuthBypassEnabled) {
+      updateDevSubcontractor(id, subcontractorData as Partial<Subcontractor>);
+      return;
+    }
+
     const subcontractorRef = doc(this.collection, id);
     const { userId, createdAt, ...updatePayload } = subcontractorData as any;
     
@@ -90,11 +107,20 @@ export class SubcontractorService {
   }
 
   static async deleteSubcontractor(id: string): Promise<void> {
+    if (isDevAuthBypassEnabled) {
+      deleteDevSubcontractor(id);
+      return;
+    }
+
     const subcontractorRef = doc(this.collection, id);
     await deleteDoc(subcontractorRef);
   }
 
   static async getSubcontractor(userId: string, id: string): Promise<Subcontractor | null> {
+    if (isDevAuthBypassEnabled) {
+      return getDevSubcontractor(userId, id);
+    }
+
     const subcontractorRef = doc(this.collection, id);
     const subcontractorDoc = await getDoc(subcontractorRef);
 
@@ -118,6 +144,10 @@ export class SubcontractorService {
     companyName?: string;
     active?: boolean;
   }): Promise<Subcontractor[]> {
+    if (isDevAuthBypassEnabled) {
+      return listDevSubcontractors(userId, filters);
+    }
+
     console.log(`SubcontractorService: Fetching subcontractors for user: ${userId}, with filters:`, filters);
     
     if (!userId) {

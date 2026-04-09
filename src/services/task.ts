@@ -1,4 +1,12 @@
 import { db } from '../config/firebase';
+import { isDevAuthBypassEnabled } from '../config/devMode';
+import {
+  createDevTask,
+  deleteDevTask,
+  getDevTask,
+  listDevTasks,
+  updateDevTask,
+} from './devDataStore';
 import {
   collection,
   doc,
@@ -55,6 +63,10 @@ export class TaskService {
 
   // --- Create Task (Uses imported Task type) ---
   static async createTask(userId: string, taskData: Omit<Task, 'id' | 'userId' | 'createdAt' | 'updatedAt'>): Promise<Task> {
+    if (isDevAuthBypassEnabled) {
+      return createDevTask(userId, taskData);
+    }
+
     const now = new Date();
     const firestoreData: FirestoreTask = {
       ...taskData,
@@ -80,6 +92,10 @@ export class TaskService {
 
   // --- Get Task by ID (Returns imported Task type) ---
   static async getTask(userId: string, id: string): Promise<Task | null> {
+    if (isDevAuthBypassEnabled) {
+      return getDevTask(userId, id);
+    }
+
     const docRef = doc(this.collectionRef, id);
     const docSnap = await getDoc(docRef);
     if (!docSnap.exists()) {
@@ -107,6 +123,10 @@ export class TaskService {
     sortBy?: keyof Omit<Task, 'id'>; // Sort by fields excluding id
     sortDirection?: 'asc' | 'desc';
   }): Promise<Task[]> {
+    if (isDevAuthBypassEnabled) {
+      return listDevTasks(userId, filters);
+    }
+
     // Start query with the mandatory userId filter
     let q = query(this.collectionRef, where('userId', '==', userId));
 
@@ -136,6 +156,11 @@ export class TaskService {
 
   // --- Update Task (Input uses imported Task type) ---
   static async updateTask(id: string, taskData: Partial<Omit<Task, 'id' | 'userId' | 'createdAt' | 'projectId'>>): Promise<void> {
+    if (isDevAuthBypassEnabled) {
+      updateDevTask(id, taskData as Partial<Task>);
+      return;
+    }
+
     const docRef = doc(this.collectionRef, id);
     // Exclude fields not allowed in update
     const { userId, projectId, createdAt, updatedAt, ...updatePayload } = taskData as any; // Also exclude updatedAt
@@ -160,6 +185,11 @@ export class TaskService {
   // --- Delete Task ---
   // Rely on security rules to enforce ownership.
   static async deleteTask(id: string): Promise<void> {
+    if (isDevAuthBypassEnabled) {
+      deleteDevTask(id);
+      return;
+    }
+
     const docRef = doc(this.collectionRef, id);
     await deleteDoc(docRef);
   }

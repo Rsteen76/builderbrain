@@ -69,8 +69,7 @@ import LineItemManager from './LineItemManager';
 import BidManager from './BidManager';
 import ProjectTaskManager from './ProjectTaskManager';
 import { formatCurrency, formatPercentage, formatDate } from '../../utils/formatters';
-// @ts-ignore 
-import Timeline, { GanttData } from 'react-gantt-timeline';
+import Timeline, { GanttData } from './GanttTimelineFallback';
 
 // Helper Function to calculate Project Duration
 const calculateProjectDuration = (start?: Date | null, end?: Date | null): number => {
@@ -129,7 +128,7 @@ const ProjectDetails: React.FC = () => {
       try {
         setLoading(true);
         setError(null);
-        const projectData = await ProjectService.getProject(user.uid, id);
+        const projectData = await ProjectService.getProject(id, user.uid);
         
         if (!projectData) {
           setError(`Project with ID "${id}" not found or you don't have permission to view it.`);

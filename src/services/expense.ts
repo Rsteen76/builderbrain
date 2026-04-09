@@ -1,4 +1,12 @@
 import { db } from '../config/firebase';
+import { devBypassAppUser, isDevAuthBypassEnabled } from '../config/devMode';
+import {
+  createDevExpense,
+  deleteDevExpense,
+  getDevExpense,
+  listDevExpenses,
+  updateDevExpense,
+} from './devDataStore';
 import {
   collection,
   doc,
@@ -30,6 +38,14 @@ export class ExpenseService {
 
   static async createExpense(userId: string, expenseData: Omit<Expense, 'id' | 'userId' | 'createdBy' | 'createdAt' | 'updatedAt'> & { bidId?: string | null; paymentStageId?: string | null }): Promise<Expense> {
     if (!userId) throw new Error('User ID is required');
+
+    if (isDevAuthBypassEnabled) {
+      return createDevExpense(userId, {
+        ...expenseData,
+        bidId: expenseData.bidId ?? undefined,
+        paymentStageId: expenseData.paymentStageId ?? undefined,
+      });
+    }
     
     try {
       console.log('Expense data received by service:', JSON.stringify(expenseData));
@@ -82,6 +98,11 @@ export class ExpenseService {
     if (updatePayload.buildingPhase && !updatePayload.phaseName) {
       console.log(`ExpenseService: Standardizing on phaseName instead of buildingPhase: ${updatePayload.buildingPhase}`);
       standardizedPayload.phaseName = updatePayload.buildingPhase;
+    }
+
+    if (isDevAuthBypassEnabled) {
+      updateDevExpense(id, standardizedPayload as Partial<Expense>);
+      return;
     }
 
     const firestoreUpdateData: any = {
@@ -147,11 +168,20 @@ export class ExpenseService {
   }
 
   static async deleteExpense(id: string): Promise<void> {
+    if (isDevAuthBypassEnabled) {
+      deleteDevExpense(id);
+      return;
+    }
+
     const expenseRef = doc(this.collection, id);
     await deleteDoc(expenseRef);
   }
 
   static async getExpense(userId: string, id: string): Promise<Expense | null> {
+    if (isDevAuthBypassEnabled) {
+      return getDevExpense(userId, id);
+    }
+
     const expenseRef = doc(this.collection, id);
     const expenseDoc = await getDoc(expenseRef);
 
@@ -180,6 +210,10 @@ export class ExpenseService {
     phaseId?: string;
     subcontractorId?: string;
   }): Promise<Expense[]> {
+    if (isDevAuthBypassEnabled) {
+      return listDevExpenses(userId, filters);
+    }
+
     console.log(`ExpenseService: Fetching expenses for user: ${userId}, with filters:`, filters);
     
     if (!userId) {
@@ -252,6 +286,10 @@ export class ExpenseService {
       console.error("ExpenseService: Missing userId or projectId in getProjectExpenses");
       return [];
     }
+
+    if (isDevAuthBypassEnabled) {
+      return listDevExpenses(userId, { projectId });
+    }
     
     try {
       const q = query(
@@ -318,6 +356,32 @@ export class ExpenseService {
     notes?: string;
   }): Promise<void> {
     console.log(`ExpenseService: Marking expense ${id} as paid with amount: ${actualAmountPaidNow}`);
+
+    if (isDevAuthBypassEnabled) {
+      const expense = getDevExpense(devBypassAppUser.id, id);
+      if (!expense) {
+        throw new Error(`Expense with ID ${id} not found`);
+      }
+
+      const amountPaid = (expense.amountPaid || 0) + actualAmountPaidNow;
+      const amountRemaining = expense.amount - amountPaid;
+      const status: ExpenseStatus =
+        amountPaid >= expense.amount
+          ? 'paid'
+          : amountPaid > 0
+          ? 'partially_paid'
+          : expense.status;
+      const paymentDate = paymentDetails.date ? new Date(paymentDetails.date) : new Date();
+
+      updateDevExpense(id, {
+        amountPaid,
+        amountRemaining,
+        status,
+        lastPaymentDate: paymentDate,
+        paymentDetails,
+      });
+      return;
+    }
     
     // This method is now deprecated in favor of using ExpenseTransactionService
     // We'll keep this method for backward compatibility but switch its implementation to use transactions
@@ -379,6 +443,28 @@ export class ExpenseService {
     endDate.setDate(endDate.getDate() + threshold);
     
     console.log(`Checking for duplicates within date range: ${startDate.toISOString()} to ${endDate.toISOString()}`);
+
+    if (isDevAuthBypassEnabled) {
+      return listDevExpenses(userId, { projectId: expenseData.projectId }).filter(expense => {
+        if (expenseData.id && expense.id === expenseData.id) {
+          return false;
+        }
+
+        const expenseDateValue = expense.date instanceof Date ? expense.date : new Date(expense.date);
+        if (expenseDateValue < startDate || expenseDateValue > endDate) {
+          return false;
+        }
+
+        const amountMatches = Math.abs(expense.amount - (expenseData.amount || 0)) < 0.01;
+        const descriptionMatches = expenseData.description &&
+          expense.description.toLowerCase().includes(expenseData.description.toLowerCase());
+        const vendorMatches = expenseData.vendor && expense.vendor &&
+          expense.vendor.toLowerCase().includes(expenseData.vendor.toLowerCase());
+        const categoryMatches = expense.category === expenseData.category;
+
+        return !!amountMatches && !!(descriptionMatches || vendorMatches || categoryMatches);
+      });
+    }
     
     // Create a query for expenses that match the criteria
     let q = query(
@@ -544,6 +630,16 @@ export class ExpenseService {
    */
   static async getUniqueVendors(userId: string): Promise<string[]> {
     if (!userId) return [];
+
+    if (isDevAuthBypassEnabled) {
+      const vendors = new Set<string>();
+      listDevExpenses(userId).forEach((expense) => {
+        if (expense.vendor && typeof expense.vendor === 'string' && expense.vendor.trim() !== '') {
+          vendors.add(expense.vendor.trim());
+        }
+      });
+      return Array.from(vendors);
+    }
     
     try {
       console.log(`ExpenseService: Fetching unique vendors for user: ${userId}`);

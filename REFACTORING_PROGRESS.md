@@ -1,7 +1,7 @@
-# Refactoring Progress
+# Builderbrain Refactoring Progress
 
 ## Overall Status
-We are refactoring the codebase to improve type safety, maintainability, and performance. The focus is on implementing a proper service layer and using React Query for state management.
+We are refactoring the Builderbrain codebase to improve type safety, maintainability, and performance. The current focus is on the service layer and React Query-based state management.
 
 ## Completed Tasks
 - [x] Set up initial type system

@@ -401,7 +401,7 @@ const TasksList: React.FC = () => {
 
         if (projectId) {
           // If projectId is provided, fetch tasks for that specific project
-          const projectData = await ProjectService.getProject(user.uid, projectId);
+          const projectData = await ProjectService.getProject(projectId, user.uid);
           if (!projectData) {
             setError('Project not found');
             setLoading(false);

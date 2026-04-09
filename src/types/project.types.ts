@@ -1,3 +1,5 @@
+import type { Task } from './task.types';
+
 export type ProjectStatus = 
   | 'estimate' 
   | 'planning' 
@@ -45,6 +47,7 @@ export interface ProjectRequirements {
 
 export interface Phase {
   id: string;
+  projectId?: string;
   name: string;
   description?: string;
   startDate?: Date | null;
@@ -52,7 +55,7 @@ export interface Phase {
   status?: 'not_started' | 'in_progress' | 'completed' | 'on_hold';
   progress?: number;
   order?: number;
-  tasks?: string[]; // Array of task IDs
+  tasks?: Task[];
   budget?: number;
   actualCost?: number;
 }
@@ -95,7 +98,7 @@ export interface Project {
   keyMilestones?: ProjectMilestone[];
   requirements?: ProjectRequirements;
   lineItems?: LineItem[];
-  tasks?: string[]; // Array of task IDs
+  tasks?: Task[];
   expenses?: string[]; // Array of expense IDs
   bids?: string[]; // Array of bid IDs
 }

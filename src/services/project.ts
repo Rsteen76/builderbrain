@@ -1,4 +1,12 @@
 import { db } from '../config/firebase';
+import { isDevAuthBypassEnabled } from '../config/devMode';
+import {
+  createDevProject,
+  deleteDevProject,
+  getDevProjectById,
+  listDevProjects,
+  updateDevProject,
+} from './devDataStore';
 import {
   collection,
   doc,
@@ -54,7 +62,7 @@ class ProjectService {
   private static collection = collection(db, 'projects');
 
   // Utility function to safely convert dates to Firestore Timestamps
-  private static dateToTimestamp(date: Date | string | Timestamp | null): Timestamp | null {
+  private static dateToTimestamp(date: Date | string | Timestamp | null | undefined): Timestamp | null {
     if (!date) return null;
     
     if (date instanceof Timestamp) {
@@ -106,7 +114,7 @@ class ProjectService {
       name: data.name || '',
       description: data.description || '',
       status: data.status || 'estimate',
-      startDate: data.startDate ? data.startDate.toDate() : null,
+      startDate: data.startDate ? data.startDate.toDate() : new Date(),
       endDate: data.endDate ? data.endDate.toDate() : null,
       createdAt: data.createdAt.toDate(),
       updatedAt: data.updatedAt.toDate(),
@@ -134,6 +142,10 @@ class ProjectService {
   }
 
   static async createProject(userId: string, projectData: Partial<Project>): Promise<Project> {
+    if (isDevAuthBypassEnabled) {
+      return createDevProject(userId, projectData);
+    }
+
     try {
       // Add user ID and required fields to project data
       const completeProjectData: Partial<FirestoreProject> = {
@@ -182,6 +194,10 @@ class ProjectService {
   }
 
   static async getProjectById(id: string): Promise<Project | null> {
+    if (isDevAuthBypassEnabled) {
+      return getDevProjectById(id);
+    }
+
     try {
       const docRef = doc(this.collection, id);
       const docSnap = await getDoc(docRef);
@@ -219,6 +235,10 @@ class ProjectService {
   }
 
   static async getUserProjects(userId: string): Promise<Project[]> {
+    if (isDevAuthBypassEnabled) {
+      return listDevProjects(userId);
+    }
+
     try {
       const projectsQuery = query(this.collection, where("userId", "==", userId));
       const querySnapshot = await getDocs(projectsQuery);
@@ -226,10 +246,10 @@ class ProjectService {
       const projects: Project[] = [];
       querySnapshot.forEach((doc) => {
         const data = doc.data() as FirestoreProject;
-        projects.push({
+        projects.push(this.convertToProjectData({
+          ...data,
           id: doc.id,
-          ...this.convertToProjectData(data)
-        });
+        }));
       });
       
       return projects;
@@ -240,6 +260,14 @@ class ProjectService {
   }
 
   static async updateProject(projectId: string, projectData: Partial<Project>): Promise<Project> {
+    if (isDevAuthBypassEnabled) {
+      const project = updateDevProject(projectId, projectData);
+      if (!project) {
+        throw new Error('Failed to retrieve updated project');
+      }
+      return project;
+    }
+
     try {
       const projectRef = doc(this.collection, projectId);
       
@@ -287,6 +315,11 @@ class ProjectService {
   }
 
   static async deleteProject(projectId: string): Promise<void> {
+    if (isDevAuthBypassEnabled) {
+      deleteDevProject(projectId);
+      return;
+    }
+
     try {
       await deleteDoc(doc(this.collection, projectId));
     } catch (error) {
@@ -301,6 +334,20 @@ class ProjectService {
     startDate?: Date | Timestamp | null;
     endDate?: Date | Timestamp | null;
   }): Promise<Project[]> {
+    if (isDevAuthBypassEnabled) {
+      return listDevProjects(userId, {
+        ...filters,
+        startDate:
+          filters?.startDate instanceof Timestamp
+            ? filters.startDate.toDate()
+            : filters?.startDate || null,
+        endDate:
+          filters?.endDate instanceof Timestamp
+            ? filters.endDate.toDate()
+            : filters?.endDate || null,
+      });
+    }
+
     console.log(`ProjectService: Fetching projects for user: ${userId}, with filters:`, filters);
     
     if (!userId) {
@@ -345,26 +392,18 @@ class ProjectService {
   }
 
   private static convertFirestoreData(data: FirestoreProject, id: string): Project {
-    // Convert Firestore Timestamps to Date objects
-    const convertedPhases = data.phases?.map(phase => {
-      const convertedPhase = {
+    const convertedPhases = data.phases?.map((phase) => {
+      const startDate = this.convertTimestampToDate(phase.startDate);
+      const endDate =
+        this.convertTimestampToDate(phase.endDate) ??
+        (startDate ? this.addDays(startDate, 30) : null);
+
+      return {
         ...phase,
-        startDate: phase.startDate ? this.dateToTimestamp(phase.startDate).toDate() : null,
-        endDate: phase.endDate ? this.dateToTimestamp(phase.endDate).toDate() : null,
+        projectId: phase.projectId || id,
+        startDate,
+        endDate,
       };
-      
-      if (convertedPhase.endDate instanceof Timestamp) {
-        convertedPhase.endDate = convertedPhase.endDate.toDate();
-      } else if (typeof convertedPhase.endDate === 'string') {
-        convertedPhase.endDate = new Date(convertedPhase.endDate);
-      } else if (!convertedPhase.endDate) {
-        // If no end date, set it to 30 days after start date
-        const endDate = new Date(convertedPhase.startDate);
-        endDate.setDate(endDate.getDate() + 30);
-        convertedPhase.endDate = endDate;
-      }
-      
-      return convertedPhase;
     }) || [];
     
     console.log('Converting Firestore data with phases:', convertedPhases.map(p => ({
@@ -377,21 +416,21 @@ class ProjectService {
       ...data,
       id: id,
       userId: data.userId,
-      startDate: data.startDate.toDate(),
+      startDate: data.startDate?.toDate() || new Date(),
       endDate: data.endDate ? data.endDate.toDate() : null,
       createdAt: data.createdAt.toDate(),
       updatedAt: data.updatedAt.toDate(),
-      budget: { 
-          total: data.budget || 0, 
-          spent: 0,
-          remaining: data.budget || 0 
-      }, 
-      location: { 
-          address: data.location || '',
-          city: '', 
-          state: '', 
-          zipCode: '' 
-      }, 
+      budget: data.budget || {
+        total: 0,
+        spent: 0,
+        remaining: 0,
+      },
+      location: data.location || {
+        address: '',
+        city: '',
+        state: '',
+        zipCode: '',
+      },
       lineItems: data.lineItems || [],
       bids: data.bids || [],
       tasks: data.tasks || [],
@@ -399,6 +438,8 @@ class ProjectService {
       phases: convertedPhases,
       keyMilestones: data.keyMilestones || [],
       requirements: data.requirements || { permits: [], inspections: [], documents: [] },
+      projections: data.projections || [],
+      progress: data.progress || 0,
     };
     return project;
   }
@@ -1019,8 +1060,8 @@ class ProjectService {
         ...project,
         phases: residentialPhases,
         tasks: [...(project.tasks || []), ...allTasks],
-        startDate: this.dateToTimestamp(projectStartDate),
-        endDate: this.dateToTimestamp(projectEndDate)
+        startDate: projectStartDate,
+        endDate: projectEndDate,
       };
       
       // Update project with phases, tasks, and updated dates
@@ -1029,8 +1070,8 @@ class ProjectService {
           ...phase,
           id: phase.id || uuidv4(),
           projectId: project.id,
-          startDate: this.dateToTimestamp(phase.startDate),
-          endDate: this.dateToTimestamp(phase.endDate)
+          startDate: phase.startDate ?? undefined,
+          endDate: phase.endDate ?? undefined,
         })),
         tasks: updatedProject.tasks,
         startDate: updatedProject.startDate,
@@ -1060,6 +1101,11 @@ class ProjectService {
   }
 
   static async getProject(projectId: string, userId: string): Promise<Project | null> {
+    if (isDevAuthBypassEnabled) {
+      const project = getDevProjectById(projectId);
+      return project?.userId === userId ? project : null;
+    }
+
     // This is just a wrapper around getProjectById for backward compatibility
     return this.getProjectById(projectId);
   }
