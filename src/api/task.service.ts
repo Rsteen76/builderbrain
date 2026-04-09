@@ -2,13 +2,6 @@ import { Timestamp, DocumentData, where, query, getDocs, orderBy } from 'firebas
 import { BaseService } from './base.service';
 import { Task, TaskStatus, TaskPriority, ApiResponse } from '../types';
 
-interface FirestoreTask extends Omit<Task, 'id' | 'createdAt' | 'updatedAt' | 'dueDate' | 'completedAt'> {
-  createdAt: Timestamp;
-  updatedAt: Timestamp;
-  dueDate?: Timestamp | null;
-  completedAt?: Timestamp | null;
-}
-
 export class TaskService extends BaseService<Task> {
   constructor() {
     super('tasks', {

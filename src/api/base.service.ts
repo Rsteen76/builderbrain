@@ -14,11 +14,7 @@ import {
   Timestamp,
   CollectionReference,
   DocumentData,
-  DocumentReference,
-  WhereFilterOp,
   QueryConstraint,
-  QuerySnapshot,
-  DocumentSnapshot,
 } from 'firebase/firestore';
 import { db } from '../config/firebase';
 import { ApiResponse, FilterOptions, PaginatedResponse } from '../types';

@@ -1,4 +1,4 @@
-import React, { Suspense, lazy, useContext } from 'react';
+import React, { Suspense, lazy } from 'react';
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import { ThemeProvider, CssBaseline, GlobalStyles } from '@mui/material';
 import { LocalizationProvider } from '@mui/x-date-pickers';
@@ -19,8 +19,6 @@ import ProjectWizard from './components/project-wizard/ProjectWizard';
 // Lazy load components
 const Dashboard = lazy(() => import('./components/dashboard/Dashboard'));
 const Projects = lazy(() => import('./components/projects/Projects'));
-const ProjectDetails = lazy(() => import('./components/projects/ProjectDetails'));
-const ProjectSetupWizard = lazy(() => import('./components/projects/ProjectSetupWizard'));
 const ProjectForm = lazy(() => import('./components/projects/ProjectForm'));
 const ProjectTemplates = lazy(() => import('./components/projects/Templates'));
 const Tasks = lazy(() => import('./components/tasks/Tasks'));

@@ -2,12 +2,6 @@ import { Timestamp, DocumentData, where, query, getDocs, orderBy } from 'firebas
 import { BaseService } from './base.service';
 import { Expense, ApiResponse } from '../types';
 
-interface FirestoreExpense extends Omit<Expense, 'id' | 'date' | 'createdAt' | 'updatedAt'> {
-  date: Timestamp;
-  createdAt: Timestamp;
-  updatedAt: Timestamp;
-}
-
 export class ExpenseService extends BaseService<Expense> {
   constructor() {
     super('expenses', {

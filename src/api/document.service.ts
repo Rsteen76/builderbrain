@@ -2,11 +2,6 @@ import { Timestamp, DocumentData, where, query, getDocs, orderBy } from 'firebas
 import { BaseService } from './base.service';
 import { Document, ApiResponse } from '../types';
 
-interface FirestoreDocument extends Omit<Document, 'id' | 'createdAt' | 'updatedAt'> {
-  createdAt: Timestamp;
-  updatedAt: Timestamp;
-}
-
 export class DocumentService extends BaseService<Document> {
   constructor() {
     super('documents', {

@@ -1,17 +1,6 @@
-import { Timestamp, DocumentData, FieldValue, where, query, getDocs } from 'firebase/firestore';
-import { BaseService, FirestoreConverter } from './base.service';
-import { Project, Phase, ProjectBudget, ProjectLocation, ApiResponse } from '../types';
-import { db } from '../config/firebase';
-
-// Type for Firestore representation of Project
-interface FirestoreProject extends Omit<Project, 'id' | 'startDate' | 'endDate' | 'createdAt' | 'updatedAt' | 'budget' | 'location'> {
-  startDate: Timestamp;
-  endDate?: Timestamp | null;
-  createdAt: Timestamp;
-  updatedAt: Timestamp;
-  budget: number; // Firestore only stores the total budget value
-  location: string; // Firestore stores a string representation
-}
+import { Timestamp, DocumentData, where, query, getDocs } from 'firebase/firestore';
+import { BaseService } from './base.service';
+import { Project, ProjectBudget, ProjectLocation, ApiResponse } from '../types';
 
 export class ProjectService extends BaseService<Project> {
   constructor() {

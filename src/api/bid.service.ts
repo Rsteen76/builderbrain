@@ -1,14 +1,6 @@
 import { Timestamp, DocumentData, where, query, getDocs } from 'firebase/firestore';
-import { BaseService, FirestoreConverter } from './base.service';
+import { BaseService } from './base.service';
 import { Bid, BidStatus, BidVersion, ApiResponse } from '../types';
-
-interface FirestoreBid extends Omit<Bid, 'id' | 'createdAt' | 'updatedAt' | 'submissionDeadline' | 'startDate' | 'completionDate'> {
-  createdAt: Timestamp;
-  updatedAt: Timestamp;
-  submissionDeadline?: Timestamp | null;
-  startDate?: Timestamp | null;
-  completionDate?: Timestamp | null;
-}
 
 export class BidService extends BaseService<Bid> {
   constructor() {
