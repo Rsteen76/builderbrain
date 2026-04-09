@@ -3,7 +3,6 @@ import {
   TextField,
   Box,
   InputAdornment,
-  FormHelperText,
   Autocomplete,
   CircularProgress,
 } from '@mui/material';
@@ -12,6 +11,19 @@ import {
 } from '@mui/icons-material';
 import { useAuth } from '../../contexts/AuthContext';
 import { ExpenseService } from '../../services/expense';
+
+const DEFAULT_VENDORS = [
+  'Home Depot',
+  'Lowe\'s',
+  'Menards',
+  'Ace Hardware',
+  'Ferguson',
+  'Grainger',
+  'McMaster-Carr',
+  'Uline',
+  'Capitol Building Supply',
+  'Superior Walls',
+];
 
 interface VendorSelectorProps {
   value: string;
@@ -31,20 +43,6 @@ const VendorSelector: React.FC<VendorSelectorProps> = ({
   const { user } = useAuth();
   const [vendors, setVendors] = useState<string[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-
-  // Common default vendors as fallback
-  const defaultVendors = [
-    'Home Depot', 
-    'Lowe\'s', 
-    'Menards', 
-    'Ace Hardware',
-    'Ferguson',
-    'Grainger',
-    'McMaster-Carr',
-    'Uline',
-    'Capitol Building Supply',
-    'Superior Walls'
-  ];
 
   // Fetch vendors from user's expenses
   useEffect(() => {
@@ -103,11 +101,11 @@ const VendorSelector: React.FC<VendorSelectorProps> = ({
         
         // Fallback to default vendors if no vendors found
         console.log('VendorSelector - No vendors found, using defaults');
-        setVendors(defaultVendors);
+        setVendors(DEFAULT_VENDORS);
         
       } catch (error) {
         console.error('VendorSelector - Error fetching vendors from expenses:', error);
-        setVendors(defaultVendors);
+        setVendors(DEFAULT_VENDORS);
       } finally {
         setIsLoading(false);
       }

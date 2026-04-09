@@ -15,13 +15,11 @@ import {
   Divider,
   CircularProgress,
   Alert,
-  IconButton,
 } from '@mui/material';
 import {
   Save as SaveIcon,
   Edit as EditIcon,
   Person as PersonIcon,
-  PhotoCamera as PhotoCameraIcon,
 } from '@mui/icons-material';
 import { useAuth } from '../../contexts/AuthContext';
 import { User, UserRole } from '../../services/user';

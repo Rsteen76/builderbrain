@@ -8,14 +8,12 @@ import {
   Box,
   Typography,
   Chip,
-  Tooltip,
   Divider
 } from '@mui/material';
 import { alpha, useTheme } from '@mui/material/styles';
 import { 
   getUserCategorySystemPreference, 
-  getCategoriesBySystem, 
-  convertCategoryId 
+  getCategoriesBySystem
 } from '../../utils/categoryMappingUtils';
 
 interface CategorySelectorProps {

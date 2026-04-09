@@ -5,7 +5,6 @@ import {
   Tabs,
   Tab,
   Paper,
-  Divider,
 } from '@mui/material';
 import {
   Person as PersonIcon,

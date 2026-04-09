@@ -1,7 +1,7 @@
 import { useState, useCallback } from 'react';
 import { v4 as uuidv4 } from 'uuid';
 import { BidService } from '../services/bid';
-import { Bid, BidSummary, BidFormData, BidCallbacks } from '../types';
+import { Bid, BidSummary, BidFormData } from '../types';
 import { safelyParseDate } from '../utils/formatters';
 
 /**

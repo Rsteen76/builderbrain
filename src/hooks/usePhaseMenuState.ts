@@ -1,8 +1,5 @@
 import React, { useState, useCallback } from 'react';
 
-// Define clear names for the two menu types
-type MenuType = 'action' | 'status';
-
 interface UsePhaseMenuStateReturn {
   // Action Menu State & Handlers
   actionAnchorEl: null | HTMLElement;
