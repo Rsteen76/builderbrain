@@ -1,8 +1,9 @@
-import { collection, addDoc, query, where, getDocs, doc, getDoc, updateDoc, Timestamp, serverTimestamp } from 'firebase/firestore';
+import { collection, addDoc, query, where, getDocs, updateDoc, Timestamp, serverTimestamp, deleteField } from 'firebase/firestore';
+import type { DocumentData, DocumentReference } from 'firebase/firestore';
 import { db } from '../config/firebase';
-import { Project, Expense, ProjectPhase, Bid, BudgetProjection } from '../types';
+import { hashReportPassword, verifyStoredReportPassword } from '../utils/reportPasswords';
 
-interface ReportData {
+interface SharedReportData {
   projectId: string;
   projectName: string;
   userId: string;
@@ -10,7 +11,6 @@ interface ReportData {
   expiresAt: any; // Timestamp from Firebase
   reportType: 'budget' | 'timeline' | 'custom';
   shareId: string;
-  password?: string;
   accessCount: number;
   lastAccessedAt?: any;
   isPasswordProtected: boolean;
@@ -41,8 +41,42 @@ interface ReportData {
   };
 }
 
+interface StoredReportData extends SharedReportData {
+  password?: string;
+  passwordHash?: string;
+}
+
+interface SharedReportMetadata {
+  isPasswordProtected: boolean;
+  isExpired: boolean;
+}
+
+const isReportExpired = (reportData: Pick<SharedReportData, 'expiresAt'>): boolean => {
+  const expiresAt = reportData.expiresAt?.toDate?.();
+  return !!(expiresAt && expiresAt < new Date());
+};
+
+const sanitizeReportData = (reportData: StoredReportData): SharedReportData => {
+  const { password, passwordHash, ...sanitizedReportData } = reportData;
+  return sanitizedReportData;
+};
+
 export class ReportService {
   private static collection = collection(db, 'shared_reports');
+
+  private static async migrateLegacyPassword(
+    reportRef: DocumentReference<DocumentData>,
+    password: string
+  ): Promise<void> {
+    try {
+      await updateDoc(reportRef, {
+        passwordHash: await hashReportPassword(password),
+        password: deleteField(),
+      });
+    } catch (error) {
+      console.warn('Failed to migrate legacy shared report password:', error);
+    }
+  }
 
   /**
    * Generate a share link for a budget report
@@ -73,7 +107,7 @@ export class ReportService {
       expirationDate.setDate(expirationDate.getDate() + expirationDays);
       
       // Create report data
-      const reportData: ReportData = {
+      const reportData: StoredReportData = {
         projectId,
         projectName,
         userId,
@@ -95,8 +129,7 @@ export class ReportService {
       
       // Add password if provided
       if (password) {
-        // In a real app, you'd hash this password before storing
-        reportData.password = password;
+        reportData.passwordHash = await hashReportPassword(password);
       }
       
       // Add to Firestore
@@ -115,7 +148,28 @@ export class ReportService {
    * @param password Optional password for protected reports
    * @returns The report data or null if not found/expired/wrong password
    */
-  static async getSharedReport(shareId: string, password?: string): Promise<ReportData | null> {
+  static async getSharedReportMetadata(shareId: string): Promise<SharedReportMetadata | null> {
+    try {
+      const q = query(this.collection, where('shareId', '==', shareId));
+      const querySnapshot = await getDocs(q);
+
+      if (querySnapshot.empty) {
+        return null;
+      }
+
+      const reportData = querySnapshot.docs[0].data() as StoredReportData;
+
+      return {
+        isPasswordProtected: reportData.isPasswordProtected,
+        isExpired: isReportExpired(reportData),
+      };
+    } catch (error) {
+      console.error('Error getting shared report metadata:', error);
+      throw new Error('Failed to inspect shared report');
+    }
+  }
+
+  static async getSharedReport(shareId: string, password?: string): Promise<SharedReportData | null> {
     try {
       // Query for the report with the given shareId
       const q = query(this.collection, where('shareId', '==', shareId));
@@ -126,26 +180,41 @@ export class ReportService {
       }
       
       const reportDoc = querySnapshot.docs[0];
-      const reportData = reportDoc.data() as ReportData;
+      const reportData = reportDoc.data() as StoredReportData;
       
       // Check if the report has expired
-      const expiresAt = reportData.expiresAt?.toDate();
-      if (expiresAt && expiresAt < new Date()) {
+      if (isReportExpired(reportData)) {
         return null; // Report has expired
       }
       
       // Check password if report is password protected
-      if (reportData.isPasswordProtected && reportData.password !== password) {
-        return null; // Incorrect password
+      if (reportData.isPasswordProtected) {
+        const passwordMatches = await verifyStoredReportPassword({
+          inputPassword: password,
+          storedPasswordHash: reportData.passwordHash,
+          legacyPassword: reportData.password,
+        });
+
+        if (!passwordMatches) {
+          return null;
+        }
+
+        if (reportData.password && !reportData.passwordHash && password) {
+          await this.migrateLegacyPassword(reportDoc.ref, password);
+        }
       }
       
       // Update access count and last accessed time
-      await updateDoc(reportDoc.ref, {
-        accessCount: (reportData.accessCount || 0) + 1,
-        lastAccessedAt: serverTimestamp()
-      });
+      try {
+        await updateDoc(reportDoc.ref, {
+          accessCount: (reportData.accessCount || 0) + 1,
+          lastAccessedAt: serverTimestamp()
+        });
+      } catch (error) {
+        console.warn('Failed to update shared report access metadata:', error);
+      }
       
-      return reportData;
+      return sanitizeReportData(reportData);
     } catch (error) {
       console.error('Error getting shared report:', error);
       throw new Error('Failed to access shared report');
@@ -157,12 +226,14 @@ export class ReportService {
    * @param userId The user ID to filter by
    * @returns Array of shared report data
    */
-  static async getUserSharedReports(userId: string): Promise<ReportData[]> {
+  static async getUserSharedReports(userId: string): Promise<SharedReportData[]> {
     try {
       const q = query(this.collection, where('userId', '==', userId));
       const querySnapshot = await getDocs(q);
       
-      return querySnapshot.docs.map(doc => doc.data() as ReportData);
+      return querySnapshot.docs.map((reportDoc) =>
+        sanitizeReportData(reportDoc.data() as StoredReportData)
+      );
     } catch (error) {
       console.error('Error getting user shared reports:', error);
       throw new Error('Failed to retrieve shared reports');

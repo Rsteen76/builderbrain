@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
   Box,
@@ -12,7 +12,6 @@ import {
   Divider,
   Grid,
   Alert,
-  IconButton,
   Dialog,
   DialogActions,
   DialogContent,
@@ -28,7 +27,6 @@ import {
   AccessTime as AccessTimeIcon,
   Print as PrintIcon,
   Home as HomeIcon,
-  Visibility as ViewIcon,
   WarningAmber as WarningIcon,
 } from '@mui/icons-material';
 import ReportService from '../services/ReportService';
@@ -49,16 +47,10 @@ const SharedReportView: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [password, setPassword] = useState('');
-  const [isPasswordProtected, setIsPasswordProtected] = useState(false);
   const [showPasswordDialog, setShowPasswordDialog] = useState(false);
-  const [passwordAttempt, setPasswordAttempt] = useState(false);
   const [isPrinting, setIsPrinting] = useState(false);
-  
-  useEffect(() => {
-    loadReport();
-  }, [shareId]);
-  
-  const loadReport = async (inputPassword?: string) => {
+
+  const loadReport = useCallback(async (inputPassword?: string) => {
     if (!shareId) {
       setError('Invalid report link');
       setLoading(false);
@@ -67,44 +59,53 @@ const SharedReportView: React.FC = () => {
     
     try {
       setLoading(true);
-      
-      // Try to get the report with the given shareId and optional password
-      const report = await ReportService.getSharedReport(shareId, inputPassword);
-      
-      if (!report) {
-        // Check if it's a password issue or expired/invalid report
-        const testReport = await ReportService.getSharedReport(shareId);
-        
-        if (testReport && testReport.isPasswordProtected) {
-          // Report exists but is password protected
-          setIsPasswordProtected(true);
-          setShowPasswordDialog(true);
-          setLoading(false);
-          
-          if (passwordAttempt) {
-            setError('Incorrect password');
-          }
-        } else {
-          // Report doesn't exist or has expired
-          setError('This report has expired or is no longer available');
-          setLoading(false);
-        }
-      } else {
-        // Successfully loaded the report
-        setReportData(report);
+
+      const metadata = await ReportService.getSharedReportMetadata(shareId);
+
+      if (!metadata || metadata.isExpired) {
+        setError('This report has expired or is no longer available');
+        setLoading(false);
+        return;
+      }
+
+      if (metadata.isPasswordProtected && !inputPassword) {
+        setShowPasswordDialog(true);
         setLoading(false);
         setError(null);
-        setShowPasswordDialog(false);
+        return;
       }
+
+      const report = await ReportService.getSharedReport(shareId, inputPassword);
+
+      if (!report) {
+        if (metadata.isPasswordProtected) {
+          setShowPasswordDialog(true);
+          setLoading(false);
+          setError(inputPassword ? 'Incorrect password' : null);
+          return;
+        }
+
+        setError('This report has expired or is no longer available');
+        setLoading(false);
+        return;
+      }
+
+      setReportData(report);
+      setLoading(false);
+      setError(null);
+      setShowPasswordDialog(false);
     } catch (error) {
       console.error('Error loading shared report:', error);
       setError('Failed to load the report. Please try again later.');
       setLoading(false);
     }
-  };
+  }, [shareId]);
+
+  useEffect(() => {
+    loadReport();
+  }, [loadReport]);
   
   const handlePasswordSubmit = () => {
-    setPasswordAttempt(true);
     loadReport(password);
   };
   
