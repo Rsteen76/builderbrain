@@ -11,7 +11,6 @@ import {
   IconButton,
   Tooltip,
   useMediaQuery,
-  Divider,
   Tabs,
   Tab,
   Badge,
@@ -45,7 +44,7 @@ const Tasks: React.FC = () => {
   const [isTaskFormOpen, setIsTaskFormOpen] = useState(false);
   const [selectedTab, setSelectedTab] = useState(0);
   const [isRefreshing, setIsRefreshing] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error] = useState<string | null>(null);
 
   // Tab options
   const tabs = [

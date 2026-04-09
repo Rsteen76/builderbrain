@@ -36,7 +36,7 @@ const TaskFormModal: React.FC<TaskFormModalProps> = ({ open, onClose, onSubmitSu
   const [loading, setLoading] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [subcontractors, setSubcontractors] = useState<Subcontractor[]>([]);
-  const [users, setUsers] = useState<MockUser[]>(mockUsers);
+  const [users] = useState<MockUser[]>(mockUsers);
   const [assigneeType, setAssigneeType] = useState<'user' | 'subcontractor' | 'none'>('none');
 
   useEffect(() => {

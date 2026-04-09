@@ -1,5 +1,5 @@
 import React, { ReactNode } from 'react';
-import { Box, Theme } from '@mui/material';
+import { Box } from '@mui/material';
 // Removed unused type imports (Project, ProjectPhase, Bid, Expense)
 
 // Import tab components

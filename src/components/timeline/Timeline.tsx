@@ -5,8 +5,6 @@ import {
   Paper,
   useTheme,
   alpha,
-  Divider,
-  Stack,
   Chip,
   Button,
   IconButton,
@@ -17,7 +15,6 @@ import {
   TextField,
   Grid,
   Tooltip,
-  LinearProgress,
   CircularProgress,
 } from '@mui/material';
 import { DatePicker } from '@mui/x-date-pickers/DatePicker';
@@ -26,15 +23,11 @@ import {
   Flag as FlagIcon,
   Assignment as AssignmentIcon,
   InsertInvitation as CalendarIcon,
-  Today as TodayIcon,
   AttachMoney as PaymentIcon,
-  Build as ToolIcon,
   LocalShipping as ShippingIcon,
   FilterList as FilterIcon,
   Event as EventIcon,
   AccessTime as TimeIcon,
-  SortByAlpha as SortIcon,
-  MoreVert as MoreIcon,
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 import { formatDate } from '../../utils/formatters';
@@ -47,8 +40,6 @@ import {
   orderBy,
   getDocs,
   Timestamp,
-  limit,
-  startAfter,
   doc,
   getDoc,
 } from 'firebase/firestore';

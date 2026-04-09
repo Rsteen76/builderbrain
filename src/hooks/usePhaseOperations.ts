@@ -1,5 +1,4 @@
 import { useCallback, useState } from 'react';
-import { ProjectService } from '../services/project'; // Correct path for ProjectService
 import { Phase } from '../types'; // PhaseStatus doesn't exist, use the union type directly
 import { useAuth } from './useAuth'; // To get userId
 import { toast } from 'react-hot-toast';
