@@ -14,7 +14,7 @@ import {
   Sort as SortIcon,
   Refresh as RefreshIcon,
 } from '@mui/icons-material';
-import { BidSort, SortDirection } from '../../services/bid';
+import { BidSort } from '../../services/bid';
 
 /**
  * Props for the BidListHeader component

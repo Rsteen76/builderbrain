@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
+import React, { createContext, useContext, ReactNode } from 'react';
 import { Project, ProjectPhase, Bid, Expense, BidFormData, BidSummary, Phase, Subcontractor } from '../types';
 import { useProjectData } from '../hooks/useProjectData'; // Keep using this for core data
 // Import necessary hooks FOR the provider

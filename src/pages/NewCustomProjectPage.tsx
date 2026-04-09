@@ -17,7 +17,6 @@ import {
   useTheme,
   alpha,
   Alert,
-  IconButton,
   TextField,
   InputAdornment,
   FormControl,
@@ -28,7 +27,6 @@ import {
 import {
   Business as BusinessIcon,
   ArrowBack as ArrowBackIcon,
-  ArrowForward as ArrowForwardIcon,
   Check as CheckIcon,
   House as HouseIcon,
   Business as CommercialIcon,
@@ -43,7 +41,7 @@ import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns';
 import { DatePicker } from '@mui/x-date-pickers/DatePicker';
 import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
 import { ProjectStatus, ProjectPhase, Project } from '../types';
-import { formatCurrency, formatDate, safelyParseDate } from '../utils/formatters';
+import { safelyParseDate } from '../utils/formatters';
 
 // Define the project data interface
 interface ProjectData {
@@ -267,12 +265,6 @@ const NewCustomProjectPage: React.FC = () => {
       setCustomPhases(initialPhases);
     }
     
-    handleNext();
-  };
-  
-  // Handle project basic data from ProjectForm
-  const handleProjectDataSave = (data: ProjectData) => {
-    setProjectBasicData(data);
     handleNext();
   };
   

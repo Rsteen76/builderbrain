@@ -396,7 +396,6 @@ export class BidService {
       return;
     }
 
-    const bidRef = doc(this.collection, id);
     const updatePayload: any = { 
       ...bidData, 
       updatedAt: Timestamp.fromDate(new Date()) 

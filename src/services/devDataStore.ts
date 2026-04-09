@@ -1,11 +1,9 @@
 import { v4 as uuidv4 } from 'uuid';
 import {
   Bid,
-  BidPaymentProgress,
   BidPaymentStage,
   BidVersion,
   Expense,
-  LineItem,
   Project,
   ProjectPhase,
   Subcontractor,
@@ -31,9 +29,6 @@ let memoryState: DevDataState | null = null;
 
 const addDays = (date: Date, days: number) =>
   new Date(date.getTime() + days * DAY_MS);
-
-const clamp = (value: number, min: number, max: number) =>
-  Math.min(Math.max(value, min), max);
 
 const asDate = (value: unknown): Date | null => {
   if (!value) return null;
@@ -182,7 +177,6 @@ const writeStorage = (state: DevDataState) => {
 const createSeedState = (): DevDataState => {
   const now = new Date();
   const lastMonth = addDays(now, -35);
-  const lastWeek = addDays(now, -7);
 
   const subcontractors: Subcontractor[] = [
     {

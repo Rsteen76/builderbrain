@@ -146,13 +146,6 @@ const FilterPanel: React.FC<FilterPanelProps> = ({
   };
 
   /**
-   * Handle sort change
-   */
-  const handleSortChange = (newSort: BidSort) => {
-    onSortChange(newSort);
-  };
-
-  /**
    * Reset all filters and sorting to default
    */
   const handleReset = () => {
