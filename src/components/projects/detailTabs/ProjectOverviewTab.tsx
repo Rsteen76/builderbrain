@@ -29,12 +29,9 @@ import {
   Description as DescriptionIcon,
   CalendarToday as CalendarIcon,
   Assignment as AssignmentIcon,
-  BarChart as ChartIcon,
-  AccountCircle as AccountCircleIcon,
   Info as InfoIcon,
   PieChart as PieChartIcon,
   Layers as LayersIcon,
-  MoreVert as MoreVertIcon,
   Add as AddIcon,
   Timeline as TimelineIcon,
   Flag as MilestoneIcon,
@@ -117,26 +114,6 @@ const ProjectOverviewTab: React.FC = () => {
 
   const budgetStatus = getBudgetStatus();
   const projectStatus = getProjectStatus();
-  
-  const budgetAllocationData = React.useMemo(() => {
-    if (!phases) return [];
-    return phases.map((phase, index) => {
-      const colors = [
-        theme.palette.primary.main,
-        theme.palette.secondary.main,
-        theme.palette.success.main,
-        theme.palette.warning.main,
-        theme.palette.error.main,
-        theme.palette.info.main,
-      ];
-      
-      return {
-        name: phase.name,
-        value: phase.budget || 0,
-        color: colors[index % colors.length],
-      };
-    });
-  }, [phases, theme]);
   
   const expensesByCategory = React.useMemo(() => {
     if (!expenses) return {};

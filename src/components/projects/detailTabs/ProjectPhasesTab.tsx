@@ -1,26 +1,14 @@
-import React, { useState, useCallback, useMemo } from 'react';
+import React, { useCallback, useMemo } from 'react';
 import {
   Box,
-  Stack,
-  Paper,
   Typography,
   Button,
-  Tooltip,
-  IconButton,
   Grid,
-  Chip,
-  Avatar,
   alpha,
-  Theme,
   Card,
-  CardHeader,
   CardContent,
   Divider,
-  Collapse,
-  Badge,
-  Fade,
   useTheme,
-  useMediaQuery,
   Menu,
   MenuItem,
   ListItemIcon,
@@ -33,41 +21,25 @@ import {
   Delete as DeleteIcon,
   Add as AddIcon,
   Timeline as TimelineIcon,
-  ExpandMore as ExpandMoreIcon,
-  ExpandLess as ExpandLessIcon,
-  CheckCircle as CheckCircleIcon,
   DonutLarge as DonutLargeIcon,
-  AttachMoney as AttachMoneyIcon,
   Pending as PendingIcon,
-  PriorityHigh as PriorityHighIcon,
-  Schedule as ScheduleIcon,
   Done as DoneIcon,
   Info as InfoIcon,
-  Business as BusinessIcon,
-  MoreVert as MoreVertIcon,
-  ReceiptLong as ReceiptLongIcon,
-  Handshake as HandshakeIcon,
-  Assignment as AssignmentIcon,
   ChevronRight as ChevronRightIcon,
 } from '@mui/icons-material';
-import { formatCurrency, formatDate, truncateText, safelyParseDate } from '../../../utils/formatters';
-import { getPhaseBids, getPhaseExpenses } from '../../../utils/phaseCalculations';
+import { formatCurrency } from '../../../utils/formatters';
 import PhaseTimelineChart from '../charts/PhaseTimelineChart';
 import PhaseCard from './PhaseCard';
-import { ProjectPhase, Bid, Expense } from '../../../types';
-import { usePhaseExpandState } from '../../../hooks/usePhaseExpandState';
+import { ProjectPhase } from '../../../types';
 import { usePhaseMenuState } from '../../../hooks/usePhaseMenuState';
 import { useProjectDetail } from '../../../contexts/ProjectDetailContext';
 import { usePhaseOperations } from '../../../hooks/usePhaseOperations';
 import { usePhaseDetailsDialog } from '../../../hooks/usePhaseDetailsDialog';
-import { useBidFormDialog } from '../../../hooks/useBidFormDialog';
-import { useExpenseFormDialog } from '../../../hooks/useExpenseFormDialog';
 import { useNotification } from '../../../hooks/useNotification';
 import { 
   calculatePhaseProposedCosts, 
   calculatePhaseActualCosts 
 } from '../../../utils/phaseCalculations';
-import { useAuth } from '../../../hooks/useAuth';
 import PhaseDetailsDialog from '../dialogs/PhaseDetailsDialog';
 
 // Define the subset of statuses the hook currently supports
@@ -96,15 +68,9 @@ const ProjectPhasesTab: React.FC = () => {
     openNewExpenseDialog,
   } = useProjectDetail();
 
-  const { 
-    expandedPhases, 
-    handleToggleExpand 
-  } = usePhaseExpandState();
-  
   const phaseMenu = usePhaseMenuState();
-  const { user } = useAuth();
   const { showNotification } = useNotification();
-  const { isUpdatingPhase, updatePhaseStatus } = usePhaseOperations({
+  const { updatePhaseStatus } = usePhaseOperations({
     projectId: project?.id ?? '',
   });
   const phaseDetailsDialog = usePhaseDetailsDialog();
@@ -280,7 +246,6 @@ const ProjectPhasesTab: React.FC = () => {
           {phases.map((phase) => {
             const proposedCost = phaseProposedCosts[phase.id] || 0;
             const actualCost = phaseActualCosts[phase.id] || 0;
-            const isExpanded = expandedPhases[phase.id] || false;
 
             return (
               <Grid item xs={12} md={6} lg={4} key={phase.id}>
