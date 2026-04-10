@@ -1,4 +1,4 @@
-import { Category, CategoryWithChildren } from '../types/category.types';
+import { CategoryWithChildren } from '../types/category.types';
 
 /**
  * Hierarchical construction categories for detailed expense tracking and reporting
@@ -1016,7 +1016,6 @@ export const mapSimpleToDetailedCategory = (
   description?: string
 ): string => {
   // Convert strings to lowercase for case-insensitive matching
-  const type = itemType?.toLowerCase() || '';
   const vendor = vendorOrSubcontractor?.toLowerCase() || '';
   const desc = description?.toLowerCase() || '';
   
@@ -1046,7 +1045,7 @@ export const mapSimpleToDetailedCategory = (
     return 'pre-construction-engineering';
   }
   
-  if (desc.includes('permit') || desc.includes('fee') && desc.includes('building')) {
+  if (desc.includes('permit') || (desc.includes('fee') && desc.includes('building'))) {
     return 'pre-construction-permits';
   }
   
@@ -1090,7 +1089,7 @@ export const mapSimpleToDetailedCategory = (
     return 'framing-lumber';
   }
   
-  if (desc.includes('truss') || desc.includes('rafter') || desc.includes('roof') && desc.includes('structur')) {
+  if (desc.includes('truss') || desc.includes('rafter') || (desc.includes('roof') && desc.includes('structur'))) {
     return 'framing-trusses';
   }
   
@@ -1137,15 +1136,15 @@ export const mapSimpleToDetailedCategory = (
     return 'landscape-softscape';
   }
   
-  if (desc.includes('irrigation') || desc.includes('sprinkler') || desc.includes('drainage') && 
-      (desc.includes('landscape') || desc.includes('lawn') || desc.includes('garden'))) {
+  if (desc.includes('irrigation') || desc.includes('sprinkler') || (desc.includes('drainage') && 
+      (desc.includes('landscape') || desc.includes('lawn') || desc.includes('garden')))) {
     return 'landscape-irrigation';
   }
   
   // Drywall System (Installation & Finishing)
   if (desc.includes('drywall') || desc.includes('gypsum') || desc.includes('sheetrock') || 
       desc.includes('plaster') || desc.includes('mud') || desc.includes('tape') || 
-      desc.includes('hang') || desc.includes('finish') && desc.includes('wall') ||
+      desc.includes('hang') || (desc.includes('finish') && desc.includes('wall')) ||
       vendor.includes('drywall')) {
     return 'interior-finishes-drywall-system';
   }

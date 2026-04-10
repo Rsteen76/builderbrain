@@ -29,7 +29,6 @@ interface UsePhaseOperationsReturn {
  */
 export const usePhaseOperations = ({
   projectId,
-  onPhaseUpdate,
 }: UsePhaseOperationsOptions): UsePhaseOperationsReturn => {
   const { user } = useAuth();
   const [isUpdatingPhase, setIsUpdatingPhase] = useState(false);
@@ -62,7 +61,7 @@ export const usePhaseOperations = ({
     // toast.success('Phase status updated (simulated).');
     // if (onPhaseUpdate) { /* Call with potentially fetched updated phase */ }
 
-  }, [user?.uid, projectId, onPhaseUpdate]); // Dependencies might change with real implementation
+  }, [user?.uid, projectId]); // Dependencies might change with real implementation
 
   // Add other operation functions here...
 
