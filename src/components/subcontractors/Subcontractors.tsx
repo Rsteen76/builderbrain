@@ -2,19 +2,16 @@ import React, { useState, useEffect, useRef } from 'react';
 import {
   Box,
   Grid,
-  Paper,
   Typography,
   Card,
   CardContent,
   LinearProgress,
   IconButton,
-  Tooltip,
   Chip,
   useTheme,
   alpha,
   Avatar,
   Rating,
-  Divider,
   TextField,
   InputAdornment,
   Tabs,
@@ -32,18 +29,14 @@ import {
 } from '@mui/material';
 import {
   Search as SearchIcon,
-  FilterList as FilterIcon,
   Add as AddIcon,
   Phone as PhoneIcon,
   Email as EmailIcon,
   LocationOn as LocationIcon,
   Work as WorkIcon,
-  Star as StarIcon,
-  Sort as SortIcon,
   MoreVert as MoreVertIcon,
   CloudUpload as UploadIcon,
   CloudDownload as DownloadIcon,
-  Person as PersonIcon,
   Construction as ConstructionIcon,
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';

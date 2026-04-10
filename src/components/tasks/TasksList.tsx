@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import {
   Box,
-  Grid,
   Card,
   CardContent,
   Typography,
@@ -12,7 +11,6 @@ import {
   InputAdornment,
   Menu,
   MenuItem,
-  CircularProgress,
   Alert,
   Stack,
   Container,
@@ -20,15 +18,9 @@ import {
   alpha,
   Tabs,
   Tab,
-  Badge,
   Checkbox,
-  Tooltip,
-  FormControl,
-  InputLabel,
-  Select,
   ListItemText,
   Avatar,
-  CardActionArea,
   Skeleton,
   useMediaQuery,
   Divider,
@@ -37,19 +29,14 @@ import {
   Search as SearchIcon,
   Add as AddIcon,
   FilterList as FilterListIcon,
-  Edit as EditIcon,
-  Delete as DeleteIcon,
   DateRange as DateRangeIcon,
   MoreVert as MoreVertIcon,
-  CheckCircle as CheckCircleIcon,
   Schedule as ScheduleIcon,
   PriorityHigh as PriorityHighIcon,
   Person as PersonIcon,
   AssignmentOutlined as TaskIcon,
-  SortByAlpha as SortIcon,
-  Label as LabelIcon,
 } from '@mui/icons-material';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams } from 'react-router-dom';
 import { Task, Project } from '../../types';
 import { formatDate } from '../../utils/formatters';
 import { ProjectService } from '../../services/project';
@@ -370,7 +357,6 @@ const TasksList: React.FC = () => {
   const theme = useTheme();
   const { projectId } = useParams<{ projectId: string }>();
   const { user } = useAuth();
-  const navigate = useNavigate();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
 
   const [loading, setLoading] = useState<boolean>(true);
@@ -465,47 +451,6 @@ const TasksList: React.FC = () => {
       setTasks(prevTasks => [...prevTasks, { ...task, name: task.title }]);
     }
     setTaskFormOpen(false);
-  };
-
-  const handleSaveTask = async (taskData: ExtendedTask) => {
-    if (!user?.uid) return;
-
-    try {
-      setError(null);
-      let updatedTasks: ExtendedTask[] = [...tasks];
-
-      if (taskData.id) {
-        // Update existing task - make a copy without the added 'name' property
-        const { name, ...updateData } = taskData;
-        
-        // Update the task using the correct service method signature
-        await TaskService.updateTask(taskData.id, updateData);
-        
-        // Locally update the task in state
-        updatedTasks = tasks.map((t) => (t.id === taskData.id ? { ...taskData, title: taskData.name || taskData.title } : t));
-      } else {
-        // Create new task - ensure we have a valid projectId
-        if (!projectId) {
-          throw new Error('Project ID is required to create a task');
-        }
-        
-        // Create task with the correct data structure
-        const newTaskData = {
-          ...taskData,
-          title: taskData.name || taskData.title || '',
-          projectId: projectId
-        };
-        
-        const newTask = await TaskService.createTask(user.uid, newTaskData);
-        updatedTasks = [...tasks, { ...newTask, name: newTask.title }];
-      }
-
-      setTasks(updatedTasks);
-      setTaskFormOpen(false);
-    } catch (err) {
-      console.error('Error saving task:', err);
-      setError('Failed to save task');
-    }
   };
 
   const handleDeleteTask = async (taskId: string) => {
