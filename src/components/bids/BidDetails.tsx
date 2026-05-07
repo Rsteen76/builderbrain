@@ -5,7 +5,6 @@ import {
   Typography,
   Paper,
   Grid,
-  Divider,
   Button,
   Chip,
   Tab,
@@ -17,37 +16,31 @@ import {
   Tooltip,
   Alert,
   AlertTitle,
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  DialogContentText,
-  DialogActions,
   Stack,
   useTheme,
 } from '@mui/material';
 import {
   Edit as EditIcon,
-  Delete as DeleteIcon,
   ArrowBack as ArrowBackIcon,
   FileCopy as DuplicateIcon,
   History as HistoryIcon,
   Print as PrintIcon,
-  Mail as MailIcon,
   GetApp as DownloadIcon,
-  AddCircleOutline as AddVersionIcon,
 } from '@mui/icons-material';
-import { Bid, BidVersion, LineItem, Subcontractor, Phase, Project, ProjectPhase } from '../../types';
+import { Bid, BidVersion, Subcontractor, ProjectPhase } from '../../types';
 import { BidFormData } from '../../types/form.types';
 import { BidService } from '../../services/bid';
 import { ProjectService } from '../../services/project';
 import LineItemsTable from './LineItemsTable';
-import { formatCurrency, formatDate } from '../../utils/formatters';
+import { formatCurrency } from '../../utils/formatters';
 import { useAuth } from '../../contexts/AuthContext';
 import BidDeletionWrapper from './BidDeletionWrapper';
 import ReusableBidForm from './ReusableBidForm';
 import { SubcontractorService } from '../../services/subcontractor';
 import { v4 as uuidv4 } from 'uuid';
 import BidPaymentSchedule from '../projects/BidPaymentSchedule';
+import QuickAddSubcontractorDialog from '../dialogs/QuickAddSubcontractorDialog';
+import { submitBid } from '../../utils/bidOperations';
 
 // Status chip colors (Align with Bid['status'] from types/index.ts)
 const STATUS_COLORS: Record<Bid['status'], string> = {
@@ -86,25 +79,6 @@ const PRIORITY_DISPLAY: Record<NonNullable<Bid['priority']>, string> = {
   high: 'High',
   urgent: 'Urgent',
 };
-
-// Type for status mapping for forms/dropdowns if needed
-const STATUS_OPTIONS: { value: Bid['status']; label: string }[] = [
-  { value: 'draft', label: 'Draft' },
-  { value: 'submitted', label: 'Submitted' },
-  { value: 'accepted', label: 'Accepted' },
-  { value: 'rejected', label: 'Rejected' },
-  { value: 'expired', label: 'Expired' },
-  { value: 'withdrawn', label: 'Withdrawn' },
-  { value: 'revision_requested', label: 'Revision Requested' },
-];
-
-// Type for priority mapping for forms/dropdowns if needed
-const PRIORITY_OPTIONS: { value: NonNullable<Bid['priority']>; label: string }[] = [
-  { value: 'low', label: 'Low' },
-  { value: 'medium', label: 'Medium' },
-  { value: 'high', label: 'High' },
-  { value: 'urgent', label: 'Urgent' },
-];
 
 // Version card component for showing bid version history
 interface VersionCardProps {
@@ -185,18 +159,19 @@ const BidDetails: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const { user } = useAuth();
   const navigate = useNavigate();
-  const theme = useTheme();
   const [bid, setBid] = useState<Bid | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
   const [tabValue, setTabValue] = useState<number>(0);
   const [selectedVersionId, setSelectedVersionId] = useState<string | null>(null);
-  const [deleteDialogOpen, setDeleteDialogOpen] = useState<boolean>(false);
   const [isEditing, setIsEditing] = useState<boolean>(false);
+  const [isSavingBid, setIsSavingBid] = useState<boolean>(false);
   const [subcontractors, setSubcontractors] = useState<Subcontractor[]>([]);
   const [loadingSubcontractors, setLoadingSubcontractors] = useState<boolean>(false);
   const [projectPhases, setProjectPhases] = useState<ProjectPhase[]>([]);
   const [loadingProject, setLoadingProject] = useState<boolean>(false);
+  const [showAddSubcontractor, setShowAddSubcontractor] = useState<boolean>(false);
+  const [isAddingSubcontractor, setIsAddingSubcontractor] = useState<boolean>(false);
   
   // Callback for when bid is updated (for BidPaymentSchedule component)
   const handleBidUpdate = (updatedBid: Bid) => {
@@ -281,22 +256,87 @@ const BidDetails: React.FC = () => {
   
   const handleEdit = () => {
     if (!id) return;
+    setError(null);
     setIsEditing(true);
   };
   
   const handleCancelEdit = () => {
+    if (isSavingBid) return;
+    setError(null);
     setIsEditing(false);
   };
   
   const handleAddNewSubcontractor = () => {
-    console.log("Placeholder: Trigger Add New Subcontractor Modal/Flow from BidDetails");
-    setError("Add new subcontractor functionality not yet implemented here.");
+    setShowAddSubcontractor(true);
   };
   
-  const handleSave = async (formData: any) => {
-    console.log("Placeholder: Saving edited bid data...", formData);
-    if (!id) return;
-    setIsEditing(false);
+  const handleSave = async (formData: BidFormData) => {
+    if (!id || !user?.uid || !bid) return;
+
+    setIsSavingBid(true);
+    setError(null);
+    try {
+      const finalProjectId = formData.projectId || bid.projectId;
+      if (!finalProjectId) {
+        throw new Error('Project ID is missing for this bid.');
+      }
+
+      const savedBid = await submitBid(
+        user.uid,
+        {
+          ...formData,
+          projectId: finalProjectId,
+          projectName: formData.projectName || bid.projectName,
+        },
+        id,
+        finalProjectId,
+        formData.projectName || bid.projectName || 'Unknown Project'
+      );
+
+      if (!savedBid) {
+        throw new Error('Failed to save bid.');
+      }
+
+      setBid(savedBid);
+      setSelectedVersionId(savedBid.currentVersionId || null);
+      setIsEditing(false);
+    } catch (err) {
+      console.error('BidDetails: Failed to save bid', err);
+      setError(err instanceof Error ? err.message : 'Failed to save bid.');
+    } finally {
+      setIsSavingBid(false);
+    }
+  };
+
+  const handleQuickAddSubcontractor = async (subcontractorData: {
+    name: string;
+    specialty: string;
+    contact: {
+      phone: string;
+      email: string;
+    };
+  }) => {
+    if (!user?.uid) return;
+
+    setIsAddingSubcontractor(true);
+    setError(null);
+    try {
+      const newSubcontractor = await SubcontractorService.createSubcontractor(user.uid, {
+        name: subcontractorData.name,
+        specialty: subcontractorData.specialty,
+        contact: subcontractorData.contact,
+        rating: 0,
+        totalProjects: 0,
+      });
+
+      setSubcontractors((current) => [...current, newSubcontractor]);
+      setShowAddSubcontractor(false);
+    } catch (err) {
+      console.error('BidDetails: Failed to add subcontractor', err);
+      setError('Failed to add subcontractor.');
+    } finally {
+      setIsAddingSubcontractor(false);
+    }
   };
   
   const handleDuplicate = () => {
@@ -379,7 +419,7 @@ const BidDetails: React.FC = () => {
       scope: bid.scope || '',
       timeline: bid.timeline || 30, // Assuming timeline is stored on bid
       status: convertBidStatus(bid.status),
-      submissionDeadline: bid.submissionDeadline || new Date(),
+      submissionDeadline: bid.submissionDeadline || null,
       paymentTerms: {
         downPaymentPercent: bid.paymentSchedule?.[0]?.percentage || 0,
         isDownPaymentFixed: false,
@@ -422,8 +462,9 @@ const BidDetails: React.FC = () => {
           <Stack direction="row" spacing={1}>
             {isEditing ? (
               <>
-                <Button variant="outlined" onClick={handleCancelEdit}>Cancel</Button>
-                <Button variant="contained" onClick={() => handleSave(bid)}>Save</Button>
+                <Button variant="outlined" onClick={handleCancelEdit} disabled={isSavingBid}>
+                  Cancel
+                </Button>
               </>
             ) : (
               <>
@@ -443,7 +484,11 @@ const BidDetails: React.FC = () => {
                 >
                   Edit
                 </Button>
-                <IconButton onClick={() => setDeleteDialogOpen(true)} color="error"><DeleteIcon /></IconButton>
+                <BidDeletionWrapper
+                  bid={bid}
+                  userId={user?.uid || ''}
+                  onBidDeleted={() => navigate('/bids')}
+                />
                 <Tooltip title="More actions"><IconButton><HistoryIcon /></IconButton></Tooltip>
                 <Tooltip title="Print/Download"><IconButton onClick={handlePrint}><PrintIcon /></IconButton></Tooltip>
               </>
@@ -451,7 +496,32 @@ const BidDetails: React.FC = () => {
           </Stack>
         </Box>
       </Box>
+
+      {error && (
+        <Alert severity="error" sx={{ mb: 3 }}>
+          {error}
+        </Alert>
+      )}
       
+      {isEditing ? (
+        <Paper sx={{ p: { xs: 1.5, md: 2.5 }, mb: 3 }}>
+          <ReusableBidForm
+            initialBidData={getInitialFormData()}
+            onSubmit={handleSave}
+            onClose={handleCancelEdit}
+            subcontractors={subcontractors}
+            onAddSubcontractor={handleAddNewSubcontractor}
+            phases={projectPhases}
+            isDialog={false}
+            editingBidId={bid.id}
+            isSaving={isSavingBid || loadingSubcontractors}
+            projectId={bid.projectId}
+            projectName={bid.projectName}
+            error={error}
+          />
+        </Paper>
+      ) : (
+        <>
       {/* Status and details section */}
       <Paper sx={{ p: 3, mb: 3 }}>
         <Grid container spacing={3}>
@@ -824,44 +894,14 @@ const BidDetails: React.FC = () => {
           </Grid>
         )}
       </Box>
-
-      {/* Conditional Rendering */}
-      {isEditing ? (
-        // ---> RENDER EDIT FORM <----
-        <Paper sx={{ p: { xs: 1.5, md: 2.5 } }}> {/* Match form padding */} 
-          {/* Remove temporary placeholder box */}
-          {/* <Box sx={{my: 2, p:2, border: '1px dashed grey'}}> ReusableBidForm will go here... </Box> */}
-          
-          <ReusableBidForm
-            initialBidData={getInitialFormData()} // <-- Pass mapped data
-            onSubmit={handleSave} // <-- Pass save handler
-            onClose={handleCancelEdit} // <-- Pass cancel handler
-            subcontractors={subcontractors} // <-- Pass fetched subcontractors
-            onAddSubcontractor={handleAddNewSubcontractor} // <-- Pass add handler
-            phases={projectPhases} // <-- Pass fetched phases
-            isDialog={false} // <-- Standalone mode
-            editingBidId={bid.id} // <-- Pass the ID of the bid being edited
-            isSaving={false} // <-- Placeholder: Add isSaving state later
-            projectId={bid.projectId} // Pass projectId for context if needed by form
-            projectName={bid.projectName} // Pass projectName for context
-            error={error} // Pass any relevant error state
-          />
-        </Paper>
-      ) : (
-        // ---> RENDER DETAILS VIEW (Existing code) <----
-        <>
-          {/* ... Existing Summary Section ... */}
-          {/* ... Existing Tabs Section ... */}
-          {/* ... Existing Tab Content ... */}
         </>
       )}
-      {/* End Conditional Rendering */}
 
-      {/* Delete Confirmation Dialog (existing) */}
-      <BidDeletionWrapper
-        bid={bid}
-        userId={user?.uid || ''}
-        onBidDeleted={() => navigate('/bids')}
+      <QuickAddSubcontractorDialog
+        open={showAddSubcontractor}
+        onClose={() => setShowAddSubcontractor(false)}
+        onSubmit={handleQuickAddSubcontractor}
+        isSaving={isAddingSubcontractor}
       />
     </Box>
   );
