@@ -69,3 +69,40 @@ test('project expenses tab renders basic expense UI', async ({ page }) => {
   await expect(page.getByText('Phase Budget vs Actual')).toBeVisible();
   await expect(page.getByRole('button', { name: /Add Expense/i })).toBeVisible();
 });
+
+test('dev auth bypass can create an expense in local dev storage', async ({ page }) => {
+  const description = `Playwright lumber package ${Date.now()}`;
+
+  await page.goto('/expenses');
+  await expect(page.getByRole('heading', { name: 'Expenses & Payments' })).toBeVisible();
+
+  const initialExpenseCount = await page.evaluate(() => {
+    const rawState = window.localStorage.getItem('builderbrain:dev-data:v1');
+    return rawState ? (JSON.parse(rawState).expenses || []).length : 0;
+  });
+
+  await page.getByRole('button', { name: /Add Expense/i }).click();
+  await expect(page.getByRole('heading', { name: 'New Expense', exact: true })).toBeVisible();
+
+  await selectMuiOption(page, 'Project', seededProject.name);
+  await selectMuiOption(page, 'General Category', 'Materials');
+  await page.getByLabel('Description').fill(description);
+  await page.getByLabel('Amount').fill('4321');
+  await page.getByRole('button', { name: 'Save' }).click();
+
+  await expect(page.getByRole('heading', { name: 'New Expense', exact: true })).toBeHidden();
+  await page.waitForFunction(
+    ({ expectedDescription, expectedCount }) => {
+      const rawState = window.localStorage.getItem('builderbrain:dev-data:v1');
+      if (!rawState) return false;
+      const expenses = JSON.parse(rawState).expenses || [];
+      return (
+        expenses.length === expectedCount + 1 &&
+        expenses.some((expense: { description?: string; amount?: number }) =>
+          expense.description === expectedDescription && expense.amount === 4321
+        )
+      );
+    },
+    { expectedDescription: description, expectedCount: initialExpenseCount }
+  );
+});

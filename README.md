@@ -31,7 +31,8 @@ This repository is the frontend application. It uses Firebase Auth, Firestore, a
 - Local development works
 - Firebase-backed production-style auth/data flow
 - Local dev auth bypass is available for UI exploration
-- No public deployment configuration is currently included in this repo
+- Firebase Hosting configuration is included for the built SPA
+- GitHub Actions CI runs unit coverage, Firebase rules, build, and e2e smoke checks
 
 ## Screenshots
 
@@ -63,16 +64,17 @@ npm install
 
 ### 2. Create local environment variables
 
-Copy [.env.example](./.env.example) to `.env` and set your Firebase values:
+Copy [.env.example](./.env.example) to `.env` and set your Firebase values. These `REACT_APP_*` values are compiled into the browser bundle through the Vite config, so do not put secrets in them.
 
 ```env
-REACT_APP_FIREBASE_API_KEY=your-api-key
-REACT_APP_FIREBASE_AUTH_DOMAIN=your-auth-domain
-REACT_APP_FIREBASE_PROJECT_ID=your-project-id
-REACT_APP_FIREBASE_STORAGE_BUCKET=your-storage-bucket
-REACT_APP_FIREBASE_MESSAGING_SENDER_ID=your-messaging-sender-id
-REACT_APP_FIREBASE_APP_ID=your-app-id
+REACT_APP_FIREBASE_API_KEY=AIzaSyA1234567890abcdefghijklmnopqrstuv
+REACT_APP_FIREBASE_AUTH_DOMAIN=builderbrain-local.firebaseapp.com
+REACT_APP_FIREBASE_PROJECT_ID=builderbrain-local
+REACT_APP_FIREBASE_STORAGE_BUCKET=builderbrain-local.appspot.com
+REACT_APP_FIREBASE_MESSAGING_SENDER_ID=000000000000
+REACT_APP_FIREBASE_APP_ID=1:000000000000:web:000000000000000000000000
 REACT_APP_DEV_AUTH_BYPASS=false
+REACT_APP_ENABLE_CLIENT_LOGS=false
 ```
 
 ### 3. Start the app
@@ -81,7 +83,7 @@ REACT_APP_DEV_AUTH_BYPASS=false
 npm start
 ```
 
-The Create React App dev server runs at `http://localhost:3000`.
+The Vite dev server runs at `http://localhost:3000` by default.
 
 ## Local Demo Mode
 
@@ -99,6 +101,18 @@ When bypass mode is enabled:
 
 This mode is intended for development only. Real save/auth behavior still depends on Firebase configuration.
 
+The Firebase SDK still initializes in demo mode, so keep syntactically valid Firebase web config values in `.env`. The dummy values in [.env.example](./.env.example) are non-secret placeholders for local bypass mode only; replace them with real Firebase project values for production-style auth/data runs and hosted builds.
+
+The seeded data is stored under `localStorage["builderbrain:dev-data:v1"]`. Clear that key, or use browser storage reset tools, to force the demo seed data to reload.
+
+## Runtime Prerequisites
+
+- Node.js 20 for CI parity
+- npm, using `npm ci` in clean CI-style installs
+- Java 17 for Firebase emulator-backed rules tests
+- Playwright Chromium browser dependencies for e2e tests
+- Firebase CLI access through the checked-in `firebase-tools` dev dependency
+
 ## Available Scripts
 
 ```bash
@@ -111,13 +125,53 @@ Runs the local development server.
 npm test
 ```
 
-Runs the test runner.
+Runs the interactive Jest test runner.
+
+```bash
+npm run test:coverage
+```
+
+Runs Jest once with coverage enabled. The repository currently enforces modest global coverage thresholds as a ratchet, not as a claim of broad coverage.
+
+```bash
+npm run test:rules
+```
+
+Runs Firestore and Storage rules tests through Firebase emulators. Requires Java 17.
+
+```bash
+npm run test:e2e
+```
+
+Runs Playwright smoke tests against `http://127.0.0.1:3001`. The Playwright config starts the dev server with `REACT_APP_DEV_AUTH_BYPASS=true`, so these tests use local seeded browser storage instead of real Firebase auth.
+
+```bash
+npm run typecheck
+```
+
+Runs TypeScript without emitting files.
 
 ```bash
 npm run build
 ```
 
 Builds the app for production output in `build/`.
+
+## Local Verification
+
+The CI-equivalent local sequence is:
+
+```bash
+npm ci
+npm run test:coverage
+npm run typecheck
+npm run test:rules
+npm run build
+npx playwright install --with-deps chromium
+npm run test:e2e
+```
+
+CI uses Node 20 and Java 17, then runs the same coverage, typecheck, rules, build, and e2e gates. Pull requests run CI; pushes run CI on `simplification` and `codex/**` branches.
 
 ## App Structure
 
@@ -154,14 +208,30 @@ The current app includes routes for:
 
 See [src/App.tsx](./src/App.tsx) for the current route map.
 
-## Firebase Notes
+## Firebase And Deploy Notes
 
 This repo includes:
 
+- [firebase.json](./firebase.json)
+- [.firebaserc](./.firebaserc)
 - [firestore.rules](./firestore.rules)
 - [firestore.indexes.json](./firestore.indexes.json)
+- [storage.rules](./storage.rules)
 
-It does not currently include Firebase Hosting configuration such as `firebase.json` or `.firebaserc`.
+Firebase Hosting is configured in [firebase.json](./firebase.json) to serve the `build/` directory and rewrite all routes to `/index.html` for the React single-page app. The checked-in [.firebaserc](./.firebaserc) default project is `constructionbrain-9ff10`; verify or override the active Firebase project before deploying from a local machine.
+
+Typical deploy flow:
+
+```bash
+npm run build
+npx firebase deploy --only hosting
+```
+
+Rules and indexes are also described in Firebase config, but deploy them deliberately:
+
+```bash
+npx firebase deploy --only firestore:rules,firestore:indexes,storage
+```
 
 ## Refactoring Docs
 
@@ -177,9 +247,9 @@ These documents are engineering notes, not end-user product docs.
 
 ## Gaps To Know Up Front
 
-- The root app documentation was recently updated from the default CRA scaffold, but broader repo docs are still being normalized.
 - Some parts of the codebase are mid-refactor between legacy service usage and the newer `src/api` / hook-based patterns.
-- A public hosted environment is not documented in this repository at this time.
+- Hosted environment URLs and release ownership are not documented in this repository at this time.
+- Coverage thresholds are intentionally low until more critical flows have focused tests.
 
 ## License
 
