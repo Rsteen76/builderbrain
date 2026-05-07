@@ -15,8 +15,6 @@ import {
   useTheme,
   useMediaQuery,
   Avatar,
-  Menu,
-  MenuItem,
   Divider,
   alpha,
   Button,
@@ -30,7 +28,6 @@ import {
   Assignment as AssignmentIcon,
   Payment as PaymentIcon,
   Settings as SettingsIcon,
-  Person as PersonIcon,
   Logout as LogoutIcon,
   Group as GroupIcon,
 } from '@mui/icons-material';
@@ -47,11 +44,6 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
   const [mobileOpen, setMobileOpen] = useState(false);
-  const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
-  const [darkMode, setDarkMode] = useState(() => {
-    const savedMode = localStorage.getItem('darkMode');
-    return savedMode === 'true';
-  });
   const { user, logout } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
@@ -63,21 +55,6 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
 
   const handleDrawerToggle = () => {
     setMobileOpen(!mobileOpen);
-  };
-
-  const handleMenuOpen = (event: React.MouseEvent<HTMLElement>) => {
-    setAnchorEl(event.currentTarget);
-  };
-
-  const handleMenuClose = () => {
-    setAnchorEl(null);
-  };
-
-  const toggleDarkMode = () => {
-    const newMode = !darkMode;
-    setDarkMode(newMode);
-    localStorage.setItem('darkMode', String(newMode));
-    window.location.reload(); // Reload to apply theme changes
   };
 
   const handleSignOut = async () => {
@@ -204,10 +181,7 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
             Construction Manager
           </Typography>
 
-          <SettingsMenu
-            onThemeToggle={toggleDarkMode}
-            isDarkMode={darkMode}
-          />
+          <SettingsMenu />
         </Toolbar>
       </AppBar>
       <Box

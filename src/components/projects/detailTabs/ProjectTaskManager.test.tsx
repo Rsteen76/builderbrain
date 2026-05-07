@@ -108,6 +108,7 @@ describe('ProjectTaskManager', () => {
       logout: jest.fn(),
       signOut: jest.fn(),
       updateUserProfile: jest.fn(),
+      changePassword: jest.fn(),
     } as ReturnType<typeof useAuth>);
     mockedUseProjectDetail.mockReturnValue({
       projectId: 'project-1',

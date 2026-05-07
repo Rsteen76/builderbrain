@@ -15,7 +15,7 @@ Generated: 2026-05-07
   - `audit/docs-dx.md`
 - Phase 3 complete: this summary ranks findings, dependencies, fix waves, and conflicts.
 - Phase 4 partially complete in this branch:
-  - Completed: dependency vulnerabilities, auth startup failure handling, payment save reliability, data reset reliability, partial expense update safety, shared report ID entropy, accepted-bid expense idempotency, storage validation, hosting headers/CSP, payments N+1 query, dashboard summary read model, project-detail data boundary, Vite migration, docs/test gates.
+  - Completed: dependency vulnerabilities, auth startup failure handling, payment save reliability, data reset reliability, partial expense update safety, shared report ID entropy, accepted-bid expense idempotency, storage validation, hosting headers/CSP, payments N+1 query, dashboard summary read model, project-detail data boundary, Settings stub cleanup, Vite migration, docs/test gates.
   - Not fully closed: large structural refactors require separate reviewable follow-up PRs.
 
 ## Ranked Findings

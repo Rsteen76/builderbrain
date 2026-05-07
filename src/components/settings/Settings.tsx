@@ -10,9 +10,10 @@ import {
   Person as PersonIcon,
   Security as SecurityIcon,
   Notifications as NotificationsIcon,
-  Palette as PaletteIcon,
 } from '@mui/icons-material';
 import UserProfile from './UserProfile';
+import SecuritySettings from './SecuritySettings';
+import NotificationSettings from './NotificationSettings';
 
 interface TabPanelProps {
   children?: React.ReactNode;
@@ -64,7 +65,6 @@ const Settings: React.FC = () => {
           <Tab icon={<PersonIcon />} label="User Profile" {...a11yProps(0)} />
           <Tab icon={<SecurityIcon />} label="Security" {...a11yProps(1)} />
           <Tab icon={<NotificationsIcon />} label="Notifications" {...a11yProps(2)} />
-          <Tab icon={<PaletteIcon />} label="Appearance" {...a11yProps(3)} />
         </Tabs>
         
         <TabPanel value={activeTab} index={0}>
@@ -72,40 +72,15 @@ const Settings: React.FC = () => {
         </TabPanel>
         
         <TabPanel value={activeTab} index={1}>
-          <Box sx={{ p: 3 }}>
-            <Typography variant="h6" gutterBottom>
-              Security Settings
-            </Typography>
-            <Typography variant="body1" color="text.secondary">
-              Password change and security features coming soon...
-            </Typography>
-          </Box>
+          <SecuritySettings />
         </TabPanel>
         
         <TabPanel value={activeTab} index={2}>
-          <Box sx={{ p: 3 }}>
-            <Typography variant="h6" gutterBottom>
-              Notification Settings
-            </Typography>
-            <Typography variant="body1" color="text.secondary">
-              Notification preferences coming soon...
-            </Typography>
-          </Box>
-        </TabPanel>
-        
-        <TabPanel value={activeTab} index={3}>
-          <Box sx={{ p: 3 }}>
-            <Typography variant="h6" gutterBottom>
-              Appearance Settings
-            </Typography>
-            <Typography variant="body1" color="text.secondary">
-              Theme and appearance customization coming soon...
-            </Typography>
-          </Box>
+          <NotificationSettings />
         </TabPanel>
       </Paper>
     </Box>
   );
 };
 
-export default Settings; 
+export default Settings;

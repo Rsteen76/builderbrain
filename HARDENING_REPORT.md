@@ -23,6 +23,7 @@ Generated: 2026-05-07
 - Fixed the payment dashboard N+1 transaction query by bulk-loading expense transactions.
 - Added an owner-scoped dashboard summary read model with a bounded cached read, project-derived refresh fallback, and Firestore rules for `dashboard_summaries/{userId}`.
 - Consolidated project-detail loading into a single data service so phases are derived from the project document, bids/expenses are loaded once, and only referenced subcontractors are fetched for the detail context.
+- Replaced Settings stubs with real profile, password, and notification preference surfaces; removed the inactive appearance/dark-mode controls until a real theme system exists.
 - Added a mutation-oriented Playwright smoke test for creating an expense in local dev bypass mode.
 - Fixed the `ExpenseFormModal` render loop exposed by e2e tests.
 - Fixed DOM nesting warnings on the exercised project overview and expense dialog paths.
@@ -53,7 +54,7 @@ Generated: 2026-05-07
   - Passed.
 - `npm run test:coverage -- --coverageReporters=text-summary`
   - Passed: 27 suites, 122 tests.
-  - Coverage: statements 10.50%, branches 8.02%, functions 10.00%, lines 10.87%.
+  - Coverage: statements 10.46%, branches 7.99%, functions 9.96%, lines 10.83%.
 - `npm run build`
   - Passed.
   - Remaining build warning: large Vite chunks, especially the main app chunk and dev demo data.

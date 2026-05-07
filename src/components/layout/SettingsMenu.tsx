@@ -23,10 +23,6 @@ import {
   Delete as DeleteIcon,
   Logout as LogoutIcon,
   Sync as SyncIcon,
-  PersonOutline as ProfileIcon,
-  ColorLens as ThemeIcon,
-  Brightness4 as DarkModeIcon,
-  Brightness7 as LightModeIcon,
   ClearAll as ClearAllIcon,
   BugReport as BugReportIcon,
 } from '@mui/icons-material';
@@ -34,12 +30,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { DataResetService } from '../../services/data-reset';
 import { migrateExpenseBuildingPhaseToPhaseNames } from '../../utils/migrations';
 
-interface SettingsMenuProps {
-  onThemeToggle?: () => void;
-  isDarkMode?: boolean;
-}
-
-const SettingsMenu: React.FC<SettingsMenuProps> = ({ onThemeToggle, isDarkMode }) => {
+const SettingsMenu: React.FC = () => {
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
   const [resetDialogOpen, setResetDialogOpen] = useState(false);
   const [cacheDialogOpen, setCacheDialogOpen] = useState(false);
@@ -148,13 +139,6 @@ const SettingsMenu: React.FC<SettingsMenuProps> = ({ onThemeToggle, isDarkMode }
           }
         }}
       >
-        <MenuItem onClick={onThemeToggle}>
-          <ListItemIcon>
-            {isDarkMode ? <LightModeIcon fontSize="small" /> : <DarkModeIcon fontSize="small" />}
-          </ListItemIcon>
-          <ListItemText primary={isDarkMode ? "Light Mode" : "Dark Mode"} />
-        </MenuItem>
-        
         <MenuItem onClick={() => {
           handleMenuClose();
           setCacheDialogOpen(true);
@@ -289,4 +273,4 @@ const SettingsMenu: React.FC<SettingsMenuProps> = ({ onThemeToggle, isDarkMode }
   );
 };
 
-export default SettingsMenu; 
+export default SettingsMenu;

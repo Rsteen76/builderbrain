@@ -26,6 +26,10 @@ export interface User {
   phone?: string;
   companyName?: string;
   projects?: string[]; // Array of project IDs
+  settings?: {
+    notifications: boolean;
+    emailNotifications: boolean;
+  };
   createdAt: Date;
   updatedAt: Date;
 }
@@ -76,13 +80,14 @@ export class UserService {
     };
 
     // Only include fields that are present in userData
-    if (userData.displayName) updateData.displayName = userData.displayName;
-    if (userData.photoURL) updateData.photoURL = userData.photoURL;
-    if (userData.role) updateData.role = userData.role;
-    if (userData.jobTitle) updateData.jobTitle = userData.jobTitle;
-    if (userData.phone) updateData.phone = userData.phone;
-    if (userData.companyName) updateData.companyName = userData.companyName;
-    if (userData.projects) updateData.projects = userData.projects;
+    if (userData.displayName !== undefined) updateData.displayName = userData.displayName;
+    if (userData.photoURL !== undefined) updateData.photoURL = userData.photoURL;
+    if (userData.role !== undefined) updateData.role = userData.role;
+    if (userData.jobTitle !== undefined) updateData.jobTitle = userData.jobTitle;
+    if (userData.phone !== undefined) updateData.phone = userData.phone;
+    if (userData.companyName !== undefined) updateData.companyName = userData.companyName;
+    if (userData.projects !== undefined) updateData.projects = userData.projects;
+    if (userData.settings !== undefined) updateData.settings = userData.settings;
 
     await updateDoc(userRef, updateData);
   }

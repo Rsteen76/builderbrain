@@ -7,6 +7,9 @@ import {
   onAuthStateChanged,
   GoogleAuthProvider,
   signInWithPopup,
+  EmailAuthProvider,
+  reauthenticateWithCredential,
+  updatePassword,
 } from 'firebase/auth';
 import { auth } from '../config/firebase';
 import {
@@ -33,6 +36,7 @@ interface AuthContextType {
   logout: () => Promise<void>;
   signOut: () => Promise<void>;
   updateUserProfile: (data: Partial<User>) => Promise<void>;
+  changePassword: (currentPassword: string, newPassword: string) => Promise<void>;
 }
 
 export const AuthContext = createContext<AuthContextType>({
@@ -48,6 +52,7 @@ export const AuthContext = createContext<AuthContextType>({
   logout: async () => {},
   signOut: async () => {},
   updateUserProfile: async () => {},
+  changePassword: async () => {},
 });
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -214,6 +219,21 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
+  const changePassword = async (currentPassword: string, newPassword: string) => {
+    try {
+      setError(null);
+      if (isDevAuthBypassEnabled) return;
+      if (!user || !user.email) throw new Error('No email/password user is authenticated');
+
+      const credential = EmailAuthProvider.credential(user.email, currentPassword);
+      await reauthenticateWithCredential(user, credential);
+      await updatePassword(user, newPassword);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to change password');
+      throw err;
+    }
+  };
+
   const value = {
     user,
     userData,
@@ -227,6 +247,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     logout,
     signOut: logout,
     updateUserProfile,
+    changePassword,
   };
 
   return (
