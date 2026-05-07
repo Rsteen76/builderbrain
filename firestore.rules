@@ -23,7 +23,7 @@ service cloud.firestore {
     
     // Helper to check if all required fields are present for a document
     function hasRequiredFields(requiredFields) {
-      return requiredFields.all(field => request.resource.data[field] != null);
+      return request.resource.data.keys().hasAll(requiredFields);
     }
     
     // Users collection
