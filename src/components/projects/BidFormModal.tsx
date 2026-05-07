@@ -189,14 +189,25 @@ const BidFormModal: React.FC<BidFormModalProps> = ({
               attachments: convertAttachments(initialData.attachments),
               paymentTerms: {
                 downPaymentPercent: initialData.paymentSchedule?.[0]?.percentage || 20,
+                isDownPaymentFixed: false,
+                downPaymentAmount: initialData.paymentSchedule?.[0]?.amount || 0,
                 installments: initialData.paymentSchedule?.slice(1).map(payment => ({
                   id: payment.id || uuidv4(),
                   name: payment.name || '',
                   percent: payment.percentage || 0,
+                  isFixedAmount: Boolean(payment.isFixedAmount),
+                  fixedAmount: payment.amount || 0,
                   milestoneDescription: payment.description || '',
                   phaseId: payment.phaseId || '',
                   phaseName: payment.phaseName || ''
-                })) || [{id: uuidv4(), name: 'Final Payment', percent: 80, milestoneDescription: 'Upon completion'}],
+                })) || [{
+                  id: uuidv4(),
+                  name: 'Final Payment',
+                  percent: 80,
+                  isFixedAmount: false,
+                  fixedAmount: 0,
+                  milestoneDescription: 'Upon completion'
+                }],
                 syncInstallmentPhases: true
               }
             } : undefined}

@@ -2,7 +2,7 @@
 import { useState } from 'react';
 import { ExpenseService } from '../services/expense'; // Adjusted path
 import { BidService } from '../services/bid'; // Adjusted path
-import { Expense, Bid, User, BidPaymentStage } from '../types'; // Adjust path
+import { Expense, Bid, BidPaymentStage } from '../types'; // Adjust path
 import { v4 as uuidv4 } from 'uuid';
 import { formatCurrency } from '../utils/formatters'; // Adjust path
 
@@ -10,7 +10,7 @@ export interface UseExpensePaymentReturn {
   isProcessing: boolean;
   error: string | null;
   processExpensePayment: (
-    user: User | null,
+    user: { uid: string } | null,
     expenseToUpdate: Expense,
     actualAmountPaid: number,
     paymentDetails: { method: string; referenceNumber: string; date: string; notes: string }
@@ -23,7 +23,7 @@ const adjustBidPaymentScheduleInternal = async (
     originalExpense: Expense,
     paymentExpenseRecord: Expense,
     amountPaidForThisTransaction: number,
-    bidService: BidService
+    bidService: typeof BidService
 ): Promise<Bid | null> => {
     if (!originalExpense.bidId || !originalExpense.paymentStageId) {
         console.log('[adjustBidPaymentScheduleInternal] Expense not linked to a Bid or Payment Stage. Skipping adjustment.');
@@ -58,7 +58,9 @@ const adjustBidPaymentScheduleInternal = async (
 
     if (stageToUpdate.paidAmount >= stageToUpdate.amount) {
         stageToUpdate.status = 'paid';
-        stageToUpdate.paymentDate = paymentExpenseRecord.date;
+        stageToUpdate.paymentDate = paymentExpenseRecord.date instanceof Date
+            ? paymentExpenseRecord.date
+            : new Date(paymentExpenseRecord.date);
         // Link to the new payment expense if different from original (which it should be for payment records)
         if (paymentExpenseRecord.id !== originalExpense.id) {
              stageToUpdate.expenseId = paymentExpenseRecord.id;
@@ -93,7 +95,7 @@ export const useExpensePayment = (): UseExpensePaymentReturn => {
   // const bidService = new BidService();
 
   const processExpensePayment = async (
-    user: User | null,
+    user: { uid: string } | null,
     expenseToUpdate: Expense,
     actualAmountPaid: number,
     paymentDetails: { method: string; referenceNumber: string; date: string; notes: string }
@@ -127,7 +129,6 @@ export const useExpensePayment = (): UseExpensePaymentReturn => {
         bidId: expenseToUpdate.bidId,
         paymentStageId: expenseToUpdate.paymentStageId,
         originalExpenseId: expenseToUpdate.id,
-        createdBy: user.uid,
       };
 
       // Use static methods from services

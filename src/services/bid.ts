@@ -48,6 +48,7 @@ interface FirestoreBid {
   contractorName?: string;
   bidAmount?: number;
   title?: string;
+  description?: string;
   scope?: string;
   status: 'draft' | 'submitted' | 'accepted' | 'rejected' | 'expired' | 'withdrawn' | 'revision_requested';
   priority?: 'low' | 'medium' | 'high' | 'urgent';

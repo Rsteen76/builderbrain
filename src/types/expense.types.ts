@@ -25,6 +25,7 @@ export interface Expense {
   description: string;
   amount: number;
   amountPaid?: number;
+  amountRemaining?: number;
   date: Date | string;
   receiptUrl?: string;
   vendor?: string | null;

@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Dialog } from '@mui/material';
-import { Bid, ProjectPhase, Subcontractor, Project, BidFormData } from '../../types';
+import { Bid, ProjectPhase, Subcontractor, Project } from '../../types';
+import { BidFormData } from '../../types/form.types';
 import ReusableBidForm from '../bids/ReusableBidForm';
 import { SubcontractorService } from '../../services/subcontractor';
 import { ProjectService } from '../../services/project';

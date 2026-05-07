@@ -29,7 +29,7 @@ export interface BidAttachmentFormData { // Assuming attachments in form are jus
 export interface BidFormData {
   title: string;
   subcontractorId?: string;
-  subcontractorName?: string;
+  subcontractorName: string;
   projectId?: string; // Optional if form can be standalone for a new project
   projectName?: string;
   phaseId?: string;
@@ -39,9 +39,9 @@ export interface BidFormData {
   timeline: number; // Duration in days
   submissionDeadline?: Date | null;
   paymentTerms: BidPaymentTermsFormData;
-  notes?: string;
+  notes: string;
   status: BidStatus; // Or a subset if status is limited on create/edit
-  attachments?: BidAttachmentFormData[] | string[]; // string[] if only URLs are stored pre-upload
-  tags?: string[];
+  attachments: string[];
+  tags: string[];
   // Add any other fields that ReusableBidForm directly manages in its state
 }

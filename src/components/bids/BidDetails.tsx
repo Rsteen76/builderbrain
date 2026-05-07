@@ -36,7 +36,8 @@ import {
   GetApp as DownloadIcon,
   AddCircleOutline as AddVersionIcon,
 } from '@mui/icons-material';
-import { Bid, BidVersion, LineItem, Subcontractor, Phase, Project, BidFormData, ProjectPhase } from '../../types';
+import { Bid, BidVersion, LineItem, Subcontractor, Phase, Project, ProjectPhase } from '../../types';
+import { BidFormData } from '../../types/form.types';
 import { BidService } from '../../services/bid';
 import { ProjectService } from '../../services/project';
 import LineItemsTable from './LineItemsTable';
@@ -381,10 +382,14 @@ const BidDetails: React.FC = () => {
       submissionDeadline: bid.submissionDeadline || new Date(),
       paymentTerms: {
         downPaymentPercent: bid.paymentSchedule?.[0]?.percentage || 0,
+        isDownPaymentFixed: false,
+        downPaymentAmount: bid.paymentSchedule?.[0]?.amount || 0,
         installments: bid.paymentSchedule?.slice(1).map(payment => ({
           id: payment.id || uuidv4(), // Need uuidv4 import if not already there
           name: payment.name || '',
           percent: payment.percentage || 0,
+          isFixedAmount: Boolean(payment.isFixedAmount),
+          fixedAmount: payment.amount || 0,
           milestoneDescription: payment.description || '',
           phaseId: payment.phaseId || '',
           phaseName: payment.phaseName || '',

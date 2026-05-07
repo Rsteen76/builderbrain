@@ -5,6 +5,7 @@ import { Bid, BidPaymentStage, Expense, ExpenseCategory } from '../types';
 import { db } from '../config/firebase';
 import { collection, query, where, getDocs } from 'firebase/firestore';
 import { mapSimpleToDetailedCategory } from '../data/hierarchicalCategories';
+import { BidFormData } from '../types/form.types';
 
 // Extended Expense type that includes bid references
 interface EnhancedExpense extends Expense {
@@ -43,32 +44,7 @@ export const findExistingExpenseForPaymentStage = async (
  */
 export const submitBid = async (
   userId: string,
-  bidData: {
-    title: string;
-    subcontractorName: string;
-    subcontractorId?: string;
-    totalAmount: number;
-    phaseId?: string;
-    phaseName?: string;
-    scope: string;
-    timeline: number;
-    submissionDeadline?: Date;
-    paymentTerms: {
-      downPaymentPercent: number;
-      installments: {
-        id: string;
-        name: string;
-        percent: number;
-        milestoneDescription: string;
-        phaseId?: string;
-        phaseName?: string;
-      }[];
-    };
-    notes: string;
-    status: 'draft' | 'submitted' | 'accepted' | 'rejected' | 'expired' | 'withdrawn' | 'revision_requested';
-    attachments: string[];
-    tags: string[];
-  },
+  bidData: BidFormData,
   editingBidId: string | null,
   projectId: string,
   projectName: string

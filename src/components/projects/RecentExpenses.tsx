@@ -58,7 +58,6 @@ const RecentExpenses: React.FC<RecentExpensesProps> = ({
           {recentExpenses.map((expense) => {
             const phaseName = expense.phaseName || 
                              phases.find(p => p.id === expense.phaseId)?.name || 
-                             expense.buildingPhase || 
                              'Unknown Phase';
                              
             return (
