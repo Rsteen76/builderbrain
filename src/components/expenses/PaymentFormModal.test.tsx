@@ -1,5 +1,5 @@
 import React from 'react';
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import PaymentFormModal from './PaymentFormModal';
 import { Expense } from '../../types';
 
@@ -60,5 +60,47 @@ describe('PaymentFormModal', () => {
     await waitFor(() => expect(onSave).toHaveBeenCalledTimes(1));
     expect(onSave.mock.calls[0][0]).toBe(25);
     expect(onSave.mock.calls[0][1]).toMatchObject({ method: 'check' });
+  });
+
+  test('waits for async save before closing', async () => {
+    let resolveSave: () => void = () => {};
+    const onSave = jest.fn(() => new Promise<void>((resolve) => {
+      resolveSave = resolve;
+    }));
+    const onClose = jest.fn();
+    render(<PaymentFormModal open onClose={onClose} expense={expense} onSave={onSave} />);
+
+    fireEvent.change(screen.getByLabelText('Payment'), { target: { value: '25' } });
+    choosePaymentMethod();
+    fireEvent.click(screen.getByRole('button', { name: /mark as paid/i }));
+
+    await waitFor(() => expect(onSave).toHaveBeenCalledTimes(1));
+    expect(onClose).not.toHaveBeenCalled();
+    expect(screen.getByRole('button', { name: /processing/i })).toBeDisabled();
+
+    await act(async () => {
+      resolveSave();
+    });
+
+    await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1));
+  });
+
+  test('keeps the modal open and shows an error when async save fails', async () => {
+    const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
+    const onSave = jest.fn().mockRejectedValue(new Error('Network down'));
+    const onClose = jest.fn();
+
+    render(<PaymentFormModal open onClose={onClose} expense={expense} onSave={onSave} />);
+
+    fireEvent.change(screen.getByLabelText('Payment'), { target: { value: '25' } });
+    choosePaymentMethod();
+    fireEvent.click(screen.getByRole('button', { name: /mark as paid/i }));
+
+    expect(await screen.findByText(/failed to process payment: network down/i)).toBeVisible();
+    expect(onClose).not.toHaveBeenCalled();
+    expect(screen.getByLabelText('Payment')).toHaveValue(25);
+    expect(screen.getByRole('button', { name: /mark as paid/i })).toBeEnabled();
+
+    consoleErrorSpy.mockRestore();
   });
 });

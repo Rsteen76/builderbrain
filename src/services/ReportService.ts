@@ -61,6 +61,23 @@ const sanitizeReportData = (reportData: StoredReportData): SharedReportData => {
   return sanitizedReportData;
 };
 
+const generateRandomShareId = (): string => {
+  const cryptoApi = globalThis.crypto;
+
+  if (cryptoApi?.getRandomValues) {
+    const bytes = new Uint8Array(16);
+    cryptoApi.getRandomValues(bytes);
+
+    return Array.from(bytes, (byte) => byte.toString(16).padStart(2, '0')).join('');
+  }
+
+  if (cryptoApi?.randomUUID) {
+    return `${cryptoApi.randomUUID()}${cryptoApi.randomUUID()}`.replace(/-/g, '');
+  }
+
+  throw new Error('Web Crypto API is unavailable');
+};
+
 export class ReportService {
   private static collection = collection(db, 'shared_reports');
 
@@ -97,10 +114,7 @@ export class ReportService {
     password?: string
   ): Promise<string> {
     try {
-      // Generate a unique shareId with timestamp and random string
-      const timestamp = new Date().getTime();
-      const randomStr = Math.random().toString(36).substring(2, 8);
-      const shareId = `${projectId.substring(0, 8)}-${timestamp}-${randomStr}`;
+      const shareId = generateRandomShareId();
       
       // Calculate expiration date
       const expirationDate = new Date();

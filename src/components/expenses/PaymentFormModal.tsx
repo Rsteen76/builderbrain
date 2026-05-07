@@ -42,7 +42,7 @@ interface PaymentFormModalProps {
   open: boolean;
   onClose: () => void;
   expense: Expense | null;
-  onSave: (actualAmountPaid: number, paymentDetails: ExpensePaymentDetails) => void;
+  onSave: (actualAmountPaid: number, paymentDetails: ExpensePaymentDetails) => Promise<void> | void;
 }
 
 const PAYMENT_METHODS = [
@@ -67,6 +67,7 @@ const PaymentFormModal: React.FC<PaymentFormModalProps> = ({
   const [paymentDate, setPaymentDate] = useState(new Date().toISOString().split('T')[0]);
   const [notes, setNotes] = useState('');
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [submitError, setSubmitError] = useState<string | null>(null);
   const [actualAmount, setActualAmount] = useState<number | string>('');
   const [bidData, setBidData] = useState<{
     totalAmount: number;
@@ -121,6 +122,7 @@ const PaymentFormModal: React.FC<PaymentFormModalProps> = ({
     setPaymentDate(new Date().toISOString().split('T')[0]);
     setNotes('');
     setErrors({});
+    setSubmitError(null);
     setActualAmount('');
     setBidData(null);
   };
@@ -160,12 +162,13 @@ const PaymentFormModal: React.FC<PaymentFormModalProps> = ({
     return Object.keys(newErrors).length === 0;
   };
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     if (!validateForm()) {
       return;
     }
     
     setLoading(true);
+    setSubmitError(null);
     const finalAmount = Number(actualAmount);
     console.log(`[PaymentFormModal] Processing payment - Amount: ${finalAmount}`);
     
@@ -176,29 +179,30 @@ const PaymentFormModal: React.FC<PaymentFormModalProps> = ({
       date: new Date(paymentDate), // Convert string date to Date object
       notes: notes || undefined // Ensure undefined if empty
     };
-    
-    if (expense?.projectId) {
-      const event = new CustomEvent('expense-status-changed', {
-        detail: {
-          expenseId: expense.id,
-          projectId: expense.projectId,
-          phaseId: expense.phaseId,
-          oldStatus: expense.status,
-          newStatus: 'paid'
-        }
-      });
-      window.dispatchEvent(event);
-    }
-    
-    setTimeout(() => {
-      try {
-        onSave(finalAmount, paymentDetailsObj);
-      } catch (error) {
-        console.error('[PaymentFormModal] Error processing payment:', error);
+
+    try {
+      await onSave(finalAmount, paymentDetailsObj);
+
+      if (expense?.projectId) {
+        const event = new CustomEvent('expense-status-changed', {
+          detail: {
+            expenseId: expense.id,
+            projectId: expense.projectId,
+            phaseId: expense.phaseId,
+            oldStatus: expense.status,
+            newStatus: 'paid'
+          }
+        });
+        window.dispatchEvent(event);
       }
-      setLoading(false);
+
       handleClose();
-    }, 500);
+    } catch (error) {
+      console.error('[PaymentFormModal] Error processing payment:', error);
+      setSubmitError(`Failed to process payment: ${error instanceof Error ? error.message : String(error)}`);
+    } finally {
+      setLoading(false);
+    }
   };
 
   if (!expense) return null;
@@ -353,6 +357,12 @@ const PaymentFormModal: React.FC<PaymentFormModalProps> = ({
             Payment Information
           </Typography>
         </Box>
+
+        {submitError && (
+          <Alert severity="error" sx={{ mb: 2 }}>
+            {submitError}
+          </Alert>
+        )}
         
         <Grid container spacing={2}>
           <Grid item xs={12}>

@@ -44,12 +44,24 @@ export class DataResetService {
       'documents'
     ];
     
-    const deletionPromises = collections.map(collectionName => 
-      this.deleteUserDocumentsInCollection(userId, collectionName)
-    );
-    
     try {
-      await Promise.all(deletionPromises);
+      const deletionResults = await Promise.allSettled(
+        collections.map(collectionName => 
+          this.deleteUserDocumentsInCollection(userId, collectionName)
+        )
+      );
+      const failures = deletionResults
+        .map((result, index) => ({ result, collectionName: collections[index] }))
+        .filter(({ result }) => result.status === 'rejected') as Array<{
+          result: PromiseRejectedResult;
+          collectionName: string;
+        }>;
+
+      if (failures.length > 0) {
+        const failedCollections = failures.map(({ collectionName }) => collectionName).join(', ');
+        throw new Error(`Failed to reset user data for ${failures.length} collection(s): ${failedCollections}`);
+      }
+
       console.log('All user data has been reset');
       
       // Clear any local storage that might be keeping activity data
@@ -99,8 +111,8 @@ export class DataResetService {
       
       console.log(`Deleted ${numDeleted} documents from ${collectionName}`);
     } catch (error) {
-      // If collection doesn't exist, just log and continue
-      console.log(`Error with collection ${collectionName}: ${error}`);
+      console.error(`Error with collection ${collectionName}:`, error);
+      throw error;
     }
   }
   

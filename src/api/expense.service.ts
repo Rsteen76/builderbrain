@@ -1,4 +1,4 @@
-import { Timestamp, DocumentData, where, query, getDocs, orderBy } from 'firebase/firestore';
+import { Timestamp, DocumentData, where, query, getDocs, orderBy, doc, updateDoc } from 'firebase/firestore';
 import { BaseService } from './base.service';
 import { Expense, ApiResponse } from '../types';
 
@@ -87,6 +87,25 @@ export class ExpenseService extends BaseService<Expense> {
         };
       }
     });
+  }
+
+  /**
+   * Update an expense without passing a partial patch through the full-document
+   * converter, which would fill omitted required fields and reset dates.
+   */
+  async update(id: string, data: Partial<Expense>): Promise<ApiResponse<Expense>> {
+    try {
+      const docRef = doc(this.collectionRef, id);
+      const updateData = this.toFirestoreUpdate(data);
+
+      await updateDoc(docRef, updateData);
+
+      return {
+        status: 'success',
+      };
+    } catch (error) {
+      return this.handleError<Expense>(error, 'update');
+    }
   }
 
   /**
@@ -362,5 +381,28 @@ export class ExpenseService extends BaseService<Expense> {
     }
     
     return result;
+  }
+
+  private toFirestoreUpdate(expense: Partial<Expense>): DocumentData {
+    const updateData: DocumentData = {};
+
+    Object.entries(expense).forEach(([key, value]) => {
+      if (key === 'id' || value === undefined) return;
+
+      if (['date', 'createdAt', 'updatedAt', 'dueDate', 'lastPaymentDate'].includes(key)) {
+        updateData[key] = value instanceof Date
+          ? this.dateToTimestamp(value)
+          : typeof value === 'string'
+            ? this.dateToTimestamp(new Date(value))
+            : value;
+        return;
+      }
+
+      updateData[key] = this.deepCleanObject(value);
+    });
+
+    updateData.updatedAt = Timestamp.now();
+
+    return updateData;
   }
 } 
