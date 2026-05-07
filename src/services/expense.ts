@@ -22,6 +22,16 @@ import {
   QueryDocumentSnapshot,
 } from 'firebase/firestore';
 import { Expense, ExpenseStatus } from '../types';
+import { toTimestamp, toDate } from '../utils/firestoreConverter'; // Added converter imports
+import { cleanForFirestore } from '../utils/firestoreUtils';
+
+type FirestoreExpense = Omit<Expense, 'date' | 'createdAt' | 'updatedAt' | 'paymentDetails' | 'lastPaymentDate'> & {
+  date: Timestamp;
+  createdAt: Timestamp;
+  updatedAt: Timestamp;
+  paymentDetails?: Expense['paymentDetails'] | null;
+  lastPaymentDate?: Timestamp | null;
+};
 
 export class ExpenseService {
   private static collection = collection(db, 'expenses');
@@ -41,12 +51,17 @@ export class ExpenseService {
       console.log('Expense data received by service:', JSON.stringify(expenseData));
       console.log('PaymentDetails before processing:', expenseData.paymentDetails);
       
+      const now = new Date();
+      const expenseDate = expenseData.date
+        ? (typeof expenseData.date === 'string' ? new Date(expenseData.date) : toDate(expenseData.date))
+        : now;
       const expense = {
         ...expenseData,
         userId,
         createdBy: userId,
-        createdAt: new Date(),
-        updatedAt: new Date(),
+        createdAt: now, // Use JS Date for now
+        updatedAt: now, // Use JS Date for now
+        date: expenseDate || now, // Ensure date is JS Date
         // Make sure tags exists
         tags: expenseData.tags || [],
         // Ensure bidId and paymentStageId are properly passed through
@@ -60,7 +75,7 @@ export class ExpenseService {
       console.log('PaymentDetails after prep:', expense.paymentDetails);
       
       // Convert dates to Firestore timestamps
-      const firestoreExpense = this.convertToFirestore(expense);
+      const firestoreExpense = this.convertToFirestore(expense); // convertToFirestore will handle date to Timestamp
       
       console.log('Final Firestore expense object (stringified):', JSON.stringify(firestoreExpense));
       console.log('Final paymentDetails (direct):', firestoreExpense.paymentDetails);
@@ -79,7 +94,9 @@ export class ExpenseService {
 
   static async updateExpense(id: string, expenseData: Partial<Omit<Expense, 'id' | 'userId' | 'createdAt' | 'createdBy'>>): Promise<void> {
     const expenseRef = doc(this.collection, id);
-    const { userId, createdAt, ...updatePayload } = expenseData as any;
+    const updatePayload: Partial<Omit<Expense, 'id' | 'userId' | 'createdAt' | 'createdBy'>> = {
+      ...expenseData,
+    };
 
     console.log(`ExpenseService: Updating expense ${id} with data:`, expenseData);
 
@@ -95,20 +112,26 @@ export class ExpenseService {
       return;
     }
 
-    const firestoreUpdateData: any = {
+    const firestoreUpdateData: Record<string, unknown> = {
       updatedAt: Timestamp.fromDate(new Date()),
     };
 
     // Helper function to clean undefined values from an object
-    const cleanObject = (obj: any): any => {
-      if (Array.isArray(obj)) {
-        return obj.map(v => cleanObject(v));
+    // Using unknown for broader input, but internal logic should handle types.
+    const cleanObject = (objValue: unknown): unknown => { // Renamed obj to objValue
+      if (Array.isArray(objValue)) {
+        return objValue.map(v => cleanObject(v));
       }
-      if (obj !== null && typeof obj === 'object') {
-        const cleaned: any = {};
-        for (const key in obj) {
-          if (Object.prototype.hasOwnProperty.call(obj, key)) {
-            const value = cleanObject(obj[key]);
+      if (objValue !== null && typeof objValue === 'object') {
+        // Firestore Timestamps and Dates should not be recursively cleaned
+        if (objValue instanceof Timestamp || objValue instanceof Date) {
+          return objValue;
+        }
+        const cleaned: Record<string, unknown> = {}; // More specific type for cleaned
+        // Iterate over properties of objValue
+        for (const key in (objValue as Record<string, unknown>)) { 
+          if (Object.prototype.hasOwnProperty.call(objValue, key)) {
+            const value = cleanObject((objValue as Record<string, unknown>)[key]);
             if (value !== undefined) {
               cleaned[key] = value;
             }
@@ -116,7 +139,7 @@ export class ExpenseService {
         }
         return cleaned;
       }
-      return obj;
+      return objValue;
     };
 
     // Process each field in the update payload
@@ -131,25 +154,33 @@ export class ExpenseService {
           continue;
         }
 
-        // Handle Date objects
-        if (typedKey === 'date' && value instanceof Date) {
-          firestoreUpdateData.date = Timestamp.fromDate(value);
+        // Handle Date objects specifically for 'date' and 'dueDate'
+        if ((typedKey === 'date' || typedKey === 'dueDate') && value !== null) {
+          const dateValue = typeof value === 'string' ? new Date(value) : toDate(value as Date | Timestamp);
+          firestoreUpdateData[typedKey] = toTimestamp(dateValue); // Convert to JS Date then to Timestamp
         } else if (typeof value === 'object' && value !== null) {
           // Clean nested objects of undefined values
           const cleanedValue = cleanObject(value);
-          if (Object.keys(cleanedValue).length > 0) {
+          // Ensure that already converted Timestamps are not re-processed by cleanObject in a harmful way
+          if (cleanedValue instanceof Timestamp) {
+             firestoreUpdateData[typedKey] = cleanedValue;
+          } else if (Array.isArray(cleanedValue) || (cleanedValue && typeof cleanedValue === 'object' && Object.keys(cleanedValue).length > 0)) {
             firestoreUpdateData[typedKey] = cleanedValue;
+          } else if (value === null) { // Explicitly allow nulls to be set
+            firestoreUpdateData[typedKey] = null;
           }
         } else {
           firestoreUpdateData[typedKey] = value;
         }
       }
     }
+    // Ensure updatedAt is always a Timestamp
+    firestoreUpdateData.updatedAt = Timestamp.fromDate(new Date());
 
     console.log(`ExpenseService: Prepared update payload:`, firestoreUpdateData);
     
     try {
-      await updateDoc(expenseRef, firestoreUpdateData);
+      await updateDoc(expenseRef, firestoreUpdateData as Record<string, any>);
       console.log(`ExpenseService: Successfully updated expense ${id}`);
     } catch (error) {
       console.error(`ExpenseService: Error updating expense ${id}:`, error);
@@ -188,7 +219,7 @@ export class ExpenseService {
       return null;
     }
 
-    return this.convertFirestoreData(data, id);
+    return this.convertFirestoreData(data as FirestoreExpense, id); // Cast data to FirestoreExpense
   }
 
   static async getExpenses(userId: string, filters?: {
@@ -236,13 +267,13 @@ export class ExpenseService {
         }
         
         if (filters.startDate) {
-          const startTimestamp = Timestamp.fromDate(filters.startDate);
-          q = query(q, where('date', '>=', startTimestamp));
+          const startTimestamp = toTimestamp(filters.startDate);
+          if (startTimestamp) q = query(q, where('date', '>=', startTimestamp));
         }
         
         if (filters.endDate) {
-          const endTimestamp = Timestamp.fromDate(filters.endDate);
-          q = query(q, where('date', '<=', endTimestamp));
+          const endTimestamp = toTimestamp(filters.endDate);
+          if (endTimestamp) q = query(q, where('date', '<=', endTimestamp));
         }
         
         if (filters.phaseId) {
@@ -383,7 +414,7 @@ export class ExpenseService {
       throw new Error(`Expense with ID ${id} not found`);
     }
     
-    const expense = this.convertFirestoreData(expenseSnapshot.data(), id);
+    const expense = this.convertFirestoreData(expenseSnapshot.data() as FirestoreExpense, id);
     const amountPaid = (expense.amountPaid || 0) + actualAmountPaidNow;
     const amountRemaining = expense.amount - amountPaid;
     
@@ -397,13 +428,15 @@ export class ExpenseService {
       status = expense.status;
     }
     
-    const paymentDate = paymentDetails.date ? new Date(paymentDetails.date) : new Date();
-    const updateData: any = {
+    const paymentDate = paymentDetails.date
+      ? (typeof paymentDetails.date === 'string' ? new Date(paymentDetails.date) : toDate(paymentDetails.date))
+      : new Date();
+    const updateData: Partial<FirestoreExpense> = { // Type more specifically
       amountPaid,
       amountRemaining,
       status,
-      lastPaymentDate: Timestamp.fromDate(paymentDate),
-      paymentDetails, // Keep this for backward compatibility
+      lastPaymentDate: toTimestamp(paymentDate), 
+      paymentDetails: paymentDetails as Expense['paymentDetails'], // Cast if structure is compatible
       updatedAt: Timestamp.fromDate(new Date())
     };
     
@@ -421,10 +454,12 @@ export class ExpenseService {
       return [];
     }
     
-    const expenseDate = expenseData.date instanceof Date 
-      ? expenseData.date 
-      : new Date(expenseData.date);
+    const expenseDate = typeof expenseData.date === 'string'
+      ? new Date(expenseData.date)
+      : toDate(expenseData.date); // Use toDate
       
+    if (!expenseDate) return []; // Cannot check without a valid date
+
     // Calculate date range for threshold
     const startDate = new Date(expenseDate);
     startDate.setDate(startDate.getDate() - threshold);
@@ -461,8 +496,8 @@ export class ExpenseService {
       this.collection,
       where('userId', '==', userId),
       where('projectId', '==', expenseData.projectId),
-      where('date', '>=', Timestamp.fromDate(startDate)),
-      where('date', '<=', Timestamp.fromDate(endDate))
+      where('date', '>=', toTimestamp(startDate)!), // Non-null assertion as startDate is derived from valid expenseDate
+      where('date', '<=', toTimestamp(endDate)!)   // Non-null assertion
     );
     
     try {
@@ -476,7 +511,7 @@ export class ExpenseService {
       const potentialDuplicates = snapshot.docs
         .map(doc => {
           const data = doc.data();
-          return this.convertFirestoreData(data, doc.id);
+          return this.convertFirestoreData(data as FirestoreExpense, doc.id);
         })
         .filter(expense => {
           // Skip the current expense being edited if it has an ID
@@ -507,13 +542,15 @@ export class ExpenseService {
     }
   }
 
-  private static convertFirestoreData(data: any, id: string): Expense {
+  private static convertFirestoreData(data: FirestoreExpense, id: string): Expense { // Parameter 'data' typed
+    const { lastPaymentDate, ...restData } = data;
     return {
-      ...data,
+      ...restData,
       id,
-      date: data.date.toDate(),
-      createdAt: data.createdAt.toDate(),
-      updatedAt: data.updatedAt.toDate(),
+      date: toDate(data.date) || new Date(), // Use toDate
+      createdAt: toDate(data.createdAt) || new Date(), // Use toDate
+      updatedAt: toDate(data.updatedAt) || new Date(), // Use toDate
+      lastPaymentDate: lastPaymentDate ? toDate(lastPaymentDate) : undefined,
       bidId: data.bidId || undefined,
       paymentStageId: data.paymentStageId || undefined
     };
@@ -522,37 +559,36 @@ export class ExpenseService {
   /**
    * Convert a JavaScript Expense object to a Firestore-friendly format
    */
-  private static convertToFirestore(expense: Partial<Expense>): any {
+  private static convertToFirestore(expense: Partial<Expense>): Partial<FirestoreExpense> { 
     console.log('CONVERT TO FIRESTORE - Initial expense object:', expense);
     console.log('CONVERT TO FIRESTORE - Initial paymentDetails:', expense.paymentDetails);
     
-    // Helper function to recursively clean the object
-    const cleanForFirestore = (data: any): any => {
-      // Handle null, primitive values, and unsupported types
-      if (data === null || data === undefined || typeof data !== 'object') {
-        return data === undefined ? null : data;
+    // Helper function to recursively clean the object and convert dates
+    const cleanAndConvertDatesToTimestamps = (dataValue: unknown): unknown => {
+      if (dataValue === null || dataValue === undefined) {
+        return null; // Convert undefined to null for Firestore
+      }
+      if (typeof dataValue !== 'object') {
+        return dataValue; // Primitives
+      }
+      if (dataValue instanceof Date) {
+        return toTimestamp(dataValue);
+      }
+      if (dataValue instanceof Timestamp) { 
+        return dataValue; // Already a Timestamp
+      }
+      if (Array.isArray(dataValue)) {
+        return dataValue.map(item => cleanAndConvertDatesToTimestamps(item));
       }
       
-      // Handle Date objects (convert to Timestamp)
-      if (data instanceof Date) {
-        return Timestamp.fromDate(data);
+      // Handle general objects
+      const cleanObject: Record<string, unknown> = {};
+      for (const [key, value] of Object.entries(dataValue as Record<string, unknown>)) {
+        const cleanedValue = cleanAndConvertDatesToTimestamps(value);
+        if (cleanedValue !== undefined) { // Firestore cannot store undefined directly
+          cleanObject[key] = cleanedValue === undefined ? null : cleanedValue;
+        }
       }
-      
-      // Handle arrays
-      if (Array.isArray(data)) {
-        return data.map(item => cleanForFirestore(item));
-      }
-      
-      // Handle objects
-      const cleanObject: any = {};
-      
-      for (const [key, value] of Object.entries(data)) {
-        const cleanedValue = cleanForFirestore(value);
-        // Only include the key if the value is not undefined
-        // If value is undefined, replace with null (Firestore accepts null)
-        cleanObject[key] = cleanedValue;
-      }
-      
       return cleanObject;
     };
     
@@ -561,29 +597,27 @@ export class ExpenseService {
     console.log('CONVERT TO FIRESTORE - After cleanForFirestore:', cleanedExpense);
     console.log('CONVERT TO FIRESTORE - paymentDetails after cleaning:', cleanedExpense.paymentDetails);
     
-    // Ensure these specific fields are never undefined
-    const firestoreExpense = {
-      ...cleanedExpense,
-      // Ensure mandatory fields
-      tags: cleanedExpense.tags || [],
-      bidId: cleanedExpense.bidId ?? null,
-      paymentStageId: cleanedExpense.paymentStageId ?? null,
-      paymentDetails: cleanedExpense.paymentDetails ?? null,
-    };
+    // Use the enhanced helper function
+    const cleanedAndConvertedExpense = cleanAndConvertDatesToTimestamps(expense) as Partial<FirestoreExpense>;
+
+    console.log('CONVERT TO FIRESTORE - After cleanAndConvertDatesToTimestamps:', cleanedAndConvertedExpense);
     
-    // Double-check problematic fields before returning
-    if (firestoreExpense.paymentDetails === undefined) {
-      console.error('ERROR: paymentDetails is still undefined after all processing! Setting to null as last resort');
-      firestoreExpense.paymentDetails = null;
-    }
+    // Ensure specific fields that might need default values if null/undefined post-cleaning
+    const firestoreExpense: Partial<FirestoreExpense> = {
+      ...cleanedAndConvertedExpense,
+      tags: cleanedAndConvertedExpense.tags || [], // Ensure tags is an array
+      bidId: cleanedAndConvertedExpense.bidId === undefined ? null : cleanedAndConvertedExpense.bidId,
+      paymentStageId: cleanedAndConvertedExpense.paymentStageId === undefined ? null : cleanedAndConvertedExpense.paymentStageId,
+      paymentDetails: cleanedAndConvertedExpense.paymentDetails === undefined ? null : cleanedAndConvertedExpense.paymentDetails,
+    };
     
     // Log the cleaned object for debugging
     console.log('CONVERT TO FIRESTORE - Final expense object:', firestoreExpense);
     console.log('CONVERT TO FIRESTORE - Final paymentDetails:', firestoreExpense.paymentDetails);
     
     // Explicitly remove fields that are no longer part of the Expense type
-    delete firestoreExpense.amountRemaining;
-    delete firestoreExpense.buildingPhase;
+    delete (firestoreExpense as any).amountRemaining;
+    delete (firestoreExpense as any).buildingPhase;
 
     return firestoreExpense;
   }
@@ -595,9 +629,9 @@ export class ExpenseService {
     const data = doc.data() as any; // Use 'as any' to access potentially removed fields
     
     // Convert Firestore Timestamps to JavaScript Date objects
-    const createdAt = data.createdAt instanceof Timestamp ? data.createdAt.toDate() : data.createdAt;
-    const updatedAt = data.updatedAt instanceof Timestamp ? data.updatedAt.toDate() : data.updatedAt;
-    const date = data.date instanceof Timestamp ? data.date.toDate() : data.date;
+    const createdAt = toDate(data.createdAt); // Use toDate
+    const updatedAt = toDate(data.updatedAt); // Use toDate
+    const date = toDate(data.date); // Use toDate
     
     // Ensure tags is an array
     const tags = data.tags || [];

@@ -2,8 +2,7 @@
 import { useState } from 'react';
 import { ExpenseService } from '../services/expense'; // Adjusted path
 import { BidService } from '../services/bid'; // Adjusted path
-import { Expense, Bid, BidPaymentStage } from '../types'; // Adjust path
-import { v4 as uuidv4 } from 'uuid';
+import { Expense, Bid, BidPaymentStage, PaymentDetails } from '../types'; // Adjust path
 import { formatCurrency } from '../utils/formatters'; // Adjust path
 
 export interface UseExpensePaymentReturn {
@@ -13,7 +12,7 @@ export interface UseExpensePaymentReturn {
     user: { uid: string } | null,
     expenseToUpdate: Expense,
     actualAmountPaid: number,
-    paymentDetails: { method: string; referenceNumber: string; date: string; notes: string }
+    paymentDetails: PaymentDetails
   ) => Promise<{ success: boolean; message: string; updatedExpense?: Expense, updatedBid?: Bid }>;
 }
 
@@ -98,7 +97,7 @@ export const useExpensePayment = (): UseExpensePaymentReturn => {
     user: { uid: string } | null,
     expenseToUpdate: Expense,
     actualAmountPaid: number,
-    paymentDetails: { method: string; referenceNumber: string; date: string; notes: string }
+    paymentDetails: PaymentDetails
   ): Promise<{ success: boolean; message: string; updatedExpense?: Expense, updatedBid?: Bid }> => {
     if (!user || !user.uid) {
       setError('User not authenticated.');
@@ -117,7 +116,7 @@ export const useExpensePayment = (): UseExpensePaymentReturn => {
         category: expenseToUpdate.category,
         description: `Payment for: ${expenseToUpdate.description}`,
         amount: actualAmountPaid,
-        date: new Date(paymentDetails.date),
+        date: paymentDetails.date instanceof Date ? paymentDetails.date : new Date(paymentDetails.date),
         status: 'paid', // This record itself is a paid transaction
         vendor: expenseToUpdate.vendor,
         subcontractorId: expenseToUpdate.subcontractorId,
@@ -141,7 +140,7 @@ export const useExpensePayment = (): UseExpensePaymentReturn => {
         amountPaid: (expenseToUpdate.amountPaid || 0) + actualAmountPaid,
         status: isPartialPaymentOverall ? 'partially_paid' : 'paid',
         notes: `${expenseToUpdate.notes || ''}\n[${new Date().toLocaleString()}] Payment of ${formatCurrency(actualAmountPaid)} recorded. Ref: ${newPaymentExpenseRecord.id}.`,
-        lastPaymentDate: new Date(paymentDetails.date),
+        lastPaymentDate: paymentDetails.date instanceof Date ? paymentDetails.date : new Date(paymentDetails.date),
       };
       if (!isPartialPaymentOverall) {
         updatePayload.paymentDetails = paymentDetails;

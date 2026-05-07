@@ -32,7 +32,8 @@ import {
     BidVersion, 
     LineItem,
     BidPaymentStage,
-    BidPaymentProgress
+    BidPaymentProgress,
+    Expense
 } from '../types';
 
 // Define Firestore-specific Bid type extending the main Bid type
@@ -1439,3 +1440,80 @@ export class BidService {
     }
   }
 }
+
+export const adjustBidPaymentSchedule = async (
+  userId: string,
+  originalExpense: Expense,
+  paymentExpense: Expense,
+  amountPaid: number
+): Promise<void> => {
+  if (!originalExpense.bidId || !originalExpense.paymentStageId) {
+    return;
+  }
+
+  let bid: Bid | null;
+  try {
+    bid = await BidService.getBid(userId, originalExpense.bidId);
+  } catch (error) {
+    throw new Error(`Failed to fetch bid ${originalExpense.bidId}: ${error instanceof Error ? error.message : String(error)}`);
+  }
+
+  if (!bid?.paymentSchedule || !bid.paymentProgress) {
+    return;
+  }
+
+  const stageIndex = bid.paymentSchedule.findIndex((stage) => stage.id === originalExpense.paymentStageId);
+  if (stageIndex === -1) {
+    return;
+  }
+
+  const schedule = bid.paymentSchedule.map((stage) => ({ ...stage }));
+  const stageToUpdate = schedule[stageIndex];
+  const currentPaid = Number(stageToUpdate.paidAmount || 0);
+  const stageAmount = Number(stageToUpdate.amount || 0);
+  const remainingStageAmount = Math.max(stageAmount - currentPaid, 0);
+  const appliedAmount = Math.min(amountPaid, remainingStageAmount);
+
+  stageToUpdate.paidAmount = currentPaid + appliedAmount;
+  stageToUpdate.expenseId = paymentExpense.id;
+  stageToUpdate.paymentDate = new Date();
+
+  if (stageToUpdate.paidAmount >= stageAmount) {
+    stageToUpdate.status = 'paid';
+    stageToUpdate.paidAmount = stageAmount;
+    stageToUpdate.isPaid = true;
+  } else {
+    stageToUpdate.status = 'partially_paid';
+    delete stageToUpdate.isPaid;
+  }
+
+  const paid = schedule.reduce((sum, stage) => {
+    if (stage.status === 'paid') {
+      return sum + Number(stage.amount || 0);
+    }
+    return sum + Number(stage.paidAmount || 0);
+  }, 0);
+
+  const pending = schedule.reduce((sum, stage) => {
+    if (stage.status === 'paid') {
+      return sum;
+    }
+    return sum + Math.max(Number(stage.amount || 0) - Number(stage.paidAmount || 0), 0);
+  }, 0);
+
+  const paymentProgress: BidPaymentProgress = {
+    ...bid.paymentProgress,
+    paid,
+    pending,
+    remaining: Math.max(Number(bid.totalAmount || 0) - paid, 0),
+  };
+
+  try {
+    await BidService.updateBid(bid.id, {
+      paymentSchedule: schedule,
+      paymentProgress,
+    });
+  } catch (error) {
+    throw new Error(`Failed to update bid ${bid.id} after payment adjustment: ${error instanceof Error ? error.message : String(error)}`);
+  }
+};

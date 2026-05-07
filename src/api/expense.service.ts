@@ -92,6 +92,65 @@ export class ExpenseService extends BaseService<Expense> {
       }
     });
   }
+
+  /**
+   * Get expenses for a user with optional filters.
+   */
+  async getExpenses(userId: string, filters?: {
+    status?: Expense['status'] | Expense['status'][];
+    category?: Expense['category'];
+    projectId?: string;
+    phaseId?: string;
+    subcontractorId?: string;
+  }): Promise<ApiResponse<Expense[]>> {
+    try {
+      const constraints = [where('userId', '==', userId)];
+
+      if (filters?.projectId) {
+        constraints.push(where('projectId', '==', filters.projectId));
+      }
+
+      if (filters?.phaseId) {
+        constraints.push(where('phaseId', '==', filters.phaseId));
+      }
+
+      if (filters?.subcontractorId) {
+        constraints.push(where('subcontractorId', '==', filters.subcontractorId));
+      }
+
+      if (filters?.category) {
+        constraints.push(where('category', '==', filters.category));
+      }
+
+      if (filters?.status) {
+        if (Array.isArray(filters.status)) {
+          if (filters.status.length > 0 && filters.status.length <= 10) {
+            constraints.push(where('status', 'in', filters.status));
+          }
+        } else {
+          constraints.push(where('status', '==', filters.status));
+        }
+      }
+
+      const q = query(this.collectionRef, ...constraints, orderBy('date', 'desc'));
+      const querySnapshot = await getDocs(q);
+
+      const expenses: Expense[] = [];
+      querySnapshot.forEach((doc) => {
+        expenses.push(this.converter!.fromFirestore({
+          ...doc.data(),
+          id: doc.id,
+        }));
+      });
+
+      return {
+        data: expenses,
+        status: 'success',
+      };
+    } catch (error) {
+      return this.handleError<Expense[]>(error, 'getExpenses');
+    }
+  }
   
   /**
    * Get expenses for a specific project

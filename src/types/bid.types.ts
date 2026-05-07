@@ -14,14 +14,20 @@ export type BidPriority = 'low' | 'medium' | 'high' | 'urgent';
 export interface BidPaymentStage {
   id: string;
   name?: string;
-  description: string;
+  description?: string; // Made optional
   percentage: number;
   amount: number;
-  dueDate?: Date | string;
-  status?: 'pending' | 'paid' | 'partially_paid' | 'overdue';
+  dueDate?: Date | null; // Changed to Date | null
+  status?: 'pending' | 'paid' | 'partially_paid' | 'overdue' | 'in_progress' | 'requires_approval'; // Added more statuses for flexibility
   paidAmount?: number;
-  paidDate?: Date | string;
+  paidDate?: Date | null; // Changed to Date | null
   expenseId?: string; // Link to the associated expense
+  invoiceId?: string; // Link to an invoice if applicable
+  isPaid?: boolean; // Explicit flag if the stage is considered fully paid
+  createdAt?: Date; // Added for tracking
+  updatedAt?: Date; // Added for tracking
+  /** Specific completion requirements for this payment stage. */
+  completionRequirements?: string; 
 }
 
 export interface BidVersion {
@@ -79,13 +85,13 @@ export interface Bid {
   requiresBond?: boolean;
   isPublic?: boolean;
   isApproved?: boolean;
-  attachments?: BidAttachment[] | string[];
+  attachments?: BidAttachment[]; // Standardized to BidAttachment[]
   paymentSchedule?: BidPaymentStage[];
   paymentProgress?: BidPaymentProgress;
   categoryId?: string;
-  submissionDate?: Date | string;
-  approvalDate?: Date | string;
-  rejectionDate?: Date | string;
+  submissionDate?: Date | null; // Changed to Date | null
+  approvalDate?: Date | null; // Changed to Date | null
+  rejectionDate?: Date | null; // Changed to Date | null
   rejectionReason?: string;
   // TODO: Investigate and remove if confirmed unused (Redundant with scope?)
   // description?: string;

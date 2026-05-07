@@ -5,7 +5,7 @@ export type ExpenseStatus = 'pending' | 'approved' | 'rejected' | 'paid' | 'part
 
 export interface PaymentDetails {
   method: string;
-  date: string;
+  date: Date | string;
   referenceNumber?: string;
   notes?: string;
 }

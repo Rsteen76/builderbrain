@@ -4,43 +4,43 @@ import {
   Typography,
   Button,
   Grid,
-  Card,
-  CardContent,
-  CardActions,
+  // Card, // Removed, was used by old summary cards
+  // CardContent, // Removed
+  // CardActions, // Removed
   Tabs,
   Tab,
-  TextField,
-  InputAdornment,
+  // TextField, // Removed, used in ExpenseControls
+  // InputAdornment, // Removed, used in ExpenseControls
   IconButton,
   Chip,
-  Paper,
+  Paper, // Still used for remaining summary sections
   Divider,
   Stack,
-  CircularProgress,
+  CircularProgress, // Still used for remaining summary sections
   Alert,
   Menu,
   MenuItem,
   Avatar,
   useTheme,
   Snackbar,
-  FormControl,
-  InputLabel,
-  Select,
-  TableContainer,
-  Table,
-  TableHead,
-  TableBody,
+  // FormControl, // Removed, used in ExpenseControls
+  // InputLabel, // Removed, used in ExpenseControls
+  // Select, // Removed, used in ExpenseControls
+  // TableContainer, // Removed, used in ExpenseTable
+  // Table, // Removed, used in ExpenseTable
+  // TableHead, // Removed, used in ExpenseTable
+  // TableBody, // Removed, used in ExpenseTable
   TableRow,
   TableCell,
-  alpha,
-  Tooltip,
-  LinearProgress,
+  alpha, // Used by renderExpenseRow and ::-webkit-scrollbar
+  Tooltip, // Used by renderExpenseRow
+  LinearProgress, // Used in remaining summary section
 } from '@mui/material';
 import MuiAlert, { AlertProps } from '@mui/material/Alert';
 import {
   Add as AddIcon,
-  Search as SearchIcon,
-  FilterList as FilterListIcon,
+  // Search as SearchIcon, // Removed, used in ExpenseControls
+  // FilterList as FilterListIcon, // Removed, used in ExpenseControls
   MoreVert as MoreVertIcon,
   AttachMoney as MoneyIcon,
   AccountBalance as AccountBalanceIcon,
@@ -54,23 +54,25 @@ import {
   Edit as EditIcon,
   Delete as DeleteIcon,
   CheckCircle as CheckCircleIcon,
-  DeleteOutline as DeleteOutlineIcon,
+  // DeleteOutline as DeleteOutlineIcon, // Removed, used in ExpenseControls
   Business as BusinessIcon,
   Engineering as EngineeringIcon,
-  Refresh as RefreshIcon,
   ArrowDropDown as ArrowDropDownIcon,
   ArrowDropUp as ArrowDropUpIcon,
 } from '@mui/icons-material';
-import { ExpenseService } from '../../services/expense';
+import { ExpenseSummaryCards } from "./ExpenseSummaryCards";
+import { ExpenseControls } from "./ExpenseControls";
+import { ExpenseTable } from "./ExpenseTable";
+import { ExpenseService } from '../../services/expense'; // Will be indirectly used via useGetExpenses
 import { ProjectService } from '../../services/project';
-import { Expense, Project, ProjectPhase } from '../../types';
+import { Expense, Project, ProjectPhase, ExpenseCategory, ExpenseStatus } from '../../types';
 import { useAuth } from '../../contexts/AuthContext';
+import { useGetExpenses, UseExpensesFilters } from '../../hooks/use-expenses'; // Import the new hook
 import { formatCurrency, formatDate } from '../../utils/formatters';
 import ExpenseFormModal from './ExpenseFormModal';
 import PaymentFormModal from './PaymentFormModal';
 import { BidService } from '../../services/bid';
 import { BidPaymentStage } from '../../types';
-import { v4 as uuidv4 } from 'uuid';
 import { mapToProjectPhase } from '../../utils/projectUtils'; // Import mapToProjectPhase
 import { useExpensePayment } from '../../hooks/useExpensePayment'; // Import the hook
 
@@ -86,9 +88,9 @@ const CATEGORY_ICONS = {
 const Expenses: React.FC<{ projectId?: string }> = ({ projectId }) => {
   const theme = useTheme();
   const { user } = useAuth();
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [expenses, setExpenses] = useState<Expense[]>([]);
+  // Removed: const [loading, setLoading] = useState(true);
+  // Removed: const [error, setError] = useState<string | null>(null);
+  // Removed: const [expenses, setExpenses] = useState<Expense[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
   const [tabValue, setTabValue] = useState(0);
   const [searchTerm, setSearchTerm] = useState('');
@@ -117,21 +119,51 @@ const Expenses: React.FC<{ projectId?: string }> = ({ projectId }) => {
   
   // NEW: Grouping functionality
   const [groupBy, setGroupBy] = useState<'none' | 'project' | 'category' | 'vendor' | 'subcontractor'>('none');
-
   // Hook for processing payments
   const { isProcessing: isPaymentProcessing, error: paymentError, processExpensePayment } = useExpensePayment();
+
+  // Prepare filters for useGetExpenses hook
+  const expenseHookFilters = React.useMemo(() => {
+    const filters: UseExpensesFilters = {};
+    if (tabValue === 1) filters.status = ['pending', 'approved'] as ExpenseStatus[];
+    else if (tabValue === 2) filters.status = 'paid';
+    if (categoryFilter) filters.category = categoryFilter as ExpenseCategory;
+    if (projectId) filters.projectId = projectId; // If component has projectId prop, it takes precedence
+    else if (projectFilter) filters.projectId = projectFilter;
+    return filters;
+  }, [tabValue, categoryFilter, projectFilter, projectId]);
+
+  const { 
+    data: rawFetchedExpenses, 
+    isLoading: expensesListIsLoading, 
+    isError: expensesListIsError, 
+    error: expensesListError, 
+    refetch: refetchExpenses 
+  } = useGetExpenses(user?.uid || '', expenseHookFilters, !!user?.uid);
+
+  // Process fetched expenses to add project names and handle undefined data
+  const expenses = React.useMemo(() => {
+    if (!rawFetchedExpenses) return [];
+    return rawFetchedExpenses.map(exp => ({
+      ...exp,
+      projectName: projects.find(p => p.id === exp.projectId)?.name || 'Unknown Project',
+    }));
+  }, [rawFetchedExpenses, projects]);
   
   useEffect(() => {
     if (user?.uid) {
       fetchProjects();
-      fetchExpenses();
+      // fetchExpenses(); // Removed, react-query handles this via useGetExpenses based on key changes
     }
-  }, [user, tabValue, submitting, projectId]);
+  // Key dependencies for fetching projects.
+  // useGetExpenses handles its own dependencies via its query key (userId, filters).
+  // `submitting` is removed; refetchExpenses will be called explicitly in mutation onSuccess.
+  }, [user]); 
   
-  // Calculate summary data based on expenses
-  const totalExpenses = expenses.reduce((sum, expense) => sum + expense.amount, 0);
-  const needsPaymentExpenses = expenses.filter(e => e.status !== 'paid').reduce((sum, e) => sum + e.amount, 0);
-  const paidExpenses = expenses.filter(e => e.status === 'paid').reduce((sum, e) => sum + e.amount, 0);
+  // Calculate summary data based on processed expenses
+  const totalExpensesValue = expenses.reduce((sum, expense) => sum + expense.amount, 0);
+  const needsPaymentExpensesValue = expenses.filter(e => e.status !== 'paid').reduce((sum, e) => sum + e.amount, 0);
+  const paidExpensesValue = expenses.filter(e => e.status === 'paid').reduce((sum, e) => sum + e.amount, 0);
   
   // Calculate category breakdown
   const categoryBreakdown = expenses.reduce((acc, expense) => {
@@ -181,36 +213,35 @@ const Expenses: React.FC<{ projectId?: string }> = ({ projectId }) => {
 
   const handleDeleteFromMenu = () => {
     if (selectedExpenseId && user?.uid) {
-      setLoading(true);
-      ExpenseService.deleteExpense(selectedExpenseId)
+      ExpenseService.deleteExpense(selectedExpenseId) // This still uses ExpenseService directly, consider useDeleteExpense hook later
         .then(() => {
-          setExpenses(expenses.filter(exp => exp.id !== selectedExpenseId));
-          // Show success message if needed
+          // setExpenses(expenses.filter(exp => exp.id !== selectedExpenseId)); // Optimistic update, or rely on refetch
+          refetchExpenses(); // Refetch after delete
           setSnackbar({
             open: true,
             message: 'Expense deleted successfully',
             severity: 'success'
           });
         })
-        .catch((err: any) => {
+        .catch((err: unknown) => {
           console.error('Error deleting expense:', err);
-          setError('Failed to delete expense. Please try again.');
+          const errorMessage = err instanceof Error ? err.message : 'An unknown error occurred';
           setSnackbar({
             open: true,
-            message: 'Failed to delete expense',
+            message: 'Failed to delete expense: ' + errorMessage,
             severity: 'error'
           });
         })
         .finally(() => {
-          setLoading(false);
+          // setLoading(false); // Handled by useQuery's isLoading
         });
     }
     handleMenuClose();
   };
   
-  const fetchProjects = async () => {
+  const fetchProjects = async () => { // This remains as projects are fetched separately
     if (!user?.uid) return;
-    
+    // Consider moving project fetching to its own hook if it becomes complex
     try {
       const fetchedProjects = await ProjectService.getProjects(user.uid);
       const validatedProjects = fetchedProjects.map(proj => ({
@@ -222,95 +253,19 @@ const Expenses: React.FC<{ projectId?: string }> = ({ projectId }) => {
       setProjects(validatedProjects);
     } catch (err) {
       console.error('Error fetching projects:', err);
+      // Optionally set a specific project error state if needed
     }
   };
   
-  const fetchExpenses = async () => {
-    if (!user?.uid) return;
-    
-    setLoading(true);
-    setError(null);
-    
-    try {
-      // Build filters based on tab and explicit filters
-      const filters: any = {};
-      
-      // Tab filters - simplified to just paid or needs payment
-      if (tabValue === 1) {
-        // Needs Payment tab shows all non-paid expenses
-        filters.status = ['pending', 'approved']; // Using array to match multiple statuses
-      } else if (tabValue === 2) {
-        // Paid tab
-        filters.status = 'paid';
-      }
-      
-      // Detailed filters (if set)
-      if (categoryFilter) filters.category = categoryFilter;
-      
-      // If we have a projectId prop, use it - this takes precedence over projectFilter
-      if (projectId) {
-        filters.projectId = projectId;
-        console.log(`Expenses: Filtering expenses for project ID: ${projectId}`);
-      } else if (projectFilter) {
-        filters.projectId = projectFilter;
-      }
-      
-      // Fetch projects first - Apply same validation/mapping as fetchProjects
-      let validatedProjects = projects;
-      if (validatedProjects.length === 0) { 
-          const fetched = await ProjectService.getProjects(user.uid);
-          validatedProjects = fetched.map(proj => ({
-              ...proj,
-              phases: (proj.phases || [])
-                        .filter(p => !!p?.id && !!p?.name)
-                        .map(mapToProjectPhase)
-          }));
-          setProjects(validatedProjects); 
-      }
-      
-      const projectMap = validatedProjects.reduce((map, project) => {
-        map[project.id] = project.name;
-        return map;
-      }, {} as Record<string, string>);
-      
-      const fetchedExpenses = await ExpenseService.getExpenses(user.uid, filters);
-      
-      const enhancedExpenses = fetchedExpenses.map(expense => {
-        return {
-          ...expense,
-          projectName: projectMap[expense.projectId] || 'Unknown Project',
-          vendor: expense.vendor || '', 
-        } as Expense;
-      });
-      
-      setExpenses(enhancedExpenses);
-      
-      // Apply filter/map directly before setting state
-      const currentProjectIdForFilter = projectId || projectFilter;
-      if (currentProjectIdForFilter) {
-        const currentProject = validatedProjects.find(p => p.id === currentProjectIdForFilter);
-        const phases: ProjectPhase[] = (currentProject?.phases || [])
-            .filter(p => !!p?.id && !!p?.name)
-            .map(mapToProjectPhase);
-        setSelectedProjectPhases(phases);
-      } else {
-          setSelectedProjectPhases([]);
-      }
-    } catch (err) {
-      console.error('Error fetching expenses:', err);
-      setError('Failed to load expenses. Please try again.');
-    } finally {
-      setLoading(false);
-    }
-  };
+  // Removed fetchExpenses function as its logic is now in useGetExpenses hook
   
   const handleTabChange = (_event: React.SyntheticEvent, newValue: number) => {
-    setTabValue(newValue);
+    setTabValue(newValue); // This will trigger a refetch in useGetExpenses due to query key change
   };
   
   const handleRefresh = () => {
-    fetchProjects();
-    fetchExpenses();
+    fetchProjects(); // Still fetch projects if they can be updated
+    refetchExpenses(); // Refetch expenses using the hook's function
     setSnackbar({
       open: true,
       message: 'Expenses refreshed',
@@ -383,30 +338,31 @@ const Expenses: React.FC<{ projectId?: string }> = ({ projectId }) => {
       JSON.stringify(expenseData.paymentDetails) : 'undefined');
     console.log('Full expense data JSON stringified:', JSON.stringify(expenseData));
     
-    // Fix paymentDetails if it exists but might cause issues
-    if (expenseData.paymentDetails === undefined) {
-      console.log('Setting undefined paymentDetails to null before save');
-      (expenseData as any).paymentDetails = null;
-    }
+    // Ensure paymentDetails is either a valid object or null, not undefined.
+    const processedExpenseData = {
+      ...expenseData,
+      paymentDetails: expenseData.paymentDetails === undefined ? null : expenseData.paymentDetails,
+    };
     
     setSubmitting(true);
     let savedExpense: Expense;
     
     try {
-      if (expenseData.id) {
+      if (processedExpenseData.id) {
         // Update existing expense
-        console.log('Before update - expense data:', expenseData);
-        console.log('Before update - existing expense:', expenses.find(e => e.id === expenseData.id));
+        console.log('Before update - expense data:', processedExpenseData);
+        console.log('Before update - existing expense:', expenses.find(e => e.id === processedExpenseData.id));
         
-        await ExpenseService.updateExpense(expenseData.id, expenseData);
+        await ExpenseService.updateExpense(processedExpenseData.id, processedExpenseData);
         
         // Instead of complex local state updates that can cause inconsistencies,
         // trigger a complete refresh of the expenses data from the server
         // This ensures we always have the latest data directly from the database
-        await fetchExpenses();
+        // await fetchExpenses(); // Replaced by refetchExpenses or query invalidation
+        refetchExpenses();
         
         console.log('Updated expense in the database and refreshed all expense data');
-        savedExpense = { ...expenseData } as Expense;
+        savedExpense = { ...processedExpenseData } as Expense; // Use processedExpenseData
         
         // Show success message
         setSnackbar({
@@ -625,7 +581,7 @@ const Expenses: React.FC<{ projectId?: string }> = ({ projectId }) => {
                   console.log(`[handleSaveExpense][BidAdjust] Bid ${bid.id} update successful.`);
 
                   // Refresh the expenses list to ensure all data is up to date
-                  fetchExpenses();
+                  refetchExpenses();
 
                   // Show success message
                   setSnackbar({
@@ -671,26 +627,15 @@ const Expenses: React.FC<{ projectId?: string }> = ({ projectId }) => {
         
         savedExpense = await ExpenseService.createExpense(user.uid, newExpenseData);
         
-        // Find project name from projects array
-        const projectName = projects.find(p => p.id === savedExpense.projectId)?.name || 'Unknown Project';
-        
-        // Add to local state right away with project name
-        const enhancedExpense = {
-          ...savedExpense,
-          projectName,
-        };
-        
-        console.log('Adding new expense to local state:', enhancedExpense);
-        
         // Check if the expense should be visible in the current tab view
         const shouldShowInCurrentTab = 
           tabValue === 0 || // All expenses tab
           (tabValue === 1 && savedExpense.status !== 'paid') || // Needs payment tab
           (tabValue === 2 && savedExpense.status === 'paid'); // Paid tab
         
-        if (shouldShowInCurrentTab) {
-          setExpenses(prevExpenses => [enhancedExpense, ...prevExpenses]);
-        } else {
+        refetchExpenses();
+
+        if (!shouldShowInCurrentTab) {
           // If the expense doesn't match the current tab filter, show a note to the user
           console.log('New expense added but not visible in current tab view');
           setSnackbar({
@@ -698,8 +643,6 @@ const Expenses: React.FC<{ projectId?: string }> = ({ projectId }) => {
             message: 'Expense created successfully. Switch tabs to view it.',
             severity: 'info'
           });
-          // Still update the expenses array for when the user switches tabs
-          setExpenses(prevExpenses => [enhancedExpense, ...prevExpenses]);
         }
       }
       
@@ -707,30 +650,25 @@ const Expenses: React.FC<{ projectId?: string }> = ({ projectId }) => {
       handleCloseModal();
       
       // Show success message (only if we didn't already show the tab-specific message)
-      if (!(expenseData.id === undefined && tabValue !== 0 && 
-           ((tabValue === 1 && expenseData.status === 'paid') || 
-            (tabValue === 2 && expenseData.status !== 'paid')))) {
+      if (!(processedExpenseData.id === undefined && tabValue !== 0 && 
+           ((tabValue === 1 && processedExpenseData.status === 'paid') || 
+            (tabValue === 2 && processedExpenseData.status !== 'paid')))) {
         setSnackbar({
           open: true,
-          message: `Expense ${expenseData.id ? 'updated' : 'created'} successfully`,
+          message: `Expense ${processedExpenseData.id ? 'updated' : 'created'} successfully`,
           severity: 'success'
         });
       }
-    } catch (err) {
+    } catch (err: unknown) {
       console.error('Error saving expense:', err);
       
-      // Extract more meaningful error messages for Firebase errors
-      let errorMessage = `Failed to ${expenseData.id ? 'update' : 'create'} expense`;
-      
+      let errorMessage = `Failed to ${processedExpenseData.id ? 'update' : 'create'} expense`;
       if (err instanceof Error) {
-        // Add more specific error details if available
-        if (err.message.includes('invalid data')) {
-          errorMessage += ': Invalid data format';
-        } else if (err.message.includes('permission-denied')) {
-          errorMessage += ': Permission denied';
-        } else if (err.message) {
-          errorMessage += `: ${err.message}`;
-        }
+        errorMessage += `: ${err.message}`;
+      } else if (typeof err === 'string') {
+        errorMessage += `: ${err}`;
+      } else {
+        errorMessage += ': An unknown error occurred.';
       }
       
       setSnackbar({
@@ -1080,77 +1018,31 @@ const Expenses: React.FC<{ projectId?: string }> = ({ projectId }) => {
       </Box>
       
       {/* Error message */}
-      {error && (
+      {expensesListIsError && (
         <Alert severity="error" sx={{ mb: 3 }}>
-          {error}
+          {expensesListError instanceof Error ? expensesListError.message : 'An unknown error occurred while fetching expenses.'}
         </Alert>
       )}
       
       {/* Summary cards */}
+      <Box sx={{ mb: 4 }}>
+        <ExpenseSummaryCards
+          expenses={expenses} // Processed expenses
+          loading={expensesListIsLoading} // Use hook's loading state
+          totalExpenses={expenses.length}
+        />
+      </Box>
+      
+      {/* The following Grid is the "Expense Breakdown by Category", "Top Projects by Expense", and "Expense Status Summary" */}
+      {/* This content should remain as it's part of a different display section. */}
       <Grid container spacing={3} sx={{ mb: 4 }}>
-        {/* Primary summary row */}
-        <Grid item xs={12} md={4}>
-          <Paper sx={{ p: 3, bgcolor: 'primary.light', color: 'primary.contrastText', borderRadius: 2 }}>
-            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
-              <Typography variant="h6">Total Expenses</Typography>
-              <MoneyIcon />
-            </Box>
-            {loading ? (
-              <CircularProgress size={24} color="inherit" />
-            ) : (
-              <Typography variant="h4" fontWeight="bold">{formatCurrency(totalExpenses)}</Typography>
-            )}
-            <Typography variant="caption" sx={{ mt: 1, display: 'block' }}>
-              {expenses.length} expense entries
-            </Typography>
-          </Paper>
-        </Grid>
-        
-        <Grid item xs={12} md={4}>
-          <Paper sx={{ p: 3, bgcolor: 'warning.light', color: 'warning.contrastText', borderRadius: 2 }}>
-            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
-              <Typography variant="h6">Needs Payment</Typography>
-              <AccountBalanceIcon />
-            </Box>
-            {loading ? (
-              <CircularProgress size={24} color="inherit" />
-            ) : (
-              <>
-                <Typography variant="h4" fontWeight="bold">{formatCurrency(needsPaymentExpenses)}</Typography>
-                <Typography variant="caption" sx={{ mt: 1, display: 'block' }}>
-                  {expenses.filter(e => e.status !== 'paid').length} unpaid expenses
-                </Typography>
-              </>
-            )}
-          </Paper>
-        </Grid>
-        
-        <Grid item xs={12} md={4}>
-          <Paper sx={{ p: 3, bgcolor: 'success.light', color: 'success.contrastText', borderRadius: 2 }}>
-            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
-              <Typography variant="h6">Paid</Typography>
-              <PaidIcon />
-            </Box>
-            {loading ? (
-              <CircularProgress size={24} color="inherit" />
-            ) : (
-              <>
-                <Typography variant="h4" fontWeight="bold">{formatCurrency(paidExpenses)}</Typography>
-                <Typography variant="caption" sx={{ mt: 1, display: 'block' }}>
-                  {Math.round((paidExpenses / (totalExpenses || 1)) * 100)}% of total budget paid
-                </Typography>
-              </>
-            )}
-          </Paper>
-        </Grid>
-
         {/* Category breakdown row */}
         <Grid item xs={12}>
           <Paper sx={{ p: 3, borderRadius: 2 }}>
             <Typography variant="h6" sx={{ mb: 2 }}>Expense Breakdown by Category</Typography>
             
             <Grid container spacing={2}>
-              {loading ? (
+              {expensesListIsLoading ? ( // Use hook's loading state
                 <Grid item xs={12} sx={{ display: 'flex', justifyContent: 'center', p: 3 }}>
                   <CircularProgress size={30} />
                 </Grid>
@@ -1161,7 +1053,7 @@ const Expenses: React.FC<{ projectId?: string }> = ({ projectId }) => {
               ) : (
                 Object.entries(categoryBreakdown).map(([category, amount]) => {
                   // Calculate percentage of the total
-                  const percentage = totalExpenses > 0 ? (amount / totalExpenses) * 100 : 0;
+                  const percentage = totalExpensesValue > 0 ? (amount / totalExpensesValue) * 100 : 0;
                   const categoryName = category.charAt(0).toUpperCase() + category.slice(1);
                   
                   return (
@@ -1210,7 +1102,7 @@ const Expenses: React.FC<{ projectId?: string }> = ({ projectId }) => {
             <Paper sx={{ p: 3, borderRadius: 2, height: '100%' }}>
               <Typography variant="h6" sx={{ mb: 2 }}>Top Projects by Expense</Typography>
               
-              {loading ? (
+              {expensesListIsLoading ? ( // Use hook's loading state
                 <Box sx={{ display: 'flex', justifyContent: 'center', p: 3 }}>
                   <CircularProgress size={30} />
                 </Box>
@@ -1231,7 +1123,7 @@ const Expenses: React.FC<{ projectId?: string }> = ({ projectId }) => {
                   return (
                     <Box>
                       {topProjects.map(([projectName, amount], index) => {
-                        const percentage = totalExpenses > 0 ? (amount / totalExpenses) * 100 : 0;
+                        const percentage = totalExpensesValue > 0 ? (amount / totalExpensesValue) * 100 : 0;
                         
                         return (
                           <Box key={projectName} sx={{ mb: 2 }}>
@@ -1272,7 +1164,7 @@ const Expenses: React.FC<{ projectId?: string }> = ({ projectId }) => {
           <Paper sx={{ p: 3, borderRadius: 2, height: '100%' }}>
             <Typography variant="h6" sx={{ mb: 2 }}>Expense Status Summary</Typography>
             
-            {loading ? (
+            {expensesListIsLoading ? ( // Use hook's loading state
               <Box sx={{ display: 'flex', justifyContent: 'center', p: 3 }}>
                 <CircularProgress size={30} />
               </Box>
@@ -1439,8 +1331,8 @@ const Expenses: React.FC<{ projectId?: string }> = ({ projectId }) => {
       {/* Tabs, search, and group controls */}
       <Box sx={{ mb: 3, display: 'flex', flexDirection: { xs: 'column', md: 'row' }, gap: 2, alignItems: { xs: 'stretch', md: 'center' } }}>
         <Box sx={{ flexGrow: 1 }}>
-          <Tabs 
-            value={tabValue} 
+          <Tabs
+            value={tabValue}
             onChange={handleTabChange}
             indicatorColor="primary"
             textColor="primary"
@@ -1455,221 +1347,36 @@ const Expenses: React.FC<{ projectId?: string }> = ({ projectId }) => {
           </Tabs>
         </Box>
         
-        <Box sx={{ display: 'flex', gap: 2, flexWrap: { xs: 'wrap', md: 'nowrap' }, width: { xs: '100%', md: 'auto' } }}>
-          <TextField
-            placeholder="Search expenses..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            variant="outlined"
-            size="small"
-            sx={{ flexGrow: 1, minWidth: { xs: '100%', md: '200px' } }}
-            InputProps={{
-              startAdornment: (
-                <InputAdornment position="start">
-                  <SearchIcon color="action" />
-                </InputAdornment>
-              ),
-              endAdornment: searchTerm && (
-                <InputAdornment position="end">
-                  <IconButton size="small" onClick={() => setSearchTerm('')}>
-                    <DeleteOutlineIcon fontSize="small" />
-                  </IconButton>
-                </InputAdornment>
-              ),
-            }}
-          />
-          
-          {/* Only show project filter when not viewing project-specific expenses */}
-          {!projectId && (
-            <FormControl variant="outlined" size="small" sx={{ minWidth: { xs: '100%', md: '200px' } }}>
-              <InputLabel id="project-filter-label">Project</InputLabel>
-              <Select
-                labelId="project-filter-label"
-                value={projectFilter || ''}
-                onChange={(e) => setProjectFilter(e.target.value === '' ? null : e.target.value)}
-                label="Project"
-              >
-                <MenuItem value="">All Projects</MenuItem>
-                {projects.map((project) => (
-                  <MenuItem key={project.id} value={project.id}>
-                    {project.name}
-                  </MenuItem>
-                ))}
-              </Select>
-            </FormControl>
-          )}
-          
-          {/* Category filter */}
-          <FormControl variant="outlined" size="small" sx={{ minWidth: { xs: '100%', md: '150px' } }}>
-            <InputLabel id="category-filter-label">Category</InputLabel>
-            <Select
-              labelId="category-filter-label"
-              value={categoryFilter || ''}
-              onChange={(e) => setCategoryFilter(e.target.value === '' ? null : e.target.value)}
-              label="Category"
-            >
-              <MenuItem value="">All Categories</MenuItem>
-              <MenuItem value="materials">Materials</MenuItem>
-              <MenuItem value="labor">Labor</MenuItem>
-              <MenuItem value="equipment">Equipment</MenuItem>
-              <MenuItem value="permits">Permits</MenuItem>
-              <MenuItem value="other">Other</MenuItem>
-            </Select>
-          </FormControl>
-          
-          <FormControl variant="outlined" size="small" sx={{ minWidth: { xs: '100%', md: '150px' } }}>
-            <InputLabel id="group-by-label">Group By</InputLabel>
-            <Select
-              labelId="group-by-label"
-              value={groupBy}
-              onChange={(e) => setGroupBy(e.target.value as any)}
-              label="Group By"
-              startAdornment={
-                <InputAdornment position="start">
-                  <FilterListIcon fontSize="small" />
-                </InputAdornment>
-              }
-            >
-              <MenuItem value="none">No Grouping</MenuItem>
-              <MenuItem value="project">Project</MenuItem>
-              <MenuItem value="category">Category</MenuItem>
-              <MenuItem value="vendor">Vendor</MenuItem>
-              <MenuItem value="subcontractor">Subcontractor</MenuItem>
-            </Select>
-          </FormControl>
-          
-          <Tooltip title="Refresh expenses">
-            <IconButton onClick={handleRefresh} size="small" sx={{ border: `1px solid ${theme.palette.divider}`, borderRadius: 1 }}>
-              <RefreshIcon fontSize="small" />
-            </IconButton>
-          </Tooltip>
-        </Box>
+        <ExpenseControls
+          theme={theme}
+          searchTerm={searchTerm}
+          onSearchTermChange={setSearchTerm}
+          projectFilter={projectFilter}
+          onProjectFilterChange={setProjectFilter}
+          projects={projects}
+          categoryFilter={categoryFilter}
+          onCategoryFilterChange={setCategoryFilter}
+          groupBy={groupBy}
+          onGroupByChange={setGroupBy}
+          onRefresh={handleRefresh}
+          projectId={projectId} // Pass the projectId prop from Expenses
+        />
       </Box>
       
       {/* Expenses table */}
-      {loading ? (
-        <Box sx={{ display: 'flex', justifyContent: 'center', py: 5 }}>
-          <CircularProgress />
-        </Box>
-      ) : sortedExpenses.length === 0 ? (
-        <Box sx={{ p: 4, textAlign: 'center', mt: 4, bgcolor: 'background.paper', borderRadius: 2 }}>
-          <DescriptionIcon sx={{ fontSize: 60, color: 'text.secondary', mb: 2, opacity: 0.5 }} />
-          <Typography variant="h6" color="text.secondary" gutterBottom>
-            No expenses found
-          </Typography>
-          <Typography variant="body2" color="text.secondary">
-            {searchTerm ? 'Try adjusting your search' : 'Click "Add Expense" to create your first expense'}
-          </Typography>
-        </Box>
-      ) : (
-        <>
-          {Object.entries(groupedExpenses).map(([groupName, groupItems]) => (
-            <Box key={groupName} sx={{ mb: 4 }}>
-              {/* Group header - only shown when grouping is enabled */}
-              {groupBy !== 'none' && (
-                <Box 
-                  sx={{ 
-                    display: 'flex', 
-                    justifyContent: 'space-between', 
-                    alignItems: 'center',
-                    p: 2,
-                    bgcolor: 'background.paper',
-                    borderTopLeftRadius: 8,
-                    borderTopRightRadius: 8,
-                    borderBottom: `1px solid ${theme.palette.divider}`,
-                  }}
-                >
-                  <Typography variant="h6" color="text.primary">
-                    {groupName}
-                  </Typography>
-                  <Typography variant="h6" color="text.secondary">
-                    {formatCurrency(groupTotals[groupName])}
-                  </Typography>
-                </Box>
-              )}
-              
-              {/* Table */}
-              <TableContainer 
-                component={Paper} 
-                sx={{ 
-                  boxShadow: 3,
-                  ...(groupBy !== 'none' && {
-                    borderTopLeftRadius: 0,
-                    borderTopRightRadius: 0,
-                  })
-                }}
-              >
-                <Table aria-label="expenses table">
-                  <TableHead>
-                    <TableRow sx={{ '& th': { fontWeight: 'bold' } }}>
-                      <TableCell>Description</TableCell>
-                      <TableCell 
-                        align="right" 
-                        onClick={() => handleSortClick('amount')}
-                        sx={{ 
-                          cursor: 'pointer', 
-                          '&:hover': { color: theme.palette.primary.main }
-                        }}
-                      >
-                        <Tooltip title={`Sort by amount (${sortField === 'amount' && sortDirection === 'asc' ? 'lowest first' : 'highest first'})`}>
-                          <span>
-                            Amount
-                            {sortField === 'amount' && (
-                              <span style={{ marginLeft: '4px', verticalAlign: 'middle' }}>
-                                {sortDirection === 'asc' ? <ArrowDropUpIcon fontSize="small" /> : <ArrowDropDownIcon fontSize="small" />}
-                              </span>
-                            )}
-                          </span>
-                        </Tooltip>
-                      </TableCell>
-                      <TableCell 
-                        onClick={() => handleSortClick('date')}
-                        sx={{ 
-                          cursor: 'pointer', 
-                          '&:hover': { color: theme.palette.primary.main }
-                        }}
-                      >
-                        Date
-                        {sortField === 'date' && (
-                          <Tooltip title={`Sort by date (${sortDirection === 'asc' ? 'oldest first' : 'newest first'})`}>
-                            <span style={{ marginLeft: '4px', display: 'inline-block', verticalAlign: 'middle' }}>
-                              {sortDirection === 'asc' ? <ArrowDropUpIcon fontSize="small" /> : <ArrowDropDownIcon fontSize="small" />}
-                            </span>
-                          </Tooltip>
-                        )}
-                      </TableCell>
-                      <TableCell>Status</TableCell>
-                      {groupBy !== 'project' && <TableCell>Project</TableCell>}
-                      {groupBy !== 'category' && <TableCell>Category</TableCell>}
-                      {groupBy !== 'vendor' && <TableCell>Vendor</TableCell>}
-                      {groupBy !== 'subcontractor' && <TableCell>Subcontractor</TableCell>}
-                      <TableCell align="center">Actions</TableCell>
-                    </TableRow>
-                  </TableHead>
-                  <TableBody>
-                    {groupItems.map((expense) => renderExpenseRow(expense))}
-                    
-                    {/* Group total row */}
-                    {groupBy !== 'none' && (
-                      <TableRow sx={{ bgcolor: alpha(theme.palette.primary.light, 0.1) }}>
-                        <TableCell component="th" scope="row">
-                          <Typography variant="subtitle2">Group Total</Typography>
-                        </TableCell>
-                        <TableCell align="right">
-                          <Typography fontWeight="bold">
-                            {formatCurrency(groupTotals[groupName])}
-                          </Typography>
-                        </TableCell>
-                        <TableCell colSpan={7} />
-                      </TableRow>
-                    )}
-                  </TableBody>
-                </Table>
-              </TableContainer>
-            </Box>
-          ))}
-        </>
-      )}
+      <ExpenseTable
+        theme={theme}
+        loading={expensesListIsLoading} // Use hook's loading state
+        sortedExpenses={sortedExpenses} // This is derived from processed 'expenses'
+        groupedExpenses={groupedExpenses} // This is derived from processed 'expenses'
+        groupBy={groupBy}
+        groupTotals={groupTotals}
+        renderExpenseRow={renderExpenseRow}
+        handleSortClick={handleSortClick}
+        sortField={sortField}
+        sortDirection={sortDirection}
+        searchTerm={searchTerm}
+      />
 
       {/* Action Menu */}
       <Menu
@@ -1723,7 +1430,7 @@ const Expenses: React.FC<{ projectId?: string }> = ({ projectId }) => {
             );
             setSubmitting(false);
             if (result.success) {
-              fetchExpenses(); // Refresh expenses list
+              refetchExpenses(); // Refresh expenses list
               setSnackbar({ open: true, message: result.message, severity: 'success' });
               if (result.updatedBid) {
                 console.log("Bid was updated as part of payment processing:", result.updatedBid);
