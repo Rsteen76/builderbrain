@@ -42,6 +42,7 @@ import {
 import { formatCurrency, formatDate, safelyParseDate } from '../../../utils/formatters';
 import { useProjectDetail } from '../../../contexts/ProjectDetailContext';
 import { PieChart, Pie, ResponsiveContainer, Cell, Tooltip as RechartsTooltip } from 'recharts';
+import { calculateBudgetData } from '../../../utils/projectMetrics';
 
 const ProjectOverviewTab: React.FC = () => {
   const { 
@@ -58,12 +59,13 @@ const ProjectOverviewTab: React.FC = () => {
   const theme = useTheme();
 
   const budgetData = React.useMemo(() => {
-    if (!phases) return { totalBudget: 0, totalActual: 0, difference: 0, percentUsed: 0 };
-    const totalBudget = phases.reduce((sum, phase) => sum + (phase.budget || 0), 0);
-    const totalActual = phases.reduce((sum, phase) => sum + (phase.actualCost || 0), 0);
-    const difference = totalBudget - totalActual;
-    const percentUsed = totalBudget > 0 ? (totalActual / totalBudget) * 100 : 0;
-    return { totalBudget, totalActual, difference, percentUsed };
+    if (!project || !expenses) return { totalBudget: 0, totalActual: 0, difference: 0, percentUsed: 0 };
+    return calculateBudgetData(project, expenses);
+  }, [project, expenses]);
+
+  const phaseBudgetTotal = React.useMemo(() => {
+    if (!phases) return 0;
+    return phases.reduce((sum, phase) => sum + (phase.budget || 0), 0);
   }, [phases]);
 
   const totalBudget = budgetData.totalBudget;
@@ -399,6 +401,11 @@ const ProjectOverviewTab: React.FC = () => {
                     <Typography variant="h5" sx={{ fontWeight: 700, my: 1 }}>
                       {formatCurrency(totalBudget)}
                     </Typography>
+                    {phaseBudgetTotal > 0 && phaseBudgetTotal !== totalBudget && (
+                      <Typography variant="body2" color="text.secondary">
+                        Phase budget: {formatCurrency(phaseBudgetTotal)}
+                      </Typography>
+                    )}
                     
                     <Divider sx={{ my: 1.5 }} />
                     

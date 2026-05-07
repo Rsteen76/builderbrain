@@ -37,6 +37,7 @@ import {
 import { useNavigate } from 'react-router-dom';
 import { formatCurrency, formatDate } from '../../utils/formatters';
 import ProjectCard from '../projects/ProjectCard';
+import { PROJECT_WIZARD_ROUTE } from '../../constants/projectRoutes';
 
 // Define needed types
 interface DashboardProject {
@@ -212,7 +213,7 @@ const RecentProjects: React.FC<RecentProjectsProps> = ({ projects }) => {
                 variant="contained"
                 color="primary"
                 disableElevation
-                onClick={() => navigate('/projects/new')}
+                onClick={() => navigate(PROJECT_WIZARD_ROUTE)}
               >
                 Create New Project
               </Button>
@@ -244,7 +245,7 @@ const RecentProjects: React.FC<RecentProjectsProps> = ({ projects }) => {
               <Button 
                 variant="outlined"
                 color="primary"
-                onClick={() => navigate('/projects/new')}
+                onClick={() => navigate(PROJECT_WIZARD_ROUTE)}
                 sx={{
                   borderRadius: 6,
                   px: 3,

@@ -108,7 +108,7 @@ const Payments: React.FC = () => {
       <Grid container spacing={3}>
         <Grid item xs={12} md={3}>
           <Paper sx={{ p: 2, bgcolor: 'primary.light', color: 'primary.contrastText' }}>
-            <Typography variant="h6">Total Received</Typography>
+            <Typography variant="h6">Total Paid</Typography>
             <Typography variant="h4">{formatCurrency(dashboard.summary.totalReceived)}</Typography>
           </Paper>
         </Grid>

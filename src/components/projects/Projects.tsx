@@ -64,6 +64,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import PageLayout from '../layout/PageLayout';
 import { formatCurrency, formatDate } from '../../utils/formatters';
 import ProjectCard from './ProjectCard';
+import { PROJECT_WIZARD_ROUTE } from '../../constants/projectRoutes';
 
 // Enhanced utility functions with better typing
 type ProjectStatus = 'planning' | 'active' | 'in_progress' | 'completed' | 'on_hold' | 'cancelled' | 'estimate' | 'draft';
@@ -574,7 +575,8 @@ const Projects: React.FC = () => {
       name: 'Residential Construction',
       icon: <HouseIcon fontSize="small" />,
       description: 'Single-family homes, multi-family units, renovations, and additions.',
-      route: '/projects/new-residential',
+      route: PROJECT_WIZARD_ROUTE,
+      params: { template: 'residential' },
       color: theme.palette.primary.main,
     },
     {
@@ -582,7 +584,7 @@ const Projects: React.FC = () => {
       name: 'Commercial Building',
       icon: <BusinessIcon fontSize="small" />,
       description: 'Office buildings, retail spaces, warehouses, and industrial facilities.',
-      route: '/projects/new-custom',
+      route: PROJECT_WIZARD_ROUTE,
       params: { template: 'commercial' },
       color: theme.palette.secondary.main,
     },
@@ -591,7 +593,7 @@ const Projects: React.FC = () => {
       name: 'Renovation Project',
       icon: <ConstructionIcon fontSize="small" />,
       description: 'Remodeling existing structures, tenant improvements, and historic renovations.',
-      route: '/projects/new-custom',
+      route: PROJECT_WIZARD_ROUTE,
       params: { template: 'renovation' },
       color: '#ff9800', // Orange
     },
@@ -600,7 +602,7 @@ const Projects: React.FC = () => {
       name: 'Kitchen Remodel',
       icon: <HomeIcon fontSize="small" />,
       description: 'Specialized kitchen renovation with industry-standard phases and timelines.',
-      route: '/projects/new-custom',
+      route: PROJECT_WIZARD_ROUTE,
       params: { template: 'kitchen-remodel' },
       color: '#e91e63', // Pink
     },
@@ -609,7 +611,7 @@ const Projects: React.FC = () => {
       name: 'Landscaping Project',
       icon: <LandscapeIcon fontSize="small" />,
       description: 'Outdoor spaces, hardscaping, softscaping, and landscape construction.',
-      route: '/projects/new-custom',
+      route: PROJECT_WIZARD_ROUTE,
       params: { template: 'landscaping' },
       color: '#4caf50', // Green
     },
@@ -618,7 +620,8 @@ const Projects: React.FC = () => {
       name: 'Custom Project',
       icon: <AddCircleOutlineIcon fontSize="small" />,
       description: 'Create your own project structure with custom phases tailored to your specific needs.',
-      route: '/projects/new-custom',
+      route: PROJECT_WIZARD_ROUTE,
+      params: { template: 'custom' },
       color: '#9c27b0', // Purple
     },
   ];

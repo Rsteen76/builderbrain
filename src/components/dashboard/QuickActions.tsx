@@ -36,6 +36,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { ProjectService } from '../../services/project';
 import { ExpenseService } from '../../services/expense';
 import ExpenseFormModal from '../expenses/ExpenseFormModal';
+import { PROJECT_WIZARD_ROUTE } from '../../constants/projectRoutes';
 
 interface ActionCardProps {
   title: string;
@@ -249,7 +250,7 @@ const QuickActions: React.FC<QuickActionsProps> = ({ onNewProjectClick }) => {
       description: 'Start planning a new construction project',
       icon: <AddIcon sx={{ fontSize: 24 }} />,
       primaryIcon: <ProjectIcon sx={{ fontSize: 24 }} />,
-      path: '/projects/new',
+      path: PROJECT_WIZARD_ROUTE,
       color: theme.palette.primary.main,
       delay: 0,
       // Wrap onNewProjectClick to match the optional event signature

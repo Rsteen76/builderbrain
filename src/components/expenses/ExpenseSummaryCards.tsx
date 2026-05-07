@@ -10,34 +10,53 @@ interface ExpenseSummaryCardsProps {
 
 const money = (value: number) => `$${value.toFixed(2)}`;
 
+const getPaidAmount = (expense: Expense) => {
+  if (typeof expense.amountPaid === 'number') {
+    return Math.min(Math.max(expense.amountPaid, 0), expense.amount);
+  }
+
+  return expense.status === 'paid' ? expense.amount : 0;
+};
+
 export function ExpenseSummaryCards({
   expenses,
   loading,
   totalExpenses,
 }: ExpenseSummaryCardsProps) {
   const totalAmount = expenses.reduce((acc, expense) => acc + expense.amount, 0);
+  const paidAmount = expenses.reduce((acc, expense) => acc + getPaidAmount(expense), 0);
+  const approvedUnpaidAmount = expenses.reduce((acc, expense) => {
+    if (!['approved', 'partially_paid'].includes(expense.status)) {
+      return acc;
+    }
+
+    return acc + Math.max(expense.amount - getPaidAmount(expense), 0);
+  }, 0);
+  const pendingAmount = expenses
+    .filter((expense) => expense.status === 'pending')
+    .reduce((acc, expense) => acc + expense.amount, 0);
   const averageAmount = totalExpenses > 0 ? totalAmount / totalExpenses : 0;
 
   const cards = [
     {
-      title: 'Total Expenses',
+      title: 'Total Actual Cost',
       value: money(totalAmount),
-      description: 'Total amount of all expenses',
+      description: 'Recorded job cost across transactions',
     },
     {
-      title: 'Number of Expenses',
+      title: 'Paid',
+      value: money(paidAmount),
+      description: 'Vendor and subcontractor costs paid',
+    },
+    {
+      title: 'Approved Unpaid',
+      value: money(approvedUnpaidAmount),
+      description: `Pending approval: ${money(pendingAmount)}`,
+    },
+    {
+      title: 'Transactions',
       value: String(totalExpenses),
-      description: 'Total number of expenses recorded',
-    },
-    {
-      title: 'Average Expense',
-      value: money(averageAmount),
-      description: 'Average amount spent per expense',
-    },
-    {
-      title: 'Placeholder Card',
-      value: 'N/A',
-      description: 'This is a placeholder card',
+      description: `Average transaction: ${money(averageAmount)}`,
     },
   ];
 

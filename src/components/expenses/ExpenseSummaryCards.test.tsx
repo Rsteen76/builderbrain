@@ -29,7 +29,11 @@ const makeExpense = (
 const mockExpenses: Expense[] = [
   makeExpense('1', 100.00, 'materials', 'Expense 1', 'p1', 'pending'),
   makeExpense('2', 200.50, 'labor', 'Expense 2', 'p1', 'paid'),
-  makeExpense('3', 50.25, 'materials', 'Expense 3', 'p2', 'pending'),
+  {
+    ...makeExpense('3', 50.25, 'materials', 'Expense 3', 'p2', 'partially_paid'),
+    amountPaid: 20,
+  },
+  makeExpense('4', 300, 'subcontractor', 'Expense 4', 'p2', 'approved'),
 ];
 
 const emptyExpenses: Expense[] = [];
@@ -38,69 +42,67 @@ describe('ExpenseSummaryCards', () => {
   test('renders correctly with no expenses and not loading', () => {
     render(<ExpenseSummaryCards expenses={emptyExpenses} loading={false} totalExpenses={0} />);
 
-    // Check Total Expenses card
-    const totalExpensesCard = screen.getByText('Total Expenses').closest('div[role="article"]') as HTMLElement | null; // Assuming Card renders as article or similar landmark
+    const totalExpensesCard = screen.getByText('Total Actual Cost').closest('div[role="article"]') as HTMLElement | null;
     expect(totalExpensesCard).toBeInTheDocument();
-    if (totalExpensesCard) { // TypeScript type guard
+    if (totalExpensesCard) {
       expect(within(totalExpensesCard).getByText('$0.00')).toBeInTheDocument();
-      expect(within(totalExpensesCard).getByText('Total amount of all expenses')).toBeInTheDocument();
+      expect(within(totalExpensesCard).getByText('Recorded job cost across transactions')).toBeInTheDocument();
     }
     
-    // Check Number of Expenses card
-    const numExpensesCard = screen.getByText('Number of Expenses').closest('div[role="article"]') as HTMLElement | null;
-    expect(numExpensesCard).toBeInTheDocument();
-    if (numExpensesCard) {
-      expect(within(numExpensesCard).getByText('0')).toBeInTheDocument();
-      expect(within(numExpensesCard).getByText('Total number of expenses recorded')).toBeInTheDocument();
+    const paidCard = screen.getByText('Paid').closest('div[role="article"]') as HTMLElement | null;
+    expect(paidCard).toBeInTheDocument();
+    if (paidCard) {
+      expect(within(paidCard).getByText('$0.00')).toBeInTheDocument();
+      expect(within(paidCard).getByText('Vendor and subcontractor costs paid')).toBeInTheDocument();
     }
 
-    // Check Average Expense card
-    const avgExpensesCard = screen.getByText('Average Expense').closest('div[role="article"]') as HTMLElement | null;
-    expect(avgExpensesCard).toBeInTheDocument();
-    if (avgExpensesCard) {
-      expect(within(avgExpensesCard).getByText('$0.00')).toBeInTheDocument();
-      expect(within(avgExpensesCard).getByText('Average amount spent per expense')).toBeInTheDocument();
+    const approvedUnpaidCard = screen.getByText('Approved Unpaid').closest('div[role="article"]') as HTMLElement | null;
+    expect(approvedUnpaidCard).toBeInTheDocument();
+    if (approvedUnpaidCard) {
+      expect(within(approvedUnpaidCard).getByText('$0.00')).toBeInTheDocument();
+      expect(within(approvedUnpaidCard).getByText('Pending approval: $0.00')).toBeInTheDocument();
     }
     
-    // Check Placeholder Card
-    const placeholderCard = screen.getByText('Placeholder Card').closest('div[role="article"]') as HTMLElement | null;
-    expect(placeholderCard).toBeInTheDocument();
-    if (placeholderCard) {
-        expect(within(placeholderCard).getByText('N/A')).toBeInTheDocument();
+    const transactionsCard = screen.getByText('Transactions').closest('div[role="article"]') as HTMLElement | null;
+    expect(transactionsCard).toBeInTheDocument();
+    if (transactionsCard) {
+      expect(within(transactionsCard).getByText('0')).toBeInTheDocument();
+      expect(within(transactionsCard).getByText('Average transaction: $0.00')).toBeInTheDocument();
     }
   });
 
   test('renders correctly with expenses and not loading', () => {
     const totalAmount = mockExpenses.reduce((acc, exp) => acc + exp.amount, 0);
-    const averageAmount = mockExpenses.length > 0 ? totalAmount / mockExpenses.length : 0;
+    const paidAmount = 200.50 + 20;
+    const approvedUnpaidAmount = 30.25 + 300;
+    const pendingAmount = 100;
     
     render(<ExpenseSummaryCards expenses={mockExpenses} loading={false} totalExpenses={mockExpenses.length} />);
 
-    // Total Expenses
-    const totalExpensesCard = screen.getByText('Total Expenses').closest('div[role="article"]') as HTMLElement | null;
+    const totalExpensesCard = screen.getByText('Total Actual Cost').closest('div[role="article"]') as HTMLElement | null;
     expect(totalExpensesCard).toBeInTheDocument();
     if (totalExpensesCard) {
         expect(within(totalExpensesCard).getByText(`$${totalAmount.toFixed(2)}`)).toBeInTheDocument();
     }
 
-    // Number of Expenses
-    const numExpensesCard = screen.getByText('Number of Expenses').closest('div[role="article"]') as HTMLElement | null;
-    expect(numExpensesCard).toBeInTheDocument();
-    if (numExpensesCard) {
-        expect(within(numExpensesCard).getByText(mockExpenses.length.toString())).toBeInTheDocument();
+    const paidCard = screen.getByText('Paid').closest('div[role="article"]') as HTMLElement | null;
+    expect(paidCard).toBeInTheDocument();
+    if (paidCard) {
+        expect(within(paidCard).getByText(`$${paidAmount.toFixed(2)}`)).toBeInTheDocument();
     }
-    
-    // Average Expense
-    // Note: The component calculates average based on `totalExpenses` prop for count, not `expenses.length` directly for averaging.
-    // The `totalExpenses` prop in the component is used for the "Number of Expenses" card display.
-    // The average calculation inside the component is: totalAmount / totalExpenses (prop)
-    // For this test, expenses.length IS the totalExpenses prop.
-    const componentCalculatedAverage = mockExpenses.length > 0 ? totalAmount / mockExpenses.length : 0;
 
-    const avgExpensesCard = screen.getByText('Average Expense').closest('div[role="article"]') as HTMLElement | null;
-    expect(avgExpensesCard).toBeInTheDocument();
-    if (avgExpensesCard) {
-        expect(within(avgExpensesCard).getByText(`$${componentCalculatedAverage.toFixed(2)}`)).toBeInTheDocument();
+    const approvedUnpaidCard = screen.getByText('Approved Unpaid').closest('div[role="article"]') as HTMLElement | null;
+    expect(approvedUnpaidCard).toBeInTheDocument();
+    if (approvedUnpaidCard) {
+        expect(within(approvedUnpaidCard).getByText(`$${approvedUnpaidAmount.toFixed(2)}`)).toBeInTheDocument();
+        expect(within(approvedUnpaidCard).getByText(`Pending approval: $${pendingAmount.toFixed(2)}`)).toBeInTheDocument();
+    }
+
+    const transactionsCard = screen.getByText('Transactions').closest('div[role="article"]') as HTMLElement | null;
+    expect(transactionsCard).toBeInTheDocument();
+    if (transactionsCard) {
+        expect(within(transactionsCard).getByText(mockExpenses.length.toString())).toBeInTheDocument();
+        expect(within(transactionsCard).getByText(`Average transaction: $${(totalAmount / mockExpenses.length).toFixed(2)}`)).toBeInTheDocument();
     }
   });
 
@@ -112,8 +114,7 @@ describe('ExpenseSummaryCards', () => {
     // A common way is to check if any element with a class typically used for skeletons exists.
     // Or, if the Skeleton component wraps content, check that the content is NOT visible.
     
-    // Check Total Expenses card for skeleton
-    const totalExpensesCard = screen.getByText('Total Expenses').closest('div[role="article"]') as HTMLElement | null;
+    const totalExpensesCard = screen.getByText('Total Actual Cost').closest('div[role="article"]') as HTMLElement | null;
     if (totalExpensesCard) {
       expect(within(totalExpensesCard).queryByText('$0.00')).not.toBeInTheDocument(); // Value should be hidden
       // Check for a child that might be a skeleton (this is brittle, depends on Skeleton's DOM)
@@ -121,22 +122,19 @@ describe('ExpenseSummaryCards', () => {
       // For now, we assume if the value isn't there, the skeleton is.
     }
 
-    // Check Number of Expenses card for skeleton
-    const numExpensesCard = screen.getByText('Number of Expenses').closest('div[role="article"]') as HTMLElement | null;
-    if (numExpensesCard) {
-      expect(within(numExpensesCard).queryByText('0')).not.toBeInTheDocument();
+    const paidCard = screen.getByText('Paid').closest('div[role="article"]') as HTMLElement | null;
+    if (paidCard) {
+      expect(within(paidCard).queryByText('$0.00')).not.toBeInTheDocument();
     }
 
-    // Check Average Expense card for skeleton
-    const avgExpensesCard = screen.getByText('Average Expense').closest('div[role="article"]') as HTMLElement | null;
-    if (avgExpensesCard) {
-      expect(within(avgExpensesCard).queryByText('$0.00')).not.toBeInTheDocument();
+    const approvedUnpaidCard = screen.getByText('Approved Unpaid').closest('div[role="article"]') as HTMLElement | null;
+    if (approvedUnpaidCard) {
+      expect(within(approvedUnpaidCard).queryByText('$0.00')).not.toBeInTheDocument();
     }
     
-    // Check Placeholder Card for skeleton
-    const placeholderCard = screen.getByText('Placeholder Card').closest('div[role="article"]') as HTMLElement | null;
-    if (placeholderCard) {
-        expect(within(placeholderCard).queryByText('N/A')).not.toBeInTheDocument();
+    const transactionsCard = screen.getByText('Transactions').closest('div[role="article"]') as HTMLElement | null;
+    if (transactionsCard) {
+        expect(within(transactionsCard).queryByText('0')).not.toBeInTheDocument();
     }
 
     // A more robust way to check for skeletons if they have a consistent structure or test-id:
@@ -145,13 +143,10 @@ describe('ExpenseSummaryCards', () => {
     // This test is a bit weak due to lack of specific selectors for Skeletons from shadcn/ui by default.
   });
 
-  test('renders placeholder card correctly', () => {
+  test('does not render placeholder content', () => {
     render(<ExpenseSummaryCards expenses={emptyExpenses} loading={false} totalExpenses={0} />);
-    const placeholderCard = screen.getByText('Placeholder Card').closest('div[role="article"]') as HTMLElement | null;
-    expect(placeholderCard).toBeInTheDocument();
-    if (placeholderCard) {
-      expect(within(placeholderCard).getByText('N/A')).toBeInTheDocument();
-      expect(within(placeholderCard).getByText('This is a placeholder card')).toBeInTheDocument();
-    }
+    expect(screen.queryByText('Placeholder Card')).not.toBeInTheDocument();
+    expect(screen.queryByText('N/A')).not.toBeInTheDocument();
+    expect(screen.queryByText('This is a placeholder card')).not.toBeInTheDocument();
   });
 });

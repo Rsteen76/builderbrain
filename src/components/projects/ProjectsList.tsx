@@ -31,6 +31,7 @@ import {
   LocationOn as LocationIcon,
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
+import { PROJECT_WIZARD_ROUTE } from '../../constants/projectRoutes';
 
 // Types
 interface Project {
@@ -91,7 +92,7 @@ const ProjectsList: React.FC = () => {
 
   // Project actions
   const handleCreateProject = () => {
-    navigate('/projects/new');
+    navigate(PROJECT_WIZARD_ROUTE);
     handleMenuClose();
   };
 
@@ -219,7 +220,7 @@ const ProjectsList: React.FC = () => {
             <Button
               variant="outlined"
               color="primary"
-              onClick={() => navigate('/projects/new-residential')}
+              onClick={() => navigate(PROJECT_WIZARD_ROUTE, { state: { template: 'residential' } })}
               sx={{ 
                 height: 40, 
                 minWidth: { xs: '100%', sm: 'auto' },

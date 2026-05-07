@@ -56,9 +56,9 @@ export const ProjectActionsMenu: React.FC<ProjectActionsMenuProps> = ({
         }}
       >
         <MenuItem onClick={handleEditClick}>Edit Project</MenuItem>
-        <MenuItem onClick={handleArchiveClick}>Archive Project</MenuItem>
+        <MenuItem onClick={handleArchiveClick}>Move to On Hold</MenuItem>
         {/* Add other menu items here */}
       </Menu>
     </div>
   );
-}; 
+};

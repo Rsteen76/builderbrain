@@ -1,6 +1,6 @@
 // frontend/src/pages/ProjectDetailPage.tsx
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { useParams } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 import {
   Container, Typography, CircularProgress, Alert, Tab, Tabs, Box,
   Button, /* Menu, MenuItem, */ Snackbar, /* IconButton, */ LinearProgress // Removed Menu, MenuItem, IconButton
@@ -24,7 +24,6 @@ import BidFormDialog from '../components/dialogs/BidFormDialog';
 import QuickAddSubcontractorDialog from '../components/dialogs/QuickAddSubcontractorDialog';
 
 // Hooks & Services
-import { useAuth } from '../hooks/useAuth';
 // Removed direct service imports, now handled by operation hooks
 // import { BidService } from '../services/bid';
 // import { ExpenseService } from '../services/expense';
@@ -71,9 +70,12 @@ const ProjectDetailContent: React.FC = () => {
     deleteExpense,
   } = useProjectDetail();
   
-  const { user } = useAuth();
+  const navigate = useNavigate();
   const theme = useTheme();
   const [tabValue, setTabValue] = useState(0);
+  const { updateProjectDetails } = useProjectOperations({
+    onProjectUpdate: () => refreshAllProjectData(),
+  });
 
   // Keep Quick Add Subcontractor Dialog hook local
   const { setSubcontractors: setContextSubcontractors } = useProjectDetail();
@@ -166,6 +168,19 @@ const ProjectDetailContent: React.FC = () => {
     }
   }, [bids, requestDeleteBid, showNotification]);
 
+  const handleEditProject = useCallback((id: string) => {
+    navigate(`/projects/${id}/edit`);
+  }, [navigate]);
+
+  const handleArchiveProject = useCallback(async (id: string) => {
+    if (!window.confirm('Move this project to On Hold? It will stay available in your project list.')) {
+      return;
+    }
+
+    await updateProjectDetails(id, { status: 'on_hold' });
+    showNotification('Project moved to On Hold.', 'success');
+  }, [showNotification, updateProjectDetails]);
+
   // --- Rendering ---
   if (loading && !project) return <CircularProgress sx={{ display: 'block', margin: 'auto', mt: 4 }} />;
   if (error && !project) return <Container><Alert severity="error">Error loading project data: {error}</Alert></Container>;
@@ -173,7 +188,7 @@ const ProjectDetailContent: React.FC = () => {
 
   return (
     <Box sx={{ mt: 4, mb: 4 }}> 
-      <ProjectDetailHeader project={project} onEdit={() => {}} onArchive={() => {}} />
+      <ProjectDetailHeader project={project} onEdit={handleEditProject} onArchive={handleArchiveProject} />
       <NotificationComponent /> 
         <ProjectMetricCards 
           project={project}

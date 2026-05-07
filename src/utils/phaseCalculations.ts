@@ -9,7 +9,7 @@ import { ProjectPhase, Bid, Expense } from '../types'; // Adjust path if needed
 
 /**
  * Calculates the total proposed costs (sum of accepted bids) for each phase.
- * 
+ *
  * @param phases An array of project phase objects.
  * @param bids An array of bid objects for the project.
  * @returns A record mapping phase IDs to their total proposed costs.
@@ -19,24 +19,72 @@ export const calculatePhaseProposedCosts = (
   bids: Bid[]
 ): Record<string, number> => {
   const proposedCosts: Record<string, number> = {};
-  
+  const proposedStatuses = new Set<Bid['status']>(['submitted', 'accepted', 'revision_requested']);
+
   phases.forEach((phase: ProjectPhase) => {
     proposedCosts[phase.id] = 0;
   });
-  
+
   bids.forEach((bid: Bid) => {
-    if (bid.phaseId && bid.status === 'accepted') {
-      const bidAmount = (bid as any).amount || 0; // Assuming Bid might miss amount, use assertion
-      proposedCosts[bid.phaseId] = (proposedCosts[bid.phaseId] || 0) + bidAmount;
+    if (!proposedStatuses.has(bid.status)) {
+      return;
     }
+
+    const bidAmount = bid.totalAmount || bid.bidAmount || 0;
+
+    if (bid.phaseId) {
+      proposedCosts[bid.phaseId] = (proposedCosts[bid.phaseId] || 0) + bidAmount;
+      return;
+    }
+
+    bid.paymentSchedule?.forEach((payment) => {
+      if (payment.phaseId) {
+        proposedCosts[payment.phaseId] = (proposedCosts[payment.phaseId] || 0) + (payment.amount || 0);
+      }
+    });
   });
-  
+
   return proposedCosts;
 };
 
 /**
+ * Calculates committed costs (accepted bids only) for each phase.
+ */
+export const calculatePhaseCommittedCosts = (
+  phases: ProjectPhase[],
+  bids: Bid[]
+): Record<string, number> => {
+  const committedCosts: Record<string, number> = {};
+
+  phases.forEach((phase: ProjectPhase) => {
+    committedCosts[phase.id] = 0;
+  });
+
+  bids.forEach((bid: Bid) => {
+    if (bid.status !== 'accepted') {
+      return;
+    }
+
+    const bidAmount = bid.totalAmount || bid.bidAmount || 0;
+
+    if (bid.phaseId) {
+      committedCosts[bid.phaseId] = (committedCosts[bid.phaseId] || 0) + bidAmount;
+      return;
+    }
+
+    bid.paymentSchedule?.forEach((payment) => {
+      if (payment.phaseId) {
+        committedCosts[payment.phaseId] = (committedCosts[payment.phaseId] || 0) + (payment.amount || 0);
+      }
+    });
+  });
+
+  return committedCosts;
+};
+
+/**
  * Calculates the total actual costs (sum of expenses) for each phase.
- * 
+ *
  * @param phases An array of project phase objects.
  * @param expenses An array of expense objects for the project.
  * @returns A record mapping phase IDs to their total actual costs.
@@ -46,23 +94,23 @@ export const calculatePhaseActualCosts = (
   expenses: Expense[]
 ): Record<string, number> => {
   const actualCosts: Record<string, number> = {};
-  
+
   phases.forEach((phase: ProjectPhase) => {
     actualCosts[phase.id] = 0;
   });
-  
+
   expenses.forEach((expense: Expense) => {
     if (expense.phaseId) {
       actualCosts[expense.phaseId] = (actualCosts[expense.phaseId] || 0) + (expense.amount || 0);
     }
   });
-  
+
   return actualCosts;
 };
 
 /**
  * Calculates the overall project progress based on completed phases.
- * 
+ *
  * @param phases An array of project phase objects.
  * @returns A number representing the percentage of completed phases (0-100).
  */
@@ -156,13 +204,13 @@ export const getPhaseStatusIcon = (status: string): React.ReactElement => {
     case 'not_started':
       return <PendingIcon />;
     case 'planning': // Added planning case
-        return <PendingIcon />; // Or a different icon like Schedule? 
+        return <PendingIcon />; // Or a different icon like Schedule?
     case 'on_hold': // Added on_hold case
-        return <PendingIcon />; // Or a different icon? 
+        return <PendingIcon />; // Or a different icon?
     case 'delayed': // Added delayed case
-        return <PendingIcon />; // Or a different icon? 
+        return <PendingIcon />; // Or a different icon?
     default:
       return <InfoIcon />;
   }
 };
-*/ 
+*/

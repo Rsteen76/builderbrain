@@ -84,7 +84,7 @@ const ProjectMetricCards: React.FC<ProjectMetricCardsProps> = ({
 }) => {
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
   const isSmall = useMediaQuery(theme.breakpoints.down('sm'));
-  
+
   // Ensure timeline data is valid and has proper defaults
   const safeTimeline = {
     startDate: timeline?.startDate instanceof Date ? timeline.startDate : new Date(),
@@ -93,7 +93,7 @@ const ProjectMetricCards: React.FC<ProjectMetricCardsProps> = ({
     totalDays: timeline?.totalDays ?? 0,
     percentComplete: timeline?.percentComplete ?? 0
   };
-  
+
   // Ensure progress and budget data are valid
   const safeProgress = typeof projectProgress === 'number' && !isNaN(projectProgress) ? projectProgress : 0;
   const safeBudgetData = {
@@ -102,22 +102,22 @@ const ProjectMetricCards: React.FC<ProjectMetricCardsProps> = ({
     difference: typeof budgetData?.difference === 'number' ? budgetData.difference : 0,
     percentUsed: typeof budgetData?.percentUsed === 'number' ? budgetData.percentUsed : 0
   };
-  
+
   // Determine budget status indicator
-  const budgetStatus = safeBudgetData.difference >= 0 
+  const budgetStatus = safeBudgetData.difference >= 0
     ? { icon: <TrendingUpIcon sx={{ color: 'success.main' }} />, label: 'Under Budget', color: 'success.main' }
     : { icon: <TrendingDownIcon sx={{ color: 'error.main' }} />, label: 'Over Budget', color: 'error.main' };
-    
+
   // Project health calculation based on budget and timeline
   const calculateProjectHealth = () => {
     const budgetRatio = safeBudgetData.totalActual / safeBudgetData.totalBudget;
     const timeRatio = safeTimeline.elapsedDays / safeTimeline.totalDays;
-    
+
     // If data is missing, default to Fair status
     if (isNaN(budgetRatio) || isNaN(timeRatio) || !isFinite(budgetRatio) || !isFinite(timeRatio)) {
       return { status: 'Fair', color: theme.palette.warning.main, icon: <FlagIcon /> };
     }
-    
+
     // Over budget and behind schedule
     if (budgetRatio > 1 && timeRatio > safeTimeline.percentComplete / 100) {
       return { status: 'At Risk', color: theme.palette.error.main, icon: <PriorityHighIcon /> };
@@ -135,22 +135,22 @@ const ProjectMetricCards: React.FC<ProjectMetricCardsProps> = ({
       return { status: 'Fair', color: theme.palette.warning.main, icon: <FlagIcon /> };
     }
   };
-  
+
   const projectHealth = calculateProjectHealth();
 
   if (!project) {
     // Optionally return null or a placeholder if project data is essential
-    return null; 
+    return null;
   }
 
   return (
     <Box sx={{ mb: 4, mt: 2 }}>
       {/* Project Status Banner */}
-      <Paper 
+      <Paper
         elevation={0}
         sx={{
           p: 2,
-          mb: 3, 
+          mb: 3,
           background: `linear-gradient(90deg, ${alpha(theme.palette.primary.light, 0.2)} 0%, ${alpha(theme.palette.primary.main, 0.4)} 100%)`,
           borderRadius: 2,
           display: 'flex',
@@ -181,11 +181,11 @@ const ProjectMetricCards: React.FC<ProjectMetricCardsProps> = ({
             </Typography>
           </Box>
         </Box>
-        
-        <Chip 
+
+        <Chip
           label={project.status.replace('_', ' ').toUpperCase()}
           icon={getStatusIcon(project.status)}
-          sx={{ 
+          sx={{
             backgroundColor: alpha(getStatusColor(project.status), 0.1),
             color: getStatusColor(project.status),
             fontWeight: 'bold',
@@ -195,12 +195,12 @@ const ProjectMetricCards: React.FC<ProjectMetricCardsProps> = ({
           }}
         />
       </Paper>
-      
+
       <Grid container spacing={3}>
         {/* Progress Card */}
         <Grid item xs={12} md={6} lg={3}>
-          <Card elevation={0} sx={{ 
-            height: '100%', 
+          <Card elevation={0} sx={{
+            height: '100%',
             borderRadius: 2,
             border: `1px solid ${alpha(theme.palette.divider, 0.1)}`,
             boxShadow: `0 2px 12px ${alpha(theme.palette.primary.main, 0.08)}`,
@@ -222,38 +222,38 @@ const ProjectMetricCards: React.FC<ProjectMetricCardsProps> = ({
                   </IconButton>
                 </Tooltip>
               </Box>
-              
+
               <Typography variant="h4" sx={{ mb: 1, fontWeight: 700 }}>
                 {safeProgress}%
               </Typography>
-              
+
               <Box sx={{ mt: 2, mb: 1 }}>
-                <LinearProgress 
-                  variant="determinate" 
-                  value={safeProgress} 
-                  sx={{ 
-                    height: 10, 
+                <LinearProgress
+                  variant="determinate"
+                  value={safeProgress}
+                  sx={{
+                    height: 10,
                     borderRadius: 5,
                     backgroundColor: alpha(theme.palette.primary.main, 0.1),
                     '& .MuiLinearProgress-bar': {
                       borderRadius: 5,
                       background: `linear-gradient(90deg, ${theme.palette.primary.main} 0%, ${theme.palette.primary.dark} 100%)`,
                     }
-                  }} 
+                  }}
                 />
               </Box>
-              
+
               <Typography variant="body2" sx={{ color: 'text.secondary', mt: 1 }}>
                 {safeTimeline.elapsedDays} of {safeTimeline.totalDays} days elapsed
               </Typography>
             </CardContent>
           </Card>
         </Grid>
-        
+
         {/* Budget Card */}
         <Grid item xs={12} md={6} lg={3}>
-          <Card elevation={0} sx={{ 
-            height: '100%', 
+          <Card elevation={0} sx={{
+            height: '100%',
             borderRadius: 2,
             border: `1px solid ${alpha(theme.palette.divider, 0.1)}`,
             boxShadow: `0 2px 12px ${alpha(theme.palette.primary.main, 0.08)}`,
@@ -271,11 +271,11 @@ const ProjectMetricCards: React.FC<ProjectMetricCardsProps> = ({
                 </Box>
                 {budgetStatus.icon}
               </Box>
-              
+
               <Typography variant="h4" sx={{ mb: 1, fontWeight: 700 }}>
                 {formatCurrency(safeBudgetData.totalBudget)}
               </Typography>
-              
+
               <Box sx={{ mt: 0.5 }}>
                 <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
                   <Typography variant="body2" sx={{ color: 'text.secondary' }}>Spent:</Typography>
@@ -283,9 +283,9 @@ const ProjectMetricCards: React.FC<ProjectMetricCardsProps> = ({
                 </Box>
                 <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
                   <Typography variant="body2" sx={{ color: 'text.secondary' }}>Remaining:</Typography>
-                  <Typography 
-                    variant="body2" 
-                    sx={{ 
+                  <Typography
+                    variant="body2"
+                    sx={{
                       fontWeight: 600,
                       color: safeBudgetData.difference >= 0 ? 'success.main' : 'error.main'
                     }}
@@ -294,38 +294,38 @@ const ProjectMetricCards: React.FC<ProjectMetricCardsProps> = ({
                   </Typography>
                 </Box>
               </Box>
-              
+
               <Box sx={{ mt: 2, mb: 1 }}>
-                <LinearProgress 
-                  variant="determinate" 
-                  value={Math.min(safeBudgetData.percentUsed, 100)} 
-                  sx={{ 
-                    height: 10, 
+                <LinearProgress
+                  variant="determinate"
+                  value={Math.min(safeBudgetData.percentUsed, 100)}
+                  sx={{
+                    height: 10,
                     borderRadius: 5,
                     backgroundColor: alpha(theme.palette.primary.main, 0.1),
                     '& .MuiLinearProgress-bar': {
                       borderRadius: 5,
-                      background: safeBudgetData.percentUsed > 100 
+                      background: safeBudgetData.percentUsed > 100
                         ? `linear-gradient(90deg, ${theme.palette.error.main} 0%, ${theme.palette.error.dark} 100%)`
                         : safeBudgetData.percentUsed > 85
                           ? `linear-gradient(90deg, ${theme.palette.warning.main} 0%, ${theme.palette.warning.dark} 100%)`
                           : `linear-gradient(90deg, ${theme.palette.success.main} 0%, ${theme.palette.success.dark} 100%)`
                     }
-                  }} 
+                  }}
                 />
               </Box>
-              
+
               <Typography variant="body2" sx={{ color: 'text.secondary', mt: 1 }}>
-                {formatPercentage(safeBudgetData.percentUsed)} of budget used
+                {formatPercentage(safeBudgetData.percentUsed / 100)} of budget used
               </Typography>
             </CardContent>
           </Card>
         </Grid>
-        
+
         {/* Timeline Card */}
         <Grid item xs={12} md={6} lg={3}>
-          <Card elevation={0} sx={{ 
-            height: '100%', 
+          <Card elevation={0} sx={{
+            height: '100%',
             borderRadius: 2,
             border: `1px solid ${alpha(theme.palette.divider, 0.1)}`,
             boxShadow: `0 2px 12px ${alpha(theme.palette.primary.main, 0.08)}`,
@@ -347,11 +347,11 @@ const ProjectMetricCards: React.FC<ProjectMetricCardsProps> = ({
                   </IconButton>
                 </Tooltip>
               </Box>
-              
+
               <Typography variant="h4" sx={{ mb: 1, fontWeight: 700 }}>
                 {safeTimeline.totalDays} days
               </Typography>
-              
+
               <Box sx={{ mt: 1.5, display: 'flex', gap: 1, flexDirection: 'column' }}>
                 <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
@@ -362,7 +362,7 @@ const ProjectMetricCards: React.FC<ProjectMetricCardsProps> = ({
                     {safeTimeline.startDate.toLocaleDateString()}
                   </Typography>
                 </Box>
-                
+
                 <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
                     <CalendarTodayIcon sx={{ fontSize: '0.85rem', color: 'text.secondary' }} />
@@ -373,34 +373,34 @@ const ProjectMetricCards: React.FC<ProjectMetricCardsProps> = ({
                   </Typography>
                 </Box>
               </Box>
-              
+
               <Box sx={{ mt: 2, mb: 1 }}>
-                <LinearProgress 
-                  variant="determinate" 
-                  value={safeTimeline.percentComplete} 
-                  sx={{ 
-                    height: 10, 
+                <LinearProgress
+                  variant="determinate"
+                  value={safeTimeline.percentComplete}
+                  sx={{
+                    height: 10,
                     borderRadius: 5,
                     backgroundColor: alpha(theme.palette.info.main, 0.1),
                     '& .MuiLinearProgress-bar': {
                       borderRadius: 5,
                       background: `linear-gradient(90deg, ${theme.palette.info.main} 0%, ${theme.palette.info.dark} 100%)`,
                     }
-                  }} 
+                  }}
                 />
               </Box>
-              
+
               <Typography variant="body2" sx={{ color: 'text.secondary', mt: 1 }}>
-                {safeTimeline.elapsedDays} days elapsed ({formatPercentage(safeTimeline.percentComplete)})
+                {safeTimeline.elapsedDays} days elapsed ({formatPercentage(safeTimeline.percentComplete / 100)})
               </Typography>
             </CardContent>
           </Card>
         </Grid>
-        
+
         {/* Expenses Card */}
         <Grid item xs={12} md={6} lg={3}>
-          <Card elevation={0} sx={{ 
-            height: '100%', 
+          <Card elevation={0} sx={{
+            height: '100%',
             borderRadius: 2,
             border: `1px solid ${alpha(theme.palette.divider, 0.1)}`,
             boxShadow: `0 2px 12px ${alpha(theme.palette.primary.main, 0.08)}`,
@@ -422,54 +422,54 @@ const ProjectMetricCards: React.FC<ProjectMetricCardsProps> = ({
                   </IconButton>
                 </Tooltip>
               </Box>
-              
+
               <Typography variant="h4" sx={{ mb: 1, fontWeight: 700 }}>
                 {formatCurrency(expenseBreakdown.paid + expenseBreakdown.approved + expenseBreakdown.pending)}
               </Typography>
-              
+
               <Stack direction="column" spacing={1} sx={{ mt: 1 }}>
                 <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
-                  <Chip 
-                    label="Paid" 
-                    size="small" 
-                    sx={{ 
+                  <Chip
+                    label="Paid"
+                    size="small"
+                    sx={{
                       backgroundColor: alpha(theme.palette.success.main, 0.1),
                       color: theme.palette.success.main,
                       fontWeight: 'medium',
                       minWidth: 80,
-                    }} 
+                    }}
                   />
                   <Typography variant="body2" sx={{ fontWeight: 600 }}>
                     {formatCurrency(expenseBreakdown.paid)}
                   </Typography>
                 </Box>
-                
+
                 <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
-                  <Chip 
-                    label="Approved" 
-                    size="small" 
-                    sx={{ 
+                  <Chip
+                    label="Approved"
+                    size="small"
+                    sx={{
                       backgroundColor: alpha(theme.palette.info.main, 0.1),
                       color: theme.palette.info.main,
                       fontWeight: 'medium',
                       minWidth: 80,
-                    }} 
+                    }}
                   />
                   <Typography variant="body2" sx={{ fontWeight: 600 }}>
                     {formatCurrency(expenseBreakdown.approved)}
                   </Typography>
                 </Box>
-                
+
                 <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
-                  <Chip 
-                    label="Pending" 
-                    size="small" 
-                    sx={{ 
+                  <Chip
+                    label="Pending"
+                    size="small"
+                    sx={{
                       backgroundColor: alpha(theme.palette.warning.main, 0.1),
                       color: theme.palette.warning.main,
                       fontWeight: 'medium',
                       minWidth: 80,
-                    }} 
+                    }}
                   />
                   <Typography variant="body2" sx={{ fontWeight: 600 }}>
                     {formatCurrency(expenseBreakdown.pending)}
@@ -484,4 +484,4 @@ const ProjectMetricCards: React.FC<ProjectMetricCardsProps> = ({
   );
 };
 
-export default ProjectMetricCards; 
+export default ProjectMetricCards;

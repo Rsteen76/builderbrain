@@ -68,6 +68,8 @@ describe('Payments', () => {
     expect(screen.getByText('$500.00')).toBeInTheDocument();
     expect(screen.getByText('$200.00')).toBeInTheDocument();
     expect(screen.getAllByText('$750.00')).toHaveLength(2);
+    expect(screen.getByText('Total Paid')).toBeInTheDocument();
+    expect(screen.queryByText('Total Received')).not.toBeInTheDocument();
     expect(screen.getByText('Project One')).toBeInTheDocument();
     expect(screen.getByText('Material invoice')).toBeInTheDocument();
     expect(screen.getByText('Bank Transfer')).toBeInTheDocument();
