@@ -92,6 +92,9 @@ import { createExtraBidExpense } from '../../utils/bidOperations';
 import { useAuth } from '../../contexts/AuthContext';
 import { v4 as uuidv4 } from 'uuid';
 import { formatCurrency } from '../../utils/formatters';
+import { PHASE_EXPENSE_DESCRIPTIONS } from '../../data/expenseFormConstants';
+import { cleanForFirestore } from '../../utils/firestoreUtils';
+import { useExpenseLineItems, ExpenseLineItemFormData } from '../../hooks/useExpenseLineItems';
 
 interface ExpenseFormModalProps {
   open: boolean;
@@ -146,45 +149,11 @@ const formatCategoryName = (category: string): string => {
   return category.charAt(0).toUpperCase() + category.slice(1);
 };
 
-// Add this utility function at the top of the file, outside of component
-const cleanForFirestore = (data: any): any => {
-  // If null or primitive, return as is
-  if (data === null || typeof data !== 'object') {
-    return data;
-  }
-  
-  // Handle Date objects - keep them as is for now, service will convert
-  if (data instanceof Date) {
-    return data; 
-  }
-  
-  // Handle arrays
-  if (Array.isArray(data)) {
-    // Filter out undefined elements AND clean nested elements
-    return data.filter(item => item !== undefined).map(item => cleanForFirestore(item));
-  }
-  
-  // Handle objects
-  const result: any = {};
-  
-  Object.entries(data).forEach(([key, value]) => {
-    // Skip undefined values entirely
-    if (value === undefined) {
-      return;
-    }
-    
-    // Recursively clean nested values
-    result[key] = cleanForFirestore(value);
-  });
-  
-  return result;
-};
-
-// Define common expense descriptions by phase category
-const PHASE_EXPENSE_DESCRIPTIONS: Record<string, string[]> = {
-  "common": [
-    // Administration & General
-    "Project Management Fee",
+// Define common expense descriptions by phase category // This will be removed
+// const PHASE_EXPENSE_DESCRIPTIONS: Record<string, string[]> = { // This will be removed
+//   "common": [ // This will be removed
+//     // Administration & General // This will be removed
+//     "Project Management Fee", // This will be removed
     "Supervision Labor",
     "Office Supplies",
     "Plan Printing/Documents",
@@ -494,9 +463,9 @@ const PHASE_EXPENSE_DESCRIPTIONS: Record<string, string[]> = {
     "Pressure Washing Service",
     "Duct Cleaning Service",
     "Carpet Cleaning Service",
-    "Pest Control Service",
-  ],
-};
+    "Pest Control Service", // This will be removed
+  ], // This will be removed
+}; // This will be removed
 
 // Helper function to map ExpenseCategory (potentially plural) to LineItem category (singular)
 const mapExpenseCategoryToLineItemCategory = (expCategory: ExpenseCategory | undefined): ExpenseLineItem['category'] => {
@@ -524,7 +493,7 @@ const ExpenseFormModal: React.FC<ExpenseFormModalProps> = ({
   
   // Restore all state variables
   const [formData, setFormData] = useState<Partial<Expense>>({});
-  const [lineItems, setLineItems] = useState<ExpenseLineItemForm[]>([]);
+  // const [lineItems, setLineItems] = useState<ExpenseLineItemForm[]>([]); // Replaced by useExpenseLineItems
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errors, setErrors] = useState<FormErrors>({});
   const [backendError, setBackendError] = useState<string | null>(null);
@@ -543,6 +512,17 @@ const ExpenseFormModal: React.FC<ExpenseFormModalProps> = ({
   const [paymentDate, setPaymentDate] = useState(new Date().toISOString().split('T')[0]);
   const [paymentNotes, setPaymentNotes] = useState('');
   const [duplicateCheckDone, setDuplicateCheckDone] = useState(false);
+
+  // Integrate the useExpenseLineItems hook
+  const {
+    lineItems,
+    setLineItems: setHookLineItems,
+    addLineItem,
+    removeLineItem,
+    handleLineItemChange,
+    calculateTotalFromLineItems,
+    totalLineItemsAmount
+  } = useExpenseLineItems();
 
   // State to hold available bids for the selected project
   const [availableBids, setAvailableBids] = useState<Bid[]>([]);
@@ -714,18 +694,19 @@ const ExpenseFormModal: React.FC<ExpenseFormModalProps> = ({
         setCurrentProjectPhases([]);
       }
       
-      // Initialize line items if they exist
+      // Initialize line items if they exist using the hook's setter
       if (expense.lineItems && expense.lineItems.length > 0) {
-        setLineItems(expense.lineItems.map(li => ({
+        const initialItemsForHook: ExpenseLineItemFormData[] = expense.lineItems.map(li => ({
           id: li.id || uuidv4(),
           description: li.description || '',
           quantity: li.quantity || 1,
           unitCost: li.unitCost || 0,
-          totalPrice: (li.quantity || 1) * (li.unitCost || 0)
-        })));
+          totalPrice: (li.quantity || 1) * (li.unitCost || 0) // Ensure totalPrice is calculated
+        }));
+        setHookLineItems(initialItemsForHook); // Use the setter from the hook
         setShowLineItems(true);
       } else {
-        setLineItems([]);
+        setHookLineItems([]); // Reset for new or expense without line items
         setShowLineItems(false);
       }
       
@@ -761,7 +742,7 @@ const ExpenseFormModal: React.FC<ExpenseFormModalProps> = ({
         bidId: '',
         paymentStageId: '',
       });
-      setLineItems([]);
+      setHookLineItems([]); // Reset hook line items
       setShowLineItems(false);
       setReceiptPreview(null);
       setReceiptFile(null);
@@ -786,7 +767,7 @@ const ExpenseFormModal: React.FC<ExpenseFormModalProps> = ({
       setPaymentDate(new Date().toISOString().split('T')[0]);
       setPaymentNotes('');
     }
-  }, [open, expense, projects]);
+  }, [open, expense, projects, setHookLineItems]); // Added setHookLineItems to dependency array
 
   // Effect to fetch available bids when projectId changes
   useEffect(() => {
@@ -928,75 +909,19 @@ const ExpenseFormModal: React.FC<ExpenseFormModalProps> = ({
     });
   };
 
-  // Line item handlers
-  const handleAddLineItem = () => {
-    const newItem: ExpenseLineItemForm = {
-      id: uuidv4(),
-      description: '',
-      quantity: 1,
-      unitCost: 0,
-      totalPrice: 0,
-    };
-    setLineItems([...lineItems, newItem]);
-    setShowLineItems(true);
-  };
-
-  const handleRemoveLineItem = (id: string) => {
-    setLineItems(lineItems.filter(item => item.id !== id));
-    
-    // If no more line items, remove any errors for them
-    if (lineItems.length <= 1) {
-      const { lineItems: _, ...restErrors } = errors;
-      setErrors(restErrors);
-    }
-  };
-
-  const handleLineItemChange = (id: string, field: keyof ExpenseLineItemForm, value: string | number) => {
-    setLineItems(prevItems => {
-      return prevItems.map(item => {
-        if (item.id === id) {
-          const updatedItem = { ...item, [field]: value };
-          
-          // Recalculate total price if quantity or unitPrice changed
-          if (field === 'quantity' || field === 'unitCost') {
-            updatedItem.totalPrice = updatedItem.quantity * updatedItem.unitCost;
-          }
-          
-          return updatedItem;
-        }
-        return item;
-      });
-    });
-
-    // Update the formData amount to match total of line items
-    setTimeout(() => {
-      const totalAmount = calculateTotalFromLineItems();
-      setFormData(prev => ({ ...prev, amount: totalAmount }));
-    }, 0);
-    
-    // Clear errors for this line item field
-    if (errors.lineItems && errors.lineItems[id] && errors.lineItems[id][field as keyof typeof errors.lineItems[0]]) {
-      setErrors(prev => ({
-        ...prev,
-        lineItems: {
-          ...prev.lineItems,
-          [id]: {
-            ...prev.lineItems?.[id],
-            [field]: undefined
-          }
-        }
-      }));
-    }
-  };
-
-  const calculateTotalFromLineItems = useCallback(() => {
-    return lineItems.reduce((sum, item) => sum + item.totalPrice, 0);
-  }, [lineItems]);
+  // Line item handlers (handleAddLineItem, handleRemoveLineItem, handleLineItemChange, calculateTotalFromLineItems)
+  // are now replaced by functions/values from the useExpenseLineItems hook.
+  // const handleAddLineItem = () => { ... }; // Removed
+  // const handleRemoveLineItem = (id: string) => { ... }; // Removed
+  // const handleLineItemChange = (id: string, field: keyof ExpenseLineItemForm, value: string | number) => { ... }; // Removed
+  // const calculateTotalFromLineItems = useCallback(() => { ... }, [lineItems]); // Removed, use totalLineItemsAmount or hook's calculate function
 
   const toggleLineItems = () => {
-    setShowLineItems(!showLineItems);
-    if (!showLineItems && lineItems.length === 0) {
-      handleAddLineItem();
+    const newShowLineItemsState = !showLineItems;
+    setShowLineItems(newShowLineItemsState);
+    // If switching to show line items and there are none, add one.
+    if (newShowLineItemsState && lineItems.length === 0) { // lineItems is from the hook
+      addLineItem(); // addLineItem is from the hook
     }
   };
 
@@ -1545,7 +1470,7 @@ const ExpenseFormModal: React.FC<ExpenseFormModalProps> = ({
                     variant="outlined"
                     color="primary"
                     startIcon={<AddIcon />}
-                    onClick={handleAddLineItem}
+                    onClick={addLineItem} // Use addLineItem from the hook
                     size="small"
                     sx={{ 
                       textTransform: 'none',
@@ -1555,7 +1480,7 @@ const ExpenseFormModal: React.FC<ExpenseFormModalProps> = ({
                   </Button>
                   
                   <Typography variant="subtitle2" fontWeight={600} color="success.main">
-                    Total: ${calculateTotalFromLineItems().toFixed(2)}
+                    Total: ${totalLineItemsAmount.toFixed(2)} {/* Use totalLineItemsAmount from the hook */}
                   </Typography>
                 </Box>
                 
@@ -1587,7 +1512,7 @@ const ExpenseFormModal: React.FC<ExpenseFormModalProps> = ({
                                   fullWidth
                                   placeholder="Description"
                                   value={item.description}
-                                  onChange={(e) => handleLineItemChange(item.id, 'description', e.target.value)}
+                                  onChange={(e) => handleLineItemChange(item.id, 'description', e.target.value)} // Use from hook
                                   error={!!errors.lineItems?.[item.id]?.description}
                                   helperText={errors.lineItems?.[item.id]?.description}
                                   variant="standard"
@@ -1598,7 +1523,7 @@ const ExpenseFormModal: React.FC<ExpenseFormModalProps> = ({
                                 <TextField
                                   type="number"
                                   value={item.quantity}
-                                  onChange={(e) => handleLineItemChange(item.id, 'quantity', parseFloat(e.target.value) || 0)}
+                                  onChange={(e) => handleLineItemChange(item.id, 'quantity', parseFloat(e.target.value) || 0)} // Use from hook
                                   error={!!errors.lineItems?.[item.id]?.quantity}
                                   inputProps={{ min: 0, step: 0.01, style: { textAlign: 'right' } }}
                                   variant="standard"
@@ -1610,7 +1535,7 @@ const ExpenseFormModal: React.FC<ExpenseFormModalProps> = ({
                                 <TextField
                                   type="number"
                                         value={item.unitCost}
-                                        onChange={(e) => handleLineItemChange(item.id, 'unitCost', parseFloat(e.target.value) || 0)}
+                                        onChange={(e) => handleLineItemChange(item.id, 'unitCost', parseFloat(e.target.value) || 0)} // Use from hook
                                         error={!!errors.lineItems?.[item.id]?.unitCost}
                                   inputProps={{ min: 0, step: 0.01, style: { textAlign: 'right' } }}
                                   variant="standard"
@@ -1624,7 +1549,7 @@ const ExpenseFormModal: React.FC<ExpenseFormModalProps> = ({
                               <TableCell padding="checkbox">
                                 <IconButton
                                   size="small"
-                                  onClick={() => handleRemoveLineItem(item.id)}
+                                  onClick={() => removeLineItem(item.id)} // Use from hook
                                   color="error"
                                 >
                                   <DeleteIcon fontSize="small" />

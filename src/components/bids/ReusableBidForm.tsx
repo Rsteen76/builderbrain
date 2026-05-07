@@ -40,318 +40,13 @@ import {
 } from '@mui/icons-material';
 import { v4 as uuidv4 } from 'uuid';
 import { formatCurrency } from '../../utils/formatters';
-import { Bid, BidPaymentStage, Project, Subcontractor, ProjectPhase, BidFormData } from '../../types';
+import { Bid, BidPaymentStage, Project, Subcontractor, ProjectPhase } from '../../types'; // BidFormData removed
+import { BidFormData, BidPaymentTermsFormData, BidPaymentInstallmentFormData } from '../../types/form.types'; // Updated imports
 import { ProjectService } from '../../services/project';
 import { useAuth } from '../../contexts/AuthContext';
+import { usePaymentTerms } from '../../hooks/usePaymentTerms'; // Import the hook
 import { getProject } from '../../services/project';
-
-// Define common bid categories (Copied from BidFormShared.tsx for now)
-const COMMON_BID_CATEGORIES: string[] = [
-  // Site Work
-  'Site Preparation',
-  'Demolition',
-  'Excavation',
-  'Grading',
-  'Erosion Control',
-  'Utilities',
-  'Paving',
-  'Concrete',
-  'Fencing',
-  'Landscaping',
-  
-  // Structural
-  'Foundation',
-  'Concrete Foundation',
-  'Poured Foundation',
-  'Slab Foundation',
-  'Basement Foundation',
-  'Crawl Space Foundation',
-  'Pier and Beam Foundation',
-  'Pile Foundation',
-  'Masonry',
-  'Structural Steel',
-  'Framing',
-  'Rough Carpentry',
-  'Finish Carpentry',
-  
-  // Exterior
-  'Roofing',
-  'Siding',
-  'Windows',
-  'Doors',
-  'Exterior Painting',
-  'Waterproofing',
-  'Insulation',
-  
-  // Interior
-  'Drywall',
-  'Plaster',
-  'Interior Painting',
-  'Flooring',
-  'Tile',
-  'Cabinetry',
-  'Countertops',
-  'Millwork',
-  'Trim Work',
-  
-  // Mechanical/Electrical/Plumbing
-  'Plumbing',
-  'HVAC',
-  'Electrical',
-  'Fire Protection',
-  'Security Systems',
-  'Low Voltage',
-  'Solar/Renewable Energy',
-  
-  // Specialty
-  'Elevator',
-  'Windows & Doors',
-  'Glass & Glazing',
-  'Acoustical',
-  'Specialty Finishes',
-  'Kitchen Equipment',
-  'Bathroom Fixtures',
-  
-  // Professional Services
-  'Architecture',
-  'Engineering',
-  'Surveying',
-  'Interior Design',
-  'Consulting',
-  
-  // General
-  'General Contractor',
-  'Construction Management',
-  'Labor Only',
-  'Materials Only',
-  'Other',
-];
-
-// Add a mapping of standard bid titles by phase after COMMON_BID_CATEGORIES
-const PHASE_BID_TITLES: Record<string, string[]> = {
-  // Common titles that apply to all phases
-  "common": [
-    "General Contracting Services",
-    "Project Management",
-    "Construction Services",
-    "General Labor",
-    "Site Supervision",
-    "Equipment Rental",
-    "Materials Supply",
-  ],
-  // Site work phase
-  "site_work": [
-    "Excavation and Grading",
-    "Site Preparation",
-    "Land Clearing",
-    "Demolition",
-    "Erosion Control",
-    "Sitework Package",
-    "Utilities Installation",
-    "Drainage Systems",
-    "Septic System Installation",
-    "Underground Utility Work",
-  ],
-  // Foundation phase
-  "foundation": [
-    "Concrete Foundation",
-    "Foundation Package",
-    "Concrete Footings and Foundation",
-    "Basement Waterproofing",
-    "Foundation Insulation",
-    "Concrete Flatwork",
-    "Slab Preparation",
-    "Rebar Installation",
-    "Pier and Beam Foundation",
-    "Foundation Drainage",
-  ],
-  // Framing phase
-  "framing": [
-    "Rough Framing",
-    "Framing Package",
-    "Structural Framing",
-    "Roof Framing",
-    "Floor Framing",
-    "Wall Framing",
-    "Stair Framing",
-    "Deck Framing",
-    "Structural Steel",
-    "Timber Frame",
-  ],
-  // Rough-ins phase
-  "rough_ins": [
-    "Electrical Rough-in",
-    "Plumbing Rough-in",
-    "HVAC Rough-in",
-    "Mechanical Rough-in",
-    "Low Voltage Wiring",
-    "Security System Rough-in",
-    "Data/Communication Wiring",
-    "Sprinkler System Rough-in",
-  ],
-  // Exterior phase
-  "exterior": [
-    "Roofing Installation",
-    "Siding Installation",
-    "Windows and Doors",
-    "Garage Door Installation",
-    "Exterior Trim",
-    "Exterior Painting",
-    "Stucco Application",
-    "Brick/Stone Masonry",
-    "Gutters and Downspouts",
-    "Deck Construction",
-    "Porch Construction",
-  ],
-  // Interior phase
-  "interior": [
-    "Drywall Installation",
-    "Insulation Installation",
-    "Interior Trim",
-    "Interior Painting",
-    "Flooring Installation",
-    "Tile Installation",
-    "Cabinet Installation",
-    "Countertop Installation",
-    "Interior Doors",
-    "Stairs and Railings",
-    "Closet Systems",
-  ],
-  // Finishes phase
-  "finishes": [
-    "Finish Carpentry",
-    "Millwork Installation",
-    "Appliance Installation",
-    "Fixture Installation",
-    "Finish Plumbing",
-    "Finish Electrical",
-    "Window Treatments",
-    "Hardware Installation",
-    "Finish HVAC",
-    "Final Painting",
-  ],
-  // Specialty items
-  "specialty": [
-    "Pool Installation",
-    "Outdoor Kitchen",
-    "Home Theater",
-    "Smart Home Systems",
-    "Specialty Lighting",
-    "Custom Cabinetry",
-    "Fireplace Installation",
-    "Elevator Installation",
-    "Wine Cellar",
-    "Custom Shower/Bathroom",
-  ],
-};
-
-// Add a mapping of bid titles to standard scopes of work
-const BID_SCOPE_TEMPLATES: Record<string, string> = {
-  // Common scopes
-  "General Contracting Services": "Provide overall project management, coordination, and supervision of all construction activities. Includes scheduling, quality control, safety management, and coordination with all subcontractors and suppliers.",
-  "Project Management": "Oversee the entire construction project from planning through completion. Includes scheduling, budget management, communication with stakeholders, and coordination of all project activities.",
-  "Construction Services": "Provide comprehensive construction services including labor, equipment, and materials as needed for the project. Includes site preparation, construction, and cleanup.",
-  "General Labor": "Provide skilled and unskilled labor for various construction tasks as directed by the project manager. Includes site preparation, material handling, and general construction support.",
-  "Site Supervision": "Provide on-site supervision to ensure work is performed according to specifications, safety standards, and project schedule. Includes daily reporting and coordination with other trades.",
-  "Equipment Rental": "Provide construction equipment and machinery for use on the project site. Includes delivery, setup, maintenance, and removal of equipment.",
-  "Materials Supply": "Supply construction materials for the project. Includes ordering, delivery, storage, and inventory management of materials.",
-  
-  // Site work scopes
-  "Excavation and Grading": "Excavate and grade the site according to project specifications. Includes clearing, grubbing, excavation, backfilling, and final grading to prepare the site for construction.",
-  "Site Preparation": "Prepare the site for construction. Includes clearing vegetation, removing debris, leveling the ground, and establishing proper drainage.",
-  "Land Clearing": "Clear the land of trees, vegetation, and debris to prepare for construction. Includes tree removal, stump grinding, and disposal of cleared materials.",
-  "Demolition": "Demolish existing structures and prepare the site for new construction. Includes structural demolition, debris removal, and site cleanup.",
-  "Erosion Control": "Implement erosion control measures to prevent soil erosion and sediment runoff. Includes installation of silt fences, erosion control blankets, and other protective measures.",
-  "Sitework Package": "Complete all site preparation work including clearing, grading, excavation, and utility installation. Includes coordination with utility companies and obtaining necessary permits.",
-  "Utilities Installation": "Install underground utilities including water, sewer, gas, and electrical lines. Includes trenching, pipe installation, backfilling, and connection to existing utilities.",
-  "Drainage Systems": "Design and install drainage systems to manage water flow on the site. Includes French drains, catch basins, and stormwater management systems.",
-  "Septic System Installation": "Design and install a septic system according to local regulations. Includes excavation, tank installation, field line installation, and connection to the building.",
-  "Underground Utility Work": "Install and connect all underground utilities required for the project. Includes water, sewer, gas, electrical, and communication lines.",
-  
-  // Foundation scopes
-  "Concrete Foundation": "Construct the concrete foundation according to project specifications. Includes excavation, formwork, reinforcement, concrete placement, and curing.",
-  "Foundation Package": "Complete all foundation work including excavation, footings, walls, and slab. Includes waterproofing, drainage, and backfilling.",
-  "Concrete Footings and Foundation": "Construct concrete footings and foundation walls according to engineering specifications. Includes excavation, formwork, reinforcement, concrete placement, and curing.",
-  "Basement Waterproofing": "Apply waterproofing systems to the basement walls and floor to prevent water infiltration. Includes surface preparation, application of waterproofing materials, and installation of drainage systems.",
-  "Foundation Insulation": "Install insulation on the foundation walls and floor to improve energy efficiency. Includes surface preparation, installation of insulation materials, and protection from damage.",
-  "Concrete Flatwork": "Construct concrete flatwork including driveways, walkways, patios, and garage floors. Includes site preparation, formwork, reinforcement, concrete placement, and finishing.",
-  "Slab Preparation": "Prepare the site for concrete slab installation. Includes excavation, compaction, installation of vapor barrier, and reinforcement.",
-  "Rebar Installation": "Install reinforcing steel (rebar) according to engineering specifications. Includes cutting, bending, tying, and placement of rebar in the correct locations.",
-  "Pier and Beam Foundation": "Construct a pier and beam foundation system. Includes excavation, pier installation, beam installation, and floor joist installation.",
-  "Foundation Drainage": "Install drainage systems around the foundation to prevent water infiltration. Includes excavation, installation of drainage pipe, gravel backfill, and connection to existing drainage systems.",
-  
-  // Framing scopes
-  "Rough Framing": "Construct the structural framework of the building. Includes floor framing, wall framing, roof framing, and installation of structural components.",
-  "Framing Package": "Complete all framing work including floors, walls, and roof. Includes installation of structural components, sheathing, and bracing.",
-  "Structural Framing": "Construct the structural framework according to engineering specifications. Includes installation of beams, columns, trusses, and other structural components.",
-  "Roof Framing": "Construct the roof framework including trusses, rafters, and sheathing. Includes installation of structural components and preparation for roofing materials.",
-  "Floor Framing": "Construct the floor framework including joists, beams, and subfloor. Includes installation of structural components and preparation for finish flooring.",
-  "Wall Framing": "Construct the wall framework including studs, plates, and headers. Includes installation of structural components and preparation for finish materials.",
-  "Stair Framing": "Construct the framework for stairs including stringers, treads, and risers. Includes installation of structural components and preparation for finish materials.",
-  "Deck Framing": "Construct the framework for decks including posts, beams, joists, and ledger boards. Includes installation of structural components and preparation for finish materials.",
-  "Structural Steel": "Fabricate and install structural steel components according to engineering specifications. Includes cutting, welding, bolting, and installation of steel members.",
-  "Timber Frame": "Construct a timber frame structure using traditional joinery techniques. Includes cutting, fitting, and assembly of timber components.",
-  
-  // Rough-ins scopes
-  "Electrical Rough-in": "Install electrical wiring, boxes, and conduit according to electrical code. Includes installation of service panel, branch circuits, and preparation for fixtures and appliances.",
-  "Plumbing Rough-in": "Install plumbing pipes, fittings, and fixtures according to plumbing code. Includes water supply lines, drain lines, vent lines, and preparation for fixtures.",
-  "HVAC Rough-in": "Install HVAC ductwork, pipes, and equipment according to mechanical code. Includes installation of air handlers, ductwork, refrigerant lines, and preparation for registers and grilles.",
-  "Mechanical Rough-in": "Install mechanical systems including HVAC, plumbing, and electrical according to code. Includes coordination between trades and preparation for finish work.",
-  "Low Voltage Wiring": "Install low voltage wiring for security systems, data networks, and audio/video systems. Includes installation of conduit, wire, and junction boxes.",
-  "Security System Rough-in": "Install wiring and components for security systems. Includes installation of sensors, cameras, control panels, and preparation for finish work.",
-  "Data/Communication Wiring": "Install wiring for data and communication systems. Includes installation of conduit, wire, and junction boxes for network and phone systems.",
-  "Sprinkler System Rough-in": "Install piping and components for fire sprinkler systems according to fire code. Includes installation of pipes, fittings, and preparation for sprinkler heads.",
-  
-  // Exterior scopes
-  "Roofing Installation": "Install roofing materials according to manufacturer specifications. Includes installation of underlayment, flashing, shingles or other roofing materials, and ridge caps.",
-  "Siding Installation": "Install exterior siding materials according to manufacturer specifications. Includes installation of sheathing, weather barrier, siding, and trim.",
-  "Windows and Doors": "Install windows and exterior doors according to manufacturer specifications. Includes installation of frames, sills, hardware, and weatherstripping.",
-  "Garage Door Installation": "Install garage door(s) and opener(s) according to manufacturer specifications. Includes tracks, springs, hardware, weather seals, and safety sensors.",
-  "Exterior Trim": "Install exterior trim including fascia, soffits, corner boards, and window/door trim. Includes cutting, fitting, and installation of trim materials.",
-  "Exterior Painting": "Prepare and paint exterior surfaces according to specifications. Includes surface preparation, primer application, and finish coat application.",
-  "Stucco Application": "Apply stucco to exterior walls according to manufacturer specifications. Includes installation of lath, base coat, and finish coat.",
-  "Brick/Stone Masonry": "Construct brick or stone walls, veneers, and accents according to specifications. Includes layout, cutting, and installation of masonry units.",
-  "Gutters and Downspouts": "Install gutters and downspouts according to specifications. Includes installation of brackets, gutters, downspouts, and splash blocks.",
-  "Deck Construction": "Construct exterior decks according to specifications. Includes installation of footings, posts, beams, joists, decking, and railings.",
-  "Porch Construction": "Construct porches according to specifications. Includes installation of footings, posts, beams, joists, decking, and railings.",
-  
-  // Interior scopes
-  "Drywall Installation": "Install drywall according to specifications. Includes hanging, taping, mudding, sanding, and preparation for finish work.",
-  "Insulation Installation": "Install insulation according to specifications. Includes installation of insulation materials and application to building components.",
-  "Interior Trim": "Install interior trim including baseboards, crown molding, window/door trim, and other decorative elements. Includes cutting, fitting, and installation of trim materials.",
-  "Interior Painting": "Prepare and paint interior surfaces according to specifications. Includes surface preparation, primer application, and finish coat application.",
-  "Flooring Installation": "Install flooring materials according to manufacturer specifications. Includes subfloor preparation, installation of underlayment, and installation of flooring materials.",
-  "Tile Installation": "Install tile according to manufacturer specifications. Includes surface preparation, layout, cutting, and installation of tile and grout.",
-  "Cabinet Installation": "Install cabinets according to manufacturer specifications. Includes layout, leveling, and installation of base and wall cabinets.",
-  "Countertop Installation": "Install countertops according to manufacturer specifications. Includes measurement, cutting, and installation of countertop materials.",
-  "Interior Doors": "Install interior doors according to manufacturer specifications. Includes installation of frames, doors, hardware, and trim.",
-  "Stairs and Railings": "Install stairs and railings according to specifications. Includes installation of stringers, treads, risers, handrails, and balusters.",
-  "Closet Systems": "Install closet organization systems according to manufacturer specifications. Includes layout, cutting, and installation of closet components.",
-  
-  // Finishes scopes
-  "Finish Carpentry": "Complete all finish carpentry work including trim, doors, cabinets, and other decorative elements. Includes cutting, fitting, and installation of finish materials.",
-  "Millwork Installation": "Install custom millwork including cabinets, built-ins, and decorative elements. Includes layout, cutting, and installation of millwork components.",
-  "Appliance Installation": "Install appliances according to manufacturer specifications. Includes delivery, positioning, connection to utilities, and testing.",
-  "Fixture Installation": "Install plumbing and electrical fixtures according to manufacturer specifications. Includes installation of faucets, sinks, toilets, light fixtures, and other fixtures.",
-  "Finish Plumbing": "Complete all finish plumbing work including fixtures, trim, and final connections. Includes testing and adjustment of plumbing systems.",
-  "Finish Electrical": "Complete all finish electrical work including fixtures, switches, outlets, and final connections. Includes testing and adjustment of electrical systems.",
-  "Window Treatments": "Install window treatments including blinds, shades, curtains, and hardware. Includes measurement, cutting, and installation of window treatments.",
-  "Hardware Installation": "Install hardware including door knobs, cabinet pulls, and other decorative elements. Includes layout, drilling, and installation of hardware.",
-  "Finish HVAC": "Complete all finish HVAC work including registers, grilles, thermostats, and final connections. Includes testing and adjustment of HVAC systems.",
-  "Final Painting": "Complete all finish painting work including touch-ups and final coats. Includes preparation, application, and cleanup.",
-  
-  // Specialty scopes
-  "Pool Installation": "Install swimming pool according to manufacturer specifications. Includes excavation, installation of pool shell, plumbing, electrical, and finish work.",
-  "Outdoor Kitchen": "Construct outdoor kitchen according to specifications. Includes installation of cabinets, countertops, appliances, and utilities.",
-  "Home Theater": "Install home theater system according to specifications. Includes installation of audio/video equipment, wiring, and acoustic treatments.",
-  "Smart Home Systems": "Install smart home systems including lighting, security, climate control, and entertainment. Includes installation of controllers, sensors, and programming.",
-  "Specialty Lighting": "Install specialty lighting systems according to specifications. Includes installation of fixtures, controls, and programming.",
-  "Custom Cabinetry": "Design and install custom cabinetry according to specifications. Includes measurement, design, fabrication, and installation of cabinets.",
-  "Fireplace Installation": "Install fireplace according to manufacturer specifications. Includes installation of firebox, chimney, and finish work.",
-  "Elevator Installation": "Install elevator according to manufacturer specifications. Includes installation of shaft, cab, controls, and safety systems.",
-  "Wine Cellar": "Construct wine cellar according to specifications. Includes installation of cooling system, storage, lighting, and finish work.",
-  "Custom Shower/Bathroom": "Construct custom shower or bathroom according to specifications. Includes installation of fixtures, tile, and specialty features.",
-};
+import { COMMON_BID_CATEGORIES, PHASE_BID_TITLES, BID_SCOPE_TEMPLATES } from '../../data/bidFormConstants';
 
 interface ReusableBidFormProps {
   open?: boolean;
@@ -390,35 +85,40 @@ const ReusableBidForm: React.FC<ReusableBidFormProps> = ({
   // Default bid form state
   const defaultBidForm: BidFormData = {
     title: '',
+    subcontractorId: '', // Added: Ensures subcontractorId is part of the default state
     subcontractorName: '',
     totalAmount: 0,
     phaseId: (phases && phases.length > 0) ? phases[0].id : '',
     phaseName: (phases && phases.length > 0) ? phases[0].name : '',
     scope: '',
-    timeline: 30,
-    paymentTerms: {
+    timeline: 30, // Default duration in days
+    paymentTerms: { // Aligned with new BidPaymentTermsFormData
       downPaymentPercent: 20,
       isDownPaymentFixed: false,
-      downPaymentAmount: 0,
+      downPaymentAmount: 0, // Will be calculated based on percent and totalAmount
       installments: [
         {
           id: uuidv4(),
           name: 'Final Payment',
           percent: 80,
           isFixedAmount: false,
-          fixedAmount: 0,
+          fixedAmount: 0, // Will be calculated
           milestoneDescription: 'Upon completion of work',
-          phaseId: '',
-          phaseName: ''
+          phaseId: (phases && phases.length > 0) ? phases[0].id : '', // Default to first phase if available
+          phaseName: (phases && phases.length > 0) ? phases[0].name : '', // Default to first phase if available
+          manuallyConfigured: false, // Added: New field from BidPaymentInstallmentFormData
         }
       ],
-      syncInstallmentPhases: true
+      syncInstallmentPhases: true, // Default behavior
     },
     notes: '',
-    status: 'submitted',
+    status: 'draft', // Changed: Default status to 'draft'
     attachments: [],
     tags: [],
-    projectId: projectId,
+    projectId: projectId, // Retains context projectId if provided
+    projectName: projectName, // Added: Use context projectName if provided
+    submissionDeadline: null, // Added: Default to null
+    // attachments and tags are already part of defaultBidForm below
   };
 
   // State for form
@@ -432,7 +132,20 @@ const ReusableBidForm: React.FC<ReusableBidFormProps> = ({
   // Add projects state
   const [projects, setProjects] = useState<Project[]>([]);
   const [isLoadingProjects, setIsLoadingProjects] = useState(false);
-  const [currentProjectPhases, setCurrentProjectPhases] = useState<ProjectPhase[]>([]);
+  const [currentProjectPhases, setCurrentProjectPhases] = useState<ProjectPhase[]>(phases || []);
+
+  // Initialize the usePaymentTerms hook
+  const {
+    paymentTerms: formPaymentTerms, // Renamed to avoid direct conflict with bidForm.paymentTerms
+    setPaymentTerms: setHookPaymentTerms,
+    applyPaymentTemplate,
+    updateDownPayment,
+    addInstallment,
+    updateInstallment,
+    removeInstallment,
+    getTotalScheduledAmount,
+    getTotalScheduledPercent,
+  } = usePaymentTerms(bidForm.totalAmount, currentProjectPhases, bidForm.phaseId);
 
   // Log initial mounting for debugging
   console.log('ReusableBidForm mounted/updated with props:', {
@@ -495,28 +208,66 @@ const ReusableBidForm: React.FC<ReusableBidFormProps> = ({
     if (editingBidId || !initialized.current) {
       console.log("ReusableBidForm - Updating form with initialBidData");
       
-      const updatedFormData = {
+      // Prepare the main form data, excluding paymentTerms initially
+      const baseFormData: Omit<BidFormData, 'paymentTerms'> = {
         ...defaultBidForm,
         ...initialBidData,
-        // Ensure nested objects are properly initialized
-        paymentTerms: {
-          ...defaultBidForm.paymentTerms,
-          ...(initialBidData.paymentTerms || {}),
-          // Ensure installments array is properly initialized
-          installments: Array.isArray(initialBidData.paymentTerms?.installments) 
-            ? [...(initialBidData.paymentTerms?.installments || [])]
-            : [...defaultBidForm.paymentTerms.installments]
-        },
-        // Ensure arrays are properly initialized
-        tags: Array.isArray(initialBidData.tags) ? [...initialBidData.tags] : [],
-        attachments: Array.isArray(initialBidData.attachments) ? [...initialBidData.attachments] : []
+        // Explicitly handle fields that might be objects or arrays to ensure proper merging
+        tags: Array.isArray(initialBidData.tags) ? [...initialBidData.tags] : defaultBidForm.tags,
+        attachments: Array.isArray(initialBidData.attachments) ? [...initialBidData.attachments] : defaultBidForm.attachments,
+        // Ensure status, projectId, projectName, submissionDeadline are correctly set
+        status: initialBidData.status || defaultBidForm.status,
+        projectId: initialBidData.projectId || defaultBidForm.projectId,
+        projectName: initialBidData.projectName || defaultBidForm.projectName,
+        submissionDeadline: initialBidData.submissionDeadline !== undefined ? initialBidData.submissionDeadline : defaultBidForm.submissionDeadline,
       };
+
+      // Set the base form data (excluding paymentTerms which are handled by the hook)
+      // We spread baseFormData over prev to ensure we don't lose other fields if setBidForm is called multiple times
+      setBidForm(prev => ({ ...prev, ...baseFormData, paymentTerms: prev.paymentTerms })); // Keep existing paymentTerms for a moment
+
+      // Initialize payment terms using the hook's setter if initialBidData has them
+      if (initialBidData.paymentTerms) {
+        const validInitialPaymentTerms: BidPaymentTermsFormData = {
+            ...defaultBidForm.paymentTerms,
+            ...initialBidData.paymentTerms,
+            installments: Array.isArray(initialBidData.paymentTerms.installments)
+                ? initialBidData.paymentTerms.installments.map(inst => ({
+                    id: inst.id || uuidv4(), name: inst.name || '', percent: inst.percent || 0,
+                    isFixedAmount: inst.isFixedAmount || false, fixedAmount: inst.fixedAmount || 0,
+                    milestoneDescription: inst.milestoneDescription || '', phaseId: inst.phaseId || '',
+                    phaseName: inst.phaseName || '', manuallyConfigured: inst.manuallyConfigured || false,
+                  }))
+                : defaultBidForm.paymentTerms.installments,
+        };
+        setHookPaymentTerms(validInitialPaymentTerms);
+      } else {
+        // If no initial payment terms from prop, initialize hook with default state based on current bid phase
+        const currentPhaseDetails = currentProjectPhases.find(p => p.id === (baseFormData.phaseId || defaultBidForm.phaseId));
+        // The defaultPaymentTermsState function is not exported from the hook, so we rely on the hook's internal default
+        // or we can replicate a similar default structure here if needed for setHookPaymentTerms.
+        // For simplicity, if the hook initializes itself to a sensible default, we might not need to call setHookPaymentTerms here.
+        // However, to be explicit and ensure currentBidPhaseId is considered:
+        const defaultHookState: BidPaymentTermsFormData = {
+            downPaymentPercent: 20, isDownPaymentFixed: false, downPaymentAmount: 0,
+            installments: [{
+                id: uuidv4(), name: 'Final Payment', percent: 80, isFixedAmount: false, fixedAmount: 0,
+                milestoneDescription: 'Upon completion', phaseId: currentPhaseDetails?.id, phaseName: currentPhaseDetails?.name, manuallyConfigured: false,
+            }],
+            syncInstallmentPhases: true,
+        };
+        setHookPaymentTerms(defaultHookState);
+      }
       
-      setBidForm(updatedFormData);
-      console.log("ReusableBidForm - Form updated with data:", updatedFormData);
+      console.log("ReusableBidForm - Form updated with data (base):", baseFormData);
       initialized.current = true;
     }
-  }, [initialBidData, editingBidId]);
+  }, [initialBidData, editingBidId, defaultBidForm, setHookPaymentTerms, currentProjectPhases]);
+
+  // Effect to sync paymentTerms from hook back to bidForm state
+  useEffect(() => {
+    setBidForm(prev => ({ ...prev, paymentTerms: formPaymentTerms }));
+  }, [formPaymentTerms]); // Removed setBidForm from dependency array as it's a setter
 
   // Add effect to update selectedSubcontractor based on bidForm.subcontractorId
   useEffect(() => {
@@ -669,117 +420,16 @@ const ReusableBidForm: React.FC<ReusableBidFormProps> = ({
     });
   };
 
-  const handleChangePaymentTerms = (field: string, value: any) => {
-    setBidForm(prev => ({
-      ...prev,
-      paymentTerms: {
-        ...prev.paymentTerms,
-        [field]: value
-      }
-    }));
-  };
-
-  const handleAddInstallment = () => {
-    setBidForm(prev => {
-      const currentInstallments = prev.paymentTerms.installments;
-      const numInstallments = currentInstallments.length;
-      
-      // Check if we're using fixed amounts (based on down payment setting)
-      const useFixedAmounts = prev.paymentTerms.isDownPaymentFixed;
-      
-      // Create new array of installments with updated names
-      let updatedInstallments = [];
-      
-      if (numInstallments === 0) {
-        // If this is the first installment, name it "Final Payment"
-        updatedInstallments = [
-          {
-            id: uuidv4(), 
-            name: 'Final Payment', 
-            percent: 0, 
-            isFixedAmount: useFixedAmounts, // Match down payment type
-            fixedAmount: 0,
-            milestoneDescription: '',
-            phaseId: prev.phaseId || '',
-            phaseName: prev.phaseName || '',
-            manuallyConfigured: false
-          }
-        ];
-      } else {
-        // Rename existing installments
-        updatedInstallments = currentInstallments.map((item, index) => {
-          // All items except the last one are named "Installment N"
-          if (index < numInstallments - 1) {
-            return { ...item, name: `Installment ${index + 1}` };
-          } else {
-            // The previously last item becomes an installment
-            return { ...item, name: `Installment ${numInstallments}` };
-          }
-        });
-        
-        // Add the new item as "Final Payment"
-        updatedInstallments.push({
-          id: uuidv4(), 
-          name: 'Final Payment', 
-          percent: 0, 
-          isFixedAmount: useFixedAmounts, // Match down payment type
-          fixedAmount: 0,
-          milestoneDescription: '',
-          phaseId: prev.phaseId || '',
-          phaseName: prev.phaseName || '',
-          manuallyConfigured: false
-        });
-      }
-      
-      // Return the updated state
-      return {
-        ...prev,
-        paymentTerms: {
-          ...prev.paymentTerms,
-          installments: updatedInstallments
-        }
-      };
-    });
-    setPaymentTemplate('custom');
-  };
-
-  const handleChangeInstallment = (id: string, field: string, value: any) => {
-    setBidForm(prev => {
-      // Track if this is a phase-related change
-      const isPhaseChange = field === 'phaseId' || field === 'phaseName';
-      
-      return {
-        ...prev,
-        paymentTerms: {
-          ...prev.paymentTerms,
-          installments: prev.paymentTerms.installments.map(item => 
-            item.id === id ? {
-              ...item, 
-              [field]: value,
-              // If changing phase, mark it as manually configured
-              manuallyConfigured: isPhaseChange ? true : item.manuallyConfigured
-            } : item
-          )
-        }
-      };
-    });
-    setPaymentTemplate('custom');
-  };
-
-  const handleRemoveInstallment = (id: string) => {
-    setBidForm(prev => ({
-      ...prev,
-      paymentTerms: {
-        ...prev.paymentTerms,
-        installments: prev.paymentTerms.installments.filter(item => item.id !== id)
-      }
-    }));
-    setPaymentTemplate('custom');
-  };
+  // Payment terms handlers are now replaced by functions from usePaymentTerms hook
+  // const handleChangePaymentTerms = (field: string, value: any) => { ... }; // Removed
+  // const handleAddInstallment = () => { ... }; // Removed
+  // const handleChangeInstallment = (id: string, field: string, value: any) => { ... }; // Removed
+  // const handleRemoveInstallment = (id: string) => { ... }; // Removed
 
   const handlePaymentTemplateChange = (e: SelectChangeEvent<string>) => {
-    const template = e.target.value;
-    setPaymentTemplate(template);
+    const template = e.target.value as 'one-time' | 'standard' | 'trades' | 'custom';
+    setPaymentTemplate(template); // Keep local state for the Select component
+    applyPaymentTemplate(template); // Call the hook function
     
     // Safely access phases
     const defaultPhase = (phases && phases.length > 0) ? phases[0] : null;
@@ -1150,7 +800,7 @@ const ReusableBidForm: React.FC<ReusableBidFormProps> = ({
                   </MenuItem>
                   <MenuItem value="submitted">
                     <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                      <Box sx={{ width: 7, height: 7, borderRadius: '50%', bgcolor: 'info.main', mr: 1 }} /> Submitted
+                      <Box sx={{ width: 7, height: 7, borderRadius: '50%', bgcolor: 'primary.main', mr: 1 }} /> Submitted
                     </Box>
                   </MenuItem>
                   <MenuItem value="accepted">
@@ -1370,24 +1020,13 @@ const ReusableBidForm: React.FC<ReusableBidFormProps> = ({
                     <FormControl fullWidth size="small">
                       <InputLabel>Initial Payment Type</InputLabel>
                       <Select
-                        value={bidForm.paymentTerms.isDownPaymentFixed ? 'amount' : 'percent'}
+                        value={formPaymentTerms.isDownPaymentFixed ? 'amount' : 'percent'}
                         label="Initial Payment Type"
                         onChange={(e) => {
-                          const isAmount = e.target.value === 'amount';
-                          handleChangePaymentTerms('isDownPaymentFixed', isAmount);
-                          
-                          // When switching to amount, calculate from percentage
-                          if (isAmount && !bidForm.paymentTerms.isDownPaymentFixed) {
-                            const amount = bidForm.totalAmount * (bidForm.paymentTerms.downPaymentPercent / 100);
-                            handleChangePaymentTerms('downPaymentAmount', amount);
-                          }
-                          // When switching to percentage, calculate from amount
-                          else if (!isAmount && bidForm.paymentTerms.isDownPaymentFixed) {
-                            const percent = bidForm.totalAmount > 0 ? 
-                              (bidForm.paymentTerms.downPaymentAmount || 0) / bidForm.totalAmount * 100 : 0;
-                            handleChangePaymentTerms('downPaymentPercent', percent);
-                          }
-                          
+                          const isFixed = e.target.value === 'amount';
+                          // Determine current value to pass based on which field is active
+                          const currentValue = isFixed ? formPaymentTerms.downPaymentAmount : formPaymentTerms.downPaymentPercent;
+                          updateDownPayment(currentValue, isFixed);
                           setPaymentTemplate('custom');
                         }}
                       >
@@ -1397,27 +1036,16 @@ const ReusableBidForm: React.FC<ReusableBidFormProps> = ({
                     </FormControl>
                   </Grid>
                   <Grid item xs={6}>
-                    {bidForm.paymentTerms.isDownPaymentFixed ? (
+                    {formPaymentTerms.isDownPaymentFixed ? (
                       <TextField
                         fullWidth
                         label="Initial Payment"
                         type="number"
                         size="small"
-                        InputProps={{
-                          startAdornment: <InputAdornment position="start">$</InputAdornment>,
-                          sx: { borderRadius: 1 }
-                        }}
-                        value={bidForm.paymentTerms.downPaymentAmount || 0}
+                        InputProps={{ startAdornment: <InputAdornment position="start">$</InputAdornment>, sx: { borderRadius: 1 } }}
+                        value={formPaymentTerms.downPaymentAmount || 0}
                         onChange={(e) => {
-                          const val = Math.max(0, Number(e.target.value));
-                          handleChangePaymentTerms('downPaymentAmount', val);
-                          
-                          // Also update percentage for consistency
-                          if (bidForm.totalAmount > 0) {
-                            const percent = (val / bidForm.totalAmount) * 100;
-                            handleChangePaymentTerms('downPaymentPercent', percent);
-                          }
-                          
+                          updateDownPayment(Number(e.target.value), true);
                           setPaymentTemplate('custom');
                         }}
                         variant="outlined"
@@ -1428,21 +1056,10 @@ const ReusableBidForm: React.FC<ReusableBidFormProps> = ({
                         label="Initial Payment"
                         type="number"
                         size="small"
-                        InputProps={{
-                          endAdornment: <InputAdornment position="end">%</InputAdornment>,
-                          sx: { borderRadius: 1 }
-                        }}
-                        value={bidForm.paymentTerms.downPaymentPercent}
+                        InputProps={{ endAdornment: <InputAdornment position="end">%</InputAdornment>, sx: { borderRadius: 1 } }}
+                        value={formPaymentTerms.downPaymentPercent}
                         onChange={(e) => {
-                          const val = Math.max(0, Math.min(100, Number(e.target.value)));
-                          // Round to 1 decimal place
-                          const roundedVal = parseFloat(val.toFixed(1));
-                          handleChangePaymentTerms('downPaymentPercent', roundedVal);
-                          
-                          // Also update amount for consistency
-                          const amount = bidForm.totalAmount * (roundedVal / 100);
-                          handleChangePaymentTerms('downPaymentAmount', amount);
-                          
+                          updateDownPayment(Number(e.target.value), false);
                           setPaymentTemplate('custom');
                         }}
                         variant="outlined"
@@ -1451,10 +1068,9 @@ const ReusableBidForm: React.FC<ReusableBidFormProps> = ({
                   </Grid>
                 </Grid>
                 <FormHelperText sx={{ textAlign: 'right', mt: 0.5 }}>
-                  {bidForm.paymentTerms.isDownPaymentFixed ? 
-                    `Equivalent: ${(bidForm.totalAmount > 0 ? 
-                      (bidForm.paymentTerms.downPaymentAmount || 0) / bidForm.totalAmount * 100 : 0).toFixed(1)}%` : 
-                    `Amount: ${formatCurrency(bidForm.totalAmount * bidForm.paymentTerms.downPaymentPercent / 100)}`}
+                  {formPaymentTerms.isDownPaymentFixed ?
+                    `Equivalent: ${(bidForm.totalAmount > 0 ? (formPaymentTerms.downPaymentAmount || 0) / bidForm.totalAmount * 100 : 0).toFixed(1)}%` :
+                    `Amount: ${formatCurrency(bidForm.totalAmount * formPaymentTerms.downPaymentPercent / 100)}`}
                 </FormHelperText>
               </Grid>
               <Grid item xs={12} sm={6}> 
@@ -1463,7 +1079,7 @@ const ReusableBidForm: React.FC<ReusableBidFormProps> = ({
                   variant="outlined"
                   size="small"
                   startIcon={<AddIcon />}
-                  onClick={handleAddInstallment}
+                  onClick={addInstallment} // Use from hook
                   sx={{ borderRadius: 1 }}
                 >
                   Add Installment
@@ -1472,7 +1088,7 @@ const ReusableBidForm: React.FC<ReusableBidFormProps> = ({
           </Grid>
 
           {/* Installments List */}
-          {bidForm.paymentTerms.installments.map((installment, index) => (
+          {formPaymentTerms.installments.map((installment, index) => (
             <Paper
               key={installment.id}
               elevation={0}
@@ -1487,7 +1103,7 @@ const ReusableBidForm: React.FC<ReusableBidFormProps> = ({
             >
               <IconButton 
                 size="small" 
-                onClick={() => handleRemoveInstallment(installment.id)} 
+                onClick={() => removeInstallment(installment.id)} // Use from hook
                 color="inherit"
                 sx={{ position: 'absolute', top: 6, right: 6, opacity: 0.5 }} // Adjusted position
               >
@@ -1506,7 +1122,7 @@ const ReusableBidForm: React.FC<ReusableBidFormProps> = ({
                     label="Name"
                     size="small"
                     value={installment.name}
-                    onChange={(e) => handleChangeInstallment(installment.id, 'name', e.target.value)}
+                    onChange={(e) => updateInstallment(installment.id, 'name', e.target.value)} // Use from hook
                     variant="outlined"
                     InputProps={{ sx: { borderRadius: 1 } }}
                   />
@@ -1519,24 +1135,7 @@ const ReusableBidForm: React.FC<ReusableBidFormProps> = ({
                     <Select
                       value={installment.isFixedAmount ? 'amount' : 'percent'}
                       label="Input Type"
-                      onChange={(e) => {
-                        const isAmount = e.target.value === 'amount';
-                        handleChangeInstallment(installment.id, 'isFixedAmount', isAmount);
-                        
-                        // When switching to amount, calculate from percentage
-                        if (isAmount && !installment.isFixedAmount) {
-                          const amount = bidForm.totalAmount * (installment.percent / 100);
-                          handleChangeInstallment(installment.id, 'fixedAmount', amount);
-                        }
-                        // When switching to percentage, calculate from amount
-                        else if (!isAmount && installment.isFixedAmount) {
-                          const percent = bidForm.totalAmount > 0 ? 
-                            (installment.fixedAmount || 0) / bidForm.totalAmount * 100 : 0;
-                          // Round to 1 decimal place
-                          const roundedPercent = parseFloat(percent.toFixed(1));
-                          handleChangeInstallment(installment.id, 'percent', roundedPercent);
-                        }
-                      }}
+                      onChange={(e) => updateInstallment(installment.id, 'isFixedAmount', e.target.value === 'amount')} // Use from hook
                     >
                       <MenuItem value="percent">Percentage (%)</MenuItem>
                       <MenuItem value="amount">Fixed Amount ($)</MenuItem>
@@ -1558,18 +1157,7 @@ const ReusableBidForm: React.FC<ReusableBidFormProps> = ({
                         startAdornment: <InputAdornment position="start">$</InputAdornment>,
                         sx: { borderRadius: 1 } 
                       }}
-                      onChange={(e) => {
-                        const val = Math.max(0, Number(e.target.value));
-                        handleChangeInstallment(installment.id, 'fixedAmount', val);
-                        
-                        // Also update percentage for consistency
-                        if (bidForm.totalAmount > 0) {
-                          const percent = (val / bidForm.totalAmount) * 100;
-                          handleChangeInstallment(installment.id, 'percent', percent);
-                        }
-                        
-                        setPaymentTemplate('custom');
-                      }}
+                      onChange={(e) => updateInstallment(installment.id, 'fixedAmount', Number(e.target.value))} // Use from hook
                       variant="outlined"
                     />
                   ) : (
@@ -1584,18 +1172,7 @@ const ReusableBidForm: React.FC<ReusableBidFormProps> = ({
                         endAdornment: <InputAdornment position="end">%</InputAdornment>,
                         sx: { borderRadius: 1 } 
                       }}
-                      onChange={(e) => {
-                        const val = Math.max(0, Number(e.target.value));
-                        // Round to 1 decimal place
-                        const roundedVal = parseFloat(val.toFixed(1));
-                        handleChangeInstallment(installment.id, 'percent', roundedVal);
-                        
-                        // Also update fixed amount for consistency
-                        const amount = bidForm.totalAmount * (roundedVal / 100);
-                        handleChangeInstallment(installment.id, 'fixedAmount', amount);
-                        
-                        setPaymentTemplate('custom');
-                      }}
+                      onChange={(e) => updateInstallment(installment.id, 'percent', Number(e.target.value))} // Use from hook
                       variant="outlined"
                     />
                   )}
@@ -1610,7 +1187,7 @@ const ReusableBidForm: React.FC<ReusableBidFormProps> = ({
                     size="small"
                     value={installment.isFixedAmount ? 
                       `${(bidForm.totalAmount > 0 ? (installment.fixedAmount || 0) / bidForm.totalAmount * 100 : 0).toFixed(1)}%` : 
-                      formatCurrency(bidForm.totalAmount * installment.percent / 100)}
+                      formatCurrency(bidForm.totalAmount * (installment.percent || 0) / 100)}
                     variant="outlined"
                     InputProps={{ sx: { borderRadius: 1 } }}
                   />
@@ -1622,12 +1199,7 @@ const ReusableBidForm: React.FC<ReusableBidFormProps> = ({
                     <Select
                       value={installment.phaseId || ''}
                       label="Related Phase"
-                      onChange={(e) => {
-                        const pId = e.target.value;
-                        const pName = currentProjectPhases.find(p => p.id === pId)?.name || '';
-                        handleChangeInstallment(installment.id, 'phaseId', pId);
-                        handleChangeInstallment(installment.id, 'phaseName', pName);
-                      }}
+                      onChange={(e) => updateInstallment(installment.id, 'phaseId', e.target.value)} // Use from hook
                       sx={{ borderRadius: 1 }}
                     >
                       <MenuItem value=""><em>None</em></MenuItem> 
@@ -1666,7 +1238,7 @@ const ReusableBidForm: React.FC<ReusableBidFormProps> = ({
                     placeholder="Payment trigger..."
                     size="small"
                     value={installment.milestoneDescription}
-                    onChange={(e) => handleChangeInstallment(installment.id, 'milestoneDescription', e.target.value)}
+                    onChange={(e) => updateInstallment(installment.id, 'milestoneDescription', e.target.value)} // Use from hook
                     variant="outlined"
                     InputProps={{ sx: { borderRadius: 1 } }}
                   />
@@ -1677,157 +1249,36 @@ const ReusableBidForm: React.FC<ReusableBidFormProps> = ({
 
           {/* Payment Total Summary and Warning */}
           {(() => {
-            // Calculate total percentage and amount in real-time
-            const downPaymentPercent = bidForm.paymentTerms.downPaymentPercent;
-            const installmentPercentTotal = bidForm.paymentTerms.installments.reduce((sum, i) => sum + i.percent, 0);
-            const totalPercentage = downPaymentPercent + installmentPercentTotal;
+            const totalScheduledPercentVal = getTotalScheduledPercent(bidForm.totalAmount);
+            const totalScheduledAmountVal = getTotalScheduledAmount();
+            const exactlyOneHundred = Math.abs(totalScheduledPercentVal - 100) < 0.01;
+            const matchesTotalBid = Math.abs(totalScheduledAmountVal - bidForm.totalAmount) < 0.01;
             
-            // Calculate actual dollar amounts
-            const downPaymentAmount = bidForm.paymentTerms.isDownPaymentFixed 
-              ? (bidForm.paymentTerms.downPaymentAmount || 0)
-              : (bidForm.totalAmount * downPaymentPercent / 100);
+            // Values for display, directly from hook's state
+            const downPaymentPercent = formPaymentTerms.downPaymentPercent;
+            const downPaymentAmount = formPaymentTerms.isDownPaymentFixed
+              ? formPaymentTerms.downPaymentAmount
+              : bidForm.totalAmount * (downPaymentPercent / 100);
+
+            const installmentsForDisplay = formPaymentTerms.installments;
+            const hasFinalPayment = installmentsForDisplay.length > 0;
+            const finalPayment = hasFinalPayment ? installmentsForDisplay[installmentsForDisplay.length - 1] : null;
+            const finalPaymentAmount = finalPayment ? (finalPayment.isFixedAmount ? finalPayment.fixedAmount : bidForm.totalAmount * (finalPayment.percent / 100)) : 0;
+            const finalPaymentPercent = finalPayment ? finalPayment.percent : 0;
             
-            const installmentAmountTotal = bidForm.paymentTerms.installments.reduce((sum, i) => 
-              sum + (i.isFixedAmount ? (i.fixedAmount || 0) : (bidForm.totalAmount * i.percent / 100)), 0);
-            
-            const totalAmount = downPaymentAmount + installmentAmountTotal;
-            
-            // Create informative message based on calculations
-            const exactlyOneHundred = Math.abs(totalPercentage - 100) < 0.01; // Allow tiny floating point errors
-            const matchesTotalBid = Math.abs(totalAmount - bidForm.totalAmount) < 0.01;
-            
-            // Get final payment if exists
-            const hasFinalPayment = bidForm.paymentTerms.installments.length > 0;
-            const finalPayment = hasFinalPayment ? bidForm.paymentTerms.installments[bidForm.paymentTerms.installments.length - 1] : null;
-            const finalPaymentAmount = finalPayment ? 
-              (finalPayment.isFixedAmount ? 
-                (finalPayment.fixedAmount || 0) : 
-                bidForm.totalAmount * (finalPayment.percent || 0) / 100) : 0;
-            const finalPaymentPercent = finalPayment ? (finalPayment.percent || 0) : 0;
-            
-            // Calculate what final payment should be to reach 100%
-            const remainingPercent = 100 - downPaymentPercent - (hasFinalPayment ? 
-              bidForm.paymentTerms.installments.slice(0, -1).reduce((sum, inst) => sum + (inst.percent || 0), 0) : 0);
+            const intermediateInstallments = installmentsForDisplay.slice(0, -1);
+            const intermediateAmount = intermediateInstallments.reduce((sum, inst) => sum + (inst.isFixedAmount ? inst.fixedAmount : bidForm.totalAmount * (inst.percent / 100)), 0);
+            const intermediatePercent = intermediateInstallments.reduce((sum, inst) => sum + inst.percent, 0);
+
+            // Suggestion logic (can be simplified if hook provides this directly)
+            const currentTotalPercentWithoutFinal = downPaymentPercent + intermediatePercent;
+            const remainingPercent = 100 - currentTotalPercentWithoutFinal;
             const suggestedFinalAmount = bidForm.totalAmount * (remainingPercent / 100);
             
             if (!exactlyOneHundred || !matchesTotalBid) {
-              return (
-                <Alert 
-                  severity="warning" 
-                  variant="outlined" 
-                  sx={{ mt: 1, mb: 3, borderRadius: 1, py: 1 }}
-                >
-                  <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
-                    <Typography variant="subtitle2" fontWeight="bold" sx={{ mr: 1 }}>
-                      Payment Schedule Incomplete
-                    </Typography>
-                    <Typography variant="body2" color="text.secondary">
-                      {!exactlyOneHundred ? 
-                        `Total: ${totalPercentage.toFixed(1)}% (needs to be 100%)` : 
-                        `Total: ${formatCurrency(totalAmount)} (should be ${formatCurrency(bidForm.totalAmount)})`}
-                    </Typography>
-                  </Box>
-                  
-                  <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 2 }}>
-                    <Box sx={{ minWidth: 120 }}>
-                      <Typography variant="caption" color="text.secondary">Initial Payment</Typography>
-                      <Typography variant="body2" fontWeight="medium">
-                        {formatCurrency(downPaymentAmount)} ({downPaymentPercent.toFixed(1)}%)
-                      </Typography>
-                    </Box>
-                    
-                    {bidForm.paymentTerms.installments.length > 1 && (
-                      <Box sx={{ minWidth: 120 }}>
-                        <Typography variant="caption" color="text.secondary">Intermediate</Typography>
-                        <Typography variant="body2" fontWeight="medium">
-                          {formatCurrency(bidForm.paymentTerms.installments.slice(0, -1).reduce((sum, inst) => {
-                            return sum + (inst.isFixedAmount 
-                              ? (inst.fixedAmount || 0) 
-                              : (bidForm.totalAmount * inst.percent / 100));
-                          }, 0))} ({bidForm.paymentTerms.installments.slice(0, -1).reduce((sum, inst) => sum + inst.percent, 0).toFixed(1)}%)
-                        </Typography>
-                      </Box>
-                    )}
-                    
-                    {hasFinalPayment && (
-                      <Box sx={{ minWidth: 120 }}>
-                        <Typography variant="caption" color="text.secondary" sx={{ display: 'flex', alignItems: 'center' }}>
-                          Final Payment
-                          {!exactlyOneHundred && (
-                            <Tooltip title="Needs adjustment to reach 100%">
-                              <InfoIcon fontSize="small" color="warning" sx={{ ml: 0.5, opacity: 0.7, width: 16, height: 16 }} />
-                            </Tooltip>
-                          )}
-                        </Typography>
-                        <Typography variant="body2" fontWeight="medium">
-                          {formatCurrency(finalPaymentAmount)} ({finalPaymentPercent.toFixed(1)}%)
-                        </Typography>
-                        {!exactlyOneHundred && finalPaymentPercent !== remainingPercent && (
-                          <Typography variant="caption" color="warning.main">
-                            Should be: {formatCurrency(suggestedFinalAmount)} ({remainingPercent.toFixed(1)}%)
-                          </Typography>
-                        )}
-                      </Box>
-                    )}
-                  </Box>
-                  
-                  <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 1 }}>
-                    {!exactlyOneHundred ? 
-                      `To complete the schedule, the final payment should be ${formatCurrency(suggestedFinalAmount)} (${remainingPercent.toFixed(1)}%).` :
-                      "Please adjust the payment amounts to match the total bid amount."}
-                  </Typography>
-                </Alert>
-              );
+              return ( <Alert severity="warning" variant="outlined" sx={{ mt: 1, mb: 3, borderRadius: 1, py: 1 }}> <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}><Typography variant="subtitle2" fontWeight="bold" sx={{ mr: 1 }}>Payment Schedule Incomplete</Typography><Typography variant="body2" color="text.secondary">{!exactlyOneHundred ? `Total: ${totalScheduledPercentVal.toFixed(1)}% (needs to be 100%)` : `Total: ${formatCurrency(totalScheduledAmountVal)} (should be ${formatCurrency(bidForm.totalAmount)})`}</Typography></Box> <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 2 }}><Box sx={{ minWidth: 120 }}><Typography variant="caption" color="text.secondary">Initial Payment</Typography><Typography variant="body2" fontWeight="medium">{formatCurrency(downPaymentAmount)} ({downPaymentPercent.toFixed(1)}%)</Typography></Box> {intermediateInstallments.length > 0 && (<Box sx={{ minWidth: 120 }}><Typography variant="caption" color="text.secondary">Intermediate</Typography><Typography variant="body2" fontWeight="medium">{formatCurrency(intermediateAmount)} ({intermediatePercent.toFixed(1)}%)</Typography></Box>)} {hasFinalPayment && (<Box sx={{ minWidth: 120 }}><Typography variant="caption" color="text.secondary" sx={{ display: 'flex', alignItems: 'center' }}>Final Payment{!exactlyOneHundred && (<Tooltip title="Needs adjustment"><InfoIcon fontSize="small" color="warning" sx={{ ml: 0.5, opacity: 0.7, width: 16, height: 16 }} /></Tooltip>)}</Typography><Typography variant="body2" fontWeight="medium">{formatCurrency(finalPaymentAmount)} ({finalPaymentPercent.toFixed(1)}%)</Typography>{!exactlyOneHundred && Math.abs(finalPaymentPercent - remainingPercent) > 0.01 && (<Typography variant="caption" color="warning.main">Should be: {formatCurrency(suggestedFinalAmount)} ({remainingPercent.toFixed(1)}%)</Typography>)}</Box>)} </Box> <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 1 }}>{!exactlyOneHundred ? `To complete, the final payment should be ${formatCurrency(suggestedFinalAmount)} (${remainingPercent.toFixed(1)}%).` : "Adjust payment amounts to match total bid."}</Typography> </Alert> );
             }
-            
-            // If both amounts and percentages match, show a success message
-            return (
-              <Alert 
-                severity="success" 
-                variant="outlined" 
-                sx={{ mt: 1, mb: 3, borderRadius: 1, py: 1 }}
-              >
-                <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
-                  <Typography variant="subtitle2" fontWeight="bold" sx={{ mr: 1 }}>
-                    Payment Schedule Complete
-                  </Typography>
-                  <Typography variant="body2" color="text.secondary">
-                    Total: {formatCurrency(totalAmount)} (100%)
-                  </Typography>
-                </Box>
-                
-                <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 2 }}>
-                  <Box sx={{ minWidth: 120 }}>
-                    <Typography variant="caption" color="text.secondary">Initial Payment</Typography>
-                    <Typography variant="body2" fontWeight="medium">
-                      {formatCurrency(downPaymentAmount)} ({downPaymentPercent.toFixed(1)}%)
-                    </Typography>
-                  </Box>
-                  
-                  {bidForm.paymentTerms.installments.length > 1 && (
-                    <Box sx={{ minWidth: 120 }}>
-                      <Typography variant="caption" color="text.secondary">Intermediate</Typography>
-                      <Typography variant="body2" fontWeight="medium">
-                        {formatCurrency(bidForm.paymentTerms.installments.slice(0, -1).reduce((sum, inst) => {
-                          return sum + (inst.isFixedAmount 
-                            ? (inst.fixedAmount || 0) 
-                            : (bidForm.totalAmount * inst.percent / 100));
-                        }, 0))} ({bidForm.paymentTerms.installments.slice(0, -1).reduce((sum, inst) => sum + inst.percent, 0).toFixed(1)}%)
-                      </Typography>
-                    </Box>
-                  )}
-                  
-                  {hasFinalPayment && (
-                    <Box sx={{ minWidth: 120 }}>
-                      <Typography variant="caption" color="text.secondary">Final Payment</Typography>
-                      <Typography variant="body2" fontWeight="medium">
-                        {formatCurrency(finalPaymentAmount)} ({finalPaymentPercent.toFixed(1)}%)
-                      </Typography>
-                    </Box>
-                  )}
-                </Box>
-              </Alert>
-            );
+            return ( <Alert severity="success" variant="outlined" sx={{ mt: 1, mb: 3, borderRadius: 1, py: 1 }}> <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}><Typography variant="subtitle2" fontWeight="bold" sx={{ mr: 1 }}>Payment Schedule Complete</Typography><Typography variant="body2" color="text.secondary">Total: {formatCurrency(totalScheduledAmountVal)} (100%)</Typography></Box> <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 2 }}><Box sx={{ minWidth: 120 }}><Typography variant="caption" color="text.secondary">Initial Payment</Typography><Typography variant="body2" fontWeight="medium">{formatCurrency(downPaymentAmount)} ({downPaymentPercent.toFixed(1)}%)</Typography></Box> {intermediateInstallments.length > 0 && (<Box sx={{ minWidth: 120 }}><Typography variant="caption" color="text.secondary">Intermediate</Typography><Typography variant="body2" fontWeight="medium">{formatCurrency(intermediateAmount)} ({intermediatePercent.toFixed(1)}%)</Typography></Box>)} {hasFinalPayment && (<Box sx={{ minWidth: 120 }}><Typography variant="caption" color="text.secondary">Final Payment</Typography><Typography variant="body2" fontWeight="medium">{formatCurrency(finalPaymentAmount)} ({finalPaymentPercent.toFixed(1)}%)</Typography></Box>)} </Box> </Alert> );
           })()}
         </Box>
 
@@ -1899,7 +1350,7 @@ const ReusableBidForm: React.FC<ReusableBidFormProps> = ({
               !bidForm.title ||
               !bidForm.subcontractorName ||
               !bidForm.phaseId ||
-              (bidForm.paymentTerms.downPaymentPercent + bidForm.paymentTerms.installments.reduce((s, i) => s + i.percent, 0)) !== 100
+              Math.abs(getTotalScheduledPercent(bidForm.totalAmount) - 100) > 0.01 // Use hook function for validation
             }
             sx={{ borderRadius: 1, px: 2 }}
           >
@@ -1945,7 +1396,7 @@ const ReusableBidForm: React.FC<ReusableBidFormProps> = ({
             !bidForm.title ||
             !bidForm.subcontractorName ||
             !bidForm.phaseId ||
-            (bidForm.paymentTerms.downPaymentPercent + bidForm.paymentTerms.installments.reduce((s, i) => s + i.percent, 0)) !== 100
+              Math.abs(getTotalScheduledPercent(bidForm.totalAmount) - 100) > 0.01 // Use hook function for validation
           }
           sx={{ borderRadius: 1, px: 2 }}
         >

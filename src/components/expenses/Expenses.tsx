@@ -71,6 +71,8 @@ import PaymentFormModal from './PaymentFormModal';
 import { BidService } from '../../services/bid';
 import { BidPaymentStage } from '../../types';
 import { v4 as uuidv4 } from 'uuid';
+import { mapToProjectPhase } from '../../utils/projectUtils'; // Import mapToProjectPhase
+import { useExpensePayment } from '../../hooks/useExpensePayment'; // Import the hook
 
 // Category icons mapping
 const CATEGORY_ICONS = {
@@ -115,6 +117,9 @@ const Expenses: React.FC<{ projectId?: string }> = ({ projectId }) => {
   
   // NEW: Grouping functionality
   const [groupBy, setGroupBy] = useState<'none' | 'project' | 'category' | 'vendor' | 'subcontractor'>('none');
+
+  // Hook for processing payments
+  const { isProcessing: isPaymentProcessing, error: paymentError, processExpensePayment } = useExpensePayment();
   
   useEffect(() => {
     if (user?.uid) {
@@ -145,41 +150,6 @@ const Expenses: React.FC<{ projectId?: string }> = ({ projectId }) => {
     setAnchorEl(null);
     setSelectedExpenseId(null);
   };
-
-  // --- Helper function to map raw phase data to ProjectPhase ---
-  // Ensures all required fields are present according to types/index.ts
-  const mapToProjectPhase = (phaseData: any): ProjectPhase => {
-    const id = phaseData.id!;
-    const name = phaseData.name!;
-
-    // Provide default values for required fields
-    const startDate = phaseData.startDate ? new Date(phaseData.startDate) : new Date();
-    const endDate = phaseData.endDate ? new Date(phaseData.endDate) : new Date();
-    const status = phaseData.status || 'not_started'; 
-    const progress = typeof phaseData.progress === 'number' ? phaseData.progress : 0; 
-    const budget = typeof phaseData.budget === 'number' ? phaseData.budget : 0; 
-    const actualCost = typeof phaseData.actualCost === 'number' ? phaseData.actualCost : 0; 
-    const description = phaseData.description || '';
-    // Preserve tasks if they exist or provide empty array
-    const tasks = phaseData.tasks || [];
-    const order = phaseData.order || 0;
-
-    return {
-      id,
-      name,
-      description,
-      startDate,
-      endDate,
-      status,
-      progress,
-      budget,
-      actualCost,
-      tasks,
-      order,
-      projectId: phaseData.projectId // Add the projectId from the project data
-    };
-  };
-  // --- End Helper Function ---
 
   const handleEditFromMenu = () => {
     if (selectedExpenseId) {
@@ -396,192 +366,7 @@ const Expenses: React.FC<{ projectId?: string }> = ({ projectId }) => {
     setPaymentModalOpen(false);
   };
   
-  const handleMarkAsPaid = async (expenseId: string, actualAmountPaid: number, paymentDetails?: any) => {
-    if (!user?.uid) return;
-    
-    console.log(`[handleMarkAsPaid START] ID: ${expenseId}, Amount Paid Now: ${actualAmountPaid}`, paymentDetails);
-    setSubmitting(true);
-    
-    try {
-      const expenseToUpdate = expenses.find(e => e.id === expenseId);
-      if (!expenseToUpdate) {
-        throw new Error('Expense not found locally');
-      }
-      console.log(`[handleMarkAsPaid] Found local expense before update:`, JSON.parse(JSON.stringify(expenseToUpdate)));
-      
-      // Instead of just updating the existing expense, we'll create a new one for the payment
-      // and update the original if it's a partial payment
-      const isPartialPayment = actualAmountPaid < expenseToUpdate.amount;
-      const remainingAmount = expenseToUpdate.amount - actualAmountPaid;
-      
-      // Create a new paid expense record for the payment
-      const paidExpenseData: Omit<Expense, 'id' | 'userId' | 'createdBy' | 'createdAt' | 'updatedAt'> = {
-        projectId: expenseToUpdate.projectId,
-        phaseId: expenseToUpdate.phaseId,
-        phaseName: expenseToUpdate.phaseName,
-        category: expenseToUpdate.category,
-        description: `Payment for: ${expenseToUpdate.description}`,
-        amount: actualAmountPaid,
-        date: new Date(),
-        status: 'paid',
-        vendor: expenseToUpdate.vendor,
-        subcontractorId: expenseToUpdate.subcontractorId,
-        subcontractorName: expenseToUpdate.subcontractorName,
-        notes: `Payment for expense ID: ${expenseId}. ${paymentDetails?.notes || ''}`,
-        paymentDetails: paymentDetails,
-        tags: [...(expenseToUpdate.tags || []), 'payment'],
-        projectName: expenseToUpdate.projectName,
-        bidId: expenseToUpdate.bidId,
-        paymentStageId: expenseToUpdate.paymentStageId,
-        originalExpenseId: expenseId // Reference to the original expense
-      };
-      
-      // Create the new paid expense record
-      const paidExpense = await ExpenseService.createExpense(user.uid, paidExpenseData);
-      console.log(`[handleMarkAsPaid] Created new paid expense:`, paidExpense);
-      
-      if (isPartialPayment) {
-        // Update the original expense to reflect the remaining balance
-        await ExpenseService.updateExpense(expenseId, {
-          amount: remainingAmount,
-          amountPaid: (expenseToUpdate.amountPaid || 0) + actualAmountPaid,
-          notes: `${expenseToUpdate.notes || ''}\n[${new Date().toLocaleString()}] Partial payment of ${formatCurrency(actualAmountPaid)} recorded. Remaining balance: ${formatCurrency(remainingAmount)}`,
-          status: 'partially_paid'
-        });
-        console.log(`[handleMarkAsPaid] Updated original expense with remaining balance: ${remainingAmount}`);
-      } else {
-        // If full payment, mark the original as fully paid
-        await ExpenseService.updateExpense(expenseId, {
-          amountPaid: expenseToUpdate.amount,
-          notes: `${expenseToUpdate.notes || ''}\n[${new Date().toLocaleString()}] Full payment of ${formatCurrency(actualAmountPaid)} recorded.`,
-          status: 'paid',
-          paymentDetails: paymentDetails
-        });
-        console.log(`[handleMarkAsPaid] Marked original expense as fully paid`);
-      }
-      
-      // Refresh the expenses list
-      await fetchExpenses();
-
-      // Process bid payment schedule adjustment if needed
-      if (expenseToUpdate.bidId && expenseToUpdate.paymentStageId) {
-        try {
-          await adjustBidPaymentSchedule(user.uid, expenseToUpdate, paidExpense, actualAmountPaid);
-        } catch (bidUpdateError) {
-          console.error('[handleMarkAsPaid] Error updating bid payment schedule:', bidUpdateError);
-          // We don't want to fail the whole operation if just the bid update fails
-          setSnackbar({
-            open: true,
-            message: 'Payment recorded, but failed to update Bid schedule.',
-            severity: 'warning'
-          });
-        }
-      }
-      
-      setSnackbar({
-        open: true,
-        message: `Payment of ${formatCurrency(actualAmountPaid)} recorded successfully`,
-        severity: 'success'
-      });
-
-    } catch (err: any) {
-      console.error('[handleMarkAsPaid] Error:', err);
-      setError(err.message || 'Failed to mark expense as paid. Please try again.');
-      setSnackbar({
-        open: true,
-        message: err.message || 'Failed to record payment',
-        severity: 'error'
-      });
-    } finally {
-      setSubmitting(false);
-      handleClosePaymentModal(); // Close the payment modal
-    }
-  };
-  
-  // Helper function to update bid payment schedule with new payment information
-  const adjustBidPaymentSchedule = async (userId: string, originalExpense: Expense, paymentExpense: Expense, amountPaid: number) => {
-    console.log(`[adjustBidPaymentSchedule] Starting bid adjustment for payment of ${formatCurrency(amountPaid)}`);
-    
-    // Get the specific bid using the bidId from the expense
-    const bid = await BidService.getBid(userId, originalExpense.bidId!);
-    if (!bid) {
-      console.warn(`[adjustBidPaymentSchedule] Bid ${originalExpense.bidId} not found. Skipping adjustment.`);
-      return;
-    }
-    
-    console.log(`[adjustBidPaymentSchedule] Found bid: ${bid.id}`);
-    
-    if (bid.paymentSchedule && bid.paymentProgress) {
-      console.log(`[adjustBidPaymentSchedule] Bid has payment schedule and progress. Processing stage ${originalExpense.paymentStageId}.`);
-      
-      const schedule = [...bid.paymentSchedule]; // Work with a copy
-      const progress = { ...bid.paymentProgress }; // Work with a copy
-      
-      const stageIndex = schedule.findIndex(stage => stage.id === originalExpense.paymentStageId);
-      
-      if (stageIndex === -1) {
-        console.warn(`[adjustBidPaymentSchedule] Payment Stage ${originalExpense.paymentStageId} not found. Skipping adjustment.`);
-        return;
-      }
-      
-      const stage = schedule[stageIndex];
-      const originalStageAmount = stage.amount || 0;
-      
-      console.log(`[adjustBidPaymentSchedule] Found stage ${stage.id} with amount ${originalStageAmount}`);
-      
-      // Update payment stage with new information
-      const isFullPayment = amountPaid >= originalStageAmount;
-      
-      if (isFullPayment) {
-        // Mark the stage as paid and link to the new payment expense
-        schedule[stageIndex] = {
-          ...stage,
-          status: 'paid' as const, // Explicitly specify this as a const literal type
-          paymentDate: new Date(),
-          expenseId: paymentExpense.id, // Link to the new payment expense
-          isPaid: true
-        };
-      } else {
-        // For partial payment, create a split in the payment schedule
-        // The original stage gets reduced by the paid amount
-        schedule[stageIndex] = {
-          ...stage,
-          amount: originalStageAmount - amountPaid,
-          percentage: ((originalStageAmount - amountPaid) / bid.totalAmount) * 100
-        };
-        
-        // Add a new paid stage for the partial payment
-        const paidStage = {
-          ...stage,
-          id: uuidv4(), // Generate a new ID for this split
-          name: `${stage.name} (Partial Payment)`,
-          amount: amountPaid,
-          percentage: (amountPaid / bid.totalAmount) * 100,
-          status: 'paid' as const, // Explicitly specify this as a const literal type
-          paymentDate: new Date(),
-          expenseId: paymentExpense.id,
-          isPaid: true
-        };
-        
-        schedule.push(paidStage);
-      }
-      
-      // Update the payment progress
-      const updatedPaid = (progress.paid || 0) + amountPaid;
-      const updatedRemaining = bid.totalAmount - updatedPaid;
-      progress.paid = updatedPaid;
-      progress.remaining = updatedRemaining;
-      progress.pending = Math.max(0, (progress.pending || 0) - amountPaid);
-      
-      // Update the bid with the new schedule and progress
-      await BidService.updateBid(bid.id, {
-        paymentSchedule: schedule,
-        paymentProgress: progress
-      });
-      
-      console.log(`[adjustBidPaymentSchedule] Successfully updated bid ${bid.id} payment schedule and progress`);
-    }
-  };
+  // Removed handleMarkAsPaid and adjustBidPaymentSchedule as their logic is now in useExpensePayment hook
 
   // Create a properly typed expense object
   const handleSaveExpense = async (expenseData: Partial<Expense>) => {
@@ -1927,21 +1712,53 @@ const Expenses: React.FC<{ projectId?: string }> = ({ projectId }) => {
         open={paymentModalOpen}
         onClose={handleClosePaymentModal}
         expense={fullExpenseForPayment} // Pass the full object or null
-        onSave={(actualAmountPaid, paymentDetails) => { 
-          console.log(`[Expenses] PaymentFormModal onSave callback triggered. Actual Amount Received: ${actualAmountPaid}`, paymentDetails); // LOG A
-          if (fullExpenseForPayment?.id) { 
-            console.log(`[Expenses] fullExpenseForPayment ID is valid (${fullExpenseForPayment.id}). Calling handleMarkAsPaid...`); // LOG B
-            handleMarkAsPaid(fullExpenseForPayment.id, actualAmountPaid, paymentDetails);
+        onSave={async (actualAmountPaid, paymentDetails) => { // Make async
+          if (fullExpenseForPayment?.id && user) { // Ensure user is available
+            setSubmitting(true); // Use submitting state from Expenses.tsx for general feedback if desired
+            const result = await processExpensePayment(
+              user,
+              fullExpenseForPayment, // Pass the full expense object
+              actualAmountPaid,
+              paymentDetails
+            );
+            setSubmitting(false);
+            if (result.success) {
+              fetchExpenses(); // Refresh expenses list
+              setSnackbar({ open: true, message: result.message, severity: 'success' });
+              if (result.updatedBid) {
+                console.log("Bid was updated as part of payment processing:", result.updatedBid);
+                // Optionally, could also trigger a refresh/update of bids list if displayed elsewhere
+              }
+            } else {
+              setSnackbar({ open: true, message: result.message, severity: 'error' });
+              // Display paymentError from hook if needed, though snackbar might be enough
+              if (paymentError) console.error("Payment Processing Error:", paymentError);
+            }
+            handleClosePaymentModal(); // Close modal regardless of success/failure for now
           } else {
-            console.error('[Expenses] PaymentFormModal onSave called, BUT fullExpenseForPayment or its ID is missing! Cannot call handleMarkAsPaid.', { 
-              fullExpenseForPayment: fullExpenseForPayment,
-              id: fullExpenseForPayment?.id 
-            }); // LOG C
+            console.error('[Expenses] PaymentFormModal onSave called, but required data (expense ID or user) is missing.', {
+              fullExpenseForPaymentId: fullExpenseForPayment?.id, // Corrected logging variable name
+              userId: user?.uid,
+            });
+            setSnackbar({ open: true, message: 'Error: Missing expense data or user information.', severity: 'error'});
           }
         }}
       />
       
       {/* Add Snackbar for notifications */}
+      {/* Snackbar for paymentError from the hook */}
+      {paymentError && (
+        <Snackbar
+          open={!!paymentError}
+          autoHideDuration={6000}
+          onClose={() => { /* setError(null) might be needed if error state is managed in hook */ }}
+          anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+        >
+          <MuiAlert elevation={6} variant="filled" severity="error" onClose={() => { /* setError(null) */ }}>
+            Payment Error: {paymentError}
+          </MuiAlert>
+        </Snackbar>
+      )}
       <Snackbar 
         open={snackbar.open} 
         autoHideDuration={6000} 

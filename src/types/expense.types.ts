@@ -25,7 +25,6 @@ export interface Expense {
   description: string;
   amount: number;
   amountPaid?: number;
-  amountRemaining?: number;
   date: Date | string;
   receiptUrl?: string;
   vendor?: string | null;
@@ -37,8 +36,6 @@ export interface Expense {
   createdAt: Date | string;
   updatedAt: Date | string;
   notes?: string;
-  /** @deprecated Use phaseName instead */
-  buildingPhase?: string;
   lineItems?: LineItem[];
   paymentDetails?: PaymentDetails | null;
   /** Array of transaction IDs associated with this expense */

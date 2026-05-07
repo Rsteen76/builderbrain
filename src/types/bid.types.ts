@@ -65,7 +65,8 @@ export interface Bid {
   completionDate?: Date | null;
   totalAmount: number;
   timeline?: number; // Duration in days
-  paymentTerms?: string;
+  // TODO: Investigate and remove if confirmed unused (Superseded by paymentSchedule?)
+  // paymentTerms?: string;
   currentVersionId?: string;
   versions?: BidVersion[];
   tags?: string[];
@@ -86,5 +87,6 @@ export interface Bid {
   approvalDate?: Date | string;
   rejectionDate?: Date | string;
   rejectionReason?: string;
-  description?: string;
+  // TODO: Investigate and remove if confirmed unused (Redundant with scope?)
+  // description?: string;
 } 

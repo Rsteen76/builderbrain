@@ -989,6 +989,10 @@ export class BidService {
       if (categoryId) {
           firestoreBid.categoryId = categoryId;
       }
+
+      // Explicitly remove fields that were commented out from the Bid type
+      delete (firestoreBid as any).paymentTerms;
+      delete (firestoreBid as any).description;
       
       return firestoreBid;
   }
@@ -1021,7 +1025,8 @@ export class BidService {
   private static convertFromFirestoreFormat(data: FirestoreBid, id: string): Bid {
     try {
       // Extract versions first to handle special conversion
-      const { versions: firestoreVersions, ...otherData } = data;
+      // Also destructure and ignore paymentTerms and description if they exist in Firestore data
+      const { versions: firestoreVersions, paymentTerms, description, ...otherData } = data;
       
       // Convert each version, handling lineItems and Timestamp
       const versions = firestoreVersions?.map(v => ({
