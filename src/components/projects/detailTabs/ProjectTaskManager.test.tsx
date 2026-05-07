@@ -145,6 +145,8 @@ describe('ProjectTaskManager', () => {
       closeExpenseDialog: jest.fn(),
       isUpdatingPhase: false,
       updatePhaseStatus: jest.fn(),
+      addPhase: jest.fn(),
+      deletePhase: jest.fn(),
       isExpenseOperating: false,
       addExpense: jest.fn(),
       updateExpense: jest.fn(),

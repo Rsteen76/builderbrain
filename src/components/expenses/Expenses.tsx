@@ -37,6 +37,7 @@ import {
   LinearProgress, // Used in remaining summary section
 } from '@mui/material';
 import MuiAlert, { AlertProps } from '@mui/material/Alert';
+import { logger } from '../../utils/logger';
 import {
   Add as AddIcon,
   // Search as SearchIcon, // Removed, used in ExpenseControls
@@ -112,11 +113,11 @@ const Expenses: React.FC<{ projectId?: string }> = ({ projectId }) => {
     message: '',
     severity: 'success'
   });
-  
+
   // NEW: Add sort state
   const [sortField, setSortField] = useState<'amount' | 'date' | null>(null);
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
-  
+
   // NEW: Grouping functionality
   const [groupBy, setGroupBy] = useState<'none' | 'project' | 'category' | 'vendor' | 'subcontractor'>('none');
   // Hook for processing payments
@@ -133,12 +134,12 @@ const Expenses: React.FC<{ projectId?: string }> = ({ projectId }) => {
     return filters;
   }, [tabValue, categoryFilter, projectFilter, projectId]);
 
-  const { 
-    data: rawFetchedExpenses, 
-    isLoading: expensesListIsLoading, 
-    isError: expensesListIsError, 
-    error: expensesListError, 
-    refetch: refetchExpenses 
+  const {
+    data: rawFetchedExpenses,
+    isLoading: expensesListIsLoading,
+    isError: expensesListIsError,
+    error: expensesListError,
+    refetch: refetchExpenses
   } = useGetExpenses(user?.uid || '', expenseHookFilters, !!user?.uid);
 
   // Process fetched expenses to add project names and handle undefined data
@@ -149,7 +150,7 @@ const Expenses: React.FC<{ projectId?: string }> = ({ projectId }) => {
       projectName: projects.find(p => p.id === exp.projectId)?.name || 'Unknown Project',
     }));
   }, [rawFetchedExpenses, projects]);
-  
+
   useEffect(() => {
     if (user?.uid) {
       fetchProjects();
@@ -158,19 +159,19 @@ const Expenses: React.FC<{ projectId?: string }> = ({ projectId }) => {
   // Key dependencies for fetching projects.
   // useGetExpenses handles its own dependencies via its query key (userId, filters).
   // `submitting` is removed; refetchExpenses will be called explicitly in mutation onSuccess.
-  }, [user]); 
-  
+  }, [user]);
+
   // Calculate summary data based on processed expenses
   const totalExpensesValue = expenses.reduce((sum, expense) => sum + expense.amount, 0);
   const needsPaymentExpensesValue = expenses.filter(e => e.status !== 'paid').reduce((sum, e) => sum + e.amount, 0);
   const paidExpensesValue = expenses.filter(e => e.status === 'paid').reduce((sum, e) => sum + e.amount, 0);
-  
+
   // Calculate category breakdown
   const categoryBreakdown = expenses.reduce((acc, expense) => {
     acc[expense.category] = (acc[expense.category] || 0) + expense.amount;
     return acc;
   }, {} as Record<string, number>);
- 
+
   // Menu handlers
   const handleMenuOpen = (event: React.MouseEvent<HTMLElement>, expenseId: string) => {
     event.stopPropagation();
@@ -187,13 +188,13 @@ const Expenses: React.FC<{ projectId?: string }> = ({ projectId }) => {
     if (selectedExpenseId) {
       const expenseToEdit = expenses.find(exp => exp.id === selectedExpenseId);
       if (expenseToEdit) {
-        setSelectedExpense(expenseToEdit); 
+        setSelectedExpense(expenseToEdit);
         const project = projects.find(p => p.id === expenseToEdit.projectId);
         // Apply filter/map directly before setting state
         const phases: ProjectPhase[] = (project?.phases || [])
             .filter(p => !!p?.id && !!p?.name)
             .map(mapToProjectPhase);
-        setSelectedProjectPhases(phases); 
+        setSelectedProjectPhases(phases);
         setExpenseModalOpen(true);
       }
     }
@@ -224,7 +225,7 @@ const Expenses: React.FC<{ projectId?: string }> = ({ projectId }) => {
           });
         })
         .catch((err: unknown) => {
-          console.error('Error deleting expense:', err);
+          logger.error('Error deleting expense:', err);
           const errorMessage = err instanceof Error ? err.message : 'An unknown error occurred';
           setSnackbar({
             open: true,
@@ -238,7 +239,7 @@ const Expenses: React.FC<{ projectId?: string }> = ({ projectId }) => {
     }
     handleMenuClose();
   };
-  
+
   const fetchProjects = async () => { // This remains as projects are fetched separately
     if (!user?.uid) return;
     // Consider moving project fetching to its own hook if it becomes complex
@@ -252,17 +253,17 @@ const Expenses: React.FC<{ projectId?: string }> = ({ projectId }) => {
       }));
       setProjects(validatedProjects);
     } catch (err) {
-      console.error('Error fetching projects:', err);
+      logger.error('Error fetching projects:', err);
       // Optionally set a specific project error state if needed
     }
   };
-  
+
   // Removed fetchExpenses function as its logic is now in useGetExpenses hook
-  
+
   const handleTabChange = (_event: React.SyntheticEvent, newValue: number) => {
     setTabValue(newValue); // This will trigger a refetch in useGetExpenses due to query key change
   };
-  
+
   const handleRefresh = () => {
     fetchProjects(); // Still fetch projects if they can be updated
     refetchExpenses(); // Refetch expenses using the hook's function
@@ -272,113 +273,113 @@ const Expenses: React.FC<{ projectId?: string }> = ({ projectId }) => {
       severity: 'info'
     });
   };
-  
+
   const handleAddExpense = () => {
     if (projectId) {
       const currentProject = projects.find(p => p.id === projectId);
       // Apply filter/map directly before setting state
       const projectPhases: ProjectPhase[] = (currentProject?.phases || [])
             .filter(p => !!p?.id && !!p?.name)
-            .map(mapToProjectPhase); 
+            .map(mapToProjectPhase);
       setSelectedProjectPhases(projectPhases);
-      
+
       const initialExpenseData: Partial<Expense> = {
         projectId: projectId,
-        ...(projectPhases.length === 1 && projectPhases[0].id ? { 
-            phaseId: projectPhases[0].id, 
-            phaseName: projectPhases[0].name 
+        ...(projectPhases.length === 1 && projectPhases[0].id ? {
+            phaseId: projectPhases[0].id,
+            phaseName: projectPhases[0].name
         } : {})
       };
-      
-      console.log('handleAddExpense (Project Context): Initializing with:', initialExpenseData, 'Phases:', projectPhases);
-      setSelectedExpense(initialExpenseData); 
+
+      logger.log('handleAddExpense (Project Context): Initializing with:', initialExpenseData, 'Phases:', projectPhases);
+      setSelectedExpense(initialExpenseData);
     } else {
-      console.log('handleAddExpense (General Context): Resetting');
-      setSelectedExpense(null); 
-      setSelectedProjectPhases([]); 
+      logger.log('handleAddExpense (General Context): Resetting');
+      setSelectedExpense(null);
+      setSelectedProjectPhases([]);
     }
-    
+
     setExpenseModalOpen(true);
   };
-  
+
   const handleViewExpense = (expense: Expense) => {
-    setSelectedExpense(expense); 
+    setSelectedExpense(expense);
     const project = projects.find(p => p.id === expense.projectId);
     // Apply filter/map directly before setting state
     const phases: ProjectPhase[] = (project?.phases || [])
             .filter(p => !!p?.id && !!p?.name)
             .map(mapToProjectPhase);
-    setSelectedProjectPhases(phases); 
+    setSelectedProjectPhases(phases);
     setExpenseModalOpen(true);
   };
-  
+
   const handleCloseModal = () => {
     setExpenseModalOpen(false);
     setSelectedExpense(null);
   };
-  
+
   const handleClosePaymentModal = () => {
     setPaymentModalOpen(false);
   };
-  
+
   // Removed handleMarkAsPaid and adjustBidPaymentSchedule as their logic is now in useExpensePayment hook
 
   // Create a properly typed expense object
   const handleSaveExpense = async (expenseData: Partial<Expense>) => {
     if (!user?.uid) return;
-    
+
     // DEBUGGING: Add detailed logging for paymentDetails
-    console.log('======= EXPENSE SAVE DEBUGGING =======');
-    console.log('Raw expense data received by Expenses component:', expenseData);
-    console.log('PaymentDetails value:', expenseData.paymentDetails);
-    console.log('PaymentDetails type:', expenseData.paymentDetails !== undefined ? 
+    logger.log('======= EXPENSE SAVE DEBUGGING =======');
+    logger.log('Raw expense data received by Expenses component:', expenseData);
+    logger.log('PaymentDetails value:', expenseData.paymentDetails);
+    logger.log('PaymentDetails type:', expenseData.paymentDetails !== undefined ?
       typeof expenseData.paymentDetails : 'undefined');
-    console.log('PaymentDetails stringified:', 
-      expenseData.paymentDetails !== undefined ? 
+    logger.log('PaymentDetails stringified:',
+      expenseData.paymentDetails !== undefined ?
       JSON.stringify(expenseData.paymentDetails) : 'undefined');
-    console.log('Full expense data JSON stringified:', JSON.stringify(expenseData));
-    
+    logger.log('Full expense data JSON stringified:', JSON.stringify(expenseData));
+
     // Ensure paymentDetails is either a valid object or null, not undefined.
     const processedExpenseData = {
       ...expenseData,
       paymentDetails: expenseData.paymentDetails === undefined ? null : expenseData.paymentDetails,
     };
-    
+
     setSubmitting(true);
     let savedExpense: Expense;
-    
+
     try {
       if (processedExpenseData.id) {
         // Update existing expense
-        console.log('Before update - expense data:', processedExpenseData);
-        console.log('Before update - existing expense:', expenses.find(e => e.id === processedExpenseData.id));
-        
+        logger.log('Before update - expense data:', processedExpenseData);
+        logger.log('Before update - existing expense:', expenses.find(e => e.id === processedExpenseData.id));
+
         await ExpenseService.updateExpense(processedExpenseData.id, processedExpenseData);
-        
+
         // Instead of complex local state updates that can cause inconsistencies,
         // trigger a complete refresh of the expenses data from the server
         // This ensures we always have the latest data directly from the database
         // await fetchExpenses(); // Replaced by refetchExpenses or query invalidation
         refetchExpenses();
-        
-        console.log('Updated expense in the database and refreshed all expense data');
+
+        logger.log('Updated expense in the database and refreshed all expense data');
         savedExpense = { ...processedExpenseData } as Expense; // Use processedExpenseData
-        
+
         // Show success message
         setSnackbar({
           open: true,
           message: 'Expense updated successfully',
           severity: 'success'
         });
-        
+
         // Check if this expense is being marked as paid and has payment details
-        if (expenseData.status === 'paid' && expenseData.paymentDetails && 
+        if (expenseData.status === 'paid' && expenseData.paymentDetails &&
             expenseData.paymentStageId && expenseData.bidId) {
-          console.log('Expense is being marked as paid with payment details. Triggering bid adjustment...');
-          
+          logger.log('Expense is being marked as paid with payment details. Triggering bid adjustment...');
+
           // Extract the actual amount paid from the expense data
           const actualAmountPaid = expenseData.amount || 0;
-          
+
           // Call the bid adjustment logic directly
           try {
             // Get the expense data
@@ -386,71 +387,71 @@ const Expenses: React.FC<{ projectId?: string }> = ({ projectId }) => {
             if (!expenseToUpdate) {
               throw new Error('Expense not found locally');
             }
-            
-            console.log(`[handleSaveExpense][BidAdjust] Expense ${expenseData.id} - Actual Amount Paid: ${actualAmountPaid}`);
-            
+
+            logger.log(`[handleSaveExpense][BidAdjust] Expense ${expenseData.id} - Actual Amount Paid: ${actualAmountPaid}`);
+
             // --- Start Bid Payment Schedule Adjustment Logic ---
             const paymentStageId = expenseToUpdate.paymentStageId;
             const projectId = expenseToUpdate.projectId;
             const bidId = expenseToUpdate.bidId;
-            
+
             if (paymentStageId && projectId) {
-              console.log(`[handleSaveExpense][BidAdjust] Starting adjustment for stage ${paymentStageId} in project ${projectId}.`);
-              
+              logger.log(`[handleSaveExpense][BidAdjust] Starting adjustment for stage ${paymentStageId} in project ${projectId}.`);
+
               // Fetch the full Bid associated with the project using getBids with a filter
-              console.log(`[handleSaveExpense][BidAdjust] Fetching bids for project ${projectId}...`);
+              logger.log(`[handleSaveExpense][BidAdjust] Fetching bids for project ${projectId}...`);
               const bids = await BidService.getBids(user.uid, { projectId: projectId });
-              
+
               if (!bids || bids.length === 0) {
-                console.warn(`[handleSaveExpense][BidAdjust] No Bid found for project ${projectId}. Skipping adjustment.`);
+                logger.warn(`[handleSaveExpense][BidAdjust] No Bid found for project ${projectId}. Skipping adjustment.`);
                 return;
               }
-              
+
               // If we have a specific bidId from the expense, use that to find the correct bid
               let bid;
               if (bidId) {
                 bid = bids.find(b => b.id === bidId);
                 if (bid) {
-                  console.log(`[handleSaveExpense][BidAdjust] Found specific Bid ID: ${bid.id} from expense`);
+                  logger.log(`[handleSaveExpense][BidAdjust] Found specific Bid ID: ${bid.id} from expense`);
                 } else {
-                  console.warn(`[handleSaveExpense][BidAdjust] Bid ID ${bidId} from expense not found. Using first bid.`);
+                  logger.warn(`[handleSaveExpense][BidAdjust] Bid ID ${bidId} from expense not found. Using first bid.`);
                   bid = bids[0];
                 }
               } else {
                 // If no bidId in expense, use the first bid (with warning)
                 if (bids.length > 1) {
-                  console.warn(`[handleSaveExpense][BidAdjust] Multiple bids found for project ${projectId}. Using the first one. Consider implications.`);
+                  logger.warn(`[handleSaveExpense][BidAdjust] Multiple bids found for project ${projectId}. Using the first one. Consider implications.`);
                 }
                 bid = bids[0];
               }
-              
-              console.log(`[handleSaveExpense][BidAdjust] Using Bid ID: ${bid.id}`);
-              
+
+              logger.log(`[handleSaveExpense][BidAdjust] Using Bid ID: ${bid.id}`);
+
               if (!bid.paymentSchedule || !bid.paymentProgress) {
-                console.warn(`[handleSaveExpense][BidAdjust] Bid ${bid.id} is missing paymentSchedule or paymentProgress. Skipping adjustment.`);
+                logger.warn(`[handleSaveExpense][BidAdjust] Bid ${bid.id} is missing paymentSchedule or paymentProgress. Skipping adjustment.`);
               } else {
-                console.log(`[handleSaveExpense][BidAdjust] Bid has schedule and progress. Processing stage ${paymentStageId}.`);
+                logger.log(`[handleSaveExpense][BidAdjust] Bid has schedule and progress. Processing stage ${paymentStageId}.`);
                 const schedule = [...bid.paymentSchedule]; // Work with a copy
                 const progress = { ...bid.paymentProgress }; // Work with a copy
-                
+
                 const stageIndex = schedule.findIndex(stage => stage.id === paymentStageId);
-                
+
                 if (stageIndex === -1) {
-                  console.warn(`[handleSaveExpense][BidAdjust] Payment Stage ${paymentStageId} not found in Bid's schedule. Skipping adjustment.`);
+                  logger.warn(`[handleSaveExpense][BidAdjust] Payment Stage ${paymentStageId} not found in Bid's schedule. Skipping adjustment.`);
                 } else {
                   const paidStage = schedule[stageIndex];
                   const originalStageAmount = paidStage.amount;
-                  
-                  console.log(`[handleSaveExpense][BidAdjust] Found Stage ${paidStage.id} ('${paidStage.name}') with original amount ${originalStageAmount}.`);
-                  
+
+                  logger.log(`[handleSaveExpense][BidAdjust] Found Stage ${paidStage.id} ('${paidStage.name}') with original amount ${originalStageAmount}.`);
+
                   // Update the paid stage status & details
                   paidStage.status = 'paid';
                   paidStage.paymentDate = new Date(); // Set payment date
                   paidStage.expenseId = expenseData.id; // Ensure link
                   // **CRITICAL:** Update the stage amount to the actual amount paid
                   paidStage.amount = actualAmountPaid;
-                  console.log(`[handleSaveExpense][BidAdjust] Updated paid stage ${paidStage.id} status to 'paid' and amount to actual: ${paidStage.amount}`);
-                  
+                  logger.log(`[handleSaveExpense][BidAdjust] Updated paid stage ${paidStage.id} status to 'paid' and amount to actual: ${paidStage.amount}`);
+
                   // Recalculate overall payment progress based on ACTUAL amounts of ALL paid stages
                   let calculatedTotalPaid = 0;
                   schedule.forEach(stage => {
@@ -458,22 +459,22 @@ const Expenses: React.FC<{ projectId?: string }> = ({ projectId }) => {
                       calculatedTotalPaid += stage.amount; // Use the updated actual amount for the current stage
                     }
                   });
-                  
+
                   const newTotalPaid = calculatedTotalPaid; // Use the recalculated total
                   const newRemaining = bid.totalAmount - newTotalPaid;
-                  
+
                   progress.paid = newTotalPaid;
                   progress.remaining = newRemaining;
                   // Recalculate pending amount
-                  progress.pending = bid.totalAmount - newTotalPaid; 
-                  console.log(`[handleSaveExpense][BidAdjust] Recalculated Bid Progress: Paid=${progress.paid}, Remaining=${progress.remaining}, Pending=${progress.pending}`);
-                  
+                  progress.pending = bid.totalAmount - newTotalPaid;
+                  logger.log(`[handleSaveExpense][BidAdjust] Recalculated Bid Progress: Paid=${progress.paid}, Remaining=${progress.remaining}, Pending=${progress.pending}`);
+
                   // Check if adjustment is needed for subsequent stages based on the difference *for this stage*
-                  const difference = actualAmountPaid - originalStageAmount; 
-                  console.log(`[handleSaveExpense][BidAdjust] Payment difference for this stage: ${difference} (Actual: ${actualAmountPaid}, Scheduled Original: ${originalStageAmount})`);
-                  
+                  const difference = actualAmountPaid - originalStageAmount;
+                  logger.log(`[handleSaveExpense][BidAdjust] Payment difference for this stage: ${difference} (Actual: ${actualAmountPaid}, Scheduled Original: ${originalStageAmount})`);
+
                   if (Math.abs(difference) > 0.001) { // Use a small tolerance for float comparison
-                    console.log(`[handleSaveExpense][BidAdjust] Adjustment needed due to difference.`);
+                    logger.log(`[handleSaveExpense][BidAdjust] Adjustment needed due to difference.`);
                     // Find the *last* pending stage
                     let lastPendingStageIndex = -1;
                     for (let i = schedule.length - 1; i >= 0; i--) {
@@ -482,47 +483,47 @@ const Expenses: React.FC<{ projectId?: string }> = ({ projectId }) => {
                         break;
                       }
                     }
-                    console.log(`[handleSaveExpense][BidAdjust] Found last pending stage index: ${lastPendingStageIndex}`);
-                    
+                    logger.log(`[handleSaveExpense][BidAdjust] Found last pending stage index: ${lastPendingStageIndex}`);
+
                     if (lastPendingStageIndex !== -1 && lastPendingStageIndex !== stageIndex) {
                       const lastPendingStage = schedule[lastPendingStageIndex];
-                      console.log(`[handleSaveExpense][BidAdjust] Adjusting last pending stage: ${lastPendingStage.id} ('${lastPendingStage.name}')`);
+                      logger.log(`[handleSaveExpense][BidAdjust] Adjusting last pending stage: ${lastPendingStage.id} ('${lastPendingStage.name}')`);
                       // Adjust the amount of the last pending stage
-                      // The difference needs to be SUBTRACTED from the last stage 
-                      lastPendingStage.amount -= difference; 
-                      console.log(`[handleSaveExpense][BidAdjust] Adjusted last pending stage amount to: ${lastPendingStage.amount}`);
-                      
+                      // The difference needs to be SUBTRACTED from the last stage
+                      lastPendingStage.amount -= difference;
+                      logger.log(`[handleSaveExpense][BidAdjust] Adjusted last pending stage amount to: ${lastPendingStage.amount}`);
+
                       // Update the final payment expense if it exists
                       if (lastPendingStage.expenseId) {
-                        console.log(`[handleSaveExpense][BidAdjust] Updating final payment expense: ${lastPendingStage.expenseId}`);
+                        logger.log(`[handleSaveExpense][BidAdjust] Updating final payment expense: ${lastPendingStage.expenseId}`);
                         try {
                           // Update the expense amount to match the new stage amount
                           await ExpenseService.updateExpense(lastPendingStage.expenseId, {
                             amount: lastPendingStage.amount,
                             updatedAt: new Date()
                           });
-                          console.log(`[handleSaveExpense][BidAdjust] Final payment expense updated successfully`);
+                          logger.log(`[handleSaveExpense][BidAdjust] Final payment expense updated successfully`);
                         } catch (expenseUpdateError) {
-                          console.error(`[handleSaveExpense][BidAdjust] Error updating final payment expense:`, expenseUpdateError);
+                          logger.error(`[handleSaveExpense][BidAdjust] Error updating final payment expense:`, expenseUpdateError);
                         }
                       } else {
-                        console.log(`[handleSaveExpense][BidAdjust] No expense ID found for final payment stage`);
+                        logger.log(`[handleSaveExpense][BidAdjust] No expense ID found for final payment stage`);
                       }
                     } else if (lastPendingStageIndex === stageIndex) {
                       // The stage being paid IS the last pending stage. Its amount is already updated above.
-                      console.log(`[handleSaveExpense][BidAdjust] The paid stage was the last pending stage. Amount already updated to actual paid.`);
+                      logger.log(`[handleSaveExpense][BidAdjust] The paid stage was the last pending stage. Amount already updated to actual paid.`);
                     } else {
-                      console.warn('[handleSaveExpense][BidAdjust] No pending stages left to adjust. Difference recorded in overall progress.');
+                      logger.warn('[handleSaveExpense][BidAdjust] No pending stages left to adjust. Difference recorded in overall progress.');
                     }
                   } else {
-                    console.log(`[handleSaveExpense][BidAdjust] No adjustment needed for other stages (difference is negligible).`);
+                    logger.log(`[handleSaveExpense][BidAdjust] No adjustment needed for other stages (difference is negligible).`);
                   }
-                  
+
                   // Clean up the schedule and progress objects to ensure no undefined values
                   const cleanedSchedule = schedule.map(stage => {
                     // Create a clean copy of each stage
                     const cleanStage = { ...stage };
-                    
+
                     // Ensure all required fields are present and not undefined
                     if (cleanStage.paymentDate) {
                       // Convert to Firestore Timestamp if it's a Date
@@ -530,38 +531,38 @@ const Expenses: React.FC<{ projectId?: string }> = ({ projectId }) => {
                         cleanStage.paymentDate = cleanStage.paymentDate;
                       }
                     }
-                    
+
                     if (cleanStage.createdAt) {
                       // Convert to Firestore Timestamp if it's a Date
                       if (cleanStage.createdAt instanceof Date) {
                         cleanStage.createdAt = cleanStage.createdAt;
                       }
                     }
-                    
+
                     if (cleanStage.updatedAt) {
                       // Convert to Firestore Timestamp if it's a Date
                       if (cleanStage.updatedAt instanceof Date) {
                         cleanStage.updatedAt = cleanStage.updatedAt;
                       }
                     }
-                    
+
                     if (cleanStage.dueDate) {
                       // Convert to Firestore Timestamp if it's a Date
                       if (cleanStage.dueDate instanceof Date) {
                         cleanStage.dueDate = cleanStage.dueDate;
                       }
                     }
-                    
+
                     // Remove any undefined values
                     Object.keys(cleanStage).forEach(key => {
                       if (cleanStage[key as keyof typeof cleanStage] === undefined) {
                         delete cleanStage[key as keyof typeof cleanStage];
                       }
                     });
-                    
+
                     return cleanStage;
                   });
-                  
+
                   // Clean up the progress object
                   const cleanedProgress = { ...progress };
                   Object.keys(cleanedProgress).forEach(key => {
@@ -569,16 +570,16 @@ const Expenses: React.FC<{ projectId?: string }> = ({ projectId }) => {
                       delete cleanedProgress[key as keyof typeof cleanedProgress];
                     }
                   });
-                  
+
                   // Create a clean update payload
                   const updatePayload = {
                     paymentSchedule: cleanedSchedule,
                     paymentProgress: cleanedProgress,
                     updatedAt: new Date()
                   };
-                  
+
                   await BidService.updateBid(bid.id, updatePayload);
-                  console.log(`[handleSaveExpense][BidAdjust] Bid ${bid.id} update successful.`);
+                  logger.log(`[handleSaveExpense][BidAdjust] Bid ${bid.id} update successful.`);
 
                   // Refresh the expenses list to ensure all data is up to date
                   refetchExpenses();
@@ -592,11 +593,11 @@ const Expenses: React.FC<{ projectId?: string }> = ({ projectId }) => {
                 }
               }
             } else {
-              console.log('[handleSaveExpense] Expense not linked to a Payment Stage or Project ID. No Bid adjustment needed.');
+              logger.log('[handleSaveExpense] Expense not linked to a Payment Stage or Project ID. No Bid adjustment needed.');
             }
             // --- End Bid Payment Schedule Adjustment Logic ---
           } catch (bidUpdateError) {
-            console.error('[handleSaveExpense][BidAdjust] Error during Bid update:', bidUpdateError);
+            logger.error('[handleSaveExpense][BidAdjust] Error during Bid update:', bidUpdateError);
             // Decide if we should notify the user about this secondary failure
             setSnackbar({
               open: true,
@@ -624,20 +625,20 @@ const Expenses: React.FC<{ projectId?: string }> = ({ projectId }) => {
           lineItems: expenseData.lineItems || undefined,
           paymentDetails: expenseData.paymentDetails || undefined,
         };
-        
+
         savedExpense = await ExpenseService.createExpense(user.uid, newExpenseData);
-        
+
         // Check if the expense should be visible in the current tab view
-        const shouldShowInCurrentTab = 
+        const shouldShowInCurrentTab =
           tabValue === 0 || // All expenses tab
           (tabValue === 1 && savedExpense.status !== 'paid') || // Needs payment tab
           (tabValue === 2 && savedExpense.status === 'paid'); // Paid tab
-        
+
         refetchExpenses();
 
         if (!shouldShowInCurrentTab) {
           // If the expense doesn't match the current tab filter, show a note to the user
-          console.log('New expense added but not visible in current tab view');
+          logger.log('New expense added but not visible in current tab view');
           setSnackbar({
             open: true,
             message: 'Expense created successfully. Switch tabs to view it.',
@@ -645,13 +646,13 @@ const Expenses: React.FC<{ projectId?: string }> = ({ projectId }) => {
           });
         }
       }
-      
+
       // Close modal
       handleCloseModal();
-      
+
       // Show success message (only if we didn't already show the tab-specific message)
-      if (!(processedExpenseData.id === undefined && tabValue !== 0 && 
-           ((tabValue === 1 && processedExpenseData.status === 'paid') || 
+      if (!(processedExpenseData.id === undefined && tabValue !== 0 &&
+           ((tabValue === 1 && processedExpenseData.status === 'paid') ||
             (tabValue === 2 && processedExpenseData.status !== 'paid')))) {
         setSnackbar({
           open: true,
@@ -660,8 +661,8 @@ const Expenses: React.FC<{ projectId?: string }> = ({ projectId }) => {
         });
       }
     } catch (err: unknown) {
-      console.error('Error saving expense:', err);
-      
+      logger.error('Error saving expense:', err);
+
       let errorMessage = `Failed to ${processedExpenseData.id ? 'update' : 'create'} expense`;
       if (err instanceof Error) {
         errorMessage += `: ${err.message}`;
@@ -670,7 +671,7 @@ const Expenses: React.FC<{ projectId?: string }> = ({ projectId }) => {
       } else {
         errorMessage += ': An unknown error occurred.';
       }
-      
+
       setSnackbar({
         open: true,
         message: errorMessage,
@@ -680,11 +681,11 @@ const Expenses: React.FC<{ projectId?: string }> = ({ projectId }) => {
       setSubmitting(false);
     }
   };
-  
+
   // Filter expenses based on search term
   const filteredExpenses = expenses.filter(expense => {
     if (!searchTerm) return true;
-    
+
     return (
       expense.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
       expense.vendor?.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -692,11 +693,11 @@ const Expenses: React.FC<{ projectId?: string }> = ({ projectId }) => {
       expense.subcontractorName?.toLowerCase().includes(searchTerm.toLowerCase())
     );
   });
-  
+
   // NEW: Add sorting function
   const sortedExpenses = React.useMemo(() => {
     if (!sortField) return filteredExpenses;
-    
+
     return [...filteredExpenses].sort((a, b) => {
       if (sortField === 'amount') {
         return sortDirection === 'asc' ? a.amount - b.amount : b.amount - a.amount;
@@ -731,19 +732,19 @@ const Expenses: React.FC<{ projectId?: string }> = ({ projectId }) => {
     if (groupBy === 'none') {
       return { 'All Expenses': sortedExpenses };
     }
-    
+
     const groups: Record<string, any[]> = {};
-    
+
     sortedExpenses.forEach(expense => {
       let groupKey = '';
-      
+
       switch (groupBy) {
         case 'project':
           groupKey = expense.projectName || 'No Project';
           break;
         case 'category':
-          groupKey = expense.category ? 
-            expense.category.charAt(0).toUpperCase() + expense.category.slice(1) : 
+          groupKey = expense.category ?
+            expense.category.charAt(0).toUpperCase() + expense.category.slice(1) :
             'Other';
           break;
         case 'vendor':
@@ -755,25 +756,25 @@ const Expenses: React.FC<{ projectId?: string }> = ({ projectId }) => {
         default:
           groupKey = 'All Expenses';
       }
-      
+
       if (!groups[groupKey]) {
         groups[groupKey] = [];
       }
-      
+
       groups[groupKey].push(expense);
     });
-    
+
     return groups;
   }, [sortedExpenses, groupBy, expenses]);
 
   // Calculate group totals
   const groupTotals = React.useMemo(() => {
     const totals: Record<string, number> = {};
-    
+
     Object.entries(groupedExpenses).forEach(([groupName, groupExpenses]) => {
       totals[groupName] = groupExpenses.reduce((sum, expense) => sum + expense.amount, 0);
     });
-    
+
     return totals;
   }, [groupedExpenses, expenses]);
 
@@ -781,12 +782,12 @@ const Expenses: React.FC<{ projectId?: string }> = ({ projectId }) => {
     const amountPaid = expense.amountPaid || 0;
     // When an expense is paid, we should use the original amount, not the remaining amount
     const remainingAmount = expense.status === 'paid' ? expense.amount : expense.amount - amountPaid;
-    
+
     // Add log inside render function
-    console.log(`[renderExpenseRow] ID: ${expense.id}, Status: ${expense.status}, Amount: ${expense.amount}, AmountPaid: ${amountPaid}, Remaining: ${remainingAmount}`);
+    logger.log(`[renderExpenseRow] ID: ${expense.id}, Status: ${expense.status}, Amount: ${expense.amount}, AmountPaid: ${amountPaid}, Remaining: ${remainingAmount}`);
 
     let statusLabel: string;
-    let statusColor: 'success' | 'warning' | 'info' | 'error' | 'default' = 'warning'; 
+    let statusColor: 'success' | 'warning' | 'info' | 'error' | 'default' = 'warning';
 
     switch (expense.status) {
       case 'paid':
@@ -795,14 +796,14 @@ const Expenses: React.FC<{ projectId?: string }> = ({ projectId }) => {
         break;
       case 'partially_paid':
         statusLabel = 'Partially Paid';
-        statusColor = 'info'; 
+        statusColor = 'info';
         break;
       case 'pending':
         statusLabel = 'Pending';
         statusColor = 'warning';
         break;
       case 'approved':
-        statusLabel = 'Approved'; 
+        statusLabel = 'Approved';
         statusColor = 'default'; // Use default color for approved
         break;
       case 'rejected':
@@ -812,20 +813,20 @@ const Expenses: React.FC<{ projectId?: string }> = ({ projectId }) => {
       default:
         statusLabel = expense.status; // Fallback
     }
-    
+
     return (
-      <TableRow 
+      <TableRow
         key={expense.id}
         hover
         onClick={() => handleViewExpense(expense)}
-        sx={{ 
+        sx={{
           cursor: 'pointer',
           '&:last-child td, &:last-child th': { border: 0 },
           // Optional: different styling for partially paid?
-          ...(expense.status === 'paid' && { 
+          ...(expense.status === 'paid' && {
             bgcolor: alpha(theme.palette.success.light, 0.08),
           }),
-          ...(expense.status === 'partially_paid' && { 
+          ...(expense.status === 'partially_paid' && {
             bgcolor: alpha(theme.palette.info.light, 0.08),
           }),
         }}
@@ -836,7 +837,7 @@ const Expenses: React.FC<{ projectId?: string }> = ({ projectId }) => {
             <Typography sx={{ ml: 1.5, fontWeight: 'medium' }}>
               {expense.description}
             </Typography>
-            
+
             {/* Display tags if they exist */}
             {expense.tags && expense.tags.length > 0 && (
               <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5, mt: 0.5 }}>
@@ -860,25 +861,25 @@ const Expenses: React.FC<{ projectId?: string }> = ({ projectId }) => {
             )}
           </Box>
           {expense.lineItems && expense.lineItems.length > 0 && (
-            <Chip 
-              size="small" 
-              label={`${expense.lineItems.length} item${expense.lineItems.length > 1 ? 's' : ''}`} 
-              color="primary" 
+            <Chip
+              size="small"
+              label={`${expense.lineItems.length} item${expense.lineItems.length > 1 ? 's' : ''}`}
+              color="primary"
               variant="outlined"
               sx={{ mt: 0.5 }}
             />
           )}
         </TableCell>
-        
+
         {/* Amount Cell - Show Paid / Remaining */}
-        <TableCell 
-          align="right" 
+        <TableCell
+          align="right"
           onClick={(e) => {
             e.stopPropagation();
             handleSortClick('amount');
           }}
-          sx={{ 
-            cursor: 'pointer', 
+          sx={{
+            cursor: 'pointer',
             '&:hover': { color: theme.palette.primary.main }
           }}
         >
@@ -903,13 +904,13 @@ const Expenses: React.FC<{ projectId?: string }> = ({ projectId }) => {
         </TableCell>
 
         {/* Date Cell - Unchanged */}
-        <TableCell 
+        <TableCell
           onClick={(e) => {
             e.stopPropagation();
             handleSortClick('date');
           }}
-          sx={{ 
-            cursor: 'pointer', 
+          sx={{
+            cursor: 'pointer',
             '&:hover': { color: theme.palette.primary.main }
           }}
         >
@@ -926,8 +927,8 @@ const Expenses: React.FC<{ projectId?: string }> = ({ projectId }) => {
 
         {/* Status Cell - Updated */}
         <TableCell>
-          <Chip 
-            label={statusLabel} 
+          <Chip
+            label={statusLabel}
             size="small"
             color={statusColor}
             // Optional: Add variant for different statuses?
@@ -944,7 +945,7 @@ const Expenses: React.FC<{ projectId?: string }> = ({ projectId }) => {
         {/* Actions Cell - Unchanged */}
         <TableCell align="center">
           <Box sx={{ display: 'flex', justifyContent: 'center' }}>
-            <IconButton 
+            <IconButton
               size="small"
               onClick={(e) => {
                 e.stopPropagation();
@@ -954,7 +955,7 @@ const Expenses: React.FC<{ projectId?: string }> = ({ projectId }) => {
             >
               <EditIcon fontSize="small" />
             </IconButton>
-            
+
             {expense.status !== 'paid' && (
               <IconButton
                 size="small"
@@ -968,7 +969,7 @@ const Expenses: React.FC<{ projectId?: string }> = ({ projectId }) => {
                 <PaidIcon fontSize="small" />
               </IconButton>
             )}
-            
+
             <IconButton
               size="small"
               color="default"
@@ -999,13 +1000,13 @@ const Expenses: React.FC<{ projectId?: string }> = ({ projectId }) => {
         <Typography variant="h4" component="h1" fontWeight="bold">
           Expenses & Payments
         </Typography>
-        
+
         <Button
           variant="contained"
           size="medium"
           startIcon={<AddIcon />}
           onClick={handleAddExpense}
-          sx={{ 
+          sx={{
             backgroundImage: `linear-gradient(45deg, ${theme.palette.primary.main}, ${theme.palette.primary.dark})`,
             boxShadow: '0 4px 10px rgba(0,0,0,0.15)',
             '&:hover': {
@@ -1016,14 +1017,14 @@ const Expenses: React.FC<{ projectId?: string }> = ({ projectId }) => {
           Add Expense
         </Button>
       </Box>
-      
+
       {/* Error message */}
       {expensesListIsError && (
         <Alert severity="error" sx={{ mb: 3 }}>
           {expensesListError instanceof Error ? expensesListError.message : 'An unknown error occurred while fetching expenses.'}
         </Alert>
       )}
-      
+
       {/* Summary cards */}
       <Box sx={{ mb: 4 }}>
         <ExpenseSummaryCards
@@ -1032,7 +1033,7 @@ const Expenses: React.FC<{ projectId?: string }> = ({ projectId }) => {
           totalExpenses={expenses.length}
         />
       </Box>
-      
+
       {/* The following Grid is the "Expense Breakdown by Category", "Top Projects by Expense", and "Expense Status Summary" */}
       {/* This content should remain as it's part of a different display section. */}
       <Grid container spacing={3} sx={{ mb: 4 }}>
@@ -1040,7 +1041,7 @@ const Expenses: React.FC<{ projectId?: string }> = ({ projectId }) => {
         <Grid item xs={12}>
           <Paper sx={{ p: 3, borderRadius: 2 }}>
             <Typography variant="h6" sx={{ mb: 2 }}>Expense Breakdown by Category</Typography>
-            
+
             <Grid container spacing={2}>
               {expensesListIsLoading ? ( // Use hook's loading state
                 <Grid item xs={12} sx={{ display: 'flex', justifyContent: 'center', p: 3 }}>
@@ -1055,7 +1056,7 @@ const Expenses: React.FC<{ projectId?: string }> = ({ projectId }) => {
                   // Calculate percentage of the total
                   const percentage = totalExpensesValue > 0 ? (amount / totalExpensesValue) * 100 : 0;
                   const categoryName = category.charAt(0).toUpperCase() + category.slice(1);
-                  
+
                   return (
                     <Grid item xs={12} key={category}>
                       <Box sx={{ mb: 0.5 }}>
@@ -1074,8 +1075,8 @@ const Expenses: React.FC<{ projectId?: string }> = ({ projectId }) => {
                         <LinearProgress
                           variant="determinate"
                           value={percentage}
-                          sx={{ 
-                            height: 8, 
+                          sx={{
+                            height: 8,
                             borderRadius: 4,
                             bgcolor: alpha(theme.palette.primary.light, 0.2),
                             '& .MuiLinearProgress-bar': {
@@ -1101,7 +1102,7 @@ const Expenses: React.FC<{ projectId?: string }> = ({ projectId }) => {
           <Grid item xs={12} md={6}>
             <Paper sx={{ p: 3, borderRadius: 2, height: '100%' }}>
               <Typography variant="h6" sx={{ mb: 2 }}>Top Projects by Expense</Typography>
-              
+
               {expensesListIsLoading ? ( // Use hook's loading state
                 <Box sx={{ display: 'flex', justifyContent: 'center', p: 3 }}>
                   <CircularProgress size={30} />
@@ -1114,17 +1115,17 @@ const Expenses: React.FC<{ projectId?: string }> = ({ projectId }) => {
                     acc[projectName] = (acc[projectName] || 0) + expense.amount;
                     return acc;
                   }, {} as Record<string, number>);
-                  
+
                   // Sort projects by expense amount and take top 5
                   const topProjects = Object.entries(projectTotals)
                     .sort(([, amountA], [, amountB]) => amountB - amountA)
                     .slice(0, 5);
-                  
+
                   return (
                     <Box>
                       {topProjects.map(([projectName, amount], index) => {
                         const percentage = totalExpensesValue > 0 ? (amount / totalExpensesValue) * 100 : 0;
-                        
+
                         return (
                           <Box key={projectName} sx={{ mb: 2 }}>
                             <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 0.5 }}>
@@ -1139,8 +1140,8 @@ const Expenses: React.FC<{ projectId?: string }> = ({ projectId }) => {
                             <LinearProgress
                               variant="determinate"
                               value={percentage}
-                              sx={{ 
-                                height: 6, 
+                              sx={{
+                                height: 6,
                                 borderRadius: 3,
                                 bgcolor: alpha(theme.palette.primary.light, 0.15),
                                 '& .MuiLinearProgress-bar': {
@@ -1163,7 +1164,7 @@ const Expenses: React.FC<{ projectId?: string }> = ({ projectId }) => {
         <Grid item xs={12} md={projectId ? 12 : 6}>
           <Paper sx={{ p: 3, borderRadius: 2, height: '100%' }}>
             <Typography variant="h6" sx={{ mb: 2 }}>Expense Status Summary</Typography>
-            
+
             {expensesListIsLoading ? ( // Use hook's loading state
               <Box sx={{ display: 'flex', justifyContent: 'center', p: 3 }}>
                 <CircularProgress size={30} />
@@ -1177,10 +1178,10 @@ const Expenses: React.FC<{ projectId?: string }> = ({ projectId }) => {
                       const statusCount = expenses.filter(e => e.status === status).length;
                       const statusAmount = expenses.filter(e => e.status === status).reduce((sum, e) => sum + e.amount, 0);
                       const statusLabel = status.split('_').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ');
-                      
+
                       // Skip if no expenses with this status
                       if (statusCount === 0) return null;
-                      
+
                       // Determine color based on status
                       let color: string;
                       let icon: JSX.Element;
@@ -1209,16 +1210,16 @@ const Expenses: React.FC<{ projectId?: string }> = ({ projectId }) => {
                           color = theme.palette.text.secondary;
                           icon = <DescriptionIcon fontSize="small" />;
                       }
-                      
+
                       return (
                         <Box key={status} sx={{ display: 'flex', alignItems: 'center' }}>
-                          <Avatar 
-                            sx={{ 
-                              width: 32, 
-                              height: 32, 
+                          <Avatar
+                            sx={{
+                              width: 32,
+                              height: 32,
                               bgcolor: alpha(color, 0.2),
                               color: color,
-                              mr: 1.5 
+                              mr: 1.5
                             }}
                           >
                             {icon}
@@ -1239,19 +1240,19 @@ const Expenses: React.FC<{ projectId?: string }> = ({ projectId }) => {
                     })}
                   </Box>
                 </Grid>
-                
+
                 {/* Visualization */}
                 <Grid item xs={12} md={6} sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
                   {(() => {
                     const statuses = ['pending', 'approved', 'partially_paid', 'paid', 'rejected'];
-                    const statusAmounts = statuses.map(status => 
+                    const statusAmounts = statuses.map(status =>
                       expenses.filter(e => e.status === status).reduce((sum, e) => sum + e.amount, 0)
                     );
-                    
+
                     // Calculate percentages
                     const total = statusAmounts.reduce((a, b) => a + b, 0);
                     let startPercentage = 0;
-                    
+
                     return (
                       <Box sx={{ position: 'relative', width: '100%', maxWidth: 200 }}>
                         <Box
@@ -1266,14 +1267,14 @@ const Expenses: React.FC<{ projectId?: string }> = ({ projectId }) => {
                         >
                           {statusAmounts.map((amount, index) => {
                             if (amount === 0) return null;
-                            
+
                             const percentage = total > 0 ? (amount / total) * 100 : 0;
                             const color = index === 0 ? theme.palette.warning.main :
                                         index === 1 ? theme.palette.primary.main :
                                         index === 2 ? theme.palette.info.main :
                                         index === 3 ? theme.palette.success.main :
                                         theme.palette.error.main;
-                            
+
                             const slice = (
                               <Box
                                 key={statuses[index]}
@@ -1284,19 +1285,19 @@ const Expenses: React.FC<{ projectId?: string }> = ({ projectId }) => {
                                   top: 0,
                                   left: 0,
                                   background: `conic-gradient(
-                                    ${color} ${startPercentage}%, 
-                                    ${color} ${startPercentage + percentage}%, 
-                                    transparent ${startPercentage + percentage}%, 
+                                    ${color} ${startPercentage}%,
+                                    ${color} ${startPercentage + percentage}%,
+                                    transparent ${startPercentage + percentage}%,
                                     transparent 100%
                                   )`,
                                 }}
                               />
                             );
-                            
+
                             startPercentage += percentage;
                             return slice;
                           })}
-                          
+
                           {/* Center circle to create donut */}
                           <Box
                             sx={{
@@ -1327,7 +1328,7 @@ const Expenses: React.FC<{ projectId?: string }> = ({ projectId }) => {
           </Paper>
         </Grid>
       </Grid>
-      
+
       {/* Tabs, search, and group controls */}
       <Box sx={{ mb: 3, display: 'flex', flexDirection: { xs: 'column', md: 'row' }, gap: 2, alignItems: { xs: 'stretch', md: 'center' } }}>
         <Box sx={{ flexGrow: 1 }}>
@@ -1346,7 +1347,7 @@ const Expenses: React.FC<{ projectId?: string }> = ({ projectId }) => {
             <Tab label="Paid" />
           </Tabs>
         </Box>
-        
+
         <ExpenseControls
           theme={theme}
           searchTerm={searchTerm}
@@ -1362,7 +1363,7 @@ const Expenses: React.FC<{ projectId?: string }> = ({ projectId }) => {
           projectId={projectId} // Pass the projectId prop from Expenses
         />
       </Box>
-      
+
       {/* Expenses table */}
       <ExpenseTable
         theme={theme}
@@ -1388,14 +1389,14 @@ const Expenses: React.FC<{ projectId?: string }> = ({ projectId }) => {
           <EditIcon fontSize="small" sx={{ mr: 1 }} />
           Edit Expense
         </MenuItem>
-        
+
         {selectedExpenseId && expenses.find(e => e.id === selectedExpenseId)?.status !== 'paid' && (
           <MenuItem onClick={handlePayFromMenu}>
             <PaidIcon fontSize="small" sx={{ mr: 1 }} />
             Mark as Paid
           </MenuItem>
         )}
-        
+
         <MenuItem onClick={handleDeleteFromMenu} sx={{ color: 'error.main' }}>
           <DeleteIcon fontSize="small" sx={{ mr: 1 }} />
           Delete
@@ -1407,12 +1408,12 @@ const Expenses: React.FC<{ projectId?: string }> = ({ projectId }) => {
         key={`expense-form-${selectedExpense?.id || 'new'}`}
         open={expenseModalOpen}
         onClose={handleCloseModal}
-        expense={selectedExpense || undefined} 
+        expense={selectedExpense || undefined}
         onSave={handleSaveExpense}
-        projects={projects} 
-        projectPhases={selectedProjectPhases} 
+        projects={projects}
+        projectPhases={selectedProjectPhases}
       />
-      
+
       {/* Payment Modal - Pass the full expense object or null */}
       <PaymentFormModal
         key={`payment-form-${fullExpenseForPayment?.id || 'none'}`}
@@ -1433,17 +1434,17 @@ const Expenses: React.FC<{ projectId?: string }> = ({ projectId }) => {
               refetchExpenses(); // Refresh expenses list
               setSnackbar({ open: true, message: result.message, severity: 'success' });
               if (result.updatedBid) {
-                console.log("Bid was updated as part of payment processing:", result.updatedBid);
+                logger.log("Bid was updated as part of payment processing:", result.updatedBid);
                 // Optionally, could also trigger a refresh/update of bids list if displayed elsewhere
               }
             } else {
               setSnackbar({ open: true, message: result.message, severity: 'error' });
               // Display paymentError from hook if needed, though snackbar might be enough
-              if (paymentError) console.error("Payment Processing Error:", paymentError);
+              if (paymentError) logger.error("Payment Processing Error:", paymentError);
             }
             handleClosePaymentModal(); // Close modal regardless of success/failure for now
           } else {
-            console.error('[Expenses] PaymentFormModal onSave called, but required data (expense ID or user) is missing.', {
+            logger.error('[Expenses] PaymentFormModal onSave called, but required data (expense ID or user) is missing.', {
               fullExpenseForPaymentId: fullExpenseForPayment?.id, // Corrected logging variable name
               userId: user?.uid,
             });
@@ -1451,7 +1452,7 @@ const Expenses: React.FC<{ projectId?: string }> = ({ projectId }) => {
           }
         }}
       />
-      
+
       {/* Add Snackbar for notifications */}
       {/* Snackbar for paymentError from the hook */}
       {paymentError && (
@@ -1466,14 +1467,14 @@ const Expenses: React.FC<{ projectId?: string }> = ({ projectId }) => {
           </MuiAlert>
         </Snackbar>
       )}
-      <Snackbar 
-        open={snackbar.open} 
-        autoHideDuration={6000} 
+      <Snackbar
+        open={snackbar.open}
+        autoHideDuration={6000}
         onClose={() => setSnackbar(prev => ({ ...prev, open: false }))}
       >
-        <MuiAlert 
-          elevation={6} 
-          variant="filled" 
+        <MuiAlert
+          elevation={6}
+          variant="filled"
           severity={snackbar.severity}
           onClose={() => setSnackbar(prev => ({ ...prev, open: false }))}
         >

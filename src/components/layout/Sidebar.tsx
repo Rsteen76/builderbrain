@@ -15,10 +15,8 @@ import {
   Receipt as ExpensesIcon,
   Description as BidsIcon,
   Assignment as TasksIcon,
-  Folder as DocumentsIcon,
   Payment as PaymentsIcon,
   Settings as SettingsIcon,
-  Construction as TemplatesIcon,
   Timeline as TimelineIcon,
   CalendarToday as CalendarIcon,
 } from '@mui/icons-material';
@@ -35,11 +33,9 @@ const menuItems = [
   { text: 'Projects', icon: <ProjectsIcon />, path: '/projects' },
   { text: 'Timeline', icon: <TimelineIcon />, path: '/timeline' },
   { text: 'Calendar', icon: <CalendarIcon />, path: '/calendar' },
-  { text: 'Templates', icon: <TemplatesIcon />, path: '/templates' },
   { text: 'Expenses', icon: <ExpensesIcon />, path: '/expenses' },
   { text: 'Bids', icon: <BidsIcon />, path: '/bids' },
   { text: 'Tasks', icon: <TasksIcon />, path: '/tasks' },
-  { text: 'Documents', icon: <DocumentsIcon />, path: '/documents' },
   { text: 'Payments', icon: <PaymentsIcon />, path: '/payments' },
 ];
 
@@ -94,4 +90,4 @@ const Sidebar: React.FC<SidebarProps> = ({ open }) => {
   );
 };
 
-export default Sidebar; 
+export default Sidebar;

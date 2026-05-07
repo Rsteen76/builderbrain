@@ -1,5 +1,5 @@
 import React, { createContext, useContext, ReactNode } from 'react';
-import { Project, ProjectPhase, Bid, Expense, BidSummary, Phase, Subcontractor } from '../types';
+import { Project, ProjectPhase, Bid, Expense, BidSummary, Subcontractor } from '../types';
 import { BidFormData } from '../types/form.types';
 import { useProjectData } from '../hooks/useProjectData'; // Keep using this for core data
 // Import necessary hooks FOR the provider
@@ -65,6 +65,8 @@ interface ProjectDetailContextState {
   // Phase Operations State & Actions
   isUpdatingPhase: boolean;
   updatePhaseStatus: (phaseId: string, status: PhaseStatusType) => Promise<void>;
+  addPhase: (phase: ProjectPhase) => Promise<ProjectPhase | null>;
+  deletePhase: (phaseId: string) => Promise<void>;
 
   // Expense Operations State & Actions
   isExpenseOperating: boolean;
@@ -110,6 +112,8 @@ const defaultContextValue: ProjectDetailContextState = {
   closeExpenseDialog: () => { console.warn("closeExpenseDialog called on default context"); },
   isUpdatingPhase: false,
   updatePhaseStatus: async () => { console.warn("updatePhaseStatus called on default context"); },
+  addPhase: async () => { console.warn("addPhase called on default context"); return null; },
+  deletePhase: async () => { console.warn("deletePhase called on default context"); },
   isExpenseOperating: false,
   addExpense: async () => { console.warn("addExpense called on default context"); return null; },
   updateExpense: async () => { console.warn("updateExpense called on default context"); },
@@ -175,7 +179,9 @@ export const ProjectDetailProvider: React.FC<ProjectDetailProviderProps> = ({ ch
   // Instantiate Phase Operations Hook
   const phaseOperations = usePhaseOperations({
     projectId: actualProjectId,
-    onPhaseUpdate: (updatedPhase: Phase) => {
+    phases,
+    setPhases,
+    onPhaseUpdate: (updatedPhase: ProjectPhase) => {
       // Hook uses toast, just refresh data
       refreshAllProjectData(); 
     },
@@ -232,6 +238,8 @@ export const ProjectDetailProvider: React.FC<ProjectDetailProviderProps> = ({ ch
     closeExpenseDialog: expenseFormDialog.closeExpenseDialog,
     isUpdatingPhase: phaseOperations.isUpdatingPhase,
     updatePhaseStatus: phaseOperations.updatePhaseStatus,
+    addPhase: phaseOperations.addPhase,
+    deletePhase: phaseOperations.deletePhase,
     isExpenseOperating: expenseOperations.isOperating,
     addExpense: expenseOperations.addExpense,
     updateExpense: expenseOperations.updateExpense,

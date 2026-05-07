@@ -1,4 +1,4 @@
-import { LineItem } from './project.types';
+import type { LineItem } from './project.types';
 
 export type ExpenseCategory = 'labor' | 'materials' | 'equipment' | 'permits' | 'subcontractor' | 'other';
 export type ExpenseStatus = 'pending' | 'approved' | 'rejected' | 'paid' | 'partially_paid';

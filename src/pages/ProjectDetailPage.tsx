@@ -1,73 +1,39 @@
 // frontend/src/pages/ProjectDetailPage.tsx
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useMemo, useCallback } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import {
-  Container, Typography, CircularProgress, Alert, Tab, Tabs, Box,
-  Button, /* Menu, MenuItem, */ Snackbar, /* IconButton, */ LinearProgress // Removed Menu, MenuItem, IconButton
+  Container, CircularProgress, Alert, Box,
 } from '@mui/material';
-import { AlertColor } from '@mui/material/Alert';
-// Removed MoreVertIcon import
 import { useTheme } from '@mui/material/styles';
-import { format } from 'date-fns';
 import { CheckCircle, ErrorOutline, Schedule, PlayCircleOutline, Block, HelpOutline } from '@mui/icons-material';
 
-// Context
 import { ProjectDetailProvider, useProjectDetail } from '../contexts/ProjectDetailContext';
 
-// Components
 import ProjectDetailHeader from '../components/projects/ProjectDetailHeader';
 import ProjectMetricCards from '../components/projects/ProjectMetricCards';
 import TabNavigation from '../components/projects/detailTabs/TabNavigation';
 import TabContent from '../components/projects/detailTabs/TabContent';
 import BidFormDialog from '../components/dialogs/BidFormDialog';
-// import BidDeletePortal from '../components/dialogs/BidDeletePortal'; // TODO: Implement/Uncomment
 import QuickAddSubcontractorDialog from '../components/dialogs/QuickAddSubcontractorDialog';
 
-// Hooks & Services
-// Removed direct service imports, now handled by operation hooks
-// import { BidService } from '../services/bid';
-// import { ExpenseService } from '../services/expense';
-// Import Operation Hooks
 import { 
-  useBidOperations, 
   useProjectOperations, 
-  useBidFormDialog,
   useQuickAddSubcontractorDialog,
-  useNotification
 } from '../hooks';
 
-// Types & Utils
-import { ProjectPhase, Bid, Expense, Subcontractor, Project, Phase, ExpenseCategory, BidSummary, ExpenseBreakdown } from '../types';
+import { ExpenseBreakdown } from '../types';
 import { calculateBudgetData } from '../utils/projectMetrics';
-import { calculateExpenseBreakdown, calculateExpensesChartData, calculateCombinedExpenses, ExpenseChartData, CombinedExpenseData } from '../utils/expenseAnalytics';
-import { calculateProjectProgress, calculatePhaseProposedCosts, calculatePhaseActualCosts } from '../utils/phaseCalculations';
+import { calculateExpenseBreakdown } from '../utils/expenseAnalytics';
+import { calculateProjectProgress } from '../utils/phaseCalculations';
 import { calculateTimelineData, TimelineData } from '../utils/timelineUtils';
 import { formatCurrency, formatPercentage } from '../utils/formatters';
 
-// --- Inner Content Component (Defined BEFORE ProjectDetailPage) ---
 const ProjectDetailContent: React.FC = () => {
   const {
-    // Core data
-    project, phases, bids, expenses, subcontractors, loading, error, projectId,
-    // Context Functions
-    refreshAllProjectData, showNotification, NotificationComponent,
-    // Bid Dialog state & actions
+    project, phases, expenses, subcontractors, loading, error, projectId,
+    refreshAllProjectData, showNotification, NotificationComponent, setSubcontractors,
     isBidModalOpen, bidInitialData, editingBidId, 
-    openNewBidDialog, openEditBidDialog, closeBidDialog, handleBidSubmitSuccess, 
-    isBidSubmitting, bidDialogError,
-    // Bid Operations
-    requestDeleteBid, duplicateBid, isBidOperating,
-    // Expense Dialog State & Actions
-    isExpenseDialogOpen, editingExpenseId, initialExpenseData,
-    openNewExpenseDialog, openEditExpenseDialog, closeExpenseDialog,
-    // Phase Operations State & Actions
-    isUpdatingPhase,
-    updatePhaseStatus,
-    // Expense Operations State & Actions
-    isExpenseOperating,
-    addExpense,
-    updateExpense,
-    deleteExpense,
+    closeBidDialog, handleBidSubmitSuccess,
   } = useProjectDetail();
   
   const navigate = useNavigate();
@@ -77,19 +43,12 @@ const ProjectDetailContent: React.FC = () => {
     onProjectUpdate: () => refreshAllProjectData(),
   });
 
-  // Keep Quick Add Subcontractor Dialog hook local
-  const { setSubcontractors: setContextSubcontractors } = useProjectDetail();
   const quickAddSubDialog = useQuickAddSubcontractorDialog({
     onSubmitSuccess: (newSub) => {
-      setContextSubcontractors(prev => [...prev, newSub]);
+      setSubcontractors(prev => [...prev, newSub]);
     }
   });
 
-  // Update combined loading state
-  const isProcessing = loading || isUpdatingPhase || isBidOperating || isExpenseOperating || quickAddSubDialog.isSavingSub || isBidSubmitting;
-
-  // --- Memoized Calculations ---
-  // (Ensure these calculations handle potentially null project)
   const budgetData = useMemo(() => {
     if (!project || !expenses) return { totalBudget: 0, totalActual: 0, difference: 0, percentUsed: 0 };
     return calculateBudgetData(project, expenses);
@@ -111,62 +70,9 @@ const ProjectDetailContent: React.FC = () => {
     try { return calculateTimelineData(project) || defaultTimeline; } catch (error) { return defaultTimeline; }
   }, [project]);
 
-  const expensesChartData: ExpenseChartData[] = useMemo(() => calculateExpensesChartData(expenses || []), [expenses]);
-  const combinedExpensesData: CombinedExpenseData[] = useMemo(() => calculateCombinedExpenses(expenses || []), [expenses]);
-  const phaseProposedCosts: Record<string, number> = useMemo(() => calculatePhaseProposedCosts(phases || [], bids || []), [phases, bids]);
-  const phaseActualCosts: Record<string, number> = useMemo(() => calculatePhaseActualCosts(phases || [], expenses || []), [phases, expenses]);
-  const recentBids: Bid[] = useMemo(() => (bids || []).slice(0, 5), [bids]);
-
-  // --- Event Handlers ---
-  const handleTabChange = useCallback((event: React.SyntheticEvent, newValue: number) => {
+  const handleTabChange = useCallback((_event: React.SyntheticEvent, newValue: number) => {
     setTabValue(newValue);
   }, []);
-
-  // Use updatePhaseStatus from context
-  const handleUpdatePhaseStatus = useCallback(async (phaseId: string, status: Phase['status']) => {
-    if (!status || !['not_started', 'in_progress', 'completed', 'on_hold'].includes(status)) {
-      showNotification(`Invalid phase status: ${status}`, 'error');
-      return; 
-    }
-    // Use function directly from context
-    await updatePhaseStatus(phaseId, status as 'not_started' | 'in_progress' | 'completed' | 'on_hold'); 
-    // Refresh is handled by the hook callback within the context provider
-  }, [updatePhaseStatus, showNotification]); // Dependency is the function from context
-
-  // Use addExpense from context
-  const handleAddQuickExpense = useCallback(async (description: string, amount: number, category: string, phaseId?: string) => {
-    const newExpenseData: Partial<Expense> = {
-        description, amount, category: category as Expense['category'],
-        status: 'pending', date: format(new Date(), 'yyyy-MM-dd'),
-        phaseId: phaseId || undefined, projectId: projectId ?? undefined, 
-    };
-    // Use function directly from context
-    await addExpense(newExpenseData);
-    // Refresh is handled by the hook callback within the context provider
-  }, [addExpense, projectId]);
-
-  // Bid actions use context functions
-  const handleAddBid = useCallback(() => {
-    openNewBidDialog({ projectId: projectId ?? undefined }); 
-  }, [openNewBidDialog, projectId]);
-  
-  const handleEditBid = useCallback((bidId: string) => {
-    const bidToEdit = bids.find((b: Bid | BidSummary) => b.id === bidId);
-    if (bidToEdit) {
-      openEditBidDialog(bidToEdit); 
-    } else {
-      showNotification("Bid not found for editing.", "error");
-    }
-  }, [bids, openEditBidDialog, showNotification]);
-
-  const handleDeleteBid = useCallback(async (bidId: string) => {
-    const bidToDelete = bids.find((b: Bid | BidSummary) => b.id === bidId);
-    if (bidToDelete) {
-      requestDeleteBid(bidToDelete); 
-      } else {
-       showNotification("Bid not found for deletion.", "error");
-    }
-  }, [bids, requestDeleteBid, showNotification]);
 
   const handleEditProject = useCallback((id: string) => {
     navigate(`/projects/${id}/edit`);
@@ -181,7 +87,6 @@ const ProjectDetailContent: React.FC = () => {
     showNotification('Project moved to On Hold.', 'success');
   }, [showNotification, updateProjectDetails]);
 
-  // --- Rendering ---
   if (loading && !project) return <CircularProgress sx={{ display: 'block', margin: 'auto', mt: 4 }} />;
   if (error && !project) return <Container><Alert severity="error">Error loading project data: {error}</Alert></Container>;
   if (!project) return <Container><Alert severity="warning">Project not found or you may not have access.</Alert></Container>;

@@ -9,7 +9,9 @@ import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
 import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns';
 import { TaskService } from '../../services/task';
 import { SubcontractorService } from '../../services/subcontractor';
-import { Task, Subcontractor } from '../../types';
+import { User, UserService } from '../../services/user';
+import { ProjectService } from '../../services/project';
+import { Project, Task, Subcontractor } from '../../types';
 
 interface TaskFormModalProps {
   open: boolean;
@@ -20,15 +22,10 @@ interface TaskFormModalProps {
   userId: string;
 }
 
-interface MockUser { id: string; name: string; }
+type TeamMember = Pick<User, 'id' | 'displayName' | 'email'>;
 
 const taskStatuses: Task['status'][] = ['todo', 'in_progress', 'review', 'completed'];
 const taskPriorities: Task['priority'][] = ['low', 'medium', 'high', 'urgent'];
-const mockUsers: MockUser[] = [
-    {id: 'user1', name: 'Alice (PM)'},
-    {id: 'user2', name: 'Bob (Site Super)'},
-    {id: 'user3', name: 'Charlie (Admin)'}
-];
 
 const TaskFormModal: React.FC<TaskFormModalProps> = ({ open, onClose, onSubmitSuccess, initialData, projectId, userId }) => {
   const [task, setTask] = useState<Partial<Task>>({});
@@ -36,7 +33,8 @@ const TaskFormModal: React.FC<TaskFormModalProps> = ({ open, onClose, onSubmitSu
   const [loading, setLoading] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [subcontractors, setSubcontractors] = useState<Subcontractor[]>([]);
-  const [users] = useState<MockUser[]>(mockUsers);
+  const [users, setUsers] = useState<TeamMember[]>([]);
+  const [projects, setProjects] = useState<Project[]>([]);
   const [assigneeType, setAssigneeType] = useState<'user' | 'subcontractor' | 'none'>('none');
 
   useEffect(() => {
@@ -44,7 +42,7 @@ const TaskFormModal: React.FC<TaskFormModalProps> = ({ open, onClose, onSubmitSu
       const type = initialData?.assigneeType || 'none';
       setAssigneeType(type);
       setTask(initialData || {
-        projectId: projectId,
+        projectId: projectId || '',
         title: '',
         description: '',
         status: 'todo',
@@ -63,20 +61,31 @@ const TaskFormModal: React.FC<TaskFormModalProps> = ({ open, onClose, onSubmitSu
       setSubmitError(null);
       setLoading(false);
 
-      const fetchSubs = async () => {
+      const fetchAssigneeOptions = async () => {
           if (!userId) {
               console.error("TaskFormModal: userId not provided, cannot fetch subcontractors.");
               setSubmitError("User information missing.");
               return;
           }
           try {
-              const subs: Subcontractor[] = await SubcontractorService.getSubcontractors(userId);
+              const [subs, projectUsers, currentUser] = await Promise.all([
+                SubcontractorService.getSubcontractors(userId),
+                projectId ? UserService.getUsers({ projectId }) : Promise.resolve([]),
+                UserService.getUser(userId),
+              ]);
+              const userProjects = projectId ? [] : await ProjectService.getProjects(userId);
+              const userOptions = [...projectUsers];
+              if (currentUser && !userOptions.some((option) => option.id === currentUser.id)) {
+                userOptions.unshift(currentUser);
+              }
               setSubcontractors(subs);
-          } catch (err) { console.error("Failed to fetch subcontractors for task form", err); }
+              setUsers(userOptions);
+              setProjects(userProjects);
+          } catch (err) { console.error("Failed to fetch task assignee options", err); }
       };
       
       if (userId) {
-          fetchSubs();
+          fetchAssigneeOptions();
       }
 
     } else {
@@ -85,6 +94,8 @@ const TaskFormModal: React.FC<TaskFormModalProps> = ({ open, onClose, onSubmitSu
         setSubmitError(null);
         setAssigneeType('none');
         setSubcontractors([]);
+        setUsers([]);
+        setProjects([]);
     }
   }, [open, initialData, projectId, userId]);
 
@@ -105,6 +116,9 @@ const TaskFormModal: React.FC<TaskFormModalProps> = ({ open, onClose, onSubmitSu
       case 'title':
         if (!value) error = 'Title is required';
         break;
+      case 'projectId':
+        if (!value) error = 'Project is required';
+        break;
     }
     setErrors(prev => ({ ...prev, [name]: error }));
     return !error;
@@ -118,7 +132,7 @@ const TaskFormModal: React.FC<TaskFormModalProps> = ({ open, onClose, onSubmitSu
              if (!validateField(field, task[field])) {
                 isValid = false;
              }
-        } else if (field === 'projectId' && !projectId) {
+        } else if (field === 'projectId' && !task.projectId) {
              isValid = false;
              setSubmitError("Project ID is missing.");
         } else if (field === 'title'){
@@ -136,7 +150,7 @@ const TaskFormModal: React.FC<TaskFormModalProps> = ({ open, onClose, onSubmitSu
       setTask(prev => ({ ...prev, assigneeId: '', assigneeType: newType === 'none' ? undefined : newType })); 
   };
 
-  const handleAssigneeChange = (newValue: MockUser | Subcontractor | null) => {
+  const handleAssigneeChange = (newValue: TeamMember | Subcontractor | null) => {
       setTask(prev => ({ 
           ...prev, 
           assigneeId: newValue?.id || '',
@@ -218,7 +232,7 @@ const TaskFormModal: React.FC<TaskFormModalProps> = ({ open, onClose, onSubmitSu
     }
   };
 
-  const getAssigneeValue = (): MockUser | Subcontractor | null => {
+  const getAssigneeValue = (): TeamMember | Subcontractor | null => {
       if (!task.assigneeId || assigneeType === 'none') return null;
       if (assigneeType === 'user') {
           return users.find(u => u.id === task.assigneeId) || null;
@@ -256,7 +270,7 @@ const TaskFormModal: React.FC<TaskFormModalProps> = ({ open, onClose, onSubmitSu
                 autoFocus
               />
             </Grid>
-            <Grid item xs={12}>
+             <Grid item xs={12}>
               <TextField
                 fullWidth
                 label="Description (Optional)"
@@ -267,6 +281,26 @@ const TaskFormModal: React.FC<TaskFormModalProps> = ({ open, onClose, onSubmitSu
                 onChange={handleChange}
               />
             </Grid>
+            {!projectId && (
+              <Grid item xs={12}>
+                <FormControl fullWidth error={!!errors.projectId} required>
+                  <InputLabel>Project</InputLabel>
+                  <Select
+                    name="projectId"
+                    label="Project"
+                    value={task.projectId || ''}
+                    onChange={handleChange as any}
+                  >
+                    {projects.map((project) => (
+                      <MenuItem key={project.id} value={project.id}>
+                        {project.name}
+                      </MenuItem>
+                    ))}
+                  </Select>
+                  {errors.projectId && <Alert severity="error" sx={{ mt: 1 }}>{errors.projectId}</Alert>}
+                </FormControl>
+              </Grid>
+            )}
              <Grid item xs={12} sm={6} md={3}>
                 <FormControl fullWidth error={!!errors.status}>
                   <InputLabel>Status</InputLabel>
@@ -318,8 +352,8 @@ const TaskFormModal: React.FC<TaskFormModalProps> = ({ open, onClose, onSubmitSu
               {assigneeType === 'user' && (
                  <Autocomplete
                     options={users}
-                    getOptionLabel={(option) => option.name}
-                    value={getAssigneeValue() as MockUser | null}
+                    getOptionLabel={(option) => option.displayName || option.email || option.id}
+                    value={getAssigneeValue() as TeamMember | null}
                     onChange={(event, newValue) => handleAssigneeChange(newValue)}
                     renderInput={(params) => 
                         <TextField {...params} label="Select Team Member" />

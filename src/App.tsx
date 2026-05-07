@@ -1,5 +1,5 @@
 import React, { Suspense, lazy } from 'react';
-import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
+import { BrowserRouter as Router, Navigate, Routes, Route } from 'react-router-dom';
 import { ThemeProvider, CssBaseline, GlobalStyles } from '@mui/material';
 import { LocalizationProvider } from '@mui/x-date-pickers';
 import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns';
@@ -9,21 +9,17 @@ import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { QueryProvider } from './contexts/QueryContext';
 import ProtectedRoute from './components/auth/ProtectedRoute';
 import ProjectDetailPage from './pages/ProjectDetailPage';
-import NewCustomProjectPage from './pages/NewCustomProjectPage';
-import NewResidentialProjectForm from './components/projects/NewResidentialProjectForm';
-import ResidentialTemplateLanding from './components/landing/ResidentialTemplateLanding';
 import BidDeletePortal from './components/dialogs/BidDeletePortal';
 import SharedReportView from './pages/SharedReportView';
 import ProjectWizard from './components/project-wizard/ProjectWizard';
+import { PROJECT_WIZARD_ROUTE } from './constants/projectRoutes';
 
 // Lazy load components
 const Dashboard = lazy(() => import('./components/dashboard/Dashboard'));
 const Projects = lazy(() => import('./components/projects/Projects'));
 const ProjectForm = lazy(() => import('./components/projects/ProjectForm'));
-const ProjectTemplates = lazy(() => import('./components/projects/Templates'));
 const Tasks = lazy(() => import('./components/tasks/Tasks'));
 const Expenses = lazy(() => import('./components/expenses/Expenses'));
-const Documents = lazy(() => import('./components/documents/Documents'));
 const Bids = lazy(() => import('./components/bids/Bids'));
 const BidDetails = lazy(() => import('./components/bids/BidDetails'));
 const Subcontractors = lazy(() => import('./components/subcontractors/Subcontractors'));
@@ -161,16 +157,16 @@ const App: React.FC = () => {
                     <Route index element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
                     <Route path="dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
                     <Route path="projects" element={<ProtectedRoute><Projects /></ProtectedRoute>} />
-                    <Route path="projects/new" element={<ProtectedRoute><ProjectForm /></ProtectedRoute>} />
-                    <Route path="projects/new-custom" element={<ProtectedRoute><NewCustomProjectPage /></ProtectedRoute>} />
-                    <Route path="projects/new-residential" element={<ProtectedRoute><NewResidentialProjectForm /></ProtectedRoute>} />
-                    <Route path="projects/residential-template" element={<ProtectedRoute><ResidentialTemplateLanding /></ProtectedRoute>} />
+                    <Route path="projects/new" element={<ProtectedRoute><Navigate to={PROJECT_WIZARD_ROUTE} replace /></ProtectedRoute>} />
+                    <Route path="projects/new-custom" element={<ProtectedRoute><Navigate to={PROJECT_WIZARD_ROUTE} replace /></ProtectedRoute>} />
+                    <Route path="projects/new-residential" element={<ProtectedRoute><Navigate to={PROJECT_WIZARD_ROUTE} replace /></ProtectedRoute>} />
+                    <Route path="projects/residential-template" element={<ProtectedRoute><Navigate to={PROJECT_WIZARD_ROUTE} replace /></ProtectedRoute>} />
                     <Route path="projects/wizard" element={<ProtectedRoute><ProjectWizard /></ProtectedRoute>} />
                     <Route path="projects/:id/edit" element={<ProtectedRoute><ProjectForm /></ProtectedRoute>} />
                     <Route path="projects/:projectId" element={<ProtectedRoute><ProjectDetailPage /></ProtectedRoute>} />
                     <Route path="tasks" element={<ProtectedRoute><Tasks /></ProtectedRoute>} />
                     <Route path="expenses" element={<ProtectedRoute><Expenses /></ProtectedRoute>} />
-                    <Route path="documents" element={<ProtectedRoute><Documents /></ProtectedRoute>} />
+                    <Route path="documents" element={<ProtectedRoute><Navigate to="/projects" replace /></ProtectedRoute>} />
                     <Route path="bids" element={<ProtectedRoute><Bids /></ProtectedRoute>} />
                     <Route path="bids/:id" element={<ProtectedRoute><BidDetails /></ProtectedRoute>} />
                     <Route path="payments" element={<ProtectedRoute><Payments /></ProtectedRoute>} />
@@ -179,7 +175,7 @@ const App: React.FC = () => {
                     <Route path="subcontractors/:id" element={<ProtectedRoute><SubcontractorDetails /></ProtectedRoute>} />
                     <Route path="subcontractors/:id/edit" element={<ProtectedRoute><SubcontractorForm /></ProtectedRoute>} />
                     <Route path="settings" element={<ProtectedRoute><Settings /></ProtectedRoute>} />
-                    <Route path="templates" element={<ProtectedRoute><ProjectTemplates /></ProtectedRoute>} />
+                    <Route path="templates" element={<ProtectedRoute><Navigate to={PROJECT_WIZARD_ROUTE} replace /></ProtectedRoute>} />
                     <Route path="timeline" element={<ProtectedRoute><Timeline /></ProtectedRoute>} />
                     <Route path="calendar" element={<ProtectedRoute><Calendar /></ProtectedRoute>} />
                     <Route path="shared-reports/:shareId" element={<ProtectedRoute><SharedReportView /></ProtectedRoute>} />

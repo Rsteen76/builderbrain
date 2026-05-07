@@ -1,26 +1,27 @@
-import { useCallback, useState } from 'react';
-import { Phase } from '../types'; // PhaseStatus doesn't exist, use the union type directly
+import { Dispatch, SetStateAction, useCallback, useState } from 'react';
+import { Project, ProjectPhase } from '../types';
 import { useAuth } from './useAuth'; // To get userId
 import { toast } from 'react-hot-toast';
+import { ProjectService } from '../services/project';
 
 // Define the status union type explicitly for clarity if desired, or use Phase['status']
-export type PhaseStatusType = 'not_started' | 'in_progress' | 'completed' | 'on_hold';
+export type PhaseStatusType = ProjectPhase['status'];
 
 // Define options/arguments for the hook
 interface UsePhaseOperationsOptions {
   projectId: string;
-  // This likely needs to be replaced with access to the project's full data 
-  // and a method to update the entire project (e.g., via context or useProjectData)
-  onPhaseUpdate?: (updatedPhase: Phase) => void; 
-  // Or maybe: 
-  // updateProjectData?: (updatedData: Partial<Project>) => Promise<void>;
+  phases?: ProjectPhase[];
+  setPhases?: Dispatch<SetStateAction<ProjectPhase[]>>;
+  onPhaseUpdate?: (updatedPhase: ProjectPhase) => void;
+  onProjectUpdate?: (updatedProject: Project) => void;
 }
 
 // Define the return type of the hook
 interface UsePhaseOperationsReturn {
   isUpdatingPhase: boolean;
   updatePhaseStatus: (phaseId: string, status: PhaseStatusType) => Promise<void>;
-  // Add other phase operations here (e.g., updatePhaseDetails, deletePhase)
+  addPhase: (phase: ProjectPhase) => Promise<ProjectPhase | null>;
+  deletePhase: (phaseId: string) => Promise<void>;
 }
 
 /**
@@ -29,9 +30,20 @@ interface UsePhaseOperationsReturn {
  */
 export const usePhaseOperations = ({
   projectId,
+  phases = [],
+  setPhases,
+  onPhaseUpdate,
+  onProjectUpdate,
 }: UsePhaseOperationsOptions): UsePhaseOperationsReturn => {
   const { user } = useAuth();
   const [isUpdatingPhase, setIsUpdatingPhase] = useState(false);
+
+  const savePhases = useCallback(async (updatedPhases: ProjectPhase[]) => {
+    const updatedProject = await ProjectService.updateProject(projectId, { phases: updatedPhases });
+    setPhases?.(updatedProject.phases || updatedPhases);
+    onProjectUpdate?.(updatedProject);
+    return updatedProject;
+  }, [onProjectUpdate, projectId, setPhases]);
 
   const updatePhaseStatus = useCallback(async (phaseId: string, status: PhaseStatusType) => {
     if (!user?.uid) {
@@ -44,29 +56,90 @@ export const usePhaseOperations = ({
     }
 
     setIsUpdatingPhase(true);
-    toast('Updating phase status...');
-    console.warn('usePhaseOperations: updatePhaseStatus requires full implementation using project data and updateProject.');
-    
-    // ** Placeholder/Example Logic (Needs Real Implementation) **
-    // 1. Fetch current project data (e.g., from context or parent state)
-    // 2. Find the phase by phaseId in the project.phases array
-    // 3. Update the status of the found phase
-    // 4. Call ProjectService.updateProject(projectId, { phases: updatedPhasesArray })
-    // 5. Handle success/error and update local state via callback or context setter
-    
-    // Simulating async operation
-    await new Promise(resolve => setTimeout(resolve, 1000)); 
+    try {
+      const phaseToUpdate = phases.find((phase) => phase.id === phaseId);
+      if (!phaseToUpdate) {
+        toast.error('Phase not found.');
+        return;
+      }
 
-    setIsUpdatingPhase(false);
-    // toast.success('Phase status updated (simulated).');
-    // if (onPhaseUpdate) { /* Call with potentially fetched updated phase */ }
+      const updatedPhase: ProjectPhase = {
+        ...phaseToUpdate,
+        status,
+        progress: status === 'completed' ? 100 : phaseToUpdate.progress,
+      };
+      const updatedPhases = phases.map((phase) => phase.id === phaseId ? updatedPhase : phase);
 
-  }, [user?.uid, projectId]); // Dependencies might change with real implementation
+      await savePhases(updatedPhases);
+      onPhaseUpdate?.(updatedPhase);
+      toast.success('Phase status updated.');
+    } catch (error) {
+      console.error('usePhaseOperations: Error updating phase status:', error);
+      toast.error('Failed to update phase status.');
+    } finally {
+      setIsUpdatingPhase(false);
+    }
+  }, [onPhaseUpdate, phases, projectId, savePhases, user?.uid]);
 
-  // Add other operation functions here...
+  const addPhase = useCallback(async (phase: ProjectPhase): Promise<ProjectPhase | null> => {
+    if (!user?.uid) {
+      toast.error('Authentication required.');
+      return null;
+    }
+    if (!projectId) {
+      toast.error('Project context is required.');
+      return null;
+    }
+
+    setIsUpdatingPhase(true);
+    try {
+      const updatedPhases = [...phases, phase];
+      await savePhases(updatedPhases);
+      onPhaseUpdate?.(phase);
+      toast.success('Phase added.');
+      return phase;
+    } catch (error) {
+      console.error('usePhaseOperations: Error adding phase:', error);
+      toast.error('Failed to add phase.');
+      return null;
+    } finally {
+      setIsUpdatingPhase(false);
+    }
+  }, [onPhaseUpdate, phases, projectId, savePhases, user?.uid]);
+
+  const deletePhase = useCallback(async (phaseId: string) => {
+    if (!user?.uid) {
+      toast.error('Authentication required.');
+      return;
+    }
+    if (!projectId) {
+      toast.error('Project context is required.');
+      return;
+    }
+
+    const phaseToDelete = phases.find((phase) => phase.id === phaseId);
+    if (!phaseToDelete) {
+      toast.error('Phase not found.');
+      return;
+    }
+
+    setIsUpdatingPhase(true);
+    try {
+      const updatedPhases = phases.filter((phase) => phase.id !== phaseId);
+      await savePhases(updatedPhases);
+      toast.success('Phase deleted.');
+    } catch (error) {
+      console.error('usePhaseOperations: Error deleting phase:', error);
+      toast.error('Failed to delete phase.');
+    } finally {
+      setIsUpdatingPhase(false);
+    }
+  }, [phases, projectId, savePhases, user?.uid]);
 
   return {
     isUpdatingPhase,
     updatePhaseStatus,
+    addPhase,
+    deletePhase,
   };
 }; 

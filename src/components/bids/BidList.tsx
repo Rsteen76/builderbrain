@@ -58,6 +58,7 @@ import {
   SortDirection,
   BidSummary
 } from '../../services/bid';
+import { logger } from '../../utils/logger';
 import { formatCurrency, safelyParseDate } from '../../utils/formatters';
 import { formatBidForDialog } from '../../utils/bidUtils';
 import { Bid, BidFormData } from '../../types';
@@ -143,8 +144,8 @@ const BidList: React.FC<BidListProps> = ({ projectId, hideHeader = false }) => {
   const bidDialogs = useBidFormDialog(user?.uid, {
     projectId,
     onSubmitSuccess: (savedBid: Bid) => {
-      console.log('BidList - Bid saved/updated successfully:', savedBid);
-      console.log('BidList - Calling fetchBids to refresh list');
+      logger.log('BidList - Bid saved/updated successfully:', savedBid);
+      logger.log('BidList - Calling fetchBids to refresh list');
       fetchBids(); // Refetch the list after saving
     },
     onError: (errorMsg: string) => {
@@ -163,7 +164,7 @@ const BidList: React.FC<BidListProps> = ({ projectId, hideHeader = false }) => {
   const handleAddNewSubcontractor = () => {
     // Call the function from the hook to open the dialog
     quickAddSubDialog.openQuickAddSubDialog();
-    // console.log("Placeholder: Trigger Add New Subcontractor Modal/Flow from BidList");
+    // logger.log("Placeholder: Trigger Add New Subcontractor Modal/Flow from BidList");
     // setError("Add new subcontractor functionality needs to be implemented here.");
   };
 
@@ -173,7 +174,7 @@ const BidList: React.FC<BidListProps> = ({ projectId, hideHeader = false }) => {
         setLoading(false);
         return;
     }
-    console.log('BidList - fetchBids started', {projectId, filter, tabValue});
+    logger.log('BidList - fetchBids started', {projectId, filter, tabValue});
     setLoading(true);
     setError(null);
     try {
@@ -181,7 +182,7 @@ const BidList: React.FC<BidListProps> = ({ projectId, hideHeader = false }) => {
       const bidFilter: BidFilter = { ...filter };
       if (projectId) {
         bidFilter.projectId = projectId;
-        console.log(`BidList: Filtering bids for project ID: ${projectId}`);
+        logger.log(`BidList: Filtering bids for project ID: ${projectId}`);
       }
 
       // Apply tab-based status filter
@@ -198,9 +199,9 @@ const BidList: React.FC<BidListProps> = ({ projectId, hideHeader = false }) => {
         bidFilter.status = statusFilter;
       }
 
-      console.log('BidList - Calling BidService.getBids with filter:', bidFilter);
+      logger.log('BidList - Calling BidService.getBids with filter:', bidFilter);
       const fetchedBids = await BidService.getBids(user.uid, bidFilter, sort);
-      console.log('BidList - Received bids from service:', fetchedBids.length);
+      logger.log('BidList - Received bids from service:', fetchedBids.length);
       
       const bidSummaries = fetchedBids.map(bid => ({
         id: bid.id,
@@ -217,31 +218,31 @@ const BidList: React.FC<BidListProps> = ({ projectId, hideHeader = false }) => {
         createdAt: bid.createdAt,
         updatedAt: bid.updatedAt
       }));
-      console.log('BidList - Setting bids state with:', bidSummaries.length, 'items');
+      logger.log('BidList - Setting bids state with:', bidSummaries.length, 'items');
       setBids(bidSummaries);
     } catch (err) {
-      console.error("[BidList] Error fetching bids:", err);
+      logger.error("[BidList] Error fetching bids:", err);
       // Log the specific error before setting the generic message
       const specificError = err instanceof Error ? err.message : String(err);
-      console.error("[BidList] Specific error detail:", specificError);
+      logger.error("[BidList] Specific error detail:", specificError);
       setError('Failed to load bids. Please try again.');
     } finally {
-      console.log('[BidList] fetchBids finished.');
+      logger.log('[BidList] fetchBids finished.');
       setLoading(false);
     }
   };
 
   useEffect(() => {
-    console.log('[BidList useEffect] Running effect - authLoading:', authLoading, 'user:', !!user, 'projectId:', projectId, 'tabValue:', tabValue);
+    logger.log('[BidList useEffect] Running effect - authLoading:', authLoading, 'user:', !!user, 'projectId:', projectId, 'tabValue:', tabValue);
     if (!authLoading && user) {
-      console.log('[BidList useEffect] Conditions met, calling fetchBids...');
+      logger.log('[BidList useEffect] Conditions met, calling fetchBids...');
       fetchBids();
     } else if (!authLoading && !user) {
-      console.error('[BidList useEffect] User not authenticated, setting error.');
+      logger.error('[BidList useEffect] User not authenticated, setting error.');
       setError("Please log in to view bids.");
       setLoading(false);
     } else {
-      console.log('[BidList useEffect] Conditions not met (still loading auth or no user).');
+      logger.log('[BidList useEffect] Conditions not met (still loading auth or no user).');
     }
   }, [user, filter, sort, authLoading, projectId, tabValue]);
 
@@ -249,7 +250,7 @@ const BidList: React.FC<BidListProps> = ({ projectId, hideHeader = false }) => {
   useEffect(() => {
     const handleBidDeletedEvent = (event: CustomEvent<{ bidId: string }>) => {
       const { bidId } = event.detail;
-      console.log('BidList: Received bid-deleted event for bid ID:', bidId);
+      logger.log('BidList: Received bid-deleted event for bid ID:', bidId);
       setBids(prevBids => prevBids.filter(b => b.id !== bidId));
     };
 
@@ -271,7 +272,7 @@ const BidList: React.FC<BidListProps> = ({ projectId, hideHeader = false }) => {
           const fetchedSubs = await SubcontractorService.getSubcontractors(user.uid);
           setSubcontractors(fetchedSubs);
         } catch (err) {
-          console.error("Error fetching subcontractors for BidList:", err);
+          logger.error("Error fetching subcontractors for BidList:", err);
           // Optionally set an error state specific to subcontractors
           setError(prev => prev ? `${prev}, Failed to load subs` : 'Failed to load subcontractors');
         } finally {
@@ -315,7 +316,7 @@ const BidList: React.FC<BidListProps> = ({ projectId, hideHeader = false }) => {
         const promises = bidsToFetch.map(bid => getFullBidData(bid.id));
         await Promise.all(promises);
       } catch (err) {
-        console.error("Error fetching full bids data:", err);
+        logger.error("Error fetching full bids data:", err);
       } finally {
         // Clear loading state
         setLoadingBidIds([]);
@@ -368,9 +369,9 @@ const BidList: React.FC<BidListProps> = ({ projectId, hideHeader = false }) => {
 
   // --- Dialog Handlers (using the hook) ---
   const handleOpenNewBidModal = () => {
-    console.log('[BidList DEBUG] Opening new bid modal');
+    logger.log('[BidList DEBUG] Opening new bid modal');
     bidDialogs.openNewBidDialog();
-    console.log('[BidList DEBUG] After openNewBidDialog call, isModalOpen=', bidDialogs.isModalOpen);
+    logger.log('[BidList DEBUG] After openNewBidDialog call, isModalOpen=', bidDialogs.isModalOpen);
   };
 
   const handleView = (bid: BidSummary) => {
@@ -384,14 +385,14 @@ const BidList: React.FC<BidListProps> = ({ projectId, hideHeader = false }) => {
   };
 
   const handleDeleteRequest = (bid: BidSummary) => {
-    console.log('BidList: handleDeleteRequest called for bid ID:', bid.id);
+    logger.log('BidList: handleDeleteRequest called for bid ID:', bid.id);
     handleMenuClose();
     openBidDeleteDialog(bid);
   };
 
   const handleDuplicate = async (bid: BidSummary) => {
     if (!user?.uid) return;
-    console.log('Attempting to duplicate bid:', bid.id);
+    logger.log('Attempting to duplicate bid:', bid.id);
     handleMenuClose();
     try {
       setLoading(true);
@@ -408,10 +409,10 @@ const BidList: React.FC<BidListProps> = ({ projectId, hideHeader = false }) => {
         updatedAt: new Date(),
       };
       const newBid = await BidService.createBid(user.uid, newBidData as any);
-      console.log('Duplicated bid:', newBid);
+      logger.log('Duplicated bid:', newBid);
       fetchBids();
     } catch (err) {
-      console.error("Error duplicating bid:", err);
+      logger.error("Error duplicating bid:", err);
       setError("Failed to duplicate bid.");
     } finally {
       setLoading(false);
@@ -427,7 +428,7 @@ const BidList: React.FC<BidListProps> = ({ projectId, hideHeader = false }) => {
     }
     
     try {
-      console.log(`Fetching full bid data for bid ${bidId}`);
+      logger.log(`Fetching full bid data for bid ${bidId}`);
       const fullBid = await BidService.getBid(user.uid, bidId);
       if (fullBid) {
         // Update the cache with the new full bid
@@ -439,7 +440,7 @@ const BidList: React.FC<BidListProps> = ({ projectId, hideHeader = false }) => {
       }
       return null;
     } catch (err) {
-      console.error(`Error fetching full bid data for bid ${bidId}:`, err);
+      logger.error(`Error fetching full bid data for bid ${bidId}:`, err);
       return null;
     }
   };

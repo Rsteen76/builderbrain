@@ -28,13 +28,11 @@ import {
   Receipt as ReceiptIcon,
   Gavel as GavelIcon,
   Assignment as AssignmentIcon,
-  Description as DescriptionIcon,
   Payment as PaymentIcon,
   Settings as SettingsIcon,
   Person as PersonIcon,
   Logout as LogoutIcon,
   Group as GroupIcon,
-  Construction as ConstructionIcon,
 } from '@mui/icons-material';
 import { useAuth } from '../../contexts/AuthContext';
 import SettingsMenu from './SettingsMenu';
@@ -74,7 +72,7 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
   const handleMenuClose = () => {
     setAnchorEl(null);
   };
-  
+
   const toggleDarkMode = () => {
     const newMode = !darkMode;
     setDarkMode(newMode);
@@ -98,9 +96,7 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
     { text: 'Expenses', icon: <ReceiptIcon />, path: '/expenses' },
     { text: 'Bids', icon: <GavelIcon />, path: '/bids' },
     { text: 'Tasks', icon: <AssignmentIcon />, path: '/tasks' },
-    { text: 'Documents', icon: <DescriptionIcon />, path: '/documents' },
     { text: 'Payments', icon: <PaymentIcon />, path: '/payments' },
-    { text: 'Templates', icon: <ConstructionIcon />, path: '/templates' },
     { text: 'Settings', icon: <SettingsIcon />, path: '/settings' },
   ];
 
@@ -207,8 +203,8 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
           <Typography variant="h6" noWrap component="div" sx={{ flexGrow: 1 }}>
             Construction Manager
           </Typography>
-          
-          <SettingsMenu 
+
+          <SettingsMenu
             onThemeToggle={toggleDarkMode}
             isDarkMode={darkMode}
           />
@@ -261,9 +257,9 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
         sx={{
           flexGrow: 1,
           p: 3,
-          width: { 
-            xs: '100%', 
-            sm: `calc(100% - ${drawerWidth}px)` 
+          width: {
+            xs: '100%',
+            sm: `calc(100% - ${drawerWidth}px)`
           },
           mt: '64px',
           bgcolor: 'background.default',
@@ -280,4 +276,4 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
   );
 };
 
-export default MainLayout; 
+export default MainLayout;

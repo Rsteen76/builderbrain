@@ -43,17 +43,19 @@ import { formatCurrency, formatDate, safelyParseDate } from '../../../utils/form
 import { useProjectDetail } from '../../../contexts/ProjectDetailContext';
 import { PieChart, Pie, ResponsiveContainer, Cell, Tooltip as RechartsTooltip } from 'recharts';
 import { calculateBudgetData } from '../../../utils/projectMetrics';
+import { ProjectPhase } from '../../../types';
 
 const ProjectOverviewTab: React.FC = () => {
-  const { 
-    project, 
-    phases, 
-    bids, 
-    expenses, 
-    loading, 
+  const {
+    project,
+    phases,
+    bids,
+    expenses,
+    loading,
     error,
     openNewExpenseDialog,
     refreshAllProjectData,
+    addPhase,
   } = useProjectDetail();
 
   const theme = useTheme();
@@ -70,33 +72,33 @@ const ProjectOverviewTab: React.FC = () => {
 
   const totalBudget = budgetData.totalBudget;
   const totalSpent = budgetData.totalActual;
-  
+
   const getBudgetStatus = React.useCallback(() => {
     if (totalBudget <= 0) return { label: 'No Budget', color: theme.palette.warning.main, icon: null };
-    
+
     const percentUsed = (totalSpent / totalBudget) * 100;
-    
+
     if (percentUsed > 100) {
-      return { 
-        label: 'Over Budget', 
+      return {
+        label: 'Over Budget',
         color: theme.palette.error.main,
         icon: <ArrowDownwardIcon fontSize="small" />,
       };
     } else if (percentUsed > 85) {
-      return { 
-        label: 'Near Budget', 
+      return {
+        label: 'Near Budget',
         color: theme.palette.warning.main,
         icon: <MilestoneIcon fontSize="small" />,
       };
     } else {
-      return { 
-        label: 'Under Budget', 
+      return {
+        label: 'Under Budget',
         color: theme.palette.success.main,
         icon: <ArrowUpwardIcon fontSize="small" />,
       };
     }
   }, [totalBudget, totalSpent, theme]);
-  
+
   const getProjectStatus = React.useCallback(() => {
     if (!project) return { label: 'Unknown', color: theme.palette.grey[500] };
     const statusMap: Record<string, {label: string, color: string}> = {
@@ -109,14 +111,14 @@ const ProjectOverviewTab: React.FC = () => {
       'cancelled': { label: 'Cancelled', color: theme.palette.error.main },
       'active': { label: 'Active', color: theme.palette.warning.main },
     };
-    
+
     const status = project.status.toLowerCase();
     return statusMap[status] || { label: 'Unknown', color: theme.palette.grey[500] };
   }, [project, theme]);
 
   const budgetStatus = getBudgetStatus();
   const projectStatus = getProjectStatus();
-  
+
   const expensesByCategory = React.useMemo(() => {
     if (!expenses) return {};
     return expenses.reduce((acc, exp) => {
@@ -137,7 +139,7 @@ const ProjectOverviewTab: React.FC = () => {
         theme.palette.error.main,
         theme.palette.info.main,
       ];
-      
+
       return {
         name: category.charAt(0).toUpperCase() + category.slice(1),
         value: amount,
@@ -145,7 +147,7 @@ const ProjectOverviewTab: React.FC = () => {
       };
     });
   }, [expensesByCategory, theme]);
-  
+
   const expenseTotals = React.useMemo(() => {
     if (!expenses) return { totalExpenses: 0, pendingExpenses: 0, approvedExpenses: 0, paidExpenses: 0 };
     const totalExpenses = expenses.reduce((sum, exp) => sum + exp.amount, 0);
@@ -168,29 +170,52 @@ const ProjectOverviewTab: React.FC = () => {
       })
       .slice(0, 3);
   }, [phases]);
-  
+
+  const handleAddPhase = React.useCallback(async () => {
+    const phaseName = window.prompt('Phase name');
+    if (!phaseName?.trim()) return;
+
+    const today = new Date();
+    const newPhase: ProjectPhase = {
+      id: `phase-${Date.now()}`,
+      projectId: project?.id,
+      name: phaseName.trim(),
+      description: '',
+      status: 'not_started',
+      progress: 0,
+      order: phases.length,
+      startDate: today,
+      endDate: null,
+      budget: 0,
+      actualCost: 0,
+      tasks: [],
+    };
+
+    await addPhase(newPhase);
+  }, [addPhase, phases.length, project?.id]);
+
   const acceptedBidsTotal = React.useMemo(() => {
     if (!bids) return 0;
     return bids
       .filter(bid => bid.status === 'accepted')
       .reduce((sum, bid) => sum + bid.totalAmount, 0);
   }, [bids]);
-  
+
   const getLocationDisplay = React.useCallback(() => {
     if (!project || !project.location) return 'Not specified';
-    
+
     if (typeof project.location === 'string') {
       return project.location;
     }
-    
+
     if (typeof project.location === 'object' && project.location.address) {
       const loc = project.location;
       return `${loc.address}, ${loc.city || ''} ${loc.state || ''} ${loc.zipCode || ''}`.trim();
     }
-    
+
     return 'Not specified';
   }, [project]);
-  
+
   const getClientName = React.useCallback(() => {
     if (!project) return 'Not specified';
     return project.clientId || 'Not specified';
@@ -216,7 +241,7 @@ const ProjectOverviewTab: React.FC = () => {
     <Box sx={{ py: 2 }}>
       <Grid container spacing={3}>
         <Grid item xs={12} md={6}>
-          <Card elevation={0} sx={{ 
+          <Card elevation={0} sx={{
             borderRadius: 2,
             border: `1px solid ${alpha(theme.palette.divider, 0.1)}`,
             height: '100%',
@@ -242,71 +267,71 @@ const ProjectOverviewTab: React.FC = () => {
                   <ListItemIcon>
                     <BusinessIcon sx={{ color: theme.palette.primary.main }} />
                   </ListItemIcon>
-                  <ListItemText 
-                    primary="Project Name" 
+                  <ListItemText
+                    primary="Project Name"
                     secondary={project.name}
                     primaryTypographyProps={{ variant: 'body2', color: 'text.secondary' }}
                     secondaryTypographyProps={{ variant: 'body1', fontWeight: 'medium' }}
                   />
                 </ListItem>
-                
+
                 <Divider component="li" variant="inset" />
-                
+
                 <ListItem sx={{ py: 1.5 }}>
                   <ListItemIcon>
                     <LocationIcon sx={{ color: theme.palette.primary.main }} />
                   </ListItemIcon>
-                  <ListItemText 
-                    primary="Location" 
+                  <ListItemText
+                    primary="Location"
                     secondary={getLocationDisplay()}
                     primaryTypographyProps={{ variant: 'body2', color: 'text.secondary' }}
                     secondaryTypographyProps={{ variant: 'body1', fontWeight: 'medium' }}
                   />
                 </ListItem>
-                
+
                 <Divider component="li" variant="inset" />
-                
+
                 <ListItem sx={{ py: 1.5 }}>
                   <ListItemIcon>
                     <PersonIcon sx={{ color: theme.palette.primary.main }} />
                   </ListItemIcon>
-                  <ListItemText 
-                    primary="Client" 
+                  <ListItemText
+                    primary="Client"
                     secondary={getClientName()}
                     primaryTypographyProps={{ variant: 'body2', color: 'text.secondary' }}
                     secondaryTypographyProps={{ variant: 'body1', fontWeight: 'medium' }}
                   />
                 </ListItem>
-                
+
                 <Divider component="li" variant="inset" />
-                
+
                 <ListItem sx={{ py: 1.5 }}>
                   <ListItemIcon>
                     <CalendarIcon sx={{ color: theme.palette.primary.main }} />
                   </ListItemIcon>
-                  <ListItemText 
-                    primary="Timeline" 
+                  <ListItemText
+                    primary="Timeline"
                     secondary={`${formatDate(project.startDate || new Date())} to ${formatDate(project.endDate || new Date())}`}
                     primaryTypographyProps={{ variant: 'body2', color: 'text.secondary' }}
                     secondaryTypographyProps={{ variant: 'body1', fontWeight: 'medium' }}
                   />
                 </ListItem>
-                
+
                 <Divider component="li" variant="inset" />
-                
+
                 <ListItem sx={{ py: 1.5 }}>
                   <ListItemIcon>
                     <MoneyIcon sx={{ color: theme.palette.primary.main }} />
                   </ListItemIcon>
-                  <ListItemText 
-                    primary="Budget Status" 
+                  <ListItemText
+                    primary="Budget Status"
                     secondary={
                       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                         <span>{formatCurrency(totalBudget)}</span>
-                        <Chip 
+                        <Chip
                           label={budgetStatus.label}
                           size="small"
-                          sx={{ 
+                          sx={{
                             backgroundColor: alpha(budgetStatus.color, 0.1),
                             color: budgetStatus.color,
                             fontWeight: 'medium',
@@ -318,20 +343,20 @@ const ProjectOverviewTab: React.FC = () => {
                     secondaryTypographyProps={{ variant: 'body1', fontWeight: 'medium' }}
                   />
                 </ListItem>
-                
+
                 <Divider component="li" variant="inset" />
-                
+
                 <ListItem sx={{ py: 1.5 }}>
                   <ListItemIcon>
                     <AssignmentIcon sx={{ color: theme.palette.primary.main }} />
                   </ListItemIcon>
-                  <ListItemText 
-                    primary="Current Status" 
+                  <ListItemText
+                    primary="Current Status"
                     secondary={
-                      <Chip 
+                      <Chip
                         label={projectStatus.label}
                         size="small"
-                        sx={{ 
+                        sx={{
                           backgroundColor: alpha(projectStatus.color, 0.1),
                           color: projectStatus.color,
                           fontWeight: 'medium',
@@ -342,7 +367,7 @@ const ProjectOverviewTab: React.FC = () => {
                     secondaryTypographyProps={{ variant: 'body1', fontWeight: 'medium' }}
                   />
                 </ListItem>
-                
+
                 {project.description && (
                   <>
                     <Divider component="li" variant="inset" />
@@ -350,8 +375,8 @@ const ProjectOverviewTab: React.FC = () => {
                       <ListItemIcon>
                         <DescriptionIcon sx={{ color: theme.palette.primary.main }} />
                       </ListItemIcon>
-                      <ListItemText 
-                        primary="Description" 
+                      <ListItemText
+                        primary="Description"
                         secondary={project.description}
                         primaryTypographyProps={{ variant: 'body2', color: 'text.secondary' }}
                         secondaryTypographyProps={{ variant: 'body1', fontWeight: 'medium' }}
@@ -363,9 +388,9 @@ const ProjectOverviewTab: React.FC = () => {
             </CardContent>
           </Card>
         </Grid>
-        
+
         <Grid item xs={12} md={6}>
-          <Card elevation={0} sx={{ 
+          <Card elevation={0} sx={{
             borderRadius: 2,
             border: `1px solid ${alpha(theme.palette.divider, 0.1)}`,
             height: '100%',
@@ -388,10 +413,10 @@ const ProjectOverviewTab: React.FC = () => {
             <CardContent>
               <Grid container spacing={2}>
                 <Grid item xs={12} sm={6}>
-                  <Paper 
-                    elevation={0} 
-                    sx={{ 
-                      p: 2, 
+                  <Paper
+                    elevation={0}
+                    sx={{
+                      p: 2,
                       background: alpha(theme.palette.primary.main, 0.05),
                       borderRadius: 2,
                       height: '100%',
@@ -406,21 +431,21 @@ const ProjectOverviewTab: React.FC = () => {
                         Phase budget: {formatCurrency(phaseBudgetTotal)}
                       </Typography>
                     )}
-                    
+
                     <Divider sx={{ my: 1.5 }} />
-                    
+
                     <Typography variant="subtitle2" color="text.secondary">Expected Cost</Typography>
                     <Typography variant="h6" sx={{ fontWeight: 600, color: theme.palette.primary.main }}>
                       {formatCurrency(acceptedBidsTotal || 0)}
                     </Typography>
                   </Paper>
                 </Grid>
-                
+
                 <Grid item xs={12} sm={6}>
-                  <Paper 
-                    elevation={0} 
-                    sx={{ 
-                      p: 2, 
+                  <Paper
+                    elevation={0}
+                    sx={{
+                      p: 2,
                       background: alpha(theme.palette.primary.main, 0.05),
                       borderRadius: 2,
                       height: '100%',
@@ -430,7 +455,7 @@ const ProjectOverviewTab: React.FC = () => {
                     <Typography variant="h5" sx={{ fontWeight: 700, my: 1 }}>
                       {formatCurrency(totalExpenses)}
                     </Typography>
-                    
+
                     <Box sx={{ mt: 2 }}>
                       <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
                         <Typography variant="body2" color="text.secondary">Paid</Typography>
@@ -454,12 +479,12 @@ const ProjectOverviewTab: React.FC = () => {
                   </Paper>
                 </Grid>
               </Grid>
-              
+
               <Box sx={{ mt: 3 }}>
                 <Typography variant="subtitle1" sx={{ fontWeight: 600, mb: 1.5 }}>
                   Expense Distribution
                 </Typography>
-                
+
                 {expenseCategoryData.length > 0 ? (
                   <Box sx={{ height: 220 }}>
                     <ResponsiveContainer width="100%" height="100%">
@@ -479,17 +504,17 @@ const ProjectOverviewTab: React.FC = () => {
                             <Cell key={`cell-${index}`} fill={entry.color} />
                           ))}
                         </Pie>
-                        <RechartsTooltip 
+                        <RechartsTooltip
                           formatter={(value: number) => [formatCurrency(value), 'Amount']}
                         />
                       </PieChart>
                     </ResponsiveContainer>
                   </Box>
                 ) : (
-                  <Box sx={{ 
-                    height: 220, 
-                    display: 'flex', 
-                    alignItems: 'center', 
+                  <Box sx={{
+                    height: 220,
+                    display: 'flex',
+                    alignItems: 'center',
                     justifyContent: 'center',
                     flexDirection: 'column',
                     bgcolor: alpha(theme.palette.primary.main, 0.05),
@@ -497,10 +522,10 @@ const ProjectOverviewTab: React.FC = () => {
                   }}>
                     <PieChartIcon sx={{ color: alpha(theme.palette.text.secondary, 0.3), fontSize: 40, mb: 1 }} />
                     <Typography color="text.secondary">No expense data available</Typography>
-                    <Button 
-                      startIcon={<AddIcon />} 
-                      size="small" 
-                      variant="outlined" 
+                    <Button
+                      startIcon={<AddIcon />}
+                      size="small"
+                      variant="outlined"
                       sx={{ mt: 1 }}
                       onClick={() => openNewExpenseDialog()}
                     >
@@ -512,9 +537,9 @@ const ProjectOverviewTab: React.FC = () => {
             </CardContent>
           </Card>
         </Grid>
-        
+
         <Grid item xs={12} md={6}>
-          <Card elevation={0} sx={{ 
+          <Card elevation={0} sx={{
             borderRadius: 2,
             border: `1px solid ${alpha(theme.palette.divider, 0.1)}`,
             boxShadow: `0 2px 12px ${alpha(theme.palette.primary.main, 0.08)}`,
@@ -529,7 +554,7 @@ const ProjectOverviewTab: React.FC = () => {
                 <Button
                   size="small"
                   startIcon={<AddIcon />}
-                  onClick={() => console.warn("Add Phase button clicked - handler needs context action")}
+                  onClick={handleAddPhase}
                   sx={{ bgcolor: alpha(theme.palette.primary.main, 0.1), color: 'primary.main' }}
                 >
                   Add Phase
@@ -540,13 +565,13 @@ const ProjectOverviewTab: React.FC = () => {
               {phases.length > 0 ? (
                 <Box>
                   {phases.map((phase, index) => (
-                    <Paper 
+                    <Paper
                       key={phase.id || index}
                       elevation={0}
-                      sx={{ 
-                        p: 2, 
+                      sx={{
+                        p: 2,
                         mb: 2,
-                        borderRadius: 1.5, 
+                        borderRadius: 1.5,
                         border: `1px solid ${alpha(theme.palette.divider, 0.1)}`,
                         '&:last-child': { mb: 0 },
                       }}
@@ -560,27 +585,27 @@ const ProjectOverviewTab: React.FC = () => {
                             {formatDate(phase.startDate)} - {formatDate(phase.endDate)}
                           </Typography>
                         </Box>
-                        <Chip 
+                        <Chip
                           label={`${phase.progress}%`}
                           size="small"
-                          sx={{ 
+                          sx={{
                             backgroundColor: alpha(
-                              phase.progress === 100 
-                                ? theme.palette.success.main 
-                                : phase.progress > 0 
-                                  ? theme.palette.primary.main 
+                              phase.progress === 100
+                                ? theme.palette.success.main
+                                : phase.progress > 0
+                                  ? theme.palette.primary.main
                                   : theme.palette.grey[500]
                             , 0.1),
-                            color: phase.progress === 100 
-                              ? theme.palette.success.main 
-                              : phase.progress > 0 
-                                ? theme.palette.primary.main 
+                            color: phase.progress === 100
+                              ? theme.palette.success.main
+                              : phase.progress > 0
+                                ? theme.palette.primary.main
                                 : theme.palette.grey[500],
                             fontWeight: 'medium',
                           }}
                         />
                       </Box>
-                      
+
                       <Box sx={{ mt: 1.5, display: 'flex', justifyContent: 'space-between' }}>
                         <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
                           <MoneyIcon fontSize="small" sx={{ color: theme.palette.success.main }} />
@@ -599,10 +624,10 @@ const ProjectOverviewTab: React.FC = () => {
                   ))}
                 </Box>
               ) : (
-                <Box sx={{ 
-                  py: 4, 
-                  display: 'flex', 
-                  alignItems: 'center', 
+                <Box sx={{
+                  py: 4,
+                  display: 'flex',
+                  alignItems: 'center',
                   justifyContent: 'center',
                   flexDirection: 'column',
                   bgcolor: alpha(theme.palette.primary.main, 0.05),
@@ -610,10 +635,10 @@ const ProjectOverviewTab: React.FC = () => {
                 }}>
                   <LayersIcon sx={{ color: alpha(theme.palette.text.secondary, 0.3), fontSize: 40, mb: 1 }} />
                   <Typography color="text.secondary" sx={{ mb: 1 }}>No phases defined yet</Typography>
-                  <Button 
-                    variant="contained" 
-                    color="primary" 
-                    onClick={() => console.warn("Add Project Phases button clicked - handler needs context action")}
+                  <Button
+                    variant="contained"
+                    color="primary"
+                    onClick={handleAddPhase}
                     startIcon={<AddIcon />}
                   >
                     Add Project Phases
@@ -623,9 +648,9 @@ const ProjectOverviewTab: React.FC = () => {
             </CardContent>
           </Card>
         </Grid>
-        
+
         <Grid item xs={12} md={6}>
-          <Card elevation={0} sx={{ 
+          <Card elevation={0} sx={{
             borderRadius: 2,
             border: `1px solid ${alpha(theme.palette.divider, 0.1)}`,
             boxShadow: `0 2px 12px ${alpha(theme.palette.primary.main, 0.08)}`,
@@ -651,22 +676,22 @@ const ProjectOverviewTab: React.FC = () => {
                     <React.Fragment key={milestone.id || index}>
                       <ListItem alignItems="flex-start" sx={{ py: 1.5 }}>
                         <ListItemIcon>
-                          <MilestoneIcon 
-                            sx={{ 
-                              color: milestone.progress > 0 
-                                ? theme.palette.primary.main 
-                                : theme.palette.grey[500] 
-                            }} 
+                          <MilestoneIcon
+                            sx={{
+                              color: milestone.progress > 0
+                                ? theme.palette.primary.main
+                                : theme.palette.grey[500]
+                            }}
                           />
                         </ListItemIcon>
                         <ListItemText
                           primary={
                             <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
                               <Typography variant="subtitle2">{milestone.name}</Typography>
-                              <Chip 
+                              <Chip
                                 label={`${milestone.progress}%`}
                                 size="small"
-                                sx={{ 
+                                sx={{
                                   height: 20,
                                   backgroundColor: alpha(theme.palette.info.main, 0.1),
                                   color: theme.palette.info.main,
@@ -679,14 +704,14 @@ const ProjectOverviewTab: React.FC = () => {
                               <Typography variant="body2" color="text.secondary">
                                 {formatDate(milestone.startDate)} - {formatDate(milestone.endDate)}
                               </Typography>
-                              <Typography 
-                                variant="body2" 
-                                color="text.secondary" 
-                                sx={{ 
-                                  display: 'flex', 
-                                  alignItems: 'center', 
+                              <Typography
+                                variant="body2"
+                                color="text.secondary"
+                                sx={{
+                                  display: 'flex',
+                                  alignItems: 'center',
                                   gap: 0.5,
-                                  mt: 0.5 
+                                  mt: 0.5
                                 }}
                               >
                                 <MoneyIcon fontSize="small" />
@@ -703,10 +728,10 @@ const ProjectOverviewTab: React.FC = () => {
                   ))}
                 </List>
               ) : (
-                <Box sx={{ 
-                  py: 4, 
-                  display: 'flex', 
-                  alignItems: 'center', 
+                <Box sx={{
+                  py: 4,
+                  display: 'flex',
+                  alignItems: 'center',
                   justifyContent: 'center',
                   flexDirection: 'column',
                   bgcolor: alpha(theme.palette.primary.main, 0.05),
@@ -714,12 +739,12 @@ const ProjectOverviewTab: React.FC = () => {
                 }}>
                   <TimelineIcon sx={{ color: alpha(theme.palette.text.secondary, 0.3), fontSize: 40, mb: 1 }} />
                   <Typography color="text.secondary" sx={{ mb: 1 }}>No upcoming milestones</Typography>
-                  <Button 
-                    variant="outlined" 
-                    onClick={() => console.warn("Add Milestone button clicked - handler needs context action")}
+                  <Button
+                    variant="outlined"
+                    onClick={handleAddPhase}
                     startIcon={<AddIcon />}
                   >
-                    Add Milestone
+                    Add Phase
                   </Button>
                 </Box>
               )}
@@ -731,4 +756,4 @@ const ProjectOverviewTab: React.FC = () => {
   );
 };
 
-export default ProjectOverviewTab; 
+export default ProjectOverviewTab;

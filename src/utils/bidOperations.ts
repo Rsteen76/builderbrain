@@ -6,6 +6,7 @@ import { db } from '../config/firebase';
 import { collection, query, where, getDocs } from 'firebase/firestore';
 import { mapSimpleToDetailedCategory } from '../data/hierarchicalCategories';
 import { BidFormData } from '../types/form.types';
+import { logger } from './logger';
 
 // Extended Expense type that includes bid references
 interface EnhancedExpense extends Expense {
@@ -34,7 +35,7 @@ export const findExistingExpenseForPaymentStage = async (
     
     return matchingExpense || null;
   } catch (error) {
-    console.error('Error finding existing expense for payment stage:', error);
+    logger.error('Error finding existing expense for payment stage:', error);
     return null;
   }
 };
@@ -51,7 +52,7 @@ export const submitBid = async (
 ): Promise<Bid | null> => {
   if (!userId) return null;
   
-  console.log('Submitting bid form data:', JSON.stringify(bidData, null, 2));
+  logger.log('Submitting bid form data:', JSON.stringify(bidData, null, 2));
   
   try {
     const now = new Date();
@@ -62,7 +63,7 @@ export const submitBid = async (
       try {
         existingBid = await BidService.getBid(userId, editingBidId);
       } catch (fetchError) {
-        console.error(`Error fetching existing bid ${editingBidId} during update:`, fetchError);
+        logger.error(`Error fetching existing bid ${editingBidId} during update:`, fetchError);
         // Decide whether to proceed or throw error
       }
     }
@@ -146,7 +147,7 @@ export const submitBid = async (
       }
     } catch (catError) {
       // Log but don't fail the whole operation just for category mapping
-      console.warn('Non-critical error calculating bid category:', catError);
+      logger.warn('Non-critical error calculating bid category:', catError);
     }
     
     let resultBid: Bid;
@@ -164,7 +165,7 @@ export const submitBid = async (
       resultBid = updatedBid;
     } else {
       // Create new bid
-      console.log('Creating new bid with data:', cleanBidData);
+      logger.log('Creating new bid with data:', cleanBidData);
       
       // Ensure projectId is defined (it's required by the service)
       if (!projectId) {
@@ -196,23 +197,23 @@ export const submitBid = async (
           (createBidPayload as any).categoryId = cleanBidData.categoryId;
         }
         
-        console.log('Calling BidService.createBid with payload:', JSON.stringify(createBidPayload, null, 2));
+        logger.log('Calling BidService.createBid with payload:', JSON.stringify(createBidPayload, null, 2));
         
         // DEBUG: Try to wrap the creation call in a more detailed error handling block
         try {
           resultBid = await BidService.createBid(userId, createBidPayload);
-          console.log('Successfully created bid:', resultBid);
+          logger.log('Successfully created bid:', resultBid);
         } catch (createError) {
-          console.error('ERROR IN BidService.createBid:', createError);
+          logger.error('ERROR IN BidService.createBid:', createError);
           if (createError instanceof Error) {
-            console.error('Error message:', createError.message);
-            console.error('Error stack:', createError.stack);
+            logger.error('Error message:', createError.message);
+            logger.error('Error stack:', createError.stack);
           }
           // Re-throw to be caught by the outer catch block
           throw createError;
         }
       } catch (innerError) {
-        console.error('CRITICAL: Error preparing or creating bid:', innerError);
+        logger.error('CRITICAL: Error preparing or creating bid:', innerError);
         throw new Error(`Failed to create bid: ${innerError instanceof Error ? innerError.message : String(innerError)}`);
       }
     }
@@ -221,7 +222,7 @@ export const submitBid = async (
     const isNewlyAccepted = bidData.status === 'accepted' && (!existingBid || existingBid.status !== 'accepted');
 
     if (isNewlyAccepted) {
-      console.log(`Bid ${editingBidId || resultBid.id} is newly accepted. Creating expenses...`);
+      logger.log(`Bid ${editingBidId || resultBid.id} is newly accepted. Creating expenses...`);
       try {
         // Create expenses for all payment stages that don't already have an expense
         for (const stage of paymentSchedule) {
@@ -234,7 +235,7 @@ export const submitBid = async (
             );
             
             if (existingExpense) {
-              console.log(`Expense already exists for payment stage ${stage.id}, skipping creation`);
+              logger.log(`Expense already exists for payment stage ${stage.id}, skipping creation`);
               continue; // Skip to next stage
             }
             
@@ -271,18 +272,18 @@ export const submitBid = async (
               }
             }
           } catch (error) {
-            console.error(`Error creating expense for payment stage ${stage.id}:`, error);
+            logger.error(`Error creating expense for payment stage ${stage.id}:`, error);
           }
         }
       } catch (error) {
-        console.error('Error creating expenses for accepted bid:', error);
+        logger.error('Error creating expenses for accepted bid:', error);
         // We'll continue with the flow even if expense creation fails
       }
     }
     
     return resultBid;
   } catch (error) {
-    console.error('Error submitting bid:', error);
+    logger.error('Error submitting bid:', error);
     throw error;
   }
 };
@@ -291,38 +292,38 @@ export const submitBid = async (
  * Delete a bid and return whether the operation was successful
  */
 export const deleteBid = async (bidId: string, selectedExpenseIds?: string[]): Promise<boolean> => {
-  console.log(`Starting deletion process for bid ID: ${bidId}`);
+  logger.log(`Starting deletion process for bid ID: ${bidId}`);
   try {
     // If specific expense IDs are provided, only delete those expenses
     if (selectedExpenseIds && selectedExpenseIds.length > 0) {
-      console.log(`Deleting specified expenses for bid ${bidId}:`, selectedExpenseIds);
+      logger.log(`Deleting specified expenses for bid ${bidId}:`, selectedExpenseIds);
       for (const expenseId of selectedExpenseIds) {
-        console.log(`Attempting to delete expense ID: ${expenseId}`);
+        logger.log(`Attempting to delete expense ID: ${expenseId}`);
         await ExpenseService.deleteExpense(expenseId);
-        console.log(`Successfully deleted expense ID: ${expenseId}`);
+        logger.log(`Successfully deleted expense ID: ${expenseId}`);
       }
     } else {
       // If no specific expenses are selected, delete all expenses associated with the bid
-      console.log(`Finding all associated expenses for bid ${bidId}`);
+      logger.log(`Finding all associated expenses for bid ${bidId}`);
       const expenses = await findExpensesForBid(bidId);
-      console.log(`Found ${expenses.length} associated expenses for bid ${bidId}`);
+      logger.log(`Found ${expenses.length} associated expenses for bid ${bidId}`);
       for (const expense of expenses) {
         if (expense.id) {
-          console.log(`Attempting to delete associated expense ID: ${expense.id}`);
+          logger.log(`Attempting to delete associated expense ID: ${expense.id}`);
           await ExpenseService.deleteExpense(expense.id);
-          console.log(`Successfully deleted associated expense ID: ${expense.id}`);
+          logger.log(`Successfully deleted associated expense ID: ${expense.id}`);
         }
       }
     }
 
     // Delete the bid
-    console.log(`Attempting to delete bid ID: ${bidId}`);
+    logger.log(`Attempting to delete bid ID: ${bidId}`);
     await BidService.deleteBid(bidId);
-    console.log(`Successfully deleted bid ID: ${bidId}. Returning true.`);
+    logger.log(`Successfully deleted bid ID: ${bidId}. Returning true.`);
     return true;
   } catch (error) {
-    console.error(`Error during deletion process for bid ID: ${bidId}`, error);
-    console.log(`Deletion failed for bid ID: ${bidId}. Returning false.`);
+    logger.error(`Error during deletion process for bid ID: ${bidId}`, error);
+    logger.log(`Deletion failed for bid ID: ${bidId}. Returning false.`);
     return false;
   }
 };
@@ -331,19 +332,19 @@ export const deleteBid = async (bidId: string, selectedExpenseIds?: string[]): P
  * Find all expenses associated with a bid
  */
 export const findExpensesForBid = async (bidId: string): Promise<Expense[]> => {
-  console.log(`findExpensesForBid called for bidId: ${bidId}`);
+  logger.log(`findExpensesForBid called for bidId: ${bidId}`);
   try {
     const expensesRef = collection(db, 'expenses');
     const q = query(expensesRef, where('bidId', '==', bidId));
     const querySnapshot = await getDocs(q);
-    console.log(`Firestore query for expenses with bidId=${bidId} returned ${querySnapshot.docs.length} documents.`);
+    logger.log(`Firestore query for expenses with bidId=${bidId} returned ${querySnapshot.docs.length} documents.`);
 
     return querySnapshot.docs.map(doc => ({
       id: doc.id,
       ...doc.data()
     } as Expense));
   } catch (error) {
-    console.error(`Error finding expenses for bid ${bidId}:`, error);
+    logger.error(`Error finding expenses for bid ${bidId}:`, error);
     return [];
   }
 };
@@ -447,7 +448,7 @@ export const createExtraBidExpense = async (
         paymentProgress: updatedProgress
       });
       
-      console.log(`Updated bid ${bidId} with extra payment stage and adjusted payment schedule`);
+      logger.log(`Updated bid ${bidId} with extra payment stage and adjusted payment schedule`);
     } else {
       // If there's no payment progress yet, create it
       const initialPaid = expenseData.status === 'paid' ? expenseData.amount : 0;
@@ -463,12 +464,12 @@ export const createExtraBidExpense = async (
         }
       });
       
-      console.log(`Created payment schedule with extra payment for bid ${bidId}`);
+      logger.log(`Created payment schedule with extra payment for bid ${bidId}`);
     }
     
     return expense;
   } catch (error) {
-    console.error('Error creating extra bid expense:', error);
+    logger.error('Error creating extra bid expense:', error);
     return null;
   }
 };

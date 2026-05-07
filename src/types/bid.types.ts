@@ -1,4 +1,4 @@
-import { LineItem } from './project.types';
+import type { LineItem } from './project.types';
 
 export type BidStatus = 
   | 'draft' 

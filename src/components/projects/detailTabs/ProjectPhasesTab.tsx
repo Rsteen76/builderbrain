@@ -1,12 +1,10 @@
-import React, { useCallback, useMemo } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import {
   Box,
   Typography,
   Button,
   Grid,
   alpha,
-  Card,
-  CardContent,
   Divider,
   useTheme,
   Menu,
@@ -33,7 +31,6 @@ import PhaseCard from './PhaseCard';
 import { ProjectPhase } from '../../../types';
 import { usePhaseMenuState } from '../../../hooks/usePhaseMenuState';
 import { useProjectDetail } from '../../../contexts/ProjectDetailContext';
-import { usePhaseOperations } from '../../../hooks/usePhaseOperations';
 import { usePhaseDetailsDialog } from '../../../hooks/usePhaseDetailsDialog';
 import { useNotification } from '../../../hooks/useNotification';
 import { 
@@ -41,9 +38,8 @@ import {
   calculatePhaseActualCosts 
 } from '../../../utils/phaseCalculations';
 import PhaseDetailsDialog from '../dialogs/PhaseDetailsDialog';
-
-// Define the subset of statuses the hook currently supports
-type PhaseStatusType = 'not_started' | 'in_progress' | 'completed' | 'on_hold';
+import TemplateAdjuster from '../TemplateAdjuster';
+import { v4 as uuidv4 } from 'uuid';
 
 // Original broader status list (used for menu population)
 const ALL_PHASE_STATUSES: ProjectPhase['status'][] = [
@@ -59,62 +55,112 @@ const ProjectPhasesTab: React.FC = () => {
   const theme = useTheme();
   const {
     project,
-  phases,
+    phases,
     bids = [],
     expenses = [],
     loading,
     error,
     openNewBidDialog,
     openNewExpenseDialog,
+    refreshAllProjectData,
+    setPhases,
+    isUpdatingPhase,
+    updatePhaseStatus,
+    addPhase,
+    deletePhase,
   } = useProjectDetail();
 
   const phaseMenu = usePhaseMenuState();
+  const {
+    actionMenuPhaseId,
+    statusMenuPhaseId,
+    handleActionMenuClose,
+    handleStatusMenuClose,
+  } = phaseMenu;
   const { showNotification } = useNotification();
-  const { updatePhaseStatus } = usePhaseOperations({
-    projectId: project?.id ?? '',
-  });
   const phaseDetailsDialog = usePhaseDetailsDialog();
+  const [isTemplateAdjusterOpen, setIsTemplateAdjusterOpen] = useState(false);
 
   const phaseProposedCosts = useMemo(() => calculatePhaseProposedCosts(phases || [], bids || []), [phases, bids]);
   const phaseActualCosts = useMemo(() => calculatePhaseActualCosts(phases || [], expenses || []), [phases, expenses]);
 
-  const handleStatusSelect = useCallback((status: ProjectPhase['status']) => {
-    const validStatus = status as PhaseStatusType;
-    if (phaseMenu.statusMenuPhaseId && ['not_started', 'in_progress', 'completed', 'on_hold'].includes(validStatus)) {
-      updatePhaseStatus(phaseMenu.statusMenuPhaseId, validStatus);
-    } else if (phaseMenu.statusMenuPhaseId) {
-      showNotification(`Status update to '${status}' not currently supported.`, 'warning');
-      console.warn(`Attempted to update phase ${phaseMenu.statusMenuPhaseId} to unsupported status ${status}`);
+  const handleStatusSelect = useCallback(async (status: ProjectPhase['status']) => {
+    if (statusMenuPhaseId) {
+      await updatePhaseStatus(statusMenuPhaseId, status);
     }
-    phaseMenu.handleStatusMenuClose();
-  }, [phaseMenu.statusMenuPhaseId, updatePhaseStatus, phaseMenu.handleStatusMenuClose, showNotification]);
+    handleStatusMenuClose();
+  }, [handleStatusMenuClose, statusMenuPhaseId, updatePhaseStatus]);
 
-  const handleAddPhaseClick = () => {
-    console.warn('Add phase button clicked, but hook doesn\'t provide addPhase.');
-    showNotification('Add Phase functionality not available.', 'info');
-  };
+  const createDefaultPhase = useCallback((name: string): ProjectPhase => {
+    const projectStartDate = project?.startDate ? new Date(project.startDate) : new Date();
+    const sortedPhases = [...phases].sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+    const lastPhase = sortedPhases[sortedPhases.length - 1];
+    const startDate = lastPhase?.endDate ? new Date(lastPhase.endDate as Date) : projectStartDate;
+    if (lastPhase?.endDate) {
+      startDate.setDate(startDate.getDate() + 1);
+    }
+    const endDate = new Date(startDate);
+    endDate.setDate(endDate.getDate() + 30);
+
+    return {
+      id: uuidv4(),
+      projectId: project?.id,
+      name,
+      description: '',
+      startDate,
+      endDate,
+      status: 'not_started',
+      progress: 0,
+      order: phases.length,
+      tasks: [],
+      budget: 0,
+      actualCost: 0,
+    };
+  }, [phases, project?.id, project?.startDate]);
+
+  const handleAddPhaseClick = useCallback(async () => {
+    const nextNumber = phases.length + 1;
+    const enteredName = window.prompt('Phase name', `Phase ${nextNumber}`);
+    const phaseName = enteredName?.trim();
+    if (!phaseName) return;
+
+    await addPhase(createDefaultPhase(phaseName));
+  }, [addPhase, createDefaultPhase, phases.length]);
 
   const handleOpenTemplateAdjusterClick = () => {
-    console.warn('Adjust template button clicked, but not implemented yet.');
-    showNotification('Adjust Template functionality not yet implemented.', 'info');
+    if (!project) {
+      showNotification('Project details are still loading.', 'info');
+      return;
+    }
+    setIsTemplateAdjusterOpen(true);
   };
 
-  const handleDeletePhaseClick = useCallback(() => {
-    showNotification('Delete Phase functionality not available.', 'warning');
-    phaseMenu.handleActionMenuClose();
-  }, [phaseMenu.handleActionMenuClose, showNotification]);
+  const handleDeletePhaseClick = useCallback(async () => {
+    const phaseId = actionMenuPhaseId;
+    const phase = phases.find((item) => item.id === phaseId);
+    handleActionMenuClose();
+    if (!phaseId || !phase) {
+      showNotification('Could not find phase to delete.', 'error');
+      return;
+    }
+
+    const shouldDelete = window.confirm(`Delete phase "${phase.name}"? This will remove it from the project schedule.`);
+    if (!shouldDelete) return;
+
+    await deletePhase(phaseId);
+  }, [actionMenuPhaseId, deletePhase, handleActionMenuClose, phases, showNotification]);
 
   const handleViewDetailsClick = useCallback(() => {
-    if (phaseMenu.actionMenuPhaseId) {
-      const phaseToView = phases.find(p => p.id === phaseMenu.actionMenuPhaseId);
+    if (actionMenuPhaseId) {
+      const phaseToView = phases.find(p => p.id === actionMenuPhaseId);
       if (phaseToView) {
         phaseDetailsDialog.openPhaseDetailsDialog(phaseToView as ProjectPhase);
       } else {
         showNotification('Could not find phase details.', 'error');
       }
     }
-    phaseMenu.handleActionMenuClose();
-  }, [phaseMenu.actionMenuPhaseId, phases, phaseDetailsDialog, phaseMenu.handleActionMenuClose, showNotification]);
+    handleActionMenuClose();
+  }, [actionMenuPhaseId, phases, phaseDetailsDialog, handleActionMenuClose, showNotification]);
 
   const getStatusColor = useCallback((status: string): string => {
     if (status?.includes('complete')) return theme.palette.success.main;
@@ -155,10 +201,14 @@ const ProjectPhasesTab: React.FC = () => {
   }, [phases, phaseDetailsDialog, showNotification]);
 
   const handleUpdatePhase = useCallback((phaseId: string) => {
-    // Implement the logic to update the phase
-    console.log("Updating phase:", phaseId);
-    // You can implement the actual update logic here or navigate to edit page
-  }, []);
+    phaseDetailsDialog.closePhaseDetailsDialog();
+    setIsTemplateAdjusterOpen(true);
+  }, [phaseDetailsDialog]);
+
+  const handleTemplateProjectUpdate = useCallback(async (updatedProject: NonNullable<typeof project>) => {
+    setPhases(updatedProject.phases || []);
+    await refreshAllProjectData();
+  }, [refreshAllProjectData, setPhases]);
 
   if (loading) return <CircularProgress sx={{ display: 'block', margin: 'auto', mt: 2 }} />;
   if (error) return <Alert severity="error">Error loading phases: {error}</Alert>;
@@ -208,6 +258,7 @@ const ProjectPhasesTab: React.FC = () => {
             size="medium"
             color="secondary"
             onClick={handleOpenTemplateAdjusterClick}
+            disabled={!project || isUpdatingPhase}
             sx={{ 
               borderRadius: 2,
               boxShadow: `0 2px 5px ${alpha(theme.palette.secondary.main, 0.2)}`,
@@ -224,6 +275,7 @@ const ProjectPhasesTab: React.FC = () => {
             startIcon={<AddIcon />}
             size="medium"
             onClick={handleAddPhaseClick}
+            disabled={!project || isUpdatingPhase}
             sx={{ 
               borderRadius: 2,
               background: `linear-gradient(45deg, ${theme.palette.primary.main}, ${alpha(theme.palette.primary.main, 0.8)})`,
@@ -291,6 +343,7 @@ const ProjectPhasesTab: React.FC = () => {
             startIcon={<AddIcon />} 
             size="large"
             onClick={handleAddPhaseClick}
+            disabled={!project || isUpdatingPhase}
             sx={{ 
               borderRadius: 2,
               background: `linear-gradient(45deg, ${theme.palette.primary.main}, ${alpha(theme.palette.primary.main, 0.8)})`,
@@ -335,6 +388,7 @@ const ProjectPhasesTab: React.FC = () => {
         <Divider sx={{ my: 0.5 }} />
         <MenuItem 
           onClick={handleDeletePhaseClick}
+          disabled={isUpdatingPhase}
           sx={{ borderRadius: 1, py: 1, color: theme.palette.error.main }}
         >
           <ListItemIcon>
@@ -368,6 +422,15 @@ const ProjectPhasesTab: React.FC = () => {
           theme={theme}
           getStatusColor={getStatusColor}
           handleUpdatePhase={handleUpdatePhase} 
+        />
+      )}
+
+      {project && (
+        <TemplateAdjuster
+          open={isTemplateAdjusterOpen}
+          onClose={() => setIsTemplateAdjusterOpen(false)}
+          project={{ ...project, phases }}
+          onUpdateProject={handleTemplateProjectUpdate}
         />
       )}
     </Box>

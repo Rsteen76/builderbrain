@@ -1,9 +1,5 @@
 import { Timestamp } from 'firebase/firestore';
-import { Expense, ExpenseCategory, ExpenseStatus, PaymentDetails } from './expense.types';
-import { ExpenseTransaction, TransactionStatus, PaymentMethod } from './expense-transaction.types';
-import { CategoryMappingPreferences } from './budget.types';
-import { Bid } from './bid.types';
-import { LineItem } from './project.types';
+import type { Bid } from './bid.types';
 export * from './bids.types';
 export * from './expense-transaction.types';
 
@@ -22,55 +18,6 @@ export interface User {
     emailNotifications: boolean;
     theme: 'light' | 'dark';
   };
-}
-
-export interface Project {
-  id: string;
-  userId: string;
-  name: string;
-  description: string;
-  status: 'estimate' | 'planning' | 'in_progress' | 'completed' | 'on_hold' | 'draft' | 'active' | 'cancelled';
-  priority?: 'low' | 'medium' | 'high' | 'urgent';
-  clientId?: string;
-  contractorId?: string;
-  startDate: Date;
-  endDate?: Date | null;
-  budget: {
-    total: number;
-    spent: number;
-    remaining: number;
-    contingency?: number;
-  } | number;
-  actualCost?: number;
-  location: {
-    address: string;
-    city: string;
-    state: string;
-    zipCode: string;
-  } | string;
-  createdAt: Date;
-  updatedAt: Date;
-  team?: string[];
-  projectType?: string;
-  estimatedDuration?: string;
-  phases: ProjectPhase[];
-  keyMilestones?: {
-    name: string;
-    date: Date | null;
-    description: string;
-  }[];
-  requirements?: {
-    permits: string[];
-    inspections: string[];
-    documents: string[];
-  };
-  lineItems?: LineItem[];
-  bids?: Bid[];
-  tasks?: Task[];
-  expenses?: Expense[];
-  budgetPreferences?: CategoryMappingPreferences;
-  projections?: BudgetProjection[];
-  progress: number;
 }
 
 export interface Task {
@@ -173,35 +120,6 @@ export interface Subcontractor {
   updatedAt: Date;
 }
 
-// Add or enhance the Phase interface
-export interface Phase {
-  id: string;
-  projectId?: string;
-  name: string;
-  description?: string;
-  startDate?: Date | null | Timestamp;
-  endDate?: Date | null | Timestamp;
-  status: 'not_started' | 'in_progress' | 'completed' | 'on_hold' | 'planning' | 'delayed';
-  progress: number;
-  order?: number;
-  tasks?: Task[];
-  budget: number;
-  actualCost: number;
-}
-
-// Add the ProjectPhase interface (or enhance existing Phase if preferred)
-// Note: Ensure Task type is imported or defined if used within ProjectPhase
-export interface ProjectPhase extends Phase {
-  // id is already optional in Phase, but often required in components
-  // Ensure you handle potential undefined id if extending base Phase
-  id: string; 
-  // Override tasks to be Task[] instead of string[]
-  tasks?: Task[];
-  // Other properties are inherited from Phase
-  // Add any ProjectDetailPage specific enhancements here if needed
-  // e.g., tasks: Task[]; // Ensure Task type is imported/defined
-}
-
 // Re-export types from their domain-specific files
 export * from './user.types';
 export * from './project.types';
@@ -268,17 +186,6 @@ export interface ExpenseBreakdown {
   approved: number;
   paid: number;
   rejected: number;
-}
-
-// Interface for Budget Projections
-export interface BudgetProjection {
-  id: string;
-  categoryId: string;
-  amount: number;
-  notes: string | null;
-  createdAt: Date | Timestamp;
-  userId: string;
-  projectId: string;
 }
 
 // Ensure all relevant types are exported

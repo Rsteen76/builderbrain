@@ -1,5 +1,6 @@
 import { db } from '../config/firebase';
 import { devBypassAppUser, isDevAuthBypassEnabled } from '../config/devMode';
+import { logger } from '../utils/logger';
 import {
   createDevBid,
   createDevBidVersion,
@@ -297,10 +298,10 @@ export class BidService {
       try {
         docRef = await addDoc(this.collection, firestoreBid);
       } catch (addDocError) {
-        console.error('BidService - CRITICAL ERROR during addDoc operation:', addDocError);
+        logger.error('BidService - CRITICAL ERROR during addDoc operation:', addDocError);
         if (addDocError instanceof Error) {
-          console.error('Error message:', addDocError.message);
-          console.error('Error stack:', addDocError.stack);
+          logger.error('Error message:', addDocError.message);
+          logger.error('Error stack:', addDocError.stack);
         }
         throw new Error(`Failed to save bid to Firestore: ${addDocError instanceof Error ? addDocError.message : String(addDocError)}`);
       }
@@ -325,10 +326,10 @@ export class BidService {
 
       return createdBid;
     } catch (error) {
-      console.error('BidService - CRITICAL ERROR in createBid:', error);
+      logger.error('BidService - CRITICAL ERROR in createBid:', error);
       if (error instanceof Error) {
-        console.error('Error message:', error.message);
-        console.error('Error stack:', error.stack);
+        logger.error('Error message:', error.message);
+        logger.error('Error stack:', error.stack);
       }
       throw error;
     }
@@ -654,7 +655,7 @@ export class BidService {
       const docSnap = await getDoc(docRef);
       
       if (!docSnap.exists()) {
-        console.warn(`Bid with ID ${id} not found`);
+        logger.warn(`Bid with ID ${id} not found`);
         return null;
       }
       
@@ -662,14 +663,14 @@ export class BidService {
       
       // Validate ownership or public access
       if (data.userId !== userId) {
-        console.warn(`User ${userId} cannot access bid ${id} owned by ${data.userId}`);
+        logger.warn(`User ${userId} cannot access bid ${id} owned by ${data.userId}`);
         return null;
       }
       
       // Convert to the expected Bid type
       return this.convertFromFirestoreFormat(data, id);
     } catch (err) {
-      console.error(`Error getting bid ${id}:`, err);
+      logger.error(`Error getting bid ${id}:`, err);
       throw new Error(`Failed to retrieve bid: ${err instanceof Error ? err.message : String(err)}`);
     }
   }
@@ -756,10 +757,10 @@ export class BidService {
         if (startAfterDoc.exists()) {
           queryConstraints.push(startAfter(startAfterDoc));
         } else {
-          console.warn(`[BidService.getBids] Document with startAfterId ${startAfterId} not found. Fetching from beginning.`);
+          logger.warn(`[BidService.getBids] Document with startAfterId ${startAfterId} not found. Fetching from beginning.`);
         }
       } catch (err) {
-        console.error(`[BidService.getBids] Error fetching startAfter document ${startAfterId}:`, err);
+        logger.error(`[BidService.getBids] Error fetching startAfter document ${startAfterId}:`, err);
         // Proceed without pagination if startAfter doc fails
       }
     }
@@ -774,14 +775,14 @@ export class BidService {
         try {
           bids.push(this.convertFromFirestoreFormat(doc.data() as FirestoreBid, doc.id));
         } catch (conversionError) {
-          console.error(`[BidService.getBids] Error converting bid document ${doc.id}:`, conversionError, 'Document data:', doc.data());
+          logger.error(`[BidService.getBids] Error converting bid document ${doc.id}:`, conversionError, 'Document data:', doc.data());
           // Optionally skip this bid or handle the error differently
         }
       });
       return bids;
     } catch (error) {
       // Log the specific Firestore error
-      console.error('[BidService.getBids] Firestore query failed:', error);
+      logger.error('[BidService.getBids] Firestore query failed:', error);
       // Re-throw the error so the calling component knows it failed
       throw error; 
     }
@@ -1060,7 +1061,7 @@ export class BidService {
         attachments: Array.isArray(data.attachments) ? data.attachments : (data.attachments ? [data.attachments] : []),
       };
     } catch (err) {
-      console.error('Error converting bid from Firestore format:', err, data);
+      logger.error('Error converting bid from Firestore format:', err, data);
       throw new Error('Failed to process bid data');
     }
   }
@@ -1120,20 +1121,20 @@ export class BidService {
       // Get the bid
       const bid = await this.getBid(userId, bidId);
       if (!bid) {
-        console.error(`BidService: Could not find bid with ID ${bidId}`);
+        logger.error(`BidService: Could not find bid with ID ${bidId}`);
         return null;
       }
       
       // Find the payment stage
       const paymentStage = bid.paymentSchedule?.find(stage => stage.id === paymentStageId);
       if (!paymentStage) {
-        console.error(`BidService: Could not find payment stage with ID ${paymentStageId}`);
+        logger.error(`BidService: Could not find payment stage with ID ${paymentStageId}`);
         return null;
       }
       
       // Check if an expense already exists for this payment stage
       if (paymentStage.expenseId) {
-        console.warn(`BidService: Expense already exists for payment stage ${paymentStageId}`);
+        logger.warn(`BidService: Expense already exists for payment stage ${paymentStageId}`);
         return paymentStage.expenseId;
       }
       
@@ -1167,7 +1168,7 @@ export class BidService {
       
       return expense.id || null;
     } catch (error) {
-      console.error(`BidService: Error creating expense from payment stage:`, error);
+      logger.error(`BidService: Error creating expense from payment stage:`, error);
       return null;
     }
   }
@@ -1244,7 +1245,7 @@ export class BidService {
       // Update the payment progress
       await this.updatePaymentProgress(bidId);
     } catch (error) {
-      console.error(`BidService: Error updating payment stage:`, error);
+      logger.error(`BidService: Error updating payment stage:`, error);
       throw error;
     }
   }
@@ -1326,7 +1327,7 @@ export class BidService {
         updatedAt: Timestamp.fromDate(new Date())
       });
     } catch (error) {
-      console.error(`BidService: Error updating payment progress:`, error);
+      logger.error(`BidService: Error updating payment progress:`, error);
       throw error;
     }
   }
@@ -1403,7 +1404,7 @@ export class BidService {
       // Update the payment progress
       await this.updatePaymentProgress(bidId);
     } catch (error) {
-      console.error(`BidService: Error syncing payment stage with expense:`, error);
+      logger.error(`BidService: Error syncing payment stage with expense:`, error);
       throw error;
     }
   }

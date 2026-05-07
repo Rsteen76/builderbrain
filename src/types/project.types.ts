@@ -1,3 +1,7 @@
+import type { Timestamp } from 'firebase/firestore';
+import type { CategoryMappingPreferences } from './budget.types';
+import type { Bid } from './bid.types';
+import type { Expense } from './expense.types';
 import type { Task } from './task.types';
 
 export type ProjectStatus = 
@@ -31,6 +35,7 @@ export interface ProjectBudget {
   total: number;
   spent: number;
   remaining: number;
+  contingency?: number;
 }
 
 export interface ProjectMilestone {
@@ -50,14 +55,19 @@ export interface Phase {
   projectId?: string;
   name: string;
   description?: string;
-  startDate?: Date | null;
-  endDate?: Date | null;
-  status?: 'not_started' | 'in_progress' | 'completed' | 'on_hold';
-  progress?: number;
+  startDate?: Date | null | Timestamp;
+  endDate?: Date | null | Timestamp;
+  status: 'not_started' | 'in_progress' | 'completed' | 'on_hold' | 'planning' | 'delayed';
+  progress: number;
   order?: number;
   tasks?: Task[];
-  budget?: number;
-  actualCost?: number;
+  budget: number;
+  actualCost: number;
+}
+
+export interface ProjectPhase extends Phase {
+  id: string;
+  tasks?: Task[];
 }
 
 export interface LineItem {
@@ -94,13 +104,26 @@ export interface Project {
   team?: string[];
   projectType?: string;
   estimatedDuration?: string;
-  phases?: Phase[];
+  phases: ProjectPhase[];
   keyMilestones?: ProjectMilestone[];
   requirements?: ProjectRequirements;
   lineItems?: LineItem[];
   tasks?: Task[];
-  expenses?: string[]; // Array of expense IDs
-  bids?: string[]; // Array of bid IDs
+  expenses?: Expense[];
+  bids?: Bid[];
+  budgetPreferences?: CategoryMappingPreferences;
+  projections?: BudgetProjection[];
+  progress: number;
+}
+
+export interface BudgetProjection {
+  id: string;
+  categoryId: string;
+  amount: number;
+  notes: string | null;
+  createdAt: Date | Timestamp;
+  userId: string;
+  projectId: string;
 }
 
 export interface Template {

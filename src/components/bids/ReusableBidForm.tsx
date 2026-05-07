@@ -47,6 +47,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { usePaymentTerms } from '../../hooks/usePaymentTerms'; // Import the hook
 import { getProject } from '../../services/project';
 import { COMMON_BID_CATEGORIES, PHASE_BID_TITLES, BID_SCOPE_TEMPLATES } from '../../data/bidFormConstants';
+import { logger } from '../../utils/logger';
 
 interface ReusableBidFormProps {
   open?: boolean;
@@ -148,7 +149,7 @@ const ReusableBidForm: React.FC<ReusableBidFormProps> = ({
   } = usePaymentTerms(bidForm.totalAmount, currentProjectPhases, bidForm.phaseId);
 
   // Log initial mounting for debugging
-  console.log('ReusableBidForm mounted/updated with props:', {
+  logger.log('ReusableBidForm mounted/updated with props:', {
     initialBidData: initialBidData ? { ...initialBidData } : null,
     editingBidId,
     isDialog,
@@ -162,17 +163,17 @@ const ReusableBidForm: React.FC<ReusableBidFormProps> = ({
 
   // Add a useEffect to log subcontractors changes
   useEffect(() => {
-    console.log('ReusableBidForm - subcontractors updated:', 
+    logger.log('ReusableBidForm - subcontractors updated:',
       subcontractors.map(s => ({ id: s.id, name: s.name }))
     );
   }, [subcontractors]);
 
   // At the beginning of the component, after hooks
   useEffect(() => {
-    console.log("ReusableBidForm MOUNT - initialBidData:", initialBidData);
-    console.log("ReusableBidForm MOUNT - editingBidId:", editingBidId);
-    console.log("ReusableBidForm MOUNT - initialized ref:", initialized.current);
-    console.log("ReusableBidForm MOUNT - subcontractors:", 
+    logger.log("ReusableBidForm MOUNT - initialBidData:", initialBidData);
+    logger.log("ReusableBidForm MOUNT - editingBidId:", editingBidId);
+    logger.log("ReusableBidForm MOUNT - initialized ref:", initialized.current);
+    logger.log("ReusableBidForm MOUNT - subcontractors:",
       subcontractors.map(s => ({ id: s.id, name: s.name }))
     );
   }, []);
@@ -181,7 +182,7 @@ const ReusableBidForm: React.FC<ReusableBidFormProps> = ({
   useEffect(() => {
     // Print a debug warning if editingBidId is present but initialBidData is null
     if (editingBidId && !initialBidData) {
-      console.warn("ReusableBidForm WARNING: editingBidId is present but initialBidData is null", {
+      logger.warn("ReusableBidForm WARNING: editingBidId is present but initialBidData is null", {
         editingBidId,
         initialBidData
       });
@@ -190,24 +191,24 @@ const ReusableBidForm: React.FC<ReusableBidFormProps> = ({
 
   // Update the existing useEffect
   useEffect(() => {
-    console.log("ReusableBidForm initialBidData change - initialBidData:", initialBidData);
-    console.log("ReusableBidForm initialBidData change - editingBidId:", editingBidId);
-    console.log("ReusableBidForm initialBidData change - initialized ref:", initialized.current);
-    
+    logger.log("ReusableBidForm initialBidData change - initialBidData:", initialBidData);
+    logger.log("ReusableBidForm initialBidData change - editingBidId:", editingBidId);
+    logger.log("ReusableBidForm initialBidData change - initialized ref:", initialized.current);
+
     // Skip if no initialBidData
     if (!initialBidData) {
-      console.log("ReusableBidForm - No initialBidData, skipping form initialization");
+      logger.log("ReusableBidForm - No initialBidData, skipping form initialization");
       return;
     }
 
     // Safe access to nested properties with optional chaining
     const installments = initialBidData.paymentTerms?.installments || [];
-    console.log("ReusableBidForm - Installments from initialBidData:", installments);
-    
+    logger.log("ReusableBidForm - Installments from initialBidData:", installments);
+
     // Only update form if editingBidId exists or we haven't initialized
     if (editingBidId || !initialized.current) {
-      console.log("ReusableBidForm - Updating form with initialBidData");
-      
+      logger.log("ReusableBidForm - Updating form with initialBidData");
+
       // Prepare the main form data, excluding paymentTerms initially
       const baseFormData: Omit<BidFormData, 'paymentTerms'> = {
         ...defaultBidForm,
@@ -258,8 +259,8 @@ const ReusableBidForm: React.FC<ReusableBidFormProps> = ({
         };
         setHookPaymentTerms(defaultHookState);
       }
-      
-      console.log("ReusableBidForm - Form updated with data (base):", baseFormData);
+
+      logger.log("ReusableBidForm - Form updated with data (base):", baseFormData);
       initialized.current = true;
     }
   }, [initialBidData, editingBidId, defaultBidForm, setHookPaymentTerms, currentProjectPhases]);
@@ -288,10 +289,10 @@ const ReusableBidForm: React.FC<ReusableBidFormProps> = ({
         try {
           setIsLoadingProjects(true);
           const userProjects = await ProjectService.getProjects(user.uid);
-          console.log('ReusableBidForm - Fetched projects:', userProjects.length);
+          logger.log('ReusableBidForm - Fetched projects:', userProjects.length);
           setProjects(userProjects);
         } catch (error) {
-          console.error('Error fetching projects:', error);
+          logger.error('Error fetching projects:', error);
           setApiError('Failed to load projects. Please try again.');
         } finally {
           setIsLoadingProjects(false);
@@ -304,59 +305,59 @@ const ReusableBidForm: React.FC<ReusableBidFormProps> = ({
 
   // Add Effect to update currentProjectPhases based on selected project
   useEffect(() => {
-    console.log("[Effect Update Phases] Running...");
-    console.log("[Effect Update Phases] Props -> projectId:", projectId);
-    console.log("[Effect Update Phases] Props -> phases:", phases);
-    console.log("[Effect Update Phases] Props -> availableProjects:", availableProjects?.map(p => p.name)); // Log names for readability
-    console.log("[Effect Update Phases] State -> bidForm.projectId:", bidForm.projectId);
+    logger.log("[Effect Update Phases] Running...");
+    logger.log("[Effect Update Phases] Props -> projectId:", projectId);
+    logger.log("[Effect Update Phases] Props -> phases:", phases);
+    logger.log("[Effect Update Phases] Props -> availableProjects:", availableProjects?.map(p => p.name)); // Log names for readability
+    logger.log("[Effect Update Phases] State -> bidForm.projectId:", bidForm.projectId);
 
     const fetchProjectPhases = async (id: string) => {
       try {
-        console.log("[Effect Update Phases] Fetching phases for project:", id);
+        logger.log("[Effect Update Phases] Fetching phases for project:", id);
         // Check if user is available before fetching
         if (!user?.uid) {
-          console.warn("[Effect Update Phases] User not available, cannot fetch phases");
+          logger.warn("[Effect Update Phases] User not available, cannot fetch phases");
           return;
         }
-        
+
         // Use the exported getProject function which takes userId as a second parameter
         const project = await getProject(id, user.uid);
         if (project && project.phases) {
-          console.log("[Effect Update Phases] Fetched project phases:", project.phases);
+          logger.log("[Effect Update Phases] Fetched project phases:", project.phases);
           setCurrentProjectPhases(project.phases);
         } else {
-          console.log("[Effect Update Phases] Project has no phases or could not be fetched");
+          logger.log("[Effect Update Phases] Project has no phases or could not be fetched");
           setCurrentProjectPhases([]);
         }
       } catch (error) {
-        console.error("[Effect Update Phases] Error fetching project:", error);
+        logger.error("[Effect Update Phases] Error fetching project:", error);
         setCurrentProjectPhases([]);
       }
     };
 
     // If projectId prop is provided, use the directly passed phases
     if (projectId && phases) {
-      console.log("[Effect Update Phases] Mode: Using phases passed via props for projectId:", projectId);
+      logger.log("[Effect Update Phases] Mode: Using phases passed via props for projectId:", projectId);
       setCurrentProjectPhases(phases);
-      console.log("[Effect Update Phases] Set currentProjectPhases to (from props):", phases);
-    } 
+      logger.log("[Effect Update Phases] Set currentProjectPhases to (from props):", phases);
+    }
     // If projectId is provided but phases aren't, fetch the phases
     else if (projectId && !phases) {
-      console.log("[Effect Update Phases] Mode: ProjectId provided but no phases, fetching from API");
+      logger.log("[Effect Update Phases] Mode: ProjectId provided but no phases, fetching from API");
       fetchProjectPhases(projectId);
     }
     // Else if we are in standalone mode (no projectId prop) and have availableProjects
     else if (!projectId && availableProjects && bidForm.projectId) {
-      console.log("[Effect Update Phases] Mode: Standalone form, project selected.");
+      logger.log("[Effect Update Phases] Mode: Standalone form, project selected.");
       const selectedProject = availableProjects.find(p => p.id === bidForm.projectId);
-      console.log("[Effect Update Phases] Found selected project:", selectedProject?.name);
+      logger.log("[Effect Update Phases] Found selected project:", selectedProject?.name);
       const newPhases = selectedProject?.phases || [];
       setCurrentProjectPhases(newPhases);
-      console.log("[Effect Update Phases] Set currentProjectPhases to (from selected project):", newPhases);
-      
+      logger.log("[Effect Update Phases] Set currentProjectPhases to (from selected project):", newPhases);
+
       // Reset phase selection if selected project doesn't contain the current phaseId
       if (selectedProject && !newPhases.some(p => p.id === bidForm.phaseId)) {
-        console.log("[Effect Update Phases] Resetting phaseId because it's not in the new project phases");
+        logger.log("[Effect Update Phases] Resetting phaseId because it's not in the new project phases");
         // Use functional update to avoid stale state issues if needed
         setBidForm(prev => ({
           ...prev,
@@ -364,12 +365,12 @@ const ReusableBidForm: React.FC<ReusableBidFormProps> = ({
           phaseName: ''
         }));
       }
-    } 
+    }
     // Otherwise, clear phases (e.g., no project selected yet in standalone mode or projectId passed but no phases)
     else {
-      console.log("[Effect Update Phases] Mode: Clearing phases (no project selected or missing phases prop).");
+      logger.log("[Effect Update Phases] Mode: Clearing phases (no project selected or missing phases prop).");
       setCurrentProjectPhases([]);
-      console.log("[Effect Update Phases] Set currentProjectPhases to: []");
+      logger.log("[Effect Update Phases] Set currentProjectPhases to: []");
       // Optionally reset phaseId if it shouldn't persist when phases are cleared
       // setBidForm(prev => ({ ...prev, phaseId: '', phaseName: '' }));
     }
@@ -378,32 +379,32 @@ const ReusableBidForm: React.FC<ReusableBidFormProps> = ({
 
   // Form change handlers
   const handleChangeBidForm = (field: string, value: any) => {
-    console.log(`ReusableBidForm - Changing field "${field}" to:`, value);
-    console.log(`ReusableBidForm - Current form state:`, bidForm);
-    
+    logger.log(`ReusableBidForm - Changing field "${field}" to:`, value);
+    logger.log(`ReusableBidForm - Current form state:`, bidForm);
+
     // Ensure we're not accidentally preventing updates
     if (typeof value === 'undefined') {
-      console.warn(`ReusableBidForm - Attempt to set "${field}" to undefined, using null instead`);
+      logger.warn(`ReusableBidForm - Attempt to set "${field}" to undefined, using null instead`);
       value = null;
     }
-    
+
     setBidForm(prev => {
       let newState = {
         ...prev,
         [field]: value
       };
-      
+
       // Special handling for phaseId, also update phaseName
       if (field === 'phaseId') {
         const phaseName = currentProjectPhases.find(p => p.id === value)?.name || '';
         newState.phaseName = phaseName;
-        
+
         // Update all installment phases that haven't been manually configured
         newState = {
           ...newState,
           paymentTerms: {
             ...newState.paymentTerms,
-            installments: newState.paymentTerms.installments.map(inst => 
+            installments: newState.paymentTerms.installments.map(inst =>
               // Only update phases that haven't been manually configured
               inst.manuallyConfigured ? inst : {
                 ...inst,
@@ -414,8 +415,8 @@ const ReusableBidForm: React.FC<ReusableBidFormProps> = ({
           }
         };
       }
-      
-      console.log(`ReusableBidForm - New form state after updating ${field}:`, newState);
+
+      logger.log(`ReusableBidForm - New form state after updating ${field}:`, newState);
       return newState;
     });
   };
@@ -430,13 +431,13 @@ const ReusableBidForm: React.FC<ReusableBidFormProps> = ({
     const template = e.target.value as 'one-time' | 'standard' | 'trades' | 'custom';
     setPaymentTemplate(template); // Keep local state for the Select component
     applyPaymentTemplate(template); // Call the hook function
-    
+
     // Safely access phases
     const defaultPhase = (phases && phases.length > 0) ? phases[0] : null;
-    
+
     // Keep the current fixed amount setting for consistency
     const useFixedAmounts = bidForm.paymentTerms.isDownPaymentFixed;
-    
+
     // Update payment terms based on template
     switch(template) {
       case 'one-time':
@@ -460,8 +461,8 @@ const ReusableBidForm: React.FC<ReusableBidFormProps> = ({
             downPaymentAmount: prev.totalAmount * 0.5,
             installments: [
               {
-                id: uuidv4(), 
-                name: 'Final Payment', 
+                id: uuidv4(),
+                name: 'Final Payment',
                 percent: 50,
                 isFixedAmount: useFixedAmounts,
                 fixedAmount: prev.totalAmount * 0.5,
@@ -480,7 +481,7 @@ const ReusableBidForm: React.FC<ReusableBidFormProps> = ({
         const downPercent = parseFloat((30).toFixed(1));
         const roughInPercent = parseFloat((40).toFixed(1));
         const finalPercent = parseFloat((30).toFixed(1));
-        
+
         setBidForm(prev => ({
           ...prev,
           paymentTerms: {
@@ -489,8 +490,8 @@ const ReusableBidForm: React.FC<ReusableBidFormProps> = ({
             downPaymentAmount: prev.totalAmount * (downPercent / 100),
             installments: [
               {
-                id: uuidv4(), 
-                name: 'Rough-In', 
+                id: uuidv4(),
+                name: 'Rough-In',
                 percent: roughInPercent,
                 isFixedAmount: useFixedAmounts,
                 fixedAmount: prev.totalAmount * (roughInPercent / 100),
@@ -500,8 +501,8 @@ const ReusableBidForm: React.FC<ReusableBidFormProps> = ({
                 manuallyConfigured: false
               },
               {
-                id: uuidv4(), 
-                name: 'Final/Top-Out', 
+                id: uuidv4(),
+                name: 'Final/Top-Out',
                 percent: finalPercent,
                 isFixedAmount: useFixedAmounts,
                 fixedAmount: prev.totalAmount * (finalPercent / 100),
@@ -545,16 +546,16 @@ const ReusableBidForm: React.FC<ReusableBidFormProps> = ({
     if (!bidForm.title) errors.title = 'Title is required';
     if (!bidForm.subcontractorName) errors.subcontractorName = 'Subcontractor is required';
     if (!bidForm.totalAmount || bidForm.totalAmount <= 0) errors.totalAmount = 'A valid amount is required';
-    
+
     // Ensure projectId is present
     if (!projectId && !bidForm.projectId) {
       errors.projectId = 'Project ID is required';
-      console.error('Cannot create bid: Missing project ID');
+      logger.error('Cannot create bid: Missing project ID');
     }
 
     if (Object.keys(errors).length > 0) {
       // There are validation errors
-      console.log('Form validation errors:', errors);
+      logger.log('Form validation errors:', errors);
       // Update form errors state
       setBidFormErrors(errors);
       return;
@@ -572,17 +573,17 @@ const ReusableBidForm: React.FC<ReusableBidFormProps> = ({
       };
 
       // Log data being submitted
-      console.log('Submitting bid data:', finalBidData);
-      
+      logger.log('Submitting bid data:', finalBidData);
+
       // Call the onSubmit handler
       await onSubmit(finalBidData);
-      
+
       // If we're in a dialog, close it
       if (isDialog && onClose) {
         onClose();
       }
     } catch (error) {
-      console.error('Error submitting bid:', error);
+      logger.error('Error submitting bid:', error);
       setApiError('Failed to save bid. Please try again.');
     }
   };
@@ -597,7 +598,7 @@ const ReusableBidForm: React.FC<ReusableBidFormProps> = ({
       if (phase) {
         phaseNameForLog = phase.name;
         const phaseNameLower = phase.name.toLowerCase();
-        
+
         // Use separate `if` statements to find all applicable keys
         if (phaseNameLower.includes("site") || phaseNameLower.includes("excav") || phaseNameLower.includes("demo")) {
           applicableKeys.push("site_work");
@@ -626,47 +627,47 @@ const ReusableBidForm: React.FC<ReusableBidFormProps> = ({
         // Add more checks if needed
 
       } else {
-        console.log(`[getBidTitleOptions] Phase ID ${phaseId} provided but not found in phases list.`);
+        logger.log(`[getBidTitleOptions] Phase ID ${phaseId} provided but not found in phases list.`);
       }
     } else if (!phaseId) {
-        console.log('[getBidTitleOptions] No phase selected.');
+        logger.log('[getBidTitleOptions] No phase selected.');
     } else { // phases.length === 0
-        console.log('[getBidTitleOptions] Phase ID provided but phases list is empty.');
+        logger.log('[getBidTitleOptions] Phase ID provided but phases list is empty.');
     }
 
     // Remove duplicates from applicableKeys (e.g., if common is added implicitly elsewhere)
     const uniqueKeys = Array.from(new Set(applicableKeys));
-    console.log(`[getBidTitleOptions] For Phase: "${phaseNameForLog}", Applicable Category Keys:`, uniqueKeys);
+    logger.log(`[getBidTitleOptions] For Phase: "${phaseNameForLog}", Applicable Category Keys:`, uniqueKeys);
 
     // Collect titles from all applicable keys using a Set for automatic deduplication
     const combinedTitles = new Set<string>();
     uniqueKeys.forEach(key => {
       const titles = PHASE_BID_TITLES[key] || [];
-      console.log(`[getBidTitleOptions] Titles for Key "${key}":`, titles);
+      logger.log(`[getBidTitleOptions] Titles for Key "${key}":`, titles);
       titles.forEach(title => combinedTitles.add(title));
     });
 
     // Convert Set to sorted array
     const finalOptions = Array.from(combinedTitles).sort();
-    
-    console.log(`[getBidTitleOptions] Final Combined & Sorted Options (${finalOptions.length}):`, finalOptions);
-    
+
+    logger.log(`[getBidTitleOptions] Final Combined & Sorted Options (${finalOptions.length}):`, finalOptions);
+
     return finalOptions;
   };
 
   // Log render values just before defining formContent
-  console.log("[Render Phase Select] value:", bidForm.phaseId || '');
-  console.log("[Render Phase Select] disabled:", !bidForm.projectId || currentProjectPhases.length === 0);
-  console.log("[Render Phase Select] options (currentProjectPhases):", currentProjectPhases);
+  logger.log("[Render Phase Select] value:", bidForm.phaseId || '');
+  logger.log("[Render Phase Select] disabled:", !bidForm.projectId || currentProjectPhases.length === 0);
+  logger.log("[Render Phase Select] options (currentProjectPhases):", currentProjectPhases);
 
   const formContent = (
     <LocalizationProvider dateAdapter={AdapterDateFns}>
-      <Box sx={{ 
+      <Box sx={{
         p: { xs: 1.5, md: 2.5 }, // Reduced padding
-        '& .MuiGrid-item': { 
+        '& .MuiGrid-item': {
           display: 'flex',
-          flexDirection: 'column', 
-          justifyContent: 'flex-start' 
+          flexDirection: 'column',
+          justifyContent: 'flex-start'
         },
         '& .form-section': {
           mb: 3, // Reduced spacing between sections
@@ -699,8 +700,8 @@ const ReusableBidForm: React.FC<ReusableBidFormProps> = ({
           <Typography variant="subtitle1" sx={{ fontWeight: 600, mb: 1.5, color: 'text.primary' }}>
             Bid Details
           </Typography>
-          
-          <Grid container spacing={2}> 
+
+          <Grid container spacing={2}>
             {/* Project selector - only show if projectId is not provided as prop */}
             {!projectId && (
               <Grid item xs={12}>
@@ -745,9 +746,9 @@ const ReusableBidForm: React.FC<ReusableBidFormProps> = ({
                 </FormControl>
               </Grid>
             )}
-            
+
             {/* Project Phase field - moved up to be before bid title */}
-            <Grid item xs={12} md={6}> 
+            <Grid item xs={12} md={6}>
               <FormControl fullWidth variant="outlined" size="small">
                 <InputLabel id="bid-phase-select-label">Project Phase</InputLabel>
                 <Select
@@ -756,11 +757,11 @@ const ReusableBidForm: React.FC<ReusableBidFormProps> = ({
                   label="Project Phase"
                   onChange={(e) => {
                     const phaseId = e.target.value;
-                    console.log("Project Phase Changed. New phaseId:", phaseId);
-                    console.log("Available phases (currentProjectPhases):", currentProjectPhases);
+                    logger.log("Project Phase Changed. New phaseId:", phaseId);
+                    logger.log("Available phases (currentProjectPhases):", currentProjectPhases);
                     // Safely find phase within the CURRENTLY displayed phases state
                     const phase = currentProjectPhases.find(p => p.id === phaseId);
-                    console.log("Found phase object:", phase);
+                    logger.log("Found phase object:", phase);
                     handleChangeBidForm('phaseId', phaseId);
                     handleChangeBidForm('phaseName', phase?.name || '');
                   }}
@@ -773,7 +774,7 @@ const ReusableBidForm: React.FC<ReusableBidFormProps> = ({
                     </MenuItem>
                   )}
                   {currentProjectPhases.map((phase) => {
-                    console.log("Rendering phase option:", phase.name, phase.id);
+                    logger.log("Rendering phase option:", phase.name, phase.id);
                     return (
                       <MenuItem key={phase.id} value={phase.id}>{phase.name}</MenuItem>
                     );
@@ -833,7 +834,7 @@ const ReusableBidForm: React.FC<ReusableBidFormProps> = ({
             </Grid>
 
             {/* Bid Title Autocomplete - now with phase-specific options */}
-            <Grid item xs={12} md={8}> 
+            <Grid item xs={12} md={8}>
               <Autocomplete
                 fullWidth
                 freeSolo
@@ -844,7 +845,7 @@ const ReusableBidForm: React.FC<ReusableBidFormProps> = ({
                   // Trim the value and limit to 100 characters
                   const trimmedValue = (newValue || '').trim().slice(0, 100);
                   handleChangeBidForm('title', trimmedValue);
-                  
+
                   // Auto-populate scope of work if a standard title is selected
                   if (newValue && BID_SCOPE_TEMPLATES[newValue]) {
                     handleChangeBidForm('scope', BID_SCOPE_TEMPLATES[newValue]);
@@ -897,8 +898,8 @@ const ReusableBidForm: React.FC<ReusableBidFormProps> = ({
             Subcontractor & Financials
           </Typography>
 
-          <Grid container spacing={2}> 
-            <Grid item xs={12} md={6}> 
+          <Grid container spacing={2}>
+            <Grid item xs={12} md={6}>
               <Autocomplete
                 fullWidth
                 id="subcontractor-selector"
@@ -927,10 +928,10 @@ const ReusableBidForm: React.FC<ReusableBidFormProps> = ({
                 )}
               />
               {onAddSubcontractor && (
-                <Button 
-                  variant="outlined" 
-                  size="small" 
-                  startIcon={<AddIcon />} 
+                <Button
+                  variant="outlined"
+                  size="small"
+                  startIcon={<AddIcon />}
                   onClick={onAddSubcontractor}
                   sx={{ mt: 1 }}
                 >
@@ -970,7 +971,7 @@ const ReusableBidForm: React.FC<ReusableBidFormProps> = ({
                 InputProps={{ sx: { borderRadius: 1 } }}
               />
             </Grid>
-            
+
             <Grid item xs={12}>
               <TextField
                 fullWidth
@@ -1073,7 +1074,7 @@ const ReusableBidForm: React.FC<ReusableBidFormProps> = ({
                     `Amount: ${formatCurrency(bidForm.totalAmount * formPaymentTerms.downPaymentPercent / 100)}`}
                 </FormHelperText>
               </Grid>
-              <Grid item xs={12} sm={6}> 
+              <Grid item xs={12} sm={6}>
                 <Button
                   fullWidth
                   variant="outlined"
@@ -1098,18 +1099,18 @@ const ReusableBidForm: React.FC<ReusableBidFormProps> = ({
                 mb: 1.5, // Reduced spacing
                 borderRadius: 1,
                 borderColor: 'divider',
-                position: 'relative' 
+                position: 'relative'
               }}
             >
-              <IconButton 
-                size="small" 
+              <IconButton
+                size="small"
                 onClick={() => removeInstallment(installment.id)} // Use from hook
                 color="inherit"
                 sx={{ position: 'absolute', top: 6, right: 6, opacity: 0.5 }} // Adjusted position
               >
                 <DeleteIcon fontSize="small" />
               </IconButton>
-              
+
                <Typography variant="body2" fontWeight={600} sx={{ mb: 1.5 }}> {/* Smaller title */}
                  Installment {index + 1}: {installment.name}
                </Typography>
@@ -1127,7 +1128,7 @@ const ReusableBidForm: React.FC<ReusableBidFormProps> = ({
                     InputProps={{ sx: { borderRadius: 1 } }}
                   />
                 </Grid>
-                
+
                 {/* Input Type Selector */}
                 <Grid item xs={6} sm={3} md={2}>
                   <FormControl fullWidth size="small">
@@ -1153,9 +1154,9 @@ const ReusableBidForm: React.FC<ReusableBidFormProps> = ({
                       type="number"
                       size="small"
                       value={installment.fixedAmount || 0}
-                      InputProps={{ 
+                      InputProps={{
                         startAdornment: <InputAdornment position="start">$</InputAdornment>,
-                        sx: { borderRadius: 1 } 
+                        sx: { borderRadius: 1 }
                       }}
                       onChange={(e) => updateInstallment(installment.id, 'fixedAmount', Number(e.target.value))} // Use from hook
                       variant="outlined"
@@ -1168,16 +1169,16 @@ const ReusableBidForm: React.FC<ReusableBidFormProps> = ({
                       type="number"
                       size="small"
                       value={installment.percent}
-                      InputProps={{ 
+                      InputProps={{
                         endAdornment: <InputAdornment position="end">%</InputAdornment>,
-                        sx: { borderRadius: 1 } 
+                        sx: { borderRadius: 1 }
                       }}
                       onChange={(e) => updateInstallment(installment.id, 'percent', Number(e.target.value))} // Use from hook
                       variant="outlined"
                     />
                   )}
                 </Grid>
-                
+
                 {/* Calculated Value (read-only) - shows the other format */}
                 <Grid item xs={6} sm={3} md={2}>
                   <TextField
@@ -1185,8 +1186,8 @@ const ReusableBidForm: React.FC<ReusableBidFormProps> = ({
                     disabled
                     label={installment.isFixedAmount ? "Equivalent %" : "Equivalent $"}
                     size="small"
-                    value={installment.isFixedAmount ? 
-                      `${(bidForm.totalAmount > 0 ? (installment.fixedAmount || 0) / bidForm.totalAmount * 100 : 0).toFixed(1)}%` : 
+                    value={installment.isFixedAmount ?
+                      `${(bidForm.totalAmount > 0 ? (installment.fixedAmount || 0) / bidForm.totalAmount * 100 : 0).toFixed(1)}%` :
                       formatCurrency(bidForm.totalAmount * (installment.percent || 0) / 100)}
                     variant="outlined"
                     InputProps={{ sx: { borderRadius: 1 } }}
@@ -1202,7 +1203,7 @@ const ReusableBidForm: React.FC<ReusableBidFormProps> = ({
                       onChange={(e) => updateInstallment(installment.id, 'phaseId', e.target.value)} // Use from hook
                       sx={{ borderRadius: 1 }}
                     >
-                      <MenuItem value=""><em>None</em></MenuItem> 
+                      <MenuItem value=""><em>None</em></MenuItem>
                       {currentProjectPhases && currentProjectPhases.length > 0 ? (
                         currentProjectPhases.map((p) => (
                           <MenuItem key={p.id} value={p.id}>
@@ -1253,7 +1254,7 @@ const ReusableBidForm: React.FC<ReusableBidFormProps> = ({
             const totalScheduledAmountVal = getTotalScheduledAmount();
             const exactlyOneHundred = Math.abs(totalScheduledPercentVal - 100) < 0.01;
             const matchesTotalBid = Math.abs(totalScheduledAmountVal - bidForm.totalAmount) < 0.01;
-            
+
             // Values for display, directly from hook's state
             const downPaymentPercent = formPaymentTerms.downPaymentPercent;
             const downPaymentAmount = formPaymentTerms.isDownPaymentFixed
@@ -1265,7 +1266,7 @@ const ReusableBidForm: React.FC<ReusableBidFormProps> = ({
             const finalPayment = hasFinalPayment ? installmentsForDisplay[installmentsForDisplay.length - 1] : null;
             const finalPaymentAmount = finalPayment ? (finalPayment.isFixedAmount ? finalPayment.fixedAmount : bidForm.totalAmount * (finalPayment.percent / 100)) : 0;
             const finalPaymentPercent = finalPayment ? finalPayment.percent : 0;
-            
+
             const intermediateInstallments = installmentsForDisplay.slice(0, -1);
             const intermediateAmount = intermediateInstallments.reduce((sum, inst) => sum + (inst.isFixedAmount ? inst.fixedAmount : bidForm.totalAmount * (inst.percent / 100)), 0);
             const intermediatePercent = intermediateInstallments.reduce((sum, inst) => sum + inst.percent, 0);
@@ -1274,7 +1275,7 @@ const ReusableBidForm: React.FC<ReusableBidFormProps> = ({
             const currentTotalPercentWithoutFinal = downPaymentPercent + intermediatePercent;
             const remainingPercent = 100 - currentTotalPercentWithoutFinal;
             const suggestedFinalAmount = bidForm.totalAmount * (remainingPercent / 100);
-            
+
             if (!exactlyOneHundred || !matchesTotalBid) {
               return ( <Alert severity="warning" variant="outlined" sx={{ mt: 1, mb: 3, borderRadius: 1, py: 1 }}> <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}><Typography variant="subtitle2" fontWeight="bold" sx={{ mr: 1 }}>Payment Schedule Incomplete</Typography><Typography variant="body2" color="text.secondary">{!exactlyOneHundred ? `Total: ${totalScheduledPercentVal.toFixed(1)}% (needs to be 100%)` : `Total: ${formatCurrency(totalScheduledAmountVal)} (should be ${formatCurrency(bidForm.totalAmount)})`}</Typography></Box> <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 2 }}><Box sx={{ minWidth: 120 }}><Typography variant="caption" color="text.secondary">Initial Payment</Typography><Typography variant="body2" fontWeight="medium">{formatCurrency(downPaymentAmount)} ({downPaymentPercent.toFixed(1)}%)</Typography></Box> {intermediateInstallments.length > 0 && (<Box sx={{ minWidth: 120 }}><Typography variant="caption" color="text.secondary">Intermediate</Typography><Typography variant="body2" fontWeight="medium">{formatCurrency(intermediateAmount)} ({intermediatePercent.toFixed(1)}%)</Typography></Box>)} {hasFinalPayment && (<Box sx={{ minWidth: 120 }}><Typography variant="caption" color="text.secondary" sx={{ display: 'flex', alignItems: 'center' }}>Final Payment{!exactlyOneHundred && (<Tooltip title="Needs adjustment"><InfoIcon fontSize="small" color="warning" sx={{ ml: 0.5, opacity: 0.7, width: 16, height: 16 }} /></Tooltip>)}</Typography><Typography variant="body2" fontWeight="medium">{formatCurrency(finalPaymentAmount)} ({finalPaymentPercent.toFixed(1)}%)</Typography>{!exactlyOneHundred && Math.abs(finalPaymentPercent - remainingPercent) > 0.01 && (<Typography variant="caption" color="warning.main">Should be: {formatCurrency(suggestedFinalAmount)} ({remainingPercent.toFixed(1)}%)</Typography>)}</Box>)} </Box> <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 1 }}>{!exactlyOneHundred ? `To complete, the final payment should be ${formatCurrency(suggestedFinalAmount)} (${remainingPercent.toFixed(1)}%).` : "Adjust payment amounts to match total bid."}</Typography> </Alert> );
             }
@@ -1287,7 +1288,7 @@ const ReusableBidForm: React.FC<ReusableBidFormProps> = ({
           <Typography variant="subtitle1" sx={{ fontWeight: 600, mb: 1.5, color: 'text.primary' }}> {/* Ensured reduced margin */}
             Additional Notes
           </Typography>
-          
+
           <TextField
             fullWidth
             multiline
@@ -1308,34 +1309,34 @@ const ReusableBidForm: React.FC<ReusableBidFormProps> = ({
   // Dialog Variant
   if (isDialog) {
     return (
-      <Dialog 
-        open={open || false} 
-        onClose={onClose} 
-        maxWidth="md" 
+      <Dialog
+        open={open || false}
+        onClose={onClose}
+        maxWidth="md"
         fullWidth
         PaperProps={{ sx: { borderRadius: 1.5 } }} // Adjusted rounding
       >
         <DialogTitle sx={{ borderBottom: '1px solid', borderColor: 'divider', px: 2.5, py: 1.5 }}> {/* Tighter header */}
-          <Typography variant="h6" fontWeight={500}> 
+          <Typography variant="h6" fontWeight={500}>
             {editingBidId ? 'Edit Bid' : 'Create New Bid'}
           </Typography>
         </DialogTitle>
-        <DialogContent sx={{ pt: 2 }}> {/* Added top padding */} 
+        <DialogContent sx={{ pt: 2 }}> {/* Added top padding */}
           {formContent}
         </DialogContent>
-        <DialogActions 
-          sx={{ 
+        <DialogActions
+          sx={{
             p: 1.5, // Tighter actions
-            borderTop: '1px solid', 
+            borderTop: '1px solid',
             borderColor: 'divider',
-            bgcolor: 'background.paper', 
-            justifyContent: 'space-between' 
+            bgcolor: 'background.paper',
+            justifyContent: 'space-between'
           }}
         >
-          <Button 
-            onClick={onClose} 
-            color="inherit" 
-            variant="outlined" 
+          <Button
+            onClick={onClose}
+            color="inherit"
+            variant="outlined"
             size="medium"
             sx={{ borderRadius: 1, px: 2 }}
           >
@@ -1354,7 +1355,7 @@ const ReusableBidForm: React.FC<ReusableBidFormProps> = ({
             }
             sx={{ borderRadius: 1, px: 2 }}
           >
-            {isSaving ? 
+            {isSaving ?
               <CircularProgress size={22} color="inherit"/> : // Smaller spinner
               (editingBidId ? 'Update Bid' : 'Create Bid')
             }
@@ -1366,20 +1367,20 @@ const ReusableBidForm: React.FC<ReusableBidFormProps> = ({
 
   // Standalone Paper Variant
   return (
-    <Paper 
-      sx={{ 
+    <Paper
+      sx={{
         borderRadius: 1.5, // Adjusted rounding
         overflow: 'hidden',
-        boxShadow: (theme) => theme.shadows[2] 
+        boxShadow: (theme) => theme.shadows[2]
       }}
     >
-      <Box 
-        sx={{ 
-          display: 'flex', 
-          justifyContent: 'space-between', 
-          alignItems: 'center', 
+      <Box
+        sx={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
           p: { xs: 1.5, md: 2 }, // Tighter header
-          borderBottom: '1px solid', 
+          borderBottom: '1px solid',
           borderColor: 'divider',
           bgcolor: 'background.paper'
         }}
@@ -1408,4 +1409,4 @@ const ReusableBidForm: React.FC<ReusableBidFormProps> = ({
   );
 };
 
-export default ReusableBidForm; 
+export default ReusableBidForm;

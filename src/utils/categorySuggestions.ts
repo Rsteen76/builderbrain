@@ -1,6 +1,7 @@
 import { Phase } from '../types/project.types';
 import { getSuggestedSubcategoriesForPhase, PHASE_CATEGORY_MAPPING } from '../data/phaseCategories';
 import { getCategoryById } from '../data/hierarchicalCategories';
+import { safelyParseDate } from './formatters';
 
 /**
  * Determines the most likely phase a project is in based on phase status and dates
@@ -21,7 +22,7 @@ export const determineCurrentPhase = (phases: Phase[]): string | undefined => {
         return a.order - b.order;
       }
       if (a.startDate && b.startDate) {
-        return new Date(a.startDate).getTime() - new Date(b.startDate).getTime();
+        return safelyParseDate(a.startDate).getTime() - safelyParseDate(b.startDate).getTime();
       }
       return 0;
     });
@@ -38,7 +39,7 @@ export const determineCurrentPhase = (phases: Phase[]): string | undefined => {
         return a.order - b.order;
       }
       if (a.startDate && b.startDate) {
-        return new Date(a.startDate).getTime() - new Date(b.startDate).getTime();
+        return safelyParseDate(a.startDate).getTime() - safelyParseDate(b.startDate).getTime();
       }
       return 0;
     });
@@ -53,7 +54,7 @@ export const determineCurrentPhase = (phases: Phase[]): string | undefined => {
         return b.order - a.order; // Descending order
       }
       if (a.endDate && b.endDate) {
-        return new Date(b.endDate).getTime() - new Date(a.endDate).getTime(); // Latest end date first
+        return safelyParseDate(b.endDate).getTime() - safelyParseDate(a.endDate).getTime(); // Latest end date first
       }
       return 0;
     });
@@ -66,7 +67,7 @@ export const determineCurrentPhase = (phases: Phase[]): string | undefined => {
       return a.order - b.order;
     }
     if (a.startDate && b.startDate) {
-      return new Date(a.startDate).getTime() - new Date(b.startDate).getTime();
+      return safelyParseDate(a.startDate).getTime() - safelyParseDate(b.startDate).getTime();
     }
     return 0;
   });
