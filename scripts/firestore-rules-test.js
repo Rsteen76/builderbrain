@@ -43,6 +43,26 @@ const fixtures = {
     createdAt: now(),
     updatedAt: now(),
   }),
+  dashboard_summaries: (userId) => ({
+    userId,
+    projects: [],
+    upcomingTasks: [],
+    overduePayments: [],
+    recentActivity: [],
+    stats: {
+      totalProjects: 0,
+      activeProjects: 0,
+      completedProjects: 0,
+      totalBudget: 0,
+      teamMembers: 0,
+      tasksDue: 0,
+      projectsAtRisk: 0,
+      nextMilestone: { name: '', date: '', projectId: '' },
+      budgetVariance: 0,
+      materialsToOrder: 0,
+    },
+    generatedAt: now(),
+  }),
   expenses: (userId) => ({
     userId,
     projectId: 'project-1',
@@ -154,6 +174,25 @@ async function main() {
       await assertFails(updateDoc(projectRef, { userId: 'user-2' }));
       await assertFails(deleteDoc(doc(otherDb, 'projects/project-1')));
       await assertSucceeds(deleteDoc(projectRef));
+    });
+
+    await testEnv.clearFirestore();
+
+    await runCase('dashboard summaries are private to their owner uid', async () => {
+      const ownerDb = testEnv.authenticatedContext('user-1').firestore();
+      const otherDb = testEnv.authenticatedContext('user-2').firestore();
+      const unauthDb = testEnv.unauthenticatedContext().firestore();
+      const summaryRef = doc(ownerDb, 'dashboard_summaries/user-1');
+
+      await assertSucceeds(setDoc(summaryRef, fixtures.dashboard_summaries('user-1')));
+      await assertSucceeds(getDoc(summaryRef));
+      await assertFails(getDoc(doc(otherDb, 'dashboard_summaries/user-1')));
+      await assertFails(setDoc(doc(ownerDb, 'dashboard_summaries/user-2'), fixtures.dashboard_summaries('user-2')));
+      await assertFails(setDoc(doc(unauthDb, 'dashboard_summaries/user-1'), fixtures.dashboard_summaries('user-1')));
+      await assertSucceeds(updateDoc(summaryRef, { generatedAt: now() }));
+      await assertFails(updateDoc(summaryRef, { userId: 'user-2' }));
+      await assertFails(deleteDoc(doc(otherDb, 'dashboard_summaries/user-1')));
+      await assertSucceeds(deleteDoc(summaryRef));
     });
 
     await testEnv.clearFirestore();

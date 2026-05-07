@@ -83,9 +83,14 @@ import {
   Receipt as ReceiptIcon,
 } from '@mui/icons-material';
 import { useNavigate, Link } from 'react-router-dom';
-import { Project, Task as ProjectTask } from '../../types';
-import { ProjectService } from '../../services/project';
 import { useAuth } from '../../contexts/AuthContext';
+import {
+  DashboardPaymentSummary,
+  DashboardProjectSummary,
+  DashboardRecentActivity,
+  DashboardSummaryService,
+  DashboardTaskSummary,
+} from '../../services/dashboard-summary';
 import { formatCurrency, formatDate } from '../../utils/formatters';
 import PageLayout from '../layout/PageLayout';
 import QuickActions from './QuickActions';
@@ -96,65 +101,9 @@ import RecentProjects from './RecentProjects';
 import ProjectCard from '../projects/ProjectCard';
 import { PROJECT_WIZARD_ROUTE } from '../../constants/projectRoutes';
 
-// Define interfaces for our dashboard-specific types
-interface DashboardTask {
-  id: string;
-  title: string;
-  dueDate: string;
-  status: string;
-  priority: 'urgent' | 'high' | 'medium' | 'low';
-  projectId: string;
-  projectName: string;
-}
-
-interface DashboardProject {
-  id: string;
-  name: string;
-  status: string;
-  endDate: string;
-  budget: number | { total: number; spent: number; remaining: number };
-  team: string[];
-  location: string | { address: string; city: string; state: string };
-  updatedAt: string;
-  tasks: Array<{
-    id: string;
-    title: string;
-    status: string;
-    dueDate: string;
-    priority: 'urgent' | 'high' | 'medium' | 'low';
-  }>;
-  keyMilestones?: Array<{
-    id: string;
-    name: string;
-    date: string;
-    completed: boolean;
-  }>;
-  materials?: Array<{
-    id: string;
-    name: string;
-    status: string;
-    quantity: number;
-  }>;
-  payments?: Array<{
-    id: string;
-    amount: number;
-    dueDate: string;
-    description: string;
-    status: string;
-    projectId: string;
-    projectName: string;
-  }>;
-}
-
-interface Payment {
-  id: string;
-  amount: number;
-  dueDate: string;
-  description: string;
-  status: string;
-  projectId: string;
-  projectName: string;
-}
+type DashboardTask = DashboardTaskSummary;
+type DashboardProject = DashboardProjectSummary;
+type Payment = DashboardPaymentSummary;
 
 interface StatCardProps {
   title: string;
@@ -277,51 +226,9 @@ const StatCard: React.FC<StatCardProps> = ({
   );
 };
 
-interface RecentActivity {
-  title: string;
-  time: string;
+interface RecentActivity extends DashboardRecentActivity {
   icon: React.ReactNode;
 }
-
-// Helper function to convert Project to DashboardProject
-const convertToDashboardProject = (project: Project): DashboardProject => {
-  const safeDateToString = (date: string | Date | null | undefined): string => {
-    if (!date) return '';
-    if (typeof date === 'string') return date;
-    try {
-      return date.toISOString();
-    } catch (e) {
-      console.error("Error converting date to ISO string:", date, e);
-      return '';
-    }
-  };
-
-  return {
-    id: project.id || '',
-    name: project.name,
-    status: project.status || 'draft',
-    endDate: safeDateToString(project.endDate),
-    budget: project.budget || 0,
-    team: project.team || [],
-    location: project.location || '',
-    updatedAt: safeDateToString(project.updatedAt),
-    tasks: (project.tasks || []).map(task => ({
-      id: task.id || '',
-      title: task.title || 'Untitled Task',
-      status: task.status || 'pending',
-      dueDate: safeDateToString(task.dueDate),
-      priority: task.priority || 'medium',
-    })),
-    keyMilestones: (project.keyMilestones || []).map((milestone, index) => ({
-      id: `milestone-${project.id}-${index}`,
-      name: milestone.name || 'Untitled Milestone',
-      date: safeDateToString(milestone.date),
-      completed: false,
-    })),
-    materials: [],
-    payments: [],
-  };
-};
 
 const Dashboard: React.FC = () => {
   const theme = useTheme();
@@ -353,368 +260,46 @@ const Dashboard: React.FC = () => {
   // State for the New Project dropdown menu
   const [newProjectMenuAnchor, setNewProjectMenuAnchor] = useState<null | HTMLElement>(null);
 
-  useEffect(() => {
-    const fetchDashboardData = async () => {
-      if (!user?.uid) {
-        setError("User not authenticated. Cannot load dashboard data.");
-        setLoading(false);
-        return;
-      }
-      try {
-        setLoading(true);
-        setError(null);
-        
-        const projectsData = await ProjectService.getProjects(user.uid);
-        const dashboardProjects = projectsData.map(convertToDashboardProject);
-        setProjects(dashboardProjects);
-        
-        // Calculate projects at risk
-        const atRiskProjects = dashboardProjects.filter(p => {
-          if (p.status === 'on_hold' || p.status === 'cancelled') return true;
-          
-          if (p.endDate) {
-            const endDate = new Date(p.endDate);
-            const today = new Date();
-            const oneWeekFromNow = new Date();
-            oneWeekFromNow.setDate(today.getDate() + 7);
-            
-            if (endDate < today) return true; // Past due date
-            if (endDate <= oneWeekFromNow) return true; // Due soon
-          }
-          
-          // Check if budget is at risk - safely handle budget types
-          if (p.budget && typeof p.budget === 'object') {
-            const totalBudget = p.budget.total || 0;
-            const spentBudget = p.budget.spent || 0;
-            if (spentBudget > totalBudget * 0.9) {
-              return true;
-            }
-          }
-          
-          return false;
-        }).length;
-        
-        const activeProjects = dashboardProjects.filter(p => 
-          p.status === 'in_progress' || p.status === 'planning' || p.status === 'active'
-        ).length;
-        
-        const totalBudget = dashboardProjects.reduce((sum, p) => {
-            const budgetValue = typeof p.budget === 'object' && p.budget !== null ? p.budget.total : (p.budget || 0);
-            return sum + (typeof budgetValue === 'number' ? budgetValue : 0);
-        }, 0);
-        
-        const uniqueTeamMembers = new Set<string>();
-        dashboardProjects.forEach(p => {
-          if (p.team && Array.isArray(p.team)) {
-            p.team.forEach(member => uniqueTeamMembers.add(member));
-          }
-        });
-        
-        // Calculate tasks due in the next week
-        let tasksDue = 0;
-        const tasksCollection: DashboardTask[] = [];
-        const today = new Date();
-        const nextWeek = new Date(today);
-        nextWeek.setDate(today.getDate() + 7);
-        
-        dashboardProjects.forEach(p => {
-          if (p.tasks && Array.isArray(p.tasks)) {
-            p.tasks.forEach(t => {
-              if (!t.dueDate) return;
-              
-              const dueDateObj = new Date(t.dueDate);
-              
-              if (dueDateObj >= today && dueDateObj <= nextWeek && t.status !== 'completed') {
-                tasksDue++;
-                tasksCollection.push({
-                  id: t.id,
-                  title: t.title,
-                  dueDate: formatDate(dueDateObj),
-                  status: t.status,
-                  priority: t.priority,
-                  projectId: p.id,
-                  projectName: p.name
-                });
-              }
-            });
-          }
-        });
-        
-        // Sort upcoming tasks by date and priority
-        tasksCollection.sort((a, b) => {
-          const dateA = new Date(a.dueDate).getTime();
-          const dateB = new Date(b.dueDate).getTime();
-          
-          if (dateA === dateB) {
-            const priorityValues = { urgent: 0, high: 1, medium: 2, low: 3 };
-            return priorityValues[a.priority] - priorityValues[b.priority];
-          }
-          
-          return dateA - dateB;
-        });
-        
-        setUpcomingTasks(tasksCollection);
-        
-        // Find next project milestone
-        let nextMilestone = { name: 'No upcoming milestones', date: '', projectId: '' };
-        let earliestDate = new Date();
-        earliestDate.setFullYear(earliestDate.getFullYear() + 1); // Set to a year from now
-        
-        dashboardProjects.forEach(p => {
-          // Try both keyMilestones and milestones
-          const milestones = p.keyMilestones || [];
-          if (Array.isArray(milestones)) {
-            milestones.forEach(m => {
-              if (!m.completed && m.date) {
-                const milestoneDate = new Date(m.date);
-                if (milestoneDate >= today && milestoneDate < earliestDate) {
-                  earliestDate = milestoneDate;
-                  nextMilestone = {
-                    name: m.name,
-                    date: m.date,
-                    projectId: p.id
-                  };
-                }
-              }
-            });
-          }
-        });
-        
-        // Calculate budget variance and materials to order
-        let totalBudgetVariance = 0;
-        let materialsToOrder = 0;
-        
-        dashboardProjects.forEach(p => {
-          // Budget variance - safely handle different budget types
-          if (p.budget && typeof p.budget === 'object') {
-            const actual = p.budget.spent || 0;
-            // Calculate planned as total - remaining if planned is not available
-            let planned = 0;
-            if ('planned' in p.budget) {
-              planned = (p.budget as any).planned || 0;
-            } else {
-              planned = p.budget.total - (p.budget.remaining || 0);
-            }
-            totalBudgetVariance += (actual - planned);
-          }
-          
-          // Materials to order - since we don't have real materials data, set to 0
-          materialsToOrder = 0;
-        });
-        
-        // Check for overdue payments - since we don't have real payments data, set to empty array
-        const overduePaymentsList: Payment[] = [];
-        
-        setOverduePayments(overduePaymentsList);
-        
-        setStats({
-          totalProjects: dashboardProjects.length,
-          activeProjects,
-          completedProjects: dashboardProjects.filter(p => p.status === 'completed').length,
-          totalBudget,
-          teamMembers: uniqueTeamMembers.size,
-          tasksDue,
-          projectsAtRisk: atRiskProjects,
-          nextMilestone,
-          budgetVariance: totalBudgetVariance,
-          materialsToOrder
-        });
-        
-        // This part remains unchanged - activity data
-        try {
-          setRecentActivity([]);
-        } catch (activityErr) {
-          console.log('No activity data found:', activityErr);
-          setRecentActivity([]);
-        }
-        
-      } catch (err) {
-        console.error('Error fetching dashboard data:', err);
-        setError('Failed to load dashboard data. Please try again.');
-      } finally {
-        setLoading(false);
-      }
-    };
-    
-    fetchDashboardData();
-  }, [user?.uid]);
-  
-  const refreshData = () => {
-    if (user?.uid) {
-      const fetchDashboardData = async () => {
-        try {
-          setLoading(true);
-          setError(null);
-          
-          const projectsData = await ProjectService.getProjects(user.uid);
-          const dashboardProjects = projectsData.map(convertToDashboardProject);
-          setProjects(dashboardProjects);
-          
-          // Calculate projects at risk
-          const atRiskProjects = dashboardProjects.filter(p => {
-            if (p.status === 'on_hold' || p.status === 'cancelled') return true;
-            
-            if (p.endDate) {
-              const endDate = new Date(p.endDate);
-              const today = new Date();
-              const oneWeekFromNow = new Date();
-              oneWeekFromNow.setDate(today.getDate() + 7);
-              
-              if (endDate < today) return true; // Past due date
-              if (endDate <= oneWeekFromNow) return true; // Due soon
-            }
-            
-            // Check if budget is at risk - safely handle budget types
-            if (p.budget && typeof p.budget === 'object') {
-              const totalBudget = p.budget.total || 0;
-              const spentBudget = p.budget.spent || 0;
-              if (spentBudget > totalBudget * 0.9) {
-                return true;
-              }
-            }
-            
-            return false;
-          }).length;
-          
-          const activeProjects = dashboardProjects.filter(p => 
-            p.status === 'in_progress' || p.status === 'planning' || p.status === 'active'
-          ).length;
-          
-          const totalBudget = dashboardProjects.reduce((sum, p) => {
-              const budgetValue = typeof p.budget === 'object' && p.budget !== null ? p.budget.total : (p.budget || 0);
-              return sum + (typeof budgetValue === 'number' ? budgetValue : 0);
-          }, 0);
-          
-          const uniqueTeamMembers = new Set<string>();
-          dashboardProjects.forEach(p => {
-            if (p.team && Array.isArray(p.team)) {
-              p.team.forEach(member => uniqueTeamMembers.add(member));
-            }
-          });
-          
-          // Calculate tasks due in the next week
-          let tasksDue = 0;
-          const tasksCollection: DashboardTask[] = [];
-          const today = new Date();
-          const nextWeek = new Date(today);
-          nextWeek.setDate(today.getDate() + 7);
-          
-          dashboardProjects.forEach(p => {
-            if (p.tasks && Array.isArray(p.tasks)) {
-              p.tasks.forEach(t => {
-                if (!t.dueDate) return;
-                
-                const dueDateObj = new Date(t.dueDate);
-                
-                if (dueDateObj >= today && dueDateObj <= nextWeek && t.status !== 'completed') {
-                  tasksDue++;
-                  tasksCollection.push({
-                    id: t.id,
-                    title: t.title,
-                    dueDate: formatDate(dueDateObj),
-                    status: t.status,
-                    priority: t.priority,
-                    projectId: p.id,
-                    projectName: p.name
-                  });
-                }
-              });
-            }
-          });
-          
-          // Sort upcoming tasks by date and priority
-          tasksCollection.sort((a, b) => {
-            const dateA = new Date(a.dueDate).getTime();
-            const dateB = new Date(b.dueDate).getTime();
-            
-            if (dateA === dateB) {
-              const priorityValues = { urgent: 0, high: 1, medium: 2, low: 3 };
-              return priorityValues[a.priority] - priorityValues[b.priority];
-            }
-            
-            return dateA - dateB;
-          });
-          
-          setUpcomingTasks(tasksCollection);
-          
-          // Find next project milestone
-          let nextMilestone = { name: 'No upcoming milestones', date: '', projectId: '' };
-          let earliestDate = new Date();
-          earliestDate.setFullYear(earliestDate.getFullYear() + 1); // Set to a year from now
-          
-          dashboardProjects.forEach(p => {
-            // Try both keyMilestones and milestones
-            const milestones = p.keyMilestones || [];
-            if (Array.isArray(milestones)) {
-              milestones.forEach(m => {
-                if (!m.completed && m.date) {
-                  const milestoneDate = new Date(m.date);
-                  if (milestoneDate >= today && milestoneDate < earliestDate) {
-                    earliestDate = milestoneDate;
-                    nextMilestone = {
-                      name: m.name,
-                      date: m.date,
-                      projectId: p.id
-                    };
-                  }
-                }
-              });
-            }
-          });
-          
-          // Calculate budget variance and materials to order
-          let totalBudgetVariance = 0;
-          let materialsToOrder = 0;
-          
-          dashboardProjects.forEach(p => {
-            // Budget variance - safely handle different budget types
-            if (p.budget && typeof p.budget === 'object') {
-              const actual = p.budget.spent || 0;
-              // Calculate planned as total - remaining if planned is not available
-              let planned = 0;
-              if ('planned' in p.budget) {
-                planned = (p.budget as any).planned || 0;
-              } else {
-                planned = p.budget.total - (p.budget.remaining || 0);
-              }
-              totalBudgetVariance += (actual - planned);
-            }
-            
-            // Materials to order - since we don't have real materials data, set to 0
-            materialsToOrder = 0;
-          });
-          
-          // Check for overdue payments - since we don't have real payments data, set to empty array
-          const overduePaymentsList: Payment[] = [];
-          
-          setOverduePayments(overduePaymentsList);
-          
-          setStats({
-            totalProjects: dashboardProjects.length,
-            activeProjects,
-            completedProjects: dashboardProjects.filter(p => p.status === 'completed').length,
-            totalBudget,
-            teamMembers: uniqueTeamMembers.size,
-            tasksDue,
-            projectsAtRisk: atRiskProjects,
-            nextMilestone,
-            budgetVariance: totalBudgetVariance,
-            materialsToOrder
-          });
-          
-          // Reset activity data to empty
-          setRecentActivity([]);
-          
-        } catch (err) {
-          console.error('Error refreshing dashboard data:', err);
-          setError('Failed to refresh dashboard data. Please try again.');
-        } finally {
-          setLoading(false);
-        }
-      };
-      
-      fetchDashboardData();
+  const applyDashboardData = (data: Awaited<ReturnType<typeof DashboardSummaryService.getDashboardData>>) => {
+    setProjects(data.projects);
+    setUpcomingTasks(data.upcomingTasks);
+    setOverduePayments(data.overduePayments);
+    setStats(data.stats);
+    setRecentActivity(data.recentActivity.map(activity => ({
+      ...activity,
+      icon: <NotificationsIcon color="primary" />,
+    })));
+  };
+
+  const loadDashboardData = async (forceRefresh = false) => {
+    if (!user?.uid) {
+      setError("User not authenticated. Cannot load dashboard data.");
+      setLoading(false);
+      return;
     }
+
+    try {
+      setLoading(true);
+      setError(null);
+      const dashboardData = await DashboardSummaryService.getDashboardData(user.uid, { forceRefresh });
+      applyDashboardData(dashboardData);
+    } catch (err) {
+      console.error(forceRefresh ? 'Error refreshing dashboard data:' : 'Error fetching dashboard data:', err);
+      setError(forceRefresh
+        ? 'Failed to refresh dashboard data. Please try again.'
+        : 'Failed to load dashboard data. Please try again.'
+      );
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadDashboardData();
+  }, [user?.uid]);
+
+  const refreshData = () => {
+    loadDashboardData(true);
   };
   
   // Format project data for display

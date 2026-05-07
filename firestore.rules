@@ -43,6 +43,15 @@ service cloud.firestore {
       allow update: if isOwner(resource.data.userId) && userIdNotModified();
       allow delete: if isOwner(resource.data.userId);
     }
+
+    // Owner-scoped dashboard read model. The client can refresh its own summary
+    // document, but it cannot create or mutate another user's aggregate data.
+    match /dashboard_summaries/{userId} {
+      allow read: if isOwner(userId);
+      allow create: if isOwner(userId) && userIdIsValid();
+      allow update: if isOwner(userId) && userIdNotModified();
+      allow delete: if isOwner(userId);
+    }
     
     // Expenses collection
     match /expenses/{expenseId} {

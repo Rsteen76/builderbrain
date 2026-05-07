@@ -15,8 +15,8 @@ Generated: 2026-05-07
   - `audit/docs-dx.md`
 - Phase 3 complete: this summary ranks findings, dependencies, fix waves, and conflicts.
 - Phase 4 partially complete in this branch:
-  - Completed: dependency vulnerabilities, auth startup failure handling, payment save reliability, data reset reliability, partial expense update safety, shared report ID entropy, accepted-bid expense idempotency, storage validation, hosting headers/CSP, payments N+1 query, Vite migration, docs/test gates.
-  - Not fully closed: shared report password validation requires a backend boundary; large structural refactors and dashboard/project aggregation require separate reviewable follow-up PRs.
+  - Completed: dependency vulnerabilities, auth startup failure handling, payment save reliability, data reset reliability, partial expense update safety, shared report ID entropy, accepted-bid expense idempotency, storage validation, hosting headers/CSP, payments N+1 query, dashboard summary read model, Vite migration, docs/test gates.
+  - Not fully closed: large structural refactors and project-detail aggregation require separate reviewable follow-up PRs.
 
 ## Ranked Findings
 
@@ -32,7 +32,7 @@ Generated: 2026-05-07
 1. Shared report protection is implemented entirely client-side.
    - Evidence: `src/services/ReportService.ts:44`, `src/services/ReportService.ts:151`, `src/services/ReportService.ts:172`, `src/utils/reportPasswords.ts:10`, `src/utils/reportPasswords.ts:36`
    - Risk: anyone with read access to shared-report metadata can validate passwords offline; legacy plaintext passwords are still accepted.
-   - Fix: move validation to a backend boundary, store salted password verifiers, and avoid returning password metadata to clients.
+   - Resolution: product decision for this release is random, unguessable share links without treating passwords as a security boundary. Backend password validation remains a future feature if stronger access control is required.
 
 2. Shared report IDs are predictable.
    - Evidence: `src/services/ReportService.ts:100`, `src/components/budget/BudgetReport.tsx:486`
@@ -77,7 +77,7 @@ Generated: 2026-05-07
 10. Dashboard scans all user projects for client-side aggregation.
     - Evidence: `src/components/dashboard/Dashboard.tsx:367`, `src/services/project.ts:421`, `src/services/project.ts:449`, `src/components/dashboard/Dashboard.tsx:372`
     - Risk: dashboard becomes expensive and slow for real contractor accounts.
-    - Fix: add bounded queries, summary documents, or server-maintained aggregates.
+    - Fix: added `dashboard_summaries/{userId}` read model with owner-only rules and a project-derived refresh fallback.
 
 11. Coverage is very low and unenforced.
     - Evidence: `coverage/lcov.info`, `package.json:42`, `.github/workflows/ci.yml:29`
@@ -97,7 +97,7 @@ Generated: 2026-05-07
 ## Dependency Graph
 
 1. Dependency updates come before security status can be considered acceptable.
-2. Shared report token/password work requires a backend boundary before tests or docs can claim real protection.
+2. Shared report passwords are not a release blocker because random share links are the accepted production model for this release.
 3. Data-access boundary consolidation should follow immediate corruption fixes; do not wait to patch active data-loss paths.
 4. Runtime Firestore decoders and partial update semantics should precede broad service refactors.
 5. Payment async handling should be fixed before adding payment workflow e2e tests.
@@ -124,7 +124,7 @@ Generated: 2026-05-07
 - Move direct Firestore access out of page components into hooks/services.
 - Split `bid.ts`, `project.ts`, `devDataStore.ts`, `Expenses.tsx`, `ExpenseFormModal.tsx`, and budget dashboards along cohesive boundaries.
 - Create a shared event feed/query service for calendar and timeline.
-- Rework project detail and dashboard data loading to avoid duplicate and unbounded reads.
+- Rework project detail data loading to avoid duplicate and unbounded reads.
 
 ### Wave 3: Polish and Gates
 
