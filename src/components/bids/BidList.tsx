@@ -118,22 +118,95 @@ const PRIORITY_DISPLAY: Record<NonNullable<Bid['priority']>, string> = {
 interface BidListProps {
   projectId?: string;
   hideHeader?: boolean;
+  initialBids?: Bid[];
+  onRefreshProjectBids?: () => Promise<void>;
 }
 
-const BidList: React.FC<BidListProps> = ({ projectId, hideHeader = false }) => {
+const toBidSummary = (bid: Bid): BidSummary => ({
+  id: bid.id,
+  userId: bid.userId,
+  projectId: bid.projectId,
+  projectName: bid.projectName,
+  subcontractorId: bid.subcontractorId,
+  subcontractorName: bid.subcontractorName,
+  title: bid.title,
+  status: bid.status,
+  priority: bid.priority,
+  submissionDeadline: bid.submissionDeadline || undefined,
+  totalAmount: bid.totalAmount,
+  createdAt: bid.createdAt,
+  updatedAt: bid.updatedAt,
+});
+
+const getTabStatusFilter = (tabValue: number): string | string[] | undefined => {
+  switch (tabValue) {
+    case 1: return 'draft';
+    case 2: return 'submitted';
+    case 3: return 'accepted';
+    case 4: return ['rejected', 'expired', 'withdrawn'];
+    default: return undefined;
+  }
+};
+
+const bidMatchesFilter = (bid: BidSummary, filter: BidFilter, tabValue: number): boolean => {
+  const tabStatus = getTabStatusFilter(tabValue);
+  const statusFilter = filter.status || tabStatus;
+
+  if (statusFilter) {
+    const statuses = Array.isArray(statusFilter) ? statusFilter : [statusFilter];
+    if (!statuses.includes(bid.status)) return false;
+  }
+
+  if (filter.priority && bid.priority !== filter.priority) return false;
+  if (filter.subcontractorId && bid.subcontractorId !== filter.subcontractorId) return false;
+  if (filter.minAmount !== undefined && bid.totalAmount < filter.minAmount) return false;
+  if (filter.maxAmount !== undefined && bid.totalAmount > filter.maxAmount) return false;
+
+  return true;
+};
+
+const sortBidSummaries = (bids: BidSummary[], sort: BidSort): BidSummary[] => {
+  return [...bids].sort((a, b) => {
+    const aValue = a[sort.field as keyof BidSummary];
+    const bValue = b[sort.field as keyof BidSummary];
+    const direction = sort.direction === 'desc' ? -1 : 1;
+
+    if (aValue == null && bValue == null) return 0;
+    if (aValue == null) return 1;
+    if (bValue == null) return -1;
+
+    if (aValue instanceof Date && bValue instanceof Date) {
+      return (aValue.getTime() - bValue.getTime()) * direction;
+    }
+
+    if (typeof aValue === 'number' && typeof bValue === 'number') {
+      return (aValue - bValue) * direction;
+    }
+
+    return String(aValue).localeCompare(String(bValue)) * direction;
+  });
+};
+
+const BidList: React.FC<BidListProps> = ({
+  projectId,
+  hideHeader = false,
+  initialBids,
+  onRefreshProjectBids,
+}) => {
   const { user, loading: authLoading } = useAuth();
   const navigate = useNavigate();
   const [bids, setBids] = useState<BidSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [subcontractors, setSubcontractors] = useState<Subcontractor[]>([]);
-  const [loadingSubcontractors, setLoadingSubcontractors] = useState(true);
+  const [loadingSubcontractors, setLoadingSubcontractors] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [filter, setFilter] = useState<BidFilter>({});
   const [sort, setSort] = useState<BidSort>({ field: 'createdAt', direction: 'desc' });
   const [showFilters, setShowFilters] = useState(false);
   const [tabValue, setTabValue] = useState(0);
   const theme = useTheme();
+  const usesInitialBids = initialBids !== undefined;
 
   const [selectedBidId, setSelectedBidId] = useState<string | null>(null);
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
@@ -160,6 +233,27 @@ const BidList: React.FC<BidListProps> = ({ projectId, hideHeader = false }) => {
     }
   });
 
+  const fetchSubcontractors = async () => {
+    if (!user?.uid || loadingSubcontractors) return;
+
+    setLoadingSubcontractors(true);
+    try {
+      const fetchedSubs = await SubcontractorService.getSubcontractors(user.uid);
+      setSubcontractors(fetchedSubs);
+    } catch (err) {
+      logger.error("Error fetching subcontractors for BidList:", err);
+      setError(prev => prev ? `${prev}, Failed to load subs` : 'Failed to load subcontractors');
+    } finally {
+      setLoadingSubcontractors(false);
+    }
+  };
+
+  const ensureSubcontractorsLoaded = () => {
+    if (subcontractors.length === 0) {
+      fetchSubcontractors();
+    }
+  };
+
   // ---> Update Placeholder Handler <----
   const handleAddNewSubcontractor = () => {
     // Call the function from the hook to open the dialog
@@ -169,6 +263,11 @@ const BidList: React.FC<BidListProps> = ({ projectId, hideHeader = false }) => {
   };
 
   const fetchBids = async () => {
+    if (usesInitialBids) {
+      setLoading(false);
+      return;
+    }
+
     if (!user?.uid) {
         setError("User not authenticated.");
         setLoading(false);
@@ -185,16 +284,7 @@ const BidList: React.FC<BidListProps> = ({ projectId, hideHeader = false }) => {
         logger.log(`BidList: Filtering bids for project ID: ${projectId}`);
       }
 
-      // Apply tab-based status filter
-      let statusFilter: string | string[] | undefined;
-      switch(tabValue) {
-        case 1: statusFilter = 'draft'; break;
-        case 2: statusFilter = 'submitted'; break;
-        case 3: statusFilter = 'accepted'; break;
-        case 4: statusFilter = ['rejected', 'expired', 'withdrawn']; break;
-        // case 5: statusFilter = ??? // Need logic for 'Converted' if applicable
-        default: statusFilter = undefined; // All bids
-      }
+      const statusFilter = getTabStatusFilter(tabValue);
       if (statusFilter) {
         bidFilter.status = statusFilter;
       }
@@ -203,21 +293,7 @@ const BidList: React.FC<BidListProps> = ({ projectId, hideHeader = false }) => {
       const fetchedBids = await BidService.getBids(user.uid, bidFilter, sort);
       logger.log('BidList - Received bids from service:', fetchedBids.length);
       
-      const bidSummaries = fetchedBids.map(bid => ({
-        id: bid.id,
-        userId: bid.userId,
-        projectId: bid.projectId,
-        projectName: bid.projectName,
-        subcontractorId: bid.subcontractorId,
-        subcontractorName: bid.subcontractorName,
-        title: bid.title,
-        status: bid.status,
-        priority: bid.priority,
-        submissionDeadline: bid.submissionDeadline || undefined,
-        totalAmount: bid.totalAmount,
-        createdAt: bid.createdAt,
-        updatedAt: bid.updatedAt
-      }));
+      const bidSummaries = fetchedBids.map(toBidSummary);
       logger.log('BidList - Setting bids state with:', bidSummaries.length, 'items');
       setBids(bidSummaries);
     } catch (err) {
@@ -233,7 +309,18 @@ const BidList: React.FC<BidListProps> = ({ projectId, hideHeader = false }) => {
   };
 
   useEffect(() => {
+    if (!usesInitialBids) return;
+
+    setBids(initialBids.map(toBidSummary));
+    setFullBidsCache(Object.fromEntries(initialBids.map(bid => [bid.id, bid])));
+    setLoading(false);
+    setError(null);
+  }, [initialBids, usesInitialBids]);
+
+  useEffect(() => {
     logger.log('[BidList useEffect] Running effect - authLoading:', authLoading, 'user:', !!user, 'projectId:', projectId, 'tabValue:', tabValue);
+    if (usesInitialBids) return;
+
     if (!authLoading && user) {
       logger.log('[BidList useEffect] Conditions met, calling fetchBids...');
       fetchBids();
@@ -244,7 +331,7 @@ const BidList: React.FC<BidListProps> = ({ projectId, hideHeader = false }) => {
     } else {
       logger.log('[BidList useEffect] Conditions not met (still loading auth or no user).');
     }
-  }, [user, filter, sort, authLoading, projectId, tabValue]);
+  }, [user, filter, sort, authLoading, projectId, tabValue, usesInitialBids]);
 
   // Listen for global bid deletion events
   useEffect(() => {
@@ -263,33 +350,11 @@ const BidList: React.FC<BidListProps> = ({ projectId, hideHeader = false }) => {
     };
   }, []);
 
-  // ---> ADD Fetch Subcontractors Effect <----
-  useEffect(() => {
-    const fetchSubcontractors = async () => {
-      if (user?.uid) {
-        setLoadingSubcontractors(true);
-        try {
-          const fetchedSubs = await SubcontractorService.getSubcontractors(user.uid);
-          setSubcontractors(fetchedSubs);
-        } catch (err) {
-          logger.error("Error fetching subcontractors for BidList:", err);
-          // Optionally set an error state specific to subcontractors
-          setError(prev => prev ? `${prev}, Failed to load subs` : 'Failed to load subcontractors');
-        } finally {
-          setLoadingSubcontractors(false);
-        }
-      }
-    };
-
-    if (!authLoading) { // Fetch only when auth is resolved
-      fetchSubcontractors();
-    }
-  }, [user, authLoading]); // Depend on user and authLoading
-  // ---> END Fetch Subcontractors Effect <----
-
   // Define filteredBids earlier in the component
   const filteredBids = useMemo(() => {
-    return bids.filter(bid => {
+    const matchingBids = bids.filter(bid => {
+      if (!bidMatchesFilter(bid, filter, tabValue)) return false;
+
       const search = searchTerm.toLowerCase();
       return (
         (bid.title || '').toLowerCase().includes(search) ||
@@ -297,11 +362,13 @@ const BidList: React.FC<BidListProps> = ({ projectId, hideHeader = false }) => {
         (bid.subcontractorName || '').toLowerCase().includes(search)
       );
     });
-  }, [bids, searchTerm]);
+
+    return sortBidSummaries(matchingBids, sort);
+  }, [bids, filter, searchTerm, sort, tabValue]);
 
   useEffect(() => {
     const fetchFullBidsData = async () => {
-      if (!user?.uid || filteredBids.length === 0) return;
+      if (usesInitialBids || !user?.uid || filteredBids.length === 0) return;
       
       // Fetch full data for visible bids that we don't already have cached
       const bidsToFetch = filteredBids.filter(bid => !fullBidsCache[bid.id]);
@@ -324,7 +391,7 @@ const BidList: React.FC<BidListProps> = ({ projectId, hideHeader = false }) => {
     };
     
     fetchFullBidsData();
-  }, [filteredBids, user, fullBidsCache]);
+  }, [filteredBids, user, fullBidsCache, usesInitialBids]);
 
   const handleSearchChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     setSearchTerm(event.target.value);
@@ -332,16 +399,20 @@ const BidList: React.FC<BidListProps> = ({ projectId, hideHeader = false }) => {
 
   const handleFilterChange = (newFilter: BidFilter) => {
     setFilter(newFilter);
-    fetchBids();
+    if (!usesInitialBids) fetchBids();
   };
 
   const handleSortChange = (newSort: BidSort) => {
     setSort(newSort);
-    fetchBids();
+    if (!usesInitialBids) fetchBids();
   };
 
   const handleRefresh = () => {
-    fetchBids();
+    if (usesInitialBids && onRefreshProjectBids) {
+      onRefreshProjectBids();
+    } else {
+      fetchBids();
+    }
   };
 
   const handleToggleFilters = () => {
@@ -370,6 +441,7 @@ const BidList: React.FC<BidListProps> = ({ projectId, hideHeader = false }) => {
   // --- Dialog Handlers (using the hook) ---
   const handleOpenNewBidModal = () => {
     logger.log('[BidList DEBUG] Opening new bid modal');
+    ensureSubcontractorsLoaded();
     bidDialogs.openNewBidDialog();
     logger.log('[BidList DEBUG] After openNewBidDialog call, isModalOpen=', bidDialogs.isModalOpen);
   };
@@ -380,6 +452,7 @@ const BidList: React.FC<BidListProps> = ({ projectId, hideHeader = false }) => {
   };
 
   const handleEdit = (bid: BidSummary) => {
+    ensureSubcontractorsLoaded();
     bidDialogs.openEditBidDialog(bid);
     handleMenuClose();
   };
@@ -410,7 +483,11 @@ const BidList: React.FC<BidListProps> = ({ projectId, hideHeader = false }) => {
       };
       const newBid = await BidService.createBid(user.uid, newBidData as any);
       logger.log('Duplicated bid:', newBid);
-      fetchBids();
+      if (usesInitialBids && onRefreshProjectBids) {
+        await onRefreshProjectBids();
+      } else {
+        fetchBids();
+      }
     } catch (err) {
       logger.error("Error duplicating bid:", err);
       setError("Failed to duplicate bid.");
@@ -449,7 +526,7 @@ const BidList: React.FC<BidListProps> = ({ projectId, hideHeader = false }) => {
   const availablePriorities = Array.from(new Set(bids.filter(b => b.priority).map(b => b.priority))) as NonNullable<Bid['priority']>[];
 
   // Display combined loading state
-  const isLoading = loading || loadingSubcontractors;
+  const isLoading = loading;
   // Display combined error state
   const displayError = error || bidDialogs.error;
 

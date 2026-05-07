@@ -15,8 +15,8 @@ Generated: 2026-05-07
   - `audit/docs-dx.md`
 - Phase 3 complete: this summary ranks findings, dependencies, fix waves, and conflicts.
 - Phase 4 partially complete in this branch:
-  - Completed: dependency vulnerabilities, auth startup failure handling, payment save reliability, data reset reliability, partial expense update safety, shared report ID entropy, accepted-bid expense idempotency, storage validation, hosting headers/CSP, payments N+1 query, dashboard summary read model, Vite migration, docs/test gates.
-  - Not fully closed: large structural refactors and project-detail aggregation require separate reviewable follow-up PRs.
+  - Completed: dependency vulnerabilities, auth startup failure handling, payment save reliability, data reset reliability, partial expense update safety, shared report ID entropy, accepted-bid expense idempotency, storage validation, hosting headers/CSP, payments N+1 query, dashboard summary read model, project-detail data boundary, Vite migration, docs/test gates.
+  - Not fully closed: large structural refactors require separate reviewable follow-up PRs.
 
 ## Ranked Findings
 
@@ -72,7 +72,7 @@ Generated: 2026-05-07
 9. Project detail duplicates reads and eagerly loads all subcontractors.
    - Evidence: `src/hooks/useProjectData.ts:32`, `src/hooks/useProject.ts:37`, `src/hooks/useProjectPhases.ts:84`, `src/hooks/useProjectData.ts:51`, `src/services/subcontractor.ts:158`
    - Risk: unnecessary Firestore reads and slow project pages as accounts grow.
-   - Fix: consolidate project detail data into a single query boundary and load only needed subcontractor records.
+   - Fix: added `ProjectDetailDataService`, derived phases from the fetched project document, loaded bids/expenses once, and limited context subcontractors to records referenced by project bids/expenses.
 
 10. Dashboard scans all user projects for client-side aggregation.
     - Evidence: `src/components/dashboard/Dashboard.tsx:367`, `src/services/project.ts:421`, `src/services/project.ts:449`, `src/components/dashboard/Dashboard.tsx:372`
@@ -98,7 +98,7 @@ Generated: 2026-05-07
 
 1. Dependency updates come before security status can be considered acceptable.
 2. Shared report passwords are not a release blocker because random share links are the accepted production model for this release.
-3. Data-access boundary consolidation should follow immediate corruption fixes; do not wait to patch active data-loss paths.
+3. Data-access boundary consolidation should follow immediate corruption fixes; project detail and dashboard now have dedicated read boundaries.
 4. Runtime Firestore decoders and partial update semantics should precede broad service refactors.
 5. Payment async handling should be fixed before adding payment workflow e2e tests.
 6. Accepted-bid expense creation must be made idempotent or transactional before optimizing bid/payment reads.
@@ -124,7 +124,7 @@ Generated: 2026-05-07
 - Move direct Firestore access out of page components into hooks/services.
 - Split `bid.ts`, `project.ts`, `devDataStore.ts`, `Expenses.tsx`, `ExpenseFormModal.tsx`, and budget dashboards along cohesive boundaries.
 - Create a shared event feed/query service for calendar and timeline.
-- Rework project detail data loading to avoid duplicate and unbounded reads.
+- Continue moving direct Firestore access out of calendar, timeline, and budget surfaces.
 
 ### Wave 3: Polish and Gates
 

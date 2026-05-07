@@ -1,13 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Project, Expense, Bid, ProjectPhase, Subcontractor } from '../types';
 import { useAuth } from '../contexts/AuthContext';
-import { SubcontractorService } from '../services/subcontractor';
-
-// Import the individual hooks
-import { useProject } from './useProject';
-import { useProjectPhases } from './useProjectPhases';
-import { useProjectBids } from './useProjectBids';
-import { useProjectExpenses } from './useProjectExpenses';
+import { ProjectDetailDataService } from '../services/project-detail-data';
 
 interface UseProjectDataReturn {
   project: Project | null;
@@ -15,11 +9,10 @@ interface UseProjectDataReturn {
   bids: Bid[];
   expenses: Expense[];
   subcontractors: Subcontractor[];
-  loading: boolean; // Combined loading state
-  error: string | null; // Combined error state
+  loading: boolean;
+  error: string | null;
   refreshAllProjectData: () => Promise<void>;
-  setPhases: React.Dispatch<React.SetStateAction<ProjectPhase[]>>; // Keep for optimistic updates
-  // Make setters required
+  setPhases: React.Dispatch<React.SetStateAction<ProjectPhase[]>>;
   setBids: React.Dispatch<React.SetStateAction<Bid[]>>;
   setExpenses: React.Dispatch<React.SetStateAction<Expense[]>>;
   setSubcontractors: React.Dispatch<React.SetStateAction<Subcontractor[]>>;
@@ -27,70 +20,53 @@ interface UseProjectDataReturn {
 
 export const useProjectData = (projectId: string | undefined): UseProjectDataReturn => {
   const { user } = useAuth();
-  
-  // Use the individual hooks
-  const { project, loading: projectLoading, error: projectError, fetchProject } = useProject(projectId);
-  const { phases, loading: phasesLoading, error: phasesError, fetchPhases, setPhases } = useProjectPhases(projectId);
-  const { bids, loading: bidsLoading, error: bidsError, fetchBids, setBids } = useProjectBids(projectId);
-  const { expenses, loading: expensesLoading, error: expensesError, fetchExpenses, setExpenses } = useProjectExpenses(projectId);
-
-  // ---> ADD Subcontractor State & Fetch Logic Directly <----
+  const [project, setProject] = useState<Project | null>(null);
+  const [phases, setPhases] = useState<ProjectPhase[]>([]);
+  const [bids, setBids] = useState<Bid[]>([]);
+  const [expenses, setExpenses] = useState<Expense[]>([]);
   const [subcontractors, setSubcontractors] = useState<Subcontractor[]>([]);
-  const [subcontractorsLoading, setSubcontractorsLoading] = useState<boolean>(true);
-  const [subcontractorsError, setSubcontractorsError] = useState<string | null>(null);
+  const [loading, setLoading] = useState<boolean>(true);
+  const [error, setError] = useState<string | null>(null);
 
-  const fetchSubcontractors = useCallback(async () => {
-    if (!user?.uid) {
-      setSubcontractorsLoading(false);
+  const loadProjectData = useCallback(async () => {
+    if (!projectId || !user?.uid) {
+      setProject(null);
+      setPhases([]);
+      setBids([]);
+      setExpenses([]);
       setSubcontractors([]);
+      setLoading(false);
+      setError(projectId ? 'User not authenticated' : 'Project ID is missing');
       return;
     }
-    setSubcontractorsLoading(true);
-    setSubcontractorsError(null);
+
+    setLoading(true);
+    setError(null);
+
     try {
-      const fetchedData = await SubcontractorService.getSubcontractors(user.uid);
-      setSubcontractors(fetchedData);
+      const detailData = await ProjectDetailDataService.getProjectDetailData(user.uid, projectId);
+      setProject(detailData.project);
+      setPhases(detailData.phases);
+      setBids(detailData.bids);
+      setExpenses(detailData.expenses);
+      setSubcontractors(detailData.subcontractors);
+      setError(detailData.project ? null : 'Project not found');
     } catch (err) {
-      console.error('useProjectData: Error fetching subcontractors:', err);
-      const errorMsg = err instanceof Error ? err.message : 'Failed to fetch subcontractors';
-      setSubcontractorsError(errorMsg);
+      console.error(`useProjectData: Error loading project detail data for ${projectId}:`, err);
+      setProject(null);
+      setPhases([]);
+      setBids([]);
+      setExpenses([]);
       setSubcontractors([]);
+      setError('Failed to load project data');
     } finally {
-      setSubcontractorsLoading(false);
+      setLoading(false);
     }
-  }, [user?.uid]);
+  }, [projectId, user?.uid]);
 
-  // Fetch subcontractors initially and when user changes
   useEffect(() => {
-    fetchSubcontractors();
-  }, [fetchSubcontractors]);
-  // ---> END Subcontractor Logic <----
-
-  // Combine loading states
-  const loading = projectLoading || phasesLoading || bidsLoading || expensesLoading || subcontractorsLoading;
-
-  // Combine error states
-  const error = projectError || phasesError || bidsError || expensesError || subcontractorsError;
-
-  // Combined refresh function
-  const refreshAllProjectData = useCallback(async () => {
-    if (!projectId) return;
-    try {
-      // Call individual fetch functions in parallel
-      await Promise.all([
-        fetchProject(),
-        fetchPhases(),
-        fetchBids(),
-        fetchExpenses(),
-        fetchSubcontractors(),
-      ]);
-    } catch (refreshError) {
-      console.error(`useProjectData: Error during refreshAllProjectData for project ${projectId}:`, refreshError);
-      // Error state will be set by the individual hook that failed
-    }
-  }, [projectId, fetchProject, fetchPhases, fetchBids, fetchExpenses, fetchSubcontractors]);
-
-  // No need for the initial useEffect here, as individual hooks handle their own fetching
+    loadProjectData();
+  }, [loadProjectData]);
 
   return {
     project,
@@ -100,10 +76,9 @@ export const useProjectData = (projectId: string | undefined): UseProjectDataRet
     subcontractors,
     loading,
     error,
-    refreshAllProjectData,
-    setPhases, // Pass through the setter from useProjectPhases
-    // Optionally pass through other setters if needed
-    setBids, 
+    refreshAllProjectData: loadProjectData,
+    setPhases,
+    setBids,
     setExpenses,
     setSubcontractors,
   };

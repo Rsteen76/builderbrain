@@ -15,9 +15,11 @@ import BidList from '../../bids/BidList';
 const ProjectBidsTab: React.FC = () => {
   const {
     projectId,
+    bids,
     loading,
     error,
     openNewBidDialog,
+    refreshAllProjectData,
   } = useProjectDetail();
 
   if (loading) {
@@ -48,9 +50,14 @@ const ProjectBidsTab: React.FC = () => {
         </Button>
       </Box>
       
-      <BidList projectId={projectId} hideHeader={true} />
+      <BidList
+        projectId={projectId}
+        hideHeader={true}
+        initialBids={bids}
+        onRefreshProjectBids={refreshAllProjectData}
+      />
     </Box>
   );
 };
 
-export default ProjectBidsTab; 
+export default ProjectBidsTab;
