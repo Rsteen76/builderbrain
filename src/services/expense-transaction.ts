@@ -4,7 +4,6 @@ import {
   doc,
   addDoc,
   updateDoc,
-  deleteDoc,
   getDoc,
   getDocs,
   query,
@@ -295,4 +294,4 @@ export class ExpenseTransactionService {
       receiptUrl: data.receiptUrl,
     };
   }
-} 
+}

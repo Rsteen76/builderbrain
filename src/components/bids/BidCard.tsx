@@ -1337,7 +1337,7 @@ const BidCard: React.FC<BidCardProps> = ({
 };
 
 // Helper to check if a date is coming up soon (within 7 days)
-const isNearDueDate = (dateStr: string | Date | undefined): boolean => {
+const isNearDueDate = (dateStr: string | Date | null | undefined): boolean => {
   if (!dateStr) return false;
 
   const now = new Date();

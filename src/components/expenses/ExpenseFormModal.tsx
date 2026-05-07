@@ -738,7 +738,7 @@ const ExpenseFormModal: React.FC<ExpenseFormModalProps> = ({
             description: li.description,
             quantity: li.quantity,
             unit: '', // Adjust as needed
-            unitCost: li.unitCost > 0 ? li.unitCost : undefined,
+            unitCost: li.unitCost > 0 ? li.unitCost : 0,
             totalCost: li.totalPrice,
             category: itemCategory, // Assign the correctly mapped category
           };

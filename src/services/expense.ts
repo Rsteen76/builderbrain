@@ -23,7 +23,6 @@ import {
 } from 'firebase/firestore';
 import { Expense, ExpenseStatus } from '../types';
 import { toTimestamp, toDate } from '../utils/firestoreConverter'; // Added converter imports
-import { cleanForFirestore } from '../utils/firestoreUtils';
 
 type FirestoreExpense = Omit<Expense, 'date' | 'createdAt' | 'updatedAt' | 'paymentDetails' | 'lastPaymentDate'> & {
   date: Timestamp;
@@ -48,9 +47,6 @@ export class ExpenseService {
     }
     
     try {
-      console.log('Expense data received by service:', JSON.stringify(expenseData));
-      console.log('PaymentDetails before processing:', expenseData.paymentDetails);
-      
       const now = new Date();
       const expenseDate = expenseData.date
         ? (typeof expenseData.date === 'string' ? new Date(expenseData.date) : toDate(expenseData.date))
@@ -71,15 +67,9 @@ export class ExpenseService {
         paymentDetails: expenseData.paymentDetails ?? null,
       };
       
-      console.log('Expense object after initial prep:', JSON.stringify(expense));
-      console.log('PaymentDetails after prep:', expense.paymentDetails);
-      
       // Convert dates to Firestore timestamps
       const firestoreExpense = this.convertToFirestore(expense); // convertToFirestore will handle date to Timestamp
-      
-      console.log('Final Firestore expense object (stringified):', JSON.stringify(firestoreExpense));
-      console.log('Final paymentDetails (direct):', firestoreExpense.paymentDetails);
-      
+
       const docRef = await addDoc(this.collection, firestoreExpense);
       
       return {
@@ -97,8 +87,6 @@ export class ExpenseService {
     const updatePayload: Partial<Omit<Expense, 'id' | 'userId' | 'createdAt' | 'createdBy'>> = {
       ...expenseData,
     };
-
-    console.log(`ExpenseService: Updating expense ${id} with data:`, expenseData);
 
     // Standardize on phaseName field (buildingPhase logic removed)
     const standardizedPayload = { ...updatePayload };
@@ -150,7 +138,6 @@ export class ExpenseService {
 
         // Skip undefined values
         if (value === undefined) {
-          console.log(`ExpenseService: Skipping undefined value for field ${String(typedKey)}`);
           continue;
         }
 
@@ -177,11 +164,8 @@ export class ExpenseService {
     // Ensure updatedAt is always a Timestamp
     firestoreUpdateData.updatedAt = Timestamp.fromDate(new Date());
 
-    console.log(`ExpenseService: Prepared update payload:`, firestoreUpdateData);
-    
     try {
       await updateDoc(expenseRef, firestoreUpdateData as Record<string, any>);
-      console.log(`ExpenseService: Successfully updated expense ${id}`);
     } catch (error) {
       console.error(`ExpenseService: Error updating expense ${id}:`, error);
       throw error;
@@ -207,7 +191,6 @@ export class ExpenseService {
     const expenseDoc = await getDoc(expenseRef);
 
     if (!expenseDoc.exists()) {
-      console.log(`ExpenseService: Expense ${id} not found.`);
       return null;
     }
 
@@ -235,8 +218,6 @@ export class ExpenseService {
       return listDevExpenses(userId, filters);
     }
 
-    console.log(`ExpenseService: Fetching expenses for user: ${userId}, with filters:`, filters);
-    
     if (!userId) {
       console.error("ExpenseService: No userId provided to getExpenses");
       return [];
@@ -289,8 +270,7 @@ export class ExpenseService {
       q = query(q, orderBy('date', 'desc'));
       
       const querySnapshot = await getDocs(q);
-      console.log(`ExpenseService: Found ${querySnapshot.docs.length} expenses`);
-      
+
       return querySnapshot.docs.map(doc => {
         return this.convertFromFirestore(doc);
       });
@@ -301,8 +281,6 @@ export class ExpenseService {
   }
   
   static async getProjectExpenses(userId: string, projectId: string): Promise<Expense[]> {
-    console.log(`ExpenseService: Fetching expenses for project: ${projectId}`);
-    
     if (!userId || !projectId) {
       console.error("ExpenseService: Missing userId or projectId in getProjectExpenses");
       return [];
@@ -321,8 +299,7 @@ export class ExpenseService {
       );
       
       const querySnapshot = await getDocs(q);
-      console.log(`ExpenseService: Found ${querySnapshot.docs.length} expenses for project ${projectId}`);
-      
+
       return querySnapshot.docs.map(doc => {
         return this.convertFromFirestore(doc);
       });
@@ -376,8 +353,6 @@ export class ExpenseService {
     date: string;
     notes?: string;
   }): Promise<void> {
-    console.log(`ExpenseService: Marking expense ${id} as paid with amount: ${actualAmountPaidNow}`);
-
     if (isDevAuthBypassEnabled) {
       const expense = getDevExpense(devBypassAppUser.id, id);
       if (!expense) {
@@ -467,8 +442,6 @@ export class ExpenseService {
     const endDate = new Date(expenseDate);
     endDate.setDate(endDate.getDate() + threshold);
     
-    console.log(`Checking for duplicates within date range: ${startDate.toISOString()} to ${endDate.toISOString()}`);
-
     if (isDevAuthBypassEnabled) {
       return listDevExpenses(userId, { projectId: expenseData.projectId }).filter(expense => {
         if (expenseData.id && expense.id === expenseData.id) {
@@ -560,9 +533,6 @@ export class ExpenseService {
    * Convert a JavaScript Expense object to a Firestore-friendly format
    */
   private static convertToFirestore(expense: Partial<Expense>): Partial<FirestoreExpense> { 
-    console.log('CONVERT TO FIRESTORE - Initial expense object:', expense);
-    console.log('CONVERT TO FIRESTORE - Initial paymentDetails:', expense.paymentDetails);
-    
     // Helper function to recursively clean the object and convert dates
     const cleanAndConvertDatesToTimestamps = (dataValue: unknown): unknown => {
       if (dataValue === null || dataValue === undefined) {
@@ -592,16 +562,9 @@ export class ExpenseService {
       return cleanObject;
     };
     
-    // Start by removing all undefined values and replacing with null
-    const cleanedExpense = cleanForFirestore(expense);
-    console.log('CONVERT TO FIRESTORE - After cleanForFirestore:', cleanedExpense);
-    console.log('CONVERT TO FIRESTORE - paymentDetails after cleaning:', cleanedExpense.paymentDetails);
-    
     // Use the enhanced helper function
     const cleanedAndConvertedExpense = cleanAndConvertDatesToTimestamps(expense) as Partial<FirestoreExpense>;
 
-    console.log('CONVERT TO FIRESTORE - After cleanAndConvertDatesToTimestamps:', cleanedAndConvertedExpense);
-    
     // Ensure specific fields that might need default values if null/undefined post-cleaning
     const firestoreExpense: Partial<FirestoreExpense> = {
       ...cleanedAndConvertedExpense,
@@ -610,11 +573,7 @@ export class ExpenseService {
       paymentStageId: cleanedAndConvertedExpense.paymentStageId === undefined ? null : cleanedAndConvertedExpense.paymentStageId,
       paymentDetails: cleanedAndConvertedExpense.paymentDetails === undefined ? null : cleanedAndConvertedExpense.paymentDetails,
     };
-    
-    // Log the cleaned object for debugging
-    console.log('CONVERT TO FIRESTORE - Final expense object:', firestoreExpense);
-    console.log('CONVERT TO FIRESTORE - Final paymentDetails:', firestoreExpense.paymentDetails);
-    
+
     // Explicitly remove fields that are no longer part of the Expense type
     delete (firestoreExpense as any).amountRemaining;
     delete (firestoreExpense as any).buildingPhase;
@@ -677,8 +636,6 @@ export class ExpenseService {
     }
     
     try {
-      console.log(`ExpenseService: Fetching unique vendors for user: ${userId}`);
-      
       // Query all expenses for this user
       const q = query(
         this.collection,
@@ -697,8 +654,7 @@ export class ExpenseService {
       });
       
       const uniqueVendors = Array.from(vendors);
-      console.log(`ExpenseService: Found ${uniqueVendors.length} unique vendors`);
-      
+
       return uniqueVendors;
     } catch (error) {
       console.error("ExpenseService: Error fetching unique vendors:", error);

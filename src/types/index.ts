@@ -2,6 +2,8 @@ import { Timestamp } from 'firebase/firestore';
 import { Expense, ExpenseCategory, ExpenseStatus, PaymentDetails } from './expense.types';
 import { ExpenseTransaction, TransactionStatus, PaymentMethod } from './expense-transaction.types';
 import { CategoryMappingPreferences } from './budget.types';
+import { Bid } from './bid.types';
+import { LineItem } from './project.types';
 export * from './bids.types';
 export * from './expense-transaction.types';
 
@@ -69,74 +71,6 @@ export interface Project {
   budgetPreferences?: CategoryMappingPreferences;
   projections?: BudgetProjection[];
   progress: number;
-}
-
-export interface Bid {
-  id: string;
-  userId: string;
-  projectId: string;
-  phaseId?: string;
-  phaseName?: string;
-  projectName?: string;
-  subcontractorId?: string;
-  subcontractorName?: string;
-  contractorName?: string;
-  bidAmount?: number;
-  title?: string;
-  scope?: string;
-  status: 'draft' | 'submitted' | 'accepted' | 'rejected' | 'expired' | 'withdrawn' | 'revision_requested';
-  priority?: 'low' | 'medium' | 'high' | 'urgent';
-  submissionDeadline?: Date | null;
-  startDate?: Date | null;
-  completionDate?: Date | null;
-  totalAmount: number;
-  timeline?: number; // Duration in days
-  paymentTerms?: string;
-  currentVersionId?: string;
-  versions?: BidVersion[];
-  tags?: string[];
-  createdAt: Date;
-  updatedAt: Date;
-  createdBy?: string;
-  updatedBy?: string;
-  notes?: string;
-  requiresInsurance?: boolean;
-  requiresBond?: boolean;
-  isPublic?: boolean;
-  isApproved?: boolean;
-  attachments?: { name: string; url: string }[] | string[];
-  paymentSchedule?: BidPaymentStage[];
-  paymentProgress?: {
-    paid: number;
-    pending: number;
-    remaining: number;
-  };
-  categoryId?: string; // Category ID for bid categorization
-}
-
-export interface BidVersion {
-  id: string;
-  versionNumber: number;
-  createdAt: Date;
-  totalAmount: number;
-  notes?: string;
-  lineItems?: LineItem[];
-  attachments?: string[];
-}
-
-export interface LineItem {
-  id: string;
-  projectId?: string;
-  phaseId?: string;
-  description: string;
-  category: 'material' | 'labor' | 'subcontractor' | 'equipment' | 'permit' | 'other';
-  quantity: number;
-  unit: string;
-  unitCost?: number;
-  totalCost: number;
-  notes?: string;
-  createdAt?: Date;
-  updatedAt?: Date;
 }
 
 export interface Task {
@@ -237,32 +171,6 @@ export interface Subcontractor {
   notes?: string;
   createdAt: Date;
   updatedAt: Date;
-}
-
-export interface BidPaymentStage {
-  id: string;
-  name: string;
-  description?: string;
-  percentage: number;
-  amount: number;
-  dueDate?: Date;
-  phaseId?: string; // Add phase association
-  phaseName?: string; // Add phase name for display
-  status: 'pending' | 'in_progress' | 'completed' | 'paid' | 'partially_paid' | 'overdue';
-  paidAmount?: number; // Amount that has been paid so far
-  completionRequirements?: string;
-  expenseId?: string; // Allow string or undefined
-  invoiceId?: string; // Link to invoice if created
-  paymentDate?: Date;
-  createdAt: Date;
-  updatedAt: Date;
-  isFixedAmount?: boolean;
-  fixedAmount?: number;
-  isPaid?: boolean;
-  partialPayment?: boolean; // Whether this is a partial payment
-  originalAmount?: number; // Original amount before partial payment
-  remainingAmount?: number; // Amount remaining after partial payment
-  parentStageId?: string; // Reference to the original stage (for stages created from partial payments)
 }
 
 // Add or enhance the Phase interface

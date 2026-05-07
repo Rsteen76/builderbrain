@@ -45,6 +45,13 @@ export class StorageService {
     return this.listFiles(folderRef);
   }
 
+  static async deleteProjectFiles(projectId: string): Promise<void> {
+    await Promise.all([
+      this.deleteFolder(ref(storage, `projects/${projectId}/documents`)),
+      this.deleteFolder(ref(storage, `projects/${projectId}/photos`)),
+    ]);
+  }
+
   // User Avatars
   static async uploadUserAvatar(
     userId: string,
@@ -123,6 +130,12 @@ export class StorageService {
     }
   }
 
+  private static async deleteFolder(folderRef: StorageReference): Promise<void> {
+    const result = await listAll(folderRef);
+    await Promise.all(result.items.map((item) => deleteObject(item)));
+    await Promise.all(result.prefixes.map((prefix) => this.deleteFolder(prefix)));
+  }
+
   static async deleteFile(path: string): Promise<void> {
     try {
       const fileRef = ref(storage, path);
@@ -132,4 +145,4 @@ export class StorageService {
       throw error;
     }
   }
-} 
+}

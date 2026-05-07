@@ -5,15 +5,7 @@ import { expenseService } from '../api';
 // Query key for expenses
 const EXPENSES_QUERY_KEY = 'expenses';
 
-// Debug function to check for undefined values in expense data
-function logExpenseData(method: string, expense: Record<string, unknown>) { // Changed 'any' to 'Record<string, unknown>'
-  console.log(`[useExpenses] ${method} - Checking expense data structure:`);
-  console.log('  - Has paymentDetails?', Object.prototype.hasOwnProperty.call(expense, 'paymentDetails'));
-  // Accessing expense.paymentDetails might require a type assertion or check if expense is Record<string, unknown>
-  console.log('  - paymentDetails value:', (expense as { paymentDetails?: unknown }).paymentDetails);
-  console.log('  - paymentDetails type:', expense.paymentDetails !== undefined ? typeof expense.paymentDetails : 'undefined');
-  
-  // Check for undefined values in top-level fields
+function warnOnUndefinedExpenseFields(expense: Record<string, unknown>) {
   const undefinedFields: string[] = []; // Explicitly type undefinedFields
   for (const [key, value] of Object.entries(expense)) {
     if (value === undefined) {
@@ -146,12 +138,10 @@ export const useCreateExpense = () => {
 
   return useMutation(
     async (expense: Omit<Expense, 'id' | 'createdAt' | 'updatedAt'>) => {
-      // Add debugging before sending to API
-      logExpenseData('createExpense - before API call', expense);
+      warnOnUndefinedExpenseFields(expense);
       
       // Explicitly ensure paymentDetails is never undefined
       if (expense.paymentDetails === undefined) {
-        console.log('[useExpenses] Setting undefined paymentDetails to null before API call');
         // Cast to Partial<Expense> to allow setting an optional property
         (expense as Partial<Expense>).paymentDetails = null; 
       }
@@ -200,12 +190,10 @@ export const useUpdateExpense = () => {
 
   return useMutation(
     async ({ id, expense }: { id: string; expense: Partial<Expense> }) => {
-      // Add debugging before sending to API
-      logExpenseData('updateExpense - before API call', expense);
+      warnOnUndefinedExpenseFields(expense);
       
       // Explicitly ensure paymentDetails is never undefined
       if (expense.paymentDetails === undefined) {
-        console.log('[useExpenses] Setting undefined paymentDetails to null before API call');
         // Cast to Partial<Expense> to allow setting an optional property
         (expense as Partial<Expense>).paymentDetails = null;
       }

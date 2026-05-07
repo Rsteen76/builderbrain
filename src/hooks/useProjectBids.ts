@@ -31,14 +31,12 @@ export const useProjectBids = (projectId: string | undefined): UseProjectBidsRes
       return;
     }
 
-    console.log(`useProjectBids: Fetching bids for project ID: ${projectId}`);
     setLoading(true);
     setError(null);
 
     try {
       const bidFilters = { projectId };
       const bidData = await BidService.getBids(user.uid, bidFilters);
-      console.log(`useProjectBids: Successfully fetched ${bidData.length} bids.`);
       // Ensure the state is typed as Bid[]
       setBids(bidData);
     } catch (err) {
@@ -59,10 +57,8 @@ export const useProjectBids = (projectId: string | undefined): UseProjectBidsRes
   useEffect(() => {
     const handleBidDeletedEvent = (event: CustomEvent<{ bidId: string }>) => {
       const { bidId } = event.detail;
-      console.log(`useProjectBids: Received bid-deleted event for bid ID: ${bidId}`);
       setBids(prevBids => {
         const newBids = prevBids.filter(b => b.id !== bidId);
-        console.log(`useProjectBids: Updated bids list. Removed ID: ${bidId}. New count: ${newBids.length}`);
         return newBids;
       });
       // Optionally, trigger a notification or other side effect here if needed,
@@ -72,12 +68,10 @@ export const useProjectBids = (projectId: string | undefined): UseProjectBidsRes
     // Add event listener
     // Type assertion needed as addEventListener expects EventListener type
     window.addEventListener('bid-deleted', handleBidDeletedEvent as EventListener);
-    console.log('useProjectBids: Added bid-deleted event listener.');
 
     // Cleanup: remove event listener
     return () => {
       window.removeEventListener('bid-deleted', handleBidDeletedEvent as EventListener);
-      console.log('useProjectBids: Removed bid-deleted event listener.');
     };
   }, []); // Empty dependency array ensures this runs only once on mount/unmount
 

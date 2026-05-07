@@ -12,16 +12,19 @@ import {
   doc,
   addDoc,
   updateDoc,
-  deleteDoc,
   getDoc,
   getDocs,
   query,
   where,
   orderBy,
   Timestamp,
+  writeBatch,
+  QueryDocumentSnapshot,
+  DocumentData,
 } from 'firebase/firestore';
 import { Project, LineItem, Bid, Task, Phase, BudgetProjection } from '../types';
 import { v4 as uuidv4 } from 'uuid';
+import { StorageService } from './storage';
 
 export interface FirestoreProject extends Omit<Project, 'id' | 'startDate' | 'endDate' | 'createdAt' | 'updatedAt' | 'budget' | 'location' | 'lineItems' | 'bids' | 'tasks' | 'team' | 'keyMilestones' | 'projections'> {
   id?: string;
@@ -59,6 +62,13 @@ export interface FirestoreProject extends Omit<Project, 'id' | 'startDate' | 'en
 class ProjectService {
   // Collection reference
   private static collection = collection(db, 'projects');
+  private static relatedProjectCollections = [
+    'expenses',
+    'expense_transactions',
+    'bids',
+    'tasks',
+    'documents',
+  ];
 
   // Utility function to safely convert dates to Firestore Timestamps
   private static dateToTimestamp(date: Date | string | Timestamp | null | undefined): Timestamp | null {
@@ -128,6 +138,42 @@ class ProjectService {
       projections: data.projections || [],
       progress: data.progress || 0
     };
+  }
+
+  private static async deleteDocsInBatches(
+    docsToDelete: QueryDocumentSnapshot<DocumentData>[],
+    projectId: string
+  ): Promise<void> {
+    const projectRef = doc(this.collection, projectId);
+    const refsToDelete = [
+      ...docsToDelete.map(docSnapshot => docSnapshot.ref),
+      projectRef,
+    ];
+
+    for (let i = 0; i < refsToDelete.length; i += 500) {
+      const batch = writeBatch(db);
+      refsToDelete.slice(i, i + 500).forEach(ref => batch.delete(ref));
+      await batch.commit();
+    }
+  }
+
+  private static async getOwnedRelatedProjectDocs(
+    projectId: string,
+    userId: string
+  ): Promise<QueryDocumentSnapshot<DocumentData>[]> {
+    const snapshots = await Promise.all(
+      this.relatedProjectCollections.map(async (collectionName) => {
+        const relatedQuery = query(
+          collection(db, collectionName),
+          where('projectId', '==', projectId),
+          where('userId', '==', userId)
+        );
+        const snapshot = await getDocs(relatedQuery);
+        return snapshot.docs;
+      })
+    );
+
+    return snapshots.flat();
   }
 
   // Process phases to ensure dates are Firestore Timestamps
@@ -329,7 +375,18 @@ class ProjectService {
     }
 
     try {
-      await deleteDoc(doc(this.collection, projectId));
+      const projectRef = doc(this.collection, projectId);
+      const projectSnap = await getDoc(projectRef);
+
+      if (!projectSnap.exists()) {
+        return;
+      }
+
+      const projectData = projectSnap.data() as FirestoreProject;
+      const relatedDocs = await this.getOwnedRelatedProjectDocs(projectId, projectData.userId);
+
+      await StorageService.deleteProjectFiles(projectId);
+      await this.deleteDocsInBatches(relatedDocs, projectId);
     } catch (error) {
       console.error("Error deleting project:", error);
       throw error;
@@ -356,8 +413,6 @@ class ProjectService {
       });
     }
 
-    console.log(`ProjectService: Fetching projects for user: ${userId}, with filters:`, filters);
-    
     if (!userId) {
       console.error("ProjectService: No userId provided to getProjects");
       return [];
@@ -386,10 +441,8 @@ class ProjectService {
     q = query(q, orderBy('createdAt', 'desc'));
 
     const querySnapshot = await getDocs(q);
-    console.log(`ProjectService: Found ${querySnapshot.docs.length} projects`);
-    
+
     if (querySnapshot.empty) {
-      console.log("ProjectService: No projects found for user:", userId);
       return [];
     }
     
@@ -413,13 +466,6 @@ class ProjectService {
         endDate,
       };
     }) || [];
-    
-    console.log('Converting Firestore data with phases:', convertedPhases.map(p => ({
-      name: p.name,
-      startDate: p.startDate instanceof Date ? p.startDate.toISOString() : p.startDate,
-      endDate: p.endDate instanceof Date ? p.endDate.toISOString() : p.endDate
-    })));
-
     const project: Project = {
       ...data,
       id: id,
@@ -955,9 +1001,7 @@ class ProjectService {
         ...projectData,
         projectType: 'Residential Construction'
       });
-      
-      console.log("Creating residential project with base project:", project.id);
-      
+
       // Calculate total budget from project data
       const totalBudget = typeof projectData.budget === 'number'
         ? projectData.budget
@@ -965,8 +1009,7 @@ class ProjectService {
       
       // Get project start date from projectData or use today if not provided
       const projectStartDate = projectData.startDate || new Date();
-      console.log("Using project start date:", projectStartDate);
-      
+
       // Get project end date if provided, or calculate it based on standard duration
       const hasUserProvidedEndDate = projectData.endDate !== undefined && projectData.endDate !== null;
       // If user provided an end date, use it directly
@@ -977,13 +1020,10 @@ class ProjectService {
              ? new Date(projectData.endDate)
              : this.addDays(new Date(projectStartDate), 270))
         : this.addDays(new Date(projectStartDate), 270); // Default to ~9 months if no end date specified
-        
-      console.log("Project end date:", projectEndDate, "User provided:", hasUserProvidedEndDate);
-      
+
       // Calculate total project duration in days
       const totalProjectDays = Math.ceil((projectEndDate.getTime() - new Date(projectStartDate).getTime()) / (1000 * 60 * 60 * 24));
-      console.log("Total project duration:", totalProjectDays, "days");
-      
+
       // Adjust phase duration based on total project days
       const phaseDuration = Math.floor(totalProjectDays / 10); // Divide by number of phases for even distribution
       
@@ -1048,10 +1088,6 @@ class ProjectService {
         residentialPhases.push(phase);
       });
       
-      // Verify total budget matches sum of phase budgets
-      const totalPhaseBudget = residentialPhases.reduce((sum, phase) => sum + phase.budget, 0);
-      console.log(`Total budget: ${totalBudget}, Sum of phase budgets: ${totalPhaseBudget}`);
-      
       // Collect all tasks from phases to add to project tasks
       const allTasks: Task[] = [];
       residentialPhases.forEach(phase => {
@@ -1059,10 +1095,7 @@ class ProjectService {
           allTasks.push(...phase.tasks);
         }
       });
-      
-      console.log(`Collected ${allTasks.length} tasks from all phases`);
-      console.log(`Project timeline: ${projectStartDate.toISOString()} to ${projectEndDate.toISOString()}`);
-      
+
       // Add phases to the project
       const updatedProject = {
         ...project,
@@ -1085,9 +1118,7 @@ class ProjectService {
         startDate: updatedProject.startDate,
         endDate: updatedProject.endDate
       });
-      
-      console.log(`Residential project created with ${residentialPhases.length} phases and ${allTasks.length} tasks`);
-      
+
       // Return the updated project
       return await this.getProjectById(project.id) as Project;
     } catch (error) {

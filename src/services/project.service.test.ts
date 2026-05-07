@@ -1,5 +1,6 @@
 jest.mock('../config/firebase', () => ({
   db: {},
+  storage: {},
 }));
 
 jest.mock('../config/devMode', () => ({
@@ -12,6 +13,12 @@ jest.mock('./devDataStore', () => ({
   getDevProjectById: jest.fn(),
   listDevProjects: jest.fn(),
   updateDevProject: jest.fn(),
+}));
+
+jest.mock('./storage', () => ({
+  StorageService: {
+    deleteProjectFiles: jest.fn(),
+  },
 }));
 
 jest.mock('firebase/firestore', () => {
@@ -40,12 +47,17 @@ jest.mock('firebase/firestore', () => {
     query: jest.fn((base, ...constraints) => ({ base, constraints })),
     Timestamp: MockTimestamp,
     updateDoc: jest.fn(),
+    writeBatch: jest.fn(() => ({
+      delete: jest.fn(),
+      commit: jest.fn(),
+    })),
     where: jest.fn((field, op, value) => ({ field, op, value })),
   };
 });
 
-import { getDoc, Timestamp, updateDoc } from 'firebase/firestore';
+import { collection, doc, getDoc, getDocs, query, Timestamp, updateDoc, where, writeBatch } from 'firebase/firestore';
 import { ProjectService } from './project';
+import { StorageService } from './storage';
 
 const timestamp = (date: string) => new (Timestamp as any)(new Date(date));
 
@@ -73,7 +85,15 @@ const firestoreProject = (userId = 'user-1') => ({
 describe('legacy ProjectService', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    (collection as jest.Mock).mockImplementation((_db, path) => `collection:${path}`);
+    (doc as jest.Mock).mockImplementation((_collectionRef, id) => `doc:${id}`);
+    (query as jest.Mock).mockImplementation((base, ...constraints) => ({ base, constraints }));
+    (where as jest.Mock).mockImplementation((field, op, value) => ({ field, op, value }));
     (Timestamp.fromDate as jest.Mock).mockImplementation((date: Date) => new (Timestamp as any)(date));
+    (writeBatch as jest.Mock).mockImplementation(() => ({
+      delete: jest.fn(),
+      commit: jest.fn(),
+    }));
     (getDoc as jest.Mock).mockResolvedValue({
       exists: () => true,
       id: 'project-1',
@@ -108,5 +128,20 @@ describe('legacy ProjectService', () => {
     });
 
     await expect(ProjectService.getProject('project-1', 'user-1')).resolves.toBeNull();
+  });
+
+  test('deleteProject removes owned related docs and project files before project doc', async () => {
+    (getDocs as jest.Mock).mockResolvedValue({ docs: [{ ref: 'expense-ref' }, { ref: 'task-ref' }] });
+
+    await ProjectService.deleteProject('project-1');
+
+    expect(StorageService.deleteProjectFiles).toHaveBeenCalledWith('project-1');
+    expect(getDocs).toHaveBeenCalledTimes(5);
+
+    const batch = (writeBatch as jest.Mock).mock.results[0].value;
+    expect(batch.delete).toHaveBeenCalledWith('expense-ref');
+    expect(batch.delete).toHaveBeenCalledWith('task-ref');
+    expect(batch.delete.mock.calls[batch.delete.mock.calls.length - 1][0]).toBe('doc:project-1');
+    expect(batch.commit).toHaveBeenCalledTimes(1);
   });
 });

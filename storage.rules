@@ -1,0 +1,36 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isProjectOwner(projectId) {
+      return isAuthenticated() &&
+        firestore.exists(/databases/(default)/documents/projects/$(projectId)) &&
+        firestore.get(/databases/(default)/documents/projects/$(projectId)).data.userId == request.auth.uid;
+    }
+
+    function isBidOwner(bidId) {
+      return isAuthenticated() &&
+        firestore.exists(/databases/(default)/documents/bids/$(bidId)) &&
+        firestore.get(/databases/(default)/documents/bids/$(bidId)).data.userId == request.auth.uid;
+    }
+
+    match /projects/{projectId}/{folder}/{fileName} {
+      allow read, write: if folder in ['documents', 'photos'] && isProjectOwner(projectId);
+    }
+
+    match /users/{userId}/avatar.jpg {
+      allow read, write: if isAuthenticated() && request.auth.uid == userId;
+    }
+
+    match /bids/{bidId}/attachments/{fileName} {
+      allow read, write: if isBidOwner(bidId);
+    }
+
+    match /{path=**} {
+      allow read, write: if false;
+    }
+  }
+}

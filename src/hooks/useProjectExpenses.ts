@@ -43,13 +43,11 @@ export const useProjectExpenses = (projectId: string | undefined): UseProjectExp
       return;
     }
 
-    console.log(`useProjectExpenses: Fetching expenses for project ID: ${projectId}`);
     setLoading(true);
     setError(null);
 
     try {
       const expenseData = await ExpenseService.getProjectExpenses(user.uid, projectId);
-      console.log(`useProjectExpenses: Successfully fetched ${expenseData.length} expenses.`);
       // Use type assertion if necessary, though ideally the service returns the correct type
       setExpenses(expenseData as Expense[]);
 
@@ -90,7 +88,6 @@ export const useProjectExpenses = (projectId: string | undefined): UseProjectExp
       const customEvent = event as CustomEvent<{ projectId: string; [key: string]: any }>;
 
       if (customEvent.detail && customEvent.detail.projectId === projectId) {
-        console.log('useProjectExpenses: Expense status changed event received for this project, refreshing expenses:', customEvent.detail);
         // Refetch expenses to get the updated status and potentially recalculate totals
         fetchExpenses();
       }
@@ -98,12 +95,10 @@ export const useProjectExpenses = (projectId: string | undefined): UseProjectExp
 
     // Add event listener
     window.addEventListener('expense-status-changed', handleExpenseStatusChanged);
-    console.log('useProjectExpenses: Added expense-status-changed event listener.');
 
     // Cleanup: remove event listener
     return () => {
       window.removeEventListener('expense-status-changed', handleExpenseStatusChanged);
-      console.log('useProjectExpenses: Removed expense-status-changed event listener.');
     };
   }, [projectId, fetchExpenses]); // Re-run if projectId or fetchExpenses changes
 

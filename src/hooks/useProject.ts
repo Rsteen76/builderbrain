@@ -30,7 +30,6 @@ export const useProject = (projectId: string | undefined): UseProjectResult => {
       return;
     }
 
-    console.log(`useProject: Fetching project with ID: ${projectId}`);
     setLoading(true);
     setError(null);
 
@@ -41,7 +40,6 @@ export const useProject = (projectId: string | undefined): UseProjectResult => {
         setError('Project not found');
         setProject(null);
       } else {
-        console.log(`useProject: Successfully fetched project: ${projectData.name}`);
         setProject(projectData);
       }
     } catch (err) {

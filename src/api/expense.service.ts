@@ -8,13 +8,9 @@ export class ExpenseService extends BaseService<Expense> {
       toFirestore: (expense: Expense): DocumentData => {
         // Deep clean object to remove all undefined values before sending to Firestore
         const cleanedExpense = this.deepCleanObject(expense);
-        
-        console.log('[ExpenseService API] Original expense:', expense);
-        console.log('[ExpenseService API] Cleaned expense:', cleanedExpense);
-        
+
         // Ensure paymentDetails is never undefined
         if (cleanedExpense.paymentDetails === undefined) {
-          console.log('[ExpenseService API] Setting undefined paymentDetails to null in toFirestore');
           cleanedExpense.paymentDetails = null;
         }
         

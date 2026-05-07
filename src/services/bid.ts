@@ -169,11 +169,6 @@ export class BidService {
     const now = new Date();
     const versionId = uuidv4();
     
-    // Debug paymentSchedule
-    console.log('paymentSchedule in createBid:', typeof bidData.paymentSchedule, 
-                bidData.paymentSchedule, 
-                Array.isArray(bidData.paymentSchedule));
-
     // Create initial version (matches imported BidVersion type)
     const initialVersion: BidVersion = {
       id: versionId,
@@ -250,11 +245,9 @@ export class BidService {
     // If paymentSchedule is an object but not an array, convert to array
     if (bidData.paymentSchedule) {
       if (typeof bidData.paymentSchedule === 'object' && !Array.isArray(bidData.paymentSchedule)) {
-        console.log('Converting paymentSchedule object to array:', bidData.paymentSchedule);
         if ('0' in bidData.paymentSchedule && '1' in bidData.paymentSchedule) {
           // It looks like an object with numeric keys, likely an array-like object
           newBid.paymentSchedule = Object.values(bidData.paymentSchedule);
-          console.log('Converted to array:', newBid.paymentSchedule);
         }
       } else if (Array.isArray(bidData.paymentSchedule)) {
         // Make a clean copy of the payment schedule
@@ -298,14 +291,11 @@ export class BidService {
     
     // Convert to Firestore format and save
     try {
-      console.log('BidService - DEBUG - Converting bid to Firestore format');
       const firestoreBid = this.convertToFirestoreFormat(cleanBidData);
-      
-      console.log('BidService - DEBUG - About to add document to Firestore collection');
+
       let docRef;
       try {
         docRef = await addDoc(this.collection, firestoreBid);
-        console.log('BidService - DEBUG - Document added successfully with ID:', docRef.id);
       } catch (addDocError) {
         console.error('BidService - CRITICAL ERROR during addDoc operation:', addDocError);
         if (addDocError instanceof Error) {
@@ -318,12 +308,10 @@ export class BidService {
       const newBidId = docRef.id;
       
       // Fetch the complete bid from Firestore to ensure data consistency
-      console.log('BidService - DEBUG - Fetching newly created bid from Firestore');
       const createdBid = await this.getBid(userId, newBidId);
       
       // If fetching failed, construct the bid with the local data
       if (!createdBid) {
-        console.log('BidService - DEBUG - Failed to fetch newly created bid, constructing from local data');
         return {
           ...cleanBidData,
           id: newBidId,
@@ -332,11 +320,9 @@ export class BidService {
       
       // Make sure payment schedule is intact
       if (!createdBid.paymentSchedule && cleanBidData.paymentSchedule) {
-        console.log('BidService - DEBUG - Restoring payment schedule from local data');
         createdBid.paymentSchedule = cleanBidData.paymentSchedule;
       }
-      
-      console.log('BidService - DEBUG - Successfully created and returned bid');
+
       return createdBid;
     } catch (error) {
       console.error('BidService - CRITICAL ERROR in createBid:', error);
@@ -487,8 +473,6 @@ export class BidService {
     
     // Remove undefined fields before updating to avoid errors
     const finalPayload = this.removeUndefined(updatePayload);
-
-    console.log(`BidService: Updating bid ${id} with payload:`, JSON.stringify(finalPayload, null, 2));
 
     await updateDoc(doc(this.collection, id), finalPayload);
   }
@@ -714,13 +698,11 @@ export class BidService {
       return allBids.slice(startIndex, startIndex + pageSize);
     }
 
-    console.log('[BidService.getBids] Fetching bids for user:', userId, 'Filters:', filters, 'Sort:', sort, 'PageSize:', pageSize, 'StartAfter:', startAfterId);
     let queryConstraints: QueryConstraint[] = [where('userId', '==', userId)];
 
     // Apply filters
     if (filters) {
       if (filters.projectId) {
-        console.log('[BidService.getBids] Applying projectId filter:', filters.projectId);
         queryConstraints.push(where('projectId', '==', filters.projectId));
       }
       if (filters.subcontractorId) {
@@ -730,13 +712,9 @@ export class BidService {
         if (Array.isArray(filters.status)) {
           // Ensure the array is not empty before applying 'in' filter
           if (filters.status.length > 0) {
-            console.log('[BidService.getBids] Applying status (in) filter:', filters.status);
             queryConstraints.push(where('status', 'in', filters.status));
-          } else {
-            console.log('[BidService.getBids] Status filter array is empty, skipping.');
           }
         } else {
-          console.log('[BidService.getBids] Applying status (==) filter:', filters.status);
           queryConstraints.push(where('status', '==', filters.status));
         }
       }
@@ -768,7 +746,6 @@ export class BidService {
 
     // Apply sorting
     if (sort) {
-      console.log('[BidService.getBids] Applying sort:', sort);
       queryConstraints.push(orderBy(sort.field, sort.direction));
     }
 
@@ -791,9 +768,7 @@ export class BidService {
 
     try {
       const q = query(this.collection, ...queryConstraints);
-      console.log('[BidService.getBids] Executing query...');
       const querySnapshot = await getDocs(q);
-      console.log(`[BidService.getBids] Query successful. Found ${querySnapshot.docs.length} bids.`);
       const bids: Bid[] = [];
       querySnapshot.forEach((doc) => {
         try {
@@ -886,19 +861,12 @@ export class BidService {
   private static convertToFirestoreFormat(bid: Omit<Bid, 'id'>): FirestoreBid {
       const { versions, createdAt, updatedAt, submissionDeadline, startDate, completionDate, paymentSchedule, tags, attachments, categoryId, ...rest } = bid;
       
-      // Debug paymentSchedule
-      console.log('paymentSchedule in convertToFirestoreFormat:', typeof paymentSchedule, 
-                  paymentSchedule, 
-                  Array.isArray(paymentSchedule));
-      
       // Handle array-like objects for paymentSchedule
       let paymentScheduleArray = paymentSchedule;
       if (paymentSchedule && typeof paymentSchedule === 'object' && !Array.isArray(paymentSchedule)) {
-        console.log('Converting paymentSchedule object to array in convertToFirestoreFormat');
         if ('0' in paymentSchedule && '1' in paymentSchedule) {
           // It looks like an object with numeric keys, likely an array-like object
           paymentScheduleArray = Object.values(paymentSchedule);
-          console.log('Converted to array:', paymentScheduleArray);
         } else {
           // Not an array-like object, create an empty array
           paymentScheduleArray = [];

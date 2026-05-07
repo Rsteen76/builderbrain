@@ -77,7 +77,6 @@ export const useProjectPhases = (projectId: string | undefined): UseProjectPhase
       return;
     }
 
-    console.log(`useProjectPhases: Fetching phases for project ID: ${projectId}`);
     setLoading(true);
     setError(null);
 
@@ -90,10 +89,8 @@ export const useProjectPhases = (projectId: string | undefined): UseProjectPhase
       if (projectData && projectData.phases && projectData.phases.length > 0) {
         // Fix any invalid dates before setting phases
         const phasesWithValidDates = ensureValidPhaseDates(projectData.phases as ProjectPhase[]);
-        console.log(`useProjectPhases: Successfully fetched ${phasesWithValidDates.length} phases.`);
         setPhases(phasesWithValidDates);
       } else {
-        console.log(`useProjectPhases: No phases found for project ID: ${projectId}`);
         setPhases([]);
       }
     } catch (err) {

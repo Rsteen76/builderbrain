@@ -42,6 +42,16 @@ const fixtures = {
     status: 'pending',
     createdBy: userId,
   }),
+  expense_transactions: (userId) => ({
+    userId,
+    projectId: 'project-1',
+    expenseId: 'expense-1',
+    amount: 75,
+    transactionDate: now(),
+    status: 'completed',
+    createdAt: now(),
+    updatedAt: now(),
+  }),
   subcontractors: (userId) => ({
     userId,
     name: 'Demo Subcontractor',
@@ -64,6 +74,16 @@ const fixtures = {
     title: 'Frame wall',
     status: 'todo',
     priority: 'medium',
+    createdAt: now(),
+    updatedAt: now(),
+  }),
+  documents: (userId) => ({
+    userId,
+    projectId: 'project-1',
+    name: 'Contract',
+    type: 'contract',
+    url: 'https://example.com/contract.pdf',
+    uploadedBy: userId,
     createdAt: now(),
     updatedAt: now(),
   }),
@@ -112,6 +132,7 @@ async function main() {
       await assertFails(getDoc(doc(otherDb, 'projects/project-1')));
       await assertSucceeds(updateDoc(projectRef, { name: 'Renamed Project' }));
       await assertFails(updateDoc(projectRef, { userId: 'user-2' }));
+      await assertFails(deleteDoc(doc(otherDb, 'projects/project-1')));
       await assertSucceeds(deleteDoc(projectRef));
     });
 
@@ -121,11 +142,25 @@ async function main() {
       const ownerDb = testEnv.authenticatedContext('user-1').firestore();
       const unauthDb = testEnv.unauthenticatedContext().firestore();
 
-      for (const collectionName of ['projects', 'expenses', 'subcontractors', 'bids', 'tasks']) {
+      for (const collectionName of ['projects', 'expenses', 'expense_transactions', 'subcontractors', 'bids', 'tasks', 'documents']) {
         const payload = fixtures[collectionName]('user-1');
         await assertSucceeds(setDoc(doc(ownerDb, `${collectionName}/${collectionName}-1`), payload));
         await assertFails(setDoc(doc(ownerDb, `${collectionName}/${collectionName}-2`), fixtures[collectionName]('user-2')));
         await assertFails(setDoc(doc(unauthDb, `${collectionName}/${collectionName}-3`), payload));
+      }
+    });
+
+    await testEnv.clearFirestore();
+
+    await runCase('owned related collections enforce delete ownership', async () => {
+      const ownerDb = testEnv.authenticatedContext('user-1').firestore();
+      const otherDb = testEnv.authenticatedContext('user-2').firestore();
+
+      for (const collectionName of ['expenses', 'expense_transactions', 'bids', 'tasks', 'documents']) {
+        const docPath = `${collectionName}/${collectionName}-delete`;
+        await assertSucceeds(setDoc(doc(ownerDb, docPath), fixtures[collectionName]('user-1')));
+        await assertFails(deleteDoc(doc(otherDb, docPath)));
+        await assertSucceeds(deleteDoc(doc(ownerDb, docPath)));
       }
     });
   } finally {

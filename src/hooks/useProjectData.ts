@@ -45,7 +45,6 @@ export const useProjectData = (projectId: string | undefined): UseProjectDataRet
       setSubcontractors([]);
       return;
     }
-    console.log('useProjectData: Fetching subcontractors...');
     setSubcontractorsLoading(true);
     setSubcontractorsError(null);
     try {
@@ -76,7 +75,6 @@ export const useProjectData = (projectId: string | undefined): UseProjectDataRet
   // Combined refresh function
   const refreshAllProjectData = useCallback(async () => {
     if (!projectId) return;
-    console.log(`useProjectData: Refreshing all data for project ${projectId}`);
     try {
       // Call individual fetch functions in parallel
       await Promise.all([
@@ -86,7 +84,6 @@ export const useProjectData = (projectId: string | undefined): UseProjectDataRet
         fetchExpenses(),
         fetchSubcontractors(),
       ]);
-      console.log(`useProjectData: Refresh complete for project ${projectId}`);
     } catch (refreshError) {
       console.error(`useProjectData: Error during refreshAllProjectData for project ${projectId}:`, refreshError);
       // Error state will be set by the individual hook that failed
@@ -110,4 +107,4 @@ export const useProjectData = (projectId: string | undefined): UseProjectDataRet
     setExpenses,
     setSubcontractors,
   };
-}; 
+};

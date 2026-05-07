@@ -13,17 +13,26 @@ export type BidPriority = 'low' | 'medium' | 'high' | 'urgent';
 
 export interface BidPaymentStage {
   id: string;
-  name?: string;
+  name: string;
   description?: string; // Made optional
   percentage: number;
   amount: number;
   dueDate?: Date | null; // Changed to Date | null
-  status?: 'pending' | 'paid' | 'partially_paid' | 'overdue' | 'in_progress' | 'requires_approval'; // Added more statuses for flexibility
+  phaseId?: string;
+  phaseName?: string;
+  status: 'pending' | 'paid' | 'partially_paid' | 'overdue' | 'in_progress' | 'requires_approval' | 'completed'; // Added more statuses for flexibility
   paidAmount?: number;
   paidDate?: Date | null; // Changed to Date | null
+  paymentDate?: Date | null;
   expenseId?: string; // Link to the associated expense
   invoiceId?: string; // Link to an invoice if applicable
   isPaid?: boolean; // Explicit flag if the stage is considered fully paid
+  isFixedAmount?: boolean;
+  fixedAmount?: number;
+  partialPayment?: boolean;
+  originalAmount?: number;
+  remainingAmount?: number;
+  parentStageId?: string;
   createdAt?: Date; // Added for tracking
   updatedAt?: Date; // Added for tracking
   /** Specific completion requirements for this payment stage. */
@@ -71,8 +80,7 @@ export interface Bid {
   completionDate?: Date | null;
   totalAmount: number;
   timeline?: number; // Duration in days
-  // TODO: Investigate and remove if confirmed unused (Superseded by paymentSchedule?)
-  // paymentTerms?: string;
+  paymentTerms?: string;
   currentVersionId?: string;
   versions?: BidVersion[];
   tags?: string[];
@@ -85,7 +93,7 @@ export interface Bid {
   requiresBond?: boolean;
   isPublic?: boolean;
   isApproved?: boolean;
-  attachments?: BidAttachment[]; // Standardized to BidAttachment[]
+  attachments?: BidAttachment[] | string[];
   paymentSchedule?: BidPaymentStage[];
   paymentProgress?: BidPaymentProgress;
   categoryId?: string;
@@ -95,4 +103,4 @@ export interface Bid {
   rejectionReason?: string;
   // TODO: Investigate and remove if confirmed unused (Redundant with scope?)
   // description?: string;
-} 
+}
