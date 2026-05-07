@@ -134,8 +134,15 @@ const PaymentFormModal: React.FC<PaymentFormModalProps> = ({
     const newErrors: Record<string, string> = {};
     
     const numericAmount = Number(actualAmount);
+    const remainingExpenseAmount = Math.max((expense?.amount || 0) - (expense?.amountPaid || 0), 0);
+    const maxPayableAmount = bidData
+      ? Math.min(remainingExpenseAmount, bidData.remainingAmount)
+      : remainingExpenseAmount;
+
     if (isNaN(numericAmount) || numericAmount <= 0) {
       newErrors.actualAmount = 'Please enter a valid positive amount.';
+    } else if (numericAmount > maxPayableAmount) {
+      newErrors.actualAmount = `Payment cannot exceed the remaining balance of ${formatCurrency(maxPayableAmount)}.`;
     }
     
     if (!paymentMethod) {
@@ -365,6 +372,7 @@ const PaymentFormModal: React.FC<PaymentFormModalProps> = ({
                   </InputAdornment>
                 )
               }}
+              inputProps={{ 'aria-label': 'Payment' }}
             />
           </Grid>
           
@@ -458,4 +466,4 @@ const PaymentFormModal: React.FC<PaymentFormModalProps> = ({
   );
 };
 
-export default PaymentFormModal; 
+export default PaymentFormModal;

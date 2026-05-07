@@ -269,34 +269,43 @@ class ProjectService {
 
     try {
       const projectRef = doc(this.collection, projectId);
-      
-      // Add updated timestamp
+
+      const { id: _id, ...projectFields } = projectData;
       const updatedData: Partial<FirestoreProject> = {
-        ...projectData,
-        startDate: projectData.startDate ? Timestamp.fromDate(projectData.startDate) : undefined,
-        endDate: projectData.endDate ? Timestamp.fromDate(projectData.endDate) : undefined,
+        ...(projectFields as Partial<FirestoreProject>),
         updatedAt: Timestamp.fromDate(new Date()),
-        budget: typeof projectData.budget === 'number' ? {
+      };
+
+      if ('startDate' in projectData) {
+        updatedData.startDate = projectData.startDate ? Timestamp.fromDate(projectData.startDate) : undefined;
+      }
+
+      if ('endDate' in projectData) {
+        updatedData.endDate = projectData.endDate ? Timestamp.fromDate(projectData.endDate) : undefined;
+      }
+
+      if ('budget' in projectData) {
+        updatedData.budget = typeof projectData.budget === 'number' ? {
           total: projectData.budget,
           spent: 0,
           remaining: projectData.budget
-        } : projectData.budget,
-        location: typeof projectData.location === 'string' ? {
+        } : projectData.budget;
+      }
+
+      if ('location' in projectData) {
+        updatedData.location = typeof projectData.location === 'string' ? {
           address: projectData.location,
           city: '',
           state: '',
           zipCode: ''
-        } : projectData.location,
-        lineItems: projectData.lineItems || [],
-        bids: projectData.bids || [],
-        tasks: projectData.tasks || [],
-        team: projectData.team || [],
-        keyMilestones: projectData.keyMilestones || [],
-        projections: projectData.projections || [],
-        status: projectData.status || 'estimate',
-        progress: projectData.progress || 0,
-        phases: projectData.phases || []
-      } as Partial<FirestoreProject>;
+        } : projectData.location;
+      }
+
+      Object.keys(updatedData).forEach((key) => {
+        if (updatedData[key as keyof FirestoreProject] === undefined) {
+          delete updatedData[key as keyof FirestoreProject];
+        }
+      });
 
       // Update document in Firestore
       await updateDoc(projectRef, updatedData);
@@ -1105,8 +1114,8 @@ class ProjectService {
       return project?.userId === userId ? project : null;
     }
 
-    // This is just a wrapper around getProjectById for backward compatibility
-    return this.getProjectById(projectId);
+    const project = await this.getProjectById(projectId);
+    return project?.userId === userId ? project : null;
   }
 
   // Method to create a kitchen remodel project

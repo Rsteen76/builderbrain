@@ -38,6 +38,10 @@
     "start": "react-scripts start",
     "build": "react-scripts build",
     "test": "react-scripts test",
+    "test:ci": "CI=true react-scripts test --watchAll=false",
+    "test:coverage": "CI=true react-scripts test --watchAll=false --coverage",
+    "test:rules": "firebase emulators:exec --only firestore \"node scripts/firestore-rules-test.js\"",
+    "test:e2e": "playwright test",
     "eject": "react-scripts eject"
   },
   "eslintConfig": {
@@ -57,5 +61,9 @@
       "last 1 firefox version",
       "last 1 safari version"
     ]
+  },
+  "devDependencies": {
+    "@firebase/rules-unit-testing": "^3.0.0",
+    "@playwright/test": "^1.59.1"
   }
 }

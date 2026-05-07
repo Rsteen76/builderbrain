@@ -136,7 +136,10 @@ export abstract class BaseService<T extends { id?: string }> {
         };
       }
       
-      const data = docSnap.data();
+      const data = {
+        ...docSnap.data(),
+        id: docSnap.id,
+      };
       const item = this.converter 
         ? this.converter.fromFirestore(data) 
         : { ...data, id: docSnap.id } as T;
@@ -197,7 +200,10 @@ export abstract class BaseService<T extends { id?: string }> {
       
       const items: T[] = [];
       querySnapshot.forEach((doc) => {
-        const data = doc.data();
+        const data = {
+          ...doc.data(),
+          id: doc.id,
+        };
         const item = this.converter 
           ? this.converter.fromFirestore(data) 
           : { ...data, id: doc.id } as T;
