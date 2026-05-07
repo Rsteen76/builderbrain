@@ -20,6 +20,7 @@ import {
   orderBy,
   Timestamp,
   QueryDocumentSnapshot,
+  runTransaction,
 } from 'firebase/firestore';
 import { Expense, ExpenseStatus } from '../types';
 import { toTimestamp, toDate } from '../utils/firestoreConverter'; // Added converter imports
@@ -34,6 +35,12 @@ type FirestoreExpense = Omit<Expense, 'date' | 'createdAt' | 'updatedAt' | 'paym
 
 export class ExpenseService {
   private static collection = collection(db, 'expenses');
+
+  private static bidPaymentExpenseId(bidId: string, paymentStageId: string): string {
+    const safeBidId = bidId.replace(/[^A-Za-z0-9_-]/g, '_');
+    const safeStageId = paymentStageId.replace(/[^A-Za-z0-9_-]/g, '_');
+    return `bid_${safeBidId}_stage_${safeStageId}`;
+  }
 
   static async createExpense(userId: string, expenseData: Omit<Expense, 'id' | 'userId' | 'createdBy' | 'createdAt' | 'updatedAt'> & { bidId?: string | null; paymentStageId?: string | null }): Promise<Expense> {
     if (!userId) throw new Error('User ID is required');
@@ -80,6 +87,78 @@ export class ExpenseService {
       console.error('Error creating expense:', error);
       throw error;
     }
+  }
+
+  static async createOrGetBidPaymentStageExpense(
+    userId: string,
+    bidId: string,
+    paymentStageId: string,
+    expenseData: Omit<Expense, 'id' | 'userId' | 'createdBy' | 'createdAt' | 'updatedAt'> & {
+      bidId?: string | null;
+      paymentStageId?: string | null;
+    }
+  ): Promise<Expense> {
+    if (!userId) throw new Error('User ID is required');
+    if (!bidId || !paymentStageId) {
+      throw new Error('Bid ID and payment stage ID are required');
+    }
+
+    const normalizedExpenseData = {
+      ...expenseData,
+      bidId,
+      paymentStageId,
+    };
+
+    if (isDevAuthBypassEnabled) {
+      const existingExpense = listDevExpenses(userId, { projectId: expenseData.projectId }).find(
+        (expense) => expense.bidId === bidId && expense.paymentStageId === paymentStageId
+      );
+
+      if (existingExpense) {
+        return existingExpense;
+      }
+
+      return createDevExpense(userId, normalizedExpenseData);
+    }
+
+    const expenseId = this.bidPaymentExpenseId(bidId, paymentStageId);
+    const expenseRef = doc(this.collection, expenseId);
+
+    return runTransaction(db, async (transaction) => {
+      const existingExpense = await transaction.get(expenseRef);
+      if (existingExpense.exists()) {
+        const data = existingExpense.data() as FirestoreExpense;
+        if (data.userId !== userId && data.createdBy !== userId) {
+          throw new Error('Existing bid payment expense belongs to a different user');
+        }
+        return this.convertFirestoreData(data, existingExpense.id);
+      }
+
+      const now = new Date();
+      const expenseDate = normalizedExpenseData.date
+        ? (typeof normalizedExpenseData.date === 'string'
+          ? new Date(normalizedExpenseData.date)
+          : toDate(normalizedExpenseData.date))
+        : now;
+      const expense = {
+        ...normalizedExpenseData,
+        userId,
+        createdBy: userId,
+        createdAt: now,
+        updatedAt: now,
+        date: expenseDate || now,
+        tags: normalizedExpenseData.tags || [],
+        paymentDetails: normalizedExpenseData.paymentDetails ?? null,
+      };
+      const firestoreExpense = this.convertToFirestore(expense);
+
+      transaction.set(expenseRef, firestoreExpense);
+
+      return {
+        ...expense,
+        id: expenseId,
+      } as Expense;
+    });
   }
 
   static async updateExpense(id: string, expenseData: Partial<Omit<Expense, 'id' | 'userId' | 'createdAt' | 'createdBy'>>): Promise<void> {

@@ -25,6 +25,7 @@ interface FirestoreExpenseTransaction extends Omit<ExpenseTransaction, 'id' | 't
 
 export class ExpenseTransactionService {
   private static collection = collection(db, 'expense_transactions');
+  private static readonly expenseIdInQueryLimit = 10;
 
   /**
    * Create a new expense transaction and update the related expense
@@ -220,6 +221,55 @@ export class ExpenseTransactionService {
       return querySnapshot.docs.map(doc => this.convertFromFirestore(doc));
     } catch (error) {
       console.error('Error fetching transactions for expense:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get transactions for multiple expenses using chunked Firestore in queries.
+   */
+  static async getTransactionsForExpenses(
+    userId: string,
+    expenseIds: string[]
+  ): Promise<ExpenseTransaction[]> {
+    const uniqueExpenseIds = Array.from(new Set(expenseIds.filter(Boolean)));
+    if (uniqueExpenseIds.length === 0) {
+      return [];
+    }
+
+    try {
+      const chunks: string[][] = [];
+      for (
+        let index = 0;
+        index < uniqueExpenseIds.length;
+        index += this.expenseIdInQueryLimit
+      ) {
+        chunks.push(uniqueExpenseIds.slice(index, index + this.expenseIdInQueryLimit));
+      }
+
+      const snapshots = await Promise.all(
+        chunks.map((expenseIdChunk) => {
+          const q = query(
+            this.collection,
+            where('expenseId', 'in', expenseIdChunk),
+            where('userId', '==', userId)
+          );
+
+          return getDocs(q);
+        })
+      );
+
+      return snapshots
+        .flatMap((querySnapshot) =>
+          querySnapshot.docs.map(doc => this.convertFromFirestore(doc))
+        )
+        .sort(
+          (a, b) =>
+            new Date(b.transactionDate).getTime() -
+            new Date(a.transactionDate).getTime()
+        );
+    } catch (error) {
+      console.error('Error fetching transactions for expenses:', error);
       throw error;
     }
   }

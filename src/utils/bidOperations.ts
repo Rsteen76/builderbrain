@@ -41,6 +41,102 @@ export const findExistingExpenseForPaymentStage = async (
   }
 };
 
+const inferExpenseCategoryFromBid = (bid: Pick<Bid, 'scope' | 'title'>): ExpenseCategory => {
+  const text = `${bid.scope || ''} ${bid.title || ''}`.toLowerCase();
+
+  if (['labor', 'framing', 'install', 'carpentry'].some((term) => text.includes(term))) {
+    return 'labor';
+  }
+  if (['material', 'supplies', 'concrete', 'lumber'].some((term) => text.includes(term))) {
+    return 'materials';
+  }
+  if (['equipment', 'machinery', 'tools', 'rental'].some((term) => text.includes(term))) {
+    return 'equipment';
+  }
+  if (['permit', 'inspection', 'license', 'certification'].some((term) => text.includes(term))) {
+    return 'permits';
+  }
+
+  return 'subcontractor';
+};
+
+export const ensureExpensesForAcceptedBid = async (
+  userId: string,
+  bid: Bid
+): Promise<Bid> => {
+  if (!userId) throw new Error('User ID is required');
+  if (!bid.id) throw new Error('Bid ID is required');
+  if (bid.status !== 'accepted') return bid;
+
+  const paymentSchedule = bid.paymentSchedule || [];
+  if (paymentSchedule.length === 0) return bid;
+
+  const updatedSchedule: BidPaymentStage[] = [...paymentSchedule];
+  let scheduleChanged = false;
+
+  for (let index = 0; index < updatedSchedule.length; index += 1) {
+    const stage = updatedSchedule[index];
+    if (!stage.id) continue;
+
+    const existingExpense = stage.expenseId
+      ? null
+      : await findExistingExpenseForPaymentStage(userId, bid.id, stage.id);
+
+    if (stage.expenseId && !existingExpense) {
+      continue;
+    }
+
+    const expense = existingExpense || await ExpenseService.createOrGetBidPaymentStageExpense(
+      userId,
+      bid.id,
+      stage.id,
+      {
+        projectId: bid.projectId,
+        category: inferExpenseCategoryFromBid(bid),
+        description: `${stage.name} (${stage.percentage}%) - ${bid.title || bid.scope || 'Accepted bid'} - ${bid.subcontractorName || bid.contractorName || 'Unknown contractor'}`,
+        amount: stage.amount,
+        date: new Date(),
+        status: 'pending',
+        subcontractorId: bid.subcontractorId || '',
+        subcontractorName: bid.subcontractorName || bid.contractorName || '',
+        notes: `Payment stage: ${stage.name} (${stage.percentage}%) for accepted bid (ID: ${bid.id}).\n\nRequirements: ${stage.completionRequirements || stage.description || 'None'}\n\nOriginal bid notes: ${bid.notes || 'None'}`,
+        phaseId: stage.phaseId || bid.phaseId || '',
+        phaseName: stage.phaseName || bid.phaseName || '',
+      }
+    );
+
+    if (expense.id && updatedSchedule[index].expenseId !== expense.id) {
+      updatedSchedule[index] = {
+        ...updatedSchedule[index],
+        expenseId: expense.id,
+        updatedAt: new Date(),
+      };
+      scheduleChanged = true;
+    }
+  }
+
+  const paymentProgress = bid.paymentProgress || {
+    paid: 0,
+    pending: bid.totalAmount || 0,
+    remaining: bid.totalAmount || 0,
+  };
+
+  if (scheduleChanged || !bid.paymentProgress) {
+    await BidService.updateBid(bid.id, {
+      paymentSchedule: updatedSchedule,
+      paymentProgress,
+    });
+
+    return {
+      ...bid,
+      paymentSchedule: updatedSchedule,
+      paymentProgress,
+    };
+  }
+
+  return bid;
+};
+
 /**
  * Handle creating and updating bids with consistent expense generation
  */
@@ -233,60 +329,10 @@ export const submitBid = async (
     if (isNewlyAccepted) {
       logger.log(`Bid ${editingBidId || resultBid.id} is newly accepted. Creating expenses...`);
       try {
-        // Create expenses for all payment stages that don't already have an expense
-        for (const stage of paymentSchedule) {
-          try {
-            // Check if this payment stage already has an expense
-            const existingExpense = await findExistingExpenseForPaymentStage(
-              userId,
-              editingBidId || resultBid.id, 
-              stage.id
-            );
-            
-            if (existingExpense) {
-              logger.log(`Expense already exists for payment stage ${stage.id}, skipping creation`);
-              continue; // Skip to next stage
-            }
-            
-            // Create an expense for this payment stage
-            const expenseData: Omit<EnhancedExpense, 'id' | 'userId' | 'createdBy' | 'createdAt' | 'updatedAt'> = {
-              projectId: projectId,
-              category: 'subcontractor',
-              description: `${stage.name} (${stage.percentage}%) - ${bidData.title}`,
-              amount: stage.amount,
-              date: new Date(),
-              status: 'pending',
-              subcontractorId: bidData.subcontractorId || '',
-              subcontractorName: bidData.subcontractorName || '',
-              notes: `This expense is for payment stage: ${stage.name} (${stage.percentage}%) for accepted bid: ${bidData.title}`,
-              phaseId: stage.phaseId || bidData.phaseId || '',
-              phaseName: stage.phaseName || bidData.phaseName || '',
-              bidId: editingBidId || resultBid.id,
-              paymentStageId: stage.id
-            };
-            
-            // Create the expense
-            const expense = await ExpenseService.createExpense(userId, expenseData);
-            
-            // Update the payment stage with the expense ID
-            if (expense) {
-              const updatedSchedule = [...paymentSchedule] as BidPaymentStage[];
-              const stageIndex = updatedSchedule.findIndex(s => s.id === stage.id);
-              if (stageIndex !== -1) {
-                updatedSchedule[stageIndex].expenseId = expense.id;
-                
-                await BidService.updateBid(editingBidId || resultBid.id, {
-                  paymentSchedule: updatedSchedule
-                });
-              }
-            }
-          } catch (error) {
-            logger.error(`Error creating expense for payment stage ${stage.id}:`, error);
-          }
-        }
+        resultBid = await ensureExpensesForAcceptedBid(userId, resultBid);
       } catch (error) {
         logger.error('Error creating expenses for accepted bid:', error);
-        // We'll continue with the flow even if expense creation fails
+        throw error;
       }
     }
     

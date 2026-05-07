@@ -340,7 +340,7 @@ const ProjectOverviewTab: React.FC = () => {
                       </Box>
                     }
                     primaryTypographyProps={{ variant: 'body2', color: 'text.secondary' }}
-                    secondaryTypographyProps={{ variant: 'body1', fontWeight: 'medium' }}
+                    secondaryTypographyProps={{ variant: 'body1', fontWeight: 'medium', component: 'div' }}
                   />
                 </ListItem>
 
@@ -364,7 +364,7 @@ const ProjectOverviewTab: React.FC = () => {
                       />
                     }
                     primaryTypographyProps={{ variant: 'body2', color: 'text.secondary' }}
-                    secondaryTypographyProps={{ variant: 'body1', fontWeight: 'medium' }}
+                    secondaryTypographyProps={{ variant: 'body1', fontWeight: 'medium', component: 'div' }}
                   />
                 </ListItem>
 
@@ -719,6 +719,8 @@ const ProjectOverviewTab: React.FC = () => {
                               </Typography>
                             </>
                           }
+                          primaryTypographyProps={{ component: 'div' }}
+                          secondaryTypographyProps={{ component: 'div' }}
                         />
                       </ListItem>
                       {index < keyMilestones.length - 1 && (

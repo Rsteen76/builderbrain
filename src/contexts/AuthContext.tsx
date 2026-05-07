@@ -17,6 +17,9 @@ import {
 import { ensureDevDataSeeded } from '../services/devDataStore';
 import { UserService, User, UserRole } from '../services/user';
 
+const PROFILE_AUTH_ERROR =
+  'Unable to load your user profile. Please try signing in again.';
+
 interface AuthContextType {
   user: FirebaseUser | null;
   userData: User | null;
@@ -65,7 +68,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
       console.log("Auth state changed:", firebaseUser ? `User: ${firebaseUser.uid}` : "User signed out");
-      setUser(firebaseUser);
+      setLoading(true);
+      setError(null);
       
       if (firebaseUser) {
         try {
@@ -80,12 +84,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             console.log(`Found existing user data:`, userDoc);
           }
           
+          setUser(firebaseUser);
           setUserData(userDoc);
         } catch (err) {
           console.error('Error fetching user data:', err);
-          // Continue without Firestore data, but at least we have Firebase Auth data
+          setUser(null);
+          setUserData(null);
+          setError(err instanceof Error ? `${PROFILE_AUTH_ERROR} ${err.message}` : PROFILE_AUTH_ERROR);
         }
       } else {
+        setUser(null);
         setUserData(null);
       }
       
@@ -211,7 +219,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     userData,
     loading,
     error,
-    isAuthenticated: !!user,
+    isAuthenticated: !!user && !!userData && !error,
     role: userData?.role || 'team_member',
     signIn,
     signUp,

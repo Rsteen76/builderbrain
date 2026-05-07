@@ -17,16 +17,33 @@ service firebase.storage {
         firestore.get(/databases/(default)/documents/bids/$(bidId)).data.userId == request.auth.uid;
     }
 
+    function isAllowedDocumentUpload(fileName) {
+      return request.resource.size <= 10 * 1024 * 1024 &&
+        request.resource.contentType.matches('^(application/pdf|image/jpeg|image/png|image/webp)$') &&
+        fileName.matches('.*\\.(pdf|jpg|jpeg|png|webp)$');
+    }
+
+    function isAllowedImageUpload(fileName) {
+      return request.resource.size <= 5 * 1024 * 1024 &&
+        request.resource.contentType.matches('^(image/jpeg|image/png|image/webp)$') &&
+        fileName.matches('.*\\.(jpg|jpeg|png|webp)$');
+    }
+
     match /projects/{projectId}/{folder}/{fileName} {
-      allow read, write: if folder in ['documents', 'photos'] && isProjectOwner(projectId);
+      allow read, delete: if folder in ['documents', 'photos'] && isProjectOwner(projectId);
+      allow create, update: if isProjectOwner(projectId) &&
+        ((folder == 'documents' && isAllowedDocumentUpload(fileName)) ||
+         (folder == 'photos' && isAllowedImageUpload(fileName)));
     }
 
     match /users/{userId}/avatar.jpg {
-      allow read, write: if isAuthenticated() && request.auth.uid == userId;
+      allow read, delete: if isAuthenticated() && request.auth.uid == userId;
+      allow create, update: if isAuthenticated() && request.auth.uid == userId && isAllowedImageUpload('avatar.jpg');
     }
 
     match /bids/{bidId}/attachments/{fileName} {
-      allow read, write: if isBidOwner(bidId);
+      allow read, delete: if isBidOwner(bidId);
+      allow create, update: if isBidOwner(bidId) && isAllowedDocumentUpload(fileName);
     }
 
     match /{path=**} {

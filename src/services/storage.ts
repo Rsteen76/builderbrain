@@ -14,6 +14,23 @@ export interface UploadProgress {
   downloadURL?: string;
 }
 
+type UploadKind = 'document' | 'image';
+
+const MB = 1024 * 1024;
+
+const UPLOAD_LIMITS: Record<UploadKind, { maxSizeBytes: number; contentTypes: string[]; extensions: string[] }> = {
+  document: {
+    maxSizeBytes: 10 * MB,
+    contentTypes: ['application/pdf', 'image/jpeg', 'image/png', 'image/webp'],
+    extensions: ['.pdf', '.jpg', '.jpeg', '.png', '.webp'],
+  },
+  image: {
+    maxSizeBytes: 5 * MB,
+    contentTypes: ['image/jpeg', 'image/png', 'image/webp'],
+    extensions: ['.jpg', '.jpeg', '.png', '.webp'],
+  },
+};
+
 export class StorageService {
   // Project Documents
   static async uploadProjectDocument(
@@ -21,6 +38,7 @@ export class StorageService {
     file: File,
     onProgress?: (progress: UploadProgress) => void
   ): Promise<string> {
+    this.validateFile(file, 'document');
     const fileRef = ref(storage, `projects/${projectId}/documents/${file.name}`);
     return this.uploadFile(fileRef, file, onProgress);
   }
@@ -36,6 +54,7 @@ export class StorageService {
     file: File,
     onProgress?: (progress: UploadProgress) => void
   ): Promise<string> {
+    this.validateFile(file, 'image');
     const fileRef = ref(storage, `projects/${projectId}/photos/${file.name}`);
     return this.uploadFile(fileRef, file, onProgress);
   }
@@ -58,6 +77,7 @@ export class StorageService {
     file: File,
     onProgress?: (progress: UploadProgress) => void
   ): Promise<string> {
+    this.validateFile(file, 'image');
     const fileRef = ref(storage, `users/${userId}/avatar.jpg`);
     return this.uploadFile(fileRef, file, onProgress);
   }
@@ -68,6 +88,7 @@ export class StorageService {
     file: File,
     onProgress?: (progress: UploadProgress) => void
   ): Promise<string> {
+    this.validateFile(file, 'image');
     const fileRef = ref(storage, `companies/${companyId}/logo.jpg`);
     return this.uploadFile(fileRef, file, onProgress);
   }
@@ -78,6 +99,7 @@ export class StorageService {
     file: File,
     onProgress?: (progress: UploadProgress) => void
   ): Promise<string> {
+    this.validateFile(file, 'document');
     const fileRef = ref(storage, `bids/${bidId}/attachments/${file.name}`);
     return this.uploadFile(fileRef, file, onProgress);
   }
@@ -94,7 +116,7 @@ export class StorageService {
     onProgress?: (progress: UploadProgress) => void
   ): Promise<string> {
     try {
-      const snapshot = await uploadBytes(fileRef, file);
+      const snapshot = await uploadBytes(fileRef, file, { contentType: file.type });
       const downloadURL = await getDownloadURL(snapshot.ref);
       
       if (onProgress) {
@@ -114,6 +136,23 @@ export class StorageService {
         });
       }
       throw error;
+    }
+  }
+
+  private static validateFile(file: File, kind: UploadKind): void {
+    const limits = UPLOAD_LIMITS[kind];
+
+    if (!limits.contentTypes.includes(file.type)) {
+      throw new Error(`Unsupported file type: ${file.type || 'unknown'}`);
+    }
+
+    const fileName = file.name.toLowerCase();
+    if (!limits.extensions.some((extension) => fileName.endsWith(extension))) {
+      throw new Error('Unsupported file extension');
+    }
+
+    if (file.size > limits.maxSizeBytes) {
+      throw new Error(`File size exceeds ${limits.maxSizeBytes / MB}MB limit`);
     }
   }
 

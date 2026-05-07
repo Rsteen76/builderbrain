@@ -4,7 +4,7 @@ jest.mock('../config/firebase', () => ({
 
 import { ExpenseService } from './expense';
 import { Expense, ExpenseCategory, ExpenseStatus, PaymentDetails } from '../types'; // Adjust path as necessary
-import { Timestamp, addDoc, updateDoc, doc, collection, getDocs } from 'firebase/firestore';
+import { Timestamp, addDoc, updateDoc, doc, collection, getDocs, runTransaction } from 'firebase/firestore';
 
 type FirestoreLikeExpense = Omit<Partial<Expense>, 'date' | 'createdAt' | 'updatedAt'> & {
   date?: any;
@@ -43,6 +43,7 @@ jest.mock('firebase/firestore', () => {
     where: jest.fn(),
     orderBy: jest.fn(),
     collection: jest.fn((db, path) => `mocked_collection_path_for_${path}`),
+    runTransaction: jest.fn(),
     Timestamp: MockTimestamp,
   };
 });
@@ -51,6 +52,7 @@ describe('ExpenseService', () => {
   const mockAddDoc = addDoc as jest.Mock;
   const mockUpdateDoc = updateDoc as jest.Mock;
   const mockDoc = doc as jest.Mock;
+  const mockRunTransaction = runTransaction as jest.Mock;
   // const mockCollection = collection as jest.Mock; // Already mocked above
 
   const userId = 'test-user-id';
@@ -60,8 +62,86 @@ describe('ExpenseService', () => {
     mockAddDoc.mockClear();
     mockUpdateDoc.mockClear();
     mockDoc.mockClear();
+    mockRunTransaction.mockReset();
     (Timestamp.fromDate as jest.Mock).mockClear().mockImplementation((date: Date) => new (Timestamp as any)(date));
     (Timestamp.now as jest.Mock).mockClear().mockImplementation(() => new (Timestamp as any)(new Date()));
+  });
+
+  describe('createOrGetBidPaymentStageExpense', () => {
+    const stageExpenseData: Omit<Expense, 'id' | 'userId' | 'createdBy' | 'createdAt' | 'updatedAt'> = {
+      projectId,
+      category: 'subcontractor' as ExpenseCategory,
+      description: 'Down Payment - Accepted Bid',
+      amount: 500,
+      date: mockDate,
+      status: 'pending' as ExpenseStatus,
+      subcontractorId: 'sub-1',
+      subcontractorName: 'Framing Co',
+    };
+
+    test('creates bid payment expense at a deterministic document id', async () => {
+      const transaction = {
+        get: jest.fn().mockResolvedValue({ exists: () => false }),
+        set: jest.fn(),
+      };
+      mockDoc.mockReturnValue('mocked_doc_ref_for_bid_bid_1_stage_stage_1');
+      mockRunTransaction.mockImplementation(async (_db, callback) => callback(transaction));
+
+      const result = await ExpenseService.createOrGetBidPaymentStageExpense(
+        userId,
+        'bid-1',
+        'stage-1',
+        stageExpenseData
+      );
+
+      expect(mockDoc).toHaveBeenCalledWith(
+        'mocked_collection_path_for_expenses',
+        'bid_bid-1_stage_stage-1'
+      );
+      expect(transaction.get).toHaveBeenCalledWith('mocked_doc_ref_for_bid_bid_1_stage_stage_1');
+      expect(transaction.set).toHaveBeenCalledTimes(1);
+
+      const payload = transaction.set.mock.calls[0][1];
+      expect(payload.bidId).toBe('bid-1');
+      expect(payload.paymentStageId).toBe('stage-1');
+      expect(payload.userId).toBe(userId);
+      expect(result.id).toBe('bid_bid-1_stage_stage-1');
+    });
+
+    test('returns existing bid payment expense without creating a duplicate', async () => {
+      const existingData = {
+        ...stageExpenseData,
+        userId,
+        createdBy: userId,
+        bidId: 'bid-1',
+        paymentStageId: 'stage-1',
+        date: Timestamp.fromDate(mockDate),
+        createdAt: Timestamp.fromDate(mockDate),
+        updatedAt: Timestamp.fromDate(mockDate),
+      };
+      const transaction = {
+        get: jest.fn().mockResolvedValue({
+          id: 'bid_bid-1_stage_stage-1',
+          exists: () => true,
+          data: () => existingData,
+        }),
+        set: jest.fn(),
+      };
+      mockDoc.mockReturnValue('mocked_doc_ref_for_bid_bid_1_stage_stage_1');
+      mockRunTransaction.mockImplementation(async (_db, callback) => callback(transaction));
+
+      const result = await ExpenseService.createOrGetBidPaymentStageExpense(
+        userId,
+        'bid-1',
+        'stage-1',
+        stageExpenseData
+      );
+
+      expect(transaction.set).not.toHaveBeenCalled();
+      expect(result.id).toBe('bid_bid-1_stage_stage-1');
+      expect(result.bidId).toBe('bid-1');
+      expect(result.paymentStageId).toBe('stage-1');
+    });
   });
 
   describe('createExpense', () => {

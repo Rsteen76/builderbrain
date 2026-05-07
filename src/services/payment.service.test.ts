@@ -13,6 +13,7 @@ jest.mock('./expense', () => ({
 jest.mock('./expense-transaction', () => ({
   ExpenseTransactionService: {
     getTransactionsForExpense: jest.fn(),
+    getTransactionsForExpenses: jest.fn(),
   },
 }));
 
@@ -44,6 +45,8 @@ jest.mock('./accounting', () => ({
 const mockGetExpenses = ExpenseService.getExpenses as jest.Mock;
 const mockGetTransactionsForExpense =
   ExpenseTransactionService.getTransactionsForExpense as jest.Mock;
+const mockGetTransactionsForExpenses =
+  ExpenseTransactionService.getTransactionsForExpenses as jest.Mock;
 const mockGetAccountingDashboard =
   AccountingService.getAccountingDashboard as jest.Mock;
 
@@ -86,6 +89,7 @@ describe('PaymentService', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockGetTransactionsForExpense.mockResolvedValue([]);
+    mockGetTransactionsForExpenses.mockResolvedValue([]);
     mockGetAccountingDashboard.mockResolvedValue({
       commitments: [],
       vendorInvoices: [],
@@ -195,7 +199,7 @@ describe('PaymentService', () => {
         transactionIds: ['transaction-1', 'transaction-2'],
       }),
     ]);
-    mockGetTransactionsForExpense.mockResolvedValue([
+    mockGetTransactionsForExpenses.mockResolvedValue([
       baseTransaction({ id: 'transaction-1', amount: 350 }),
       baseTransaction({
         id: 'transaction-2',
@@ -208,10 +212,11 @@ describe('PaymentService', () => {
       now: new Date('2026-05-07T00:00:00.000Z'),
     });
 
-    expect(mockGetTransactionsForExpense).toHaveBeenCalledWith(
+    expect(mockGetTransactionsForExpenses).toHaveBeenCalledWith(
       'user-1',
-      'expense-transaction-backed'
+      ['expense-transaction-backed']
     );
+    expect(mockGetTransactionsForExpense).not.toHaveBeenCalled();
     expect(dashboard.summary.totalReceived).toBe(500);
     expect(dashboard.summary.pending).toBe(300);
     expect(dashboard.summary.thisMonth).toBe(350);
@@ -232,7 +237,7 @@ describe('PaymentService', () => {
         transactionIds: ['transaction-1', 'transaction-2', 'transaction-3'],
       }),
     ]);
-    mockGetTransactionsForExpense.mockResolvedValue([
+    mockGetTransactionsForExpenses.mockResolvedValue([
       baseTransaction({ id: 'transaction-1', amount: 350, status: 'completed' }),
       baseTransaction({ id: 'transaction-2', amount: 125, status: 'pending' }),
       baseTransaction({ id: 'transaction-3', amount: 90, status: 'failed' }),
@@ -249,6 +254,56 @@ describe('PaymentService', () => {
     expect(dashboard.payments[1].status).toBe('pending');
     expect(dashboard.summary.totalReceived).toBe(350);
     expect(dashboard.summary.thisMonth).toBe(350);
+  });
+
+  test('bulk loads transactions for listed expenses instead of fetching one expense at a time', async () => {
+    mockGetExpenses.mockResolvedValue([
+      baseExpense({
+        id: 'expense-one',
+        projectName: 'Project One',
+        description: 'First invoice',
+        transactionIds: ['transaction-1'],
+      }),
+      baseExpense({
+        id: 'expense-two',
+        projectName: 'Project Two',
+        description: 'Second invoice',
+        transactionIds: ['transaction-2'],
+      }),
+      baseExpense({
+        id: 'expense-without-transactions',
+        amountPaid: 0,
+      }),
+    ]);
+    mockGetTransactionsForExpenses.mockResolvedValue([
+      baseTransaction({
+        id: 'transaction-1',
+        expenseId: 'expense-one',
+        projectId: 'project-1',
+        amount: 200,
+      }),
+      baseTransaction({
+        id: 'transaction-2',
+        expenseId: 'expense-two',
+        projectId: 'project-2',
+        amount: 300,
+      }),
+    ]);
+
+    const dashboard = await PaymentService.getPaymentsDashboard('user-1', {
+      now: new Date('2026-05-07T00:00:00.000Z'),
+    });
+
+    expect(mockGetTransactionsForExpenses).toHaveBeenCalledTimes(1);
+    expect(mockGetTransactionsForExpenses).toHaveBeenCalledWith('user-1', [
+      'expense-one',
+      'expense-two',
+    ]);
+    expect(mockGetTransactionsForExpense).not.toHaveBeenCalled();
+    expect(dashboard.payments.map((payment) => payment.id)).toEqual([
+      'transaction-1',
+      'transaction-2',
+    ]);
   });
 
   test('does not double count original expenses when payment record expenses exist', async () => {

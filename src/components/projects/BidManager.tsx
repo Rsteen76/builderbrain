@@ -21,14 +21,13 @@ import {
 import { Add as AddIcon, Edit as EditIcon, Delete as DeleteIcon, KeyboardArrowDown as KeyboardArrowDownIcon, KeyboardArrowUp as KeyboardArrowUpIcon, MonetizationOn as MoneyIcon, AttachMoney as AttachMoneyIcon, Business as BusinessIcon, Event as EventIcon, Description as DescriptionIcon, Gavel as GavelIcon, Check as CheckIcon, Close as CloseIcon, CheckCircle as CheckCircleIcon, HourglassEmpty as HourglassEmptyIcon, ReceiptLong as ReceiptIcon } from '@mui/icons-material';
 import { ProjectService } from '../../services/project';
 import { BidService, BidFilter, BidSort, BidSortField, SortDirection } from '../../services/bid'; // Import filter/sort types
-import { ExpenseService } from '../../services/expense';
-import { Project, Bid, Expense, BidPaymentStage } from '../../types';
+import { Project, Bid } from '../../types';
 import BidFormModal from './BidFormModal'; // Import the modal
 import BidPaymentSchedule from './BidPaymentSchedule'; // Import payment schedule component
 import BidPaymentTermsModal from './BidPaymentTermsModal'; // Import the new payment terms modal
 import { visuallyHidden } from '@mui/utils'; // For accessibility with sorting
-import { v4 as uuidv4 } from 'uuid';
 import { formatCurrency, formatDate } from '../../utils/formatters';
+import { ensureExpensesForAcceptedBid } from '../../utils/bidOperations';
 
 // Define types for sorting
 type Order = SortDirection; // Use imported type
@@ -326,75 +325,10 @@ const BidManager: React.FC<BidManagerProps> = ({ project, userId, onProjectUpdat
       onProjectUpdate({ ...project, bids: updatedBidsList });
       handleCloseModal();
       
-      // If bid was accepted, directly create expense from payment schedule
+      // If bid was accepted, create idempotent expenses for the payment schedule.
       if (wasAccepted && savedBid.paymentSchedule && savedBid.paymentSchedule.length > 0) {
         try {
-          // Get the first payment stage to create an expense
-          const firstStage = savedBid.paymentSchedule[0];
-          
-          // Calculate payment progress
-          const totalAmount = savedBid.totalAmount;
-          const paymentProgress = {
-            paid: 0,
-            pending: totalAmount,
-            remaining: totalAmount
-          };
-          
-          // Update the bid with payment progress
-          await BidService.updateBid(savedBid.id, { paymentProgress });
-          
-          // Create an expense for the initial payment
-          // Map bid category to expense category
-          let expenseCategory: 'labor' | 'materials' | 'equipment' | 'permits' | 'other' = 'other';
-          
-          // Determine best category based on bid scope
-          const scope = savedBid.scope?.toLowerCase() || '';
-          if (scope.includes('labor') || 
-              scope.includes('framing') || 
-              scope.includes('install') ||
-              scope.includes('carpentry')) {
-            expenseCategory = 'labor';
-          } else if (scope.includes('material') || 
-                    scope.includes('supplies') || 
-                    scope.includes('concrete') || 
-                    scope.includes('lumber')) {
-            expenseCategory = 'materials';
-          } else if (scope.includes('equipment') || 
-                    scope.includes('machinery') || 
-                    scope.includes('tools') ||
-                    scope.includes('rental')) {
-            expenseCategory = 'equipment';
-          } else if (scope.includes('permit') || 
-                    scope.includes('inspection') || 
-                    scope.includes('license') ||
-                    scope.includes('certification')) {
-            expenseCategory = 'permits';
-          }
-          
-          const expenseData: Omit<Expense, 'id' | 'userId' | 'createdAt' | 'updatedAt' | 'createdBy'> = {
-            projectId: savedBid.projectId,
-            category: expenseCategory,
-            description: `${firstStage.name} (${firstStage.percentage}%) - ${savedBid.title || savedBid.scope || 'Unnamed bid'} - ${savedBid.subcontractorName || 'Unknown contractor'}`,
-            amount: firstStage.amount,
-            date: new Date(),
-            status: 'pending',
-            subcontractorId: savedBid.subcontractorId || '',
-            subcontractorName: savedBid.subcontractorName || '',
-            notes: `This expense is for payment stage: ${firstStage.name} (${firstStage.percentage}%) for accepted bid (ID: ${savedBid.id}).\n\nRequirements: ${firstStage.completionRequirements || 'None'}\n\nOriginal bid notes: ${savedBid.notes || 'None'}`,
-          };
-          
-          // Create the expense
-          const expense = await ExpenseService.createExpense(userId, expenseData);
-          
-          // Update the payment stage with the expense ID
-          if (expense) {
-            const updatedSchedule = [...savedBid.paymentSchedule];
-            updatedSchedule[0].expenseId = expense.id;
-            
-            await BidService.updateBid(savedBid.id, {
-              paymentSchedule: updatedSchedule
-            });
-          }
+          savedBid = await ensureExpensesForAcceptedBid(userId, savedBid);
           
           // Refresh the bids data
           if (userId && project.id) {
@@ -404,7 +338,7 @@ const BidManager: React.FC<BidManagerProps> = ({ project, userId, onProjectUpdat
             onProjectUpdate({ ...project, bids: refreshedBids });
           }
           
-          setSuccess(`Bid accepted with payment schedule. Initial payment of ${formatCurrency(firstStage.amount || 0)} has been added to expenses.`);
+          setSuccess(`Bid accepted with payment schedule. ${savedBid.paymentSchedule?.length || 0} payment expense(s) are ready for draw tracking.`);
           setTimeout(() => setSuccess(null), 5000);
         } catch (err) {
           console.error("Error creating expense:", err);

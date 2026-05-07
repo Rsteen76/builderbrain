@@ -26,7 +26,9 @@ export interface UseExpenseLineItemsReturn {
   totalLineItemsAmount: number; // State for the calculated total
 }
 
-export const useExpenseLineItems = (initialLineItems: ExpenseLineItemFormData[] = []): UseExpenseLineItemsReturn => {
+const DEFAULT_INITIAL_LINE_ITEMS: ExpenseLineItemFormData[] = [];
+
+export const useExpenseLineItems = (initialLineItems: ExpenseLineItemFormData[] = DEFAULT_INITIAL_LINE_ITEMS): UseExpenseLineItemsReturn => {
   const [lineItems, setLineItems] = useState<ExpenseLineItemFormData[]>(initialLineItems);
 
   const calculateTotalFromLineItems = useCallback(() => {

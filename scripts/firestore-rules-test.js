@@ -20,8 +20,12 @@ const {
 } = require('firebase/storage');
 
 const projectId = 'builderbrain-rules-test';
+const MB = 1024 * 1024;
 
 const now = () => new Date('2024-01-01T00:00:00.000Z');
+
+const uploadWithType = (storageRef, value, contentType) =>
+  uploadString(storageRef, value, 'raw', { contentType });
 
 const fixtures = {
   users: (userId) => ({
@@ -195,14 +199,21 @@ async function main() {
       const ownerStorage = testEnv.authenticatedContext('user-1').storage();
       const otherStorage = testEnv.authenticatedContext('user-2').storage();
       const unauthStorage = testEnv.unauthenticatedContext().storage();
-      const filePath = 'projects/project-1/documents/contract.txt';
+      const filePath = 'projects/project-1/documents/contract.pdf';
 
-      await assertSucceeds(uploadString(ref(ownerStorage, filePath), 'contract'));
+      await assertSucceeds(uploadWithType(ref(ownerStorage, filePath), 'contract', 'application/pdf'));
+      await assertSucceeds(uploadWithType(ref(ownerStorage, 'projects/project-1/documents/photo.jpg'), 'photo', 'image/jpeg'));
+      await assertSucceeds(uploadWithType(ref(ownerStorage, 'projects/project-1/photos/photo.jpg'), 'photo', 'image/jpeg'));
+      await assertFails(uploadWithType(ref(ownerStorage, 'projects/project-1/documents/script.html'), '<script></script>', 'text/html'));
+      await assertFails(uploadWithType(ref(ownerStorage, 'projects/project-1/documents/contract.txt'), 'contract', 'application/pdf'));
+      await assertFails(uploadWithType(ref(ownerStorage, 'projects/project-1/photos/contract.pdf'), 'contract', 'application/pdf'));
+      await assertFails(uploadWithType(ref(ownerStorage, 'projects/project-1/documents/large.pdf'), 'x'.repeat(10 * MB + 1), 'application/pdf'));
+      await assertFails(uploadWithType(ref(ownerStorage, 'projects/project-1/photos/large.jpg'), 'x'.repeat(5 * MB + 1), 'image/jpeg'));
       await assertSucceeds(getBytes(ref(ownerStorage, filePath)));
       await assertFails(getBytes(ref(otherStorage, filePath)));
-      await assertFails(uploadString(ref(otherStorage, 'projects/project-1/photos/photo.txt'), 'photo'));
-      await assertFails(uploadString(ref(unauthStorage, 'projects/project-1/photos/public.txt'), 'public'));
-      await assertFails(uploadString(ref(ownerStorage, 'projects/project-1/private/file.txt'), 'private'));
+      await assertFails(uploadWithType(ref(otherStorage, 'projects/project-1/photos/photo.jpg'), 'photo', 'image/jpeg'));
+      await assertFails(uploadWithType(ref(unauthStorage, 'projects/project-1/photos/public.jpg'), 'public', 'image/jpeg'));
+      await assertFails(uploadWithType(ref(ownerStorage, 'projects/project-1/private/file.jpg'), 'private', 'image/jpeg'));
       await assertSucceeds(deleteObject(ref(ownerStorage, filePath)));
     });
 
@@ -215,12 +226,14 @@ async function main() {
       const unauthStorage = testEnv.unauthenticatedContext().storage();
       const avatarPath = 'users/user-1/avatar.jpg';
 
-      await assertSucceeds(uploadString(ref(ownerStorage, avatarPath), 'avatar'));
+      await assertSucceeds(uploadWithType(ref(ownerStorage, avatarPath), 'avatar', 'image/jpeg'));
       await assertSucceeds(getBytes(ref(ownerStorage, avatarPath)));
       await assertFails(getBytes(ref(otherStorage, avatarPath)));
-      await assertFails(uploadString(ref(otherStorage, avatarPath), 'avatar'));
-      await assertFails(uploadString(ref(unauthStorage, avatarPath), 'avatar'));
-      await assertFails(uploadString(ref(ownerStorage, 'users/user-1/profile.png'), 'avatar'));
+      await assertFails(uploadWithType(ref(otherStorage, avatarPath), 'avatar', 'image/jpeg'));
+      await assertFails(uploadWithType(ref(unauthStorage, avatarPath), 'avatar', 'image/jpeg'));
+      await assertFails(uploadWithType(ref(ownerStorage, avatarPath), 'avatar', 'image/gif'));
+      await assertFails(uploadWithType(ref(ownerStorage, avatarPath), 'x'.repeat(5 * MB + 1), 'image/jpeg'));
+      await assertFails(uploadWithType(ref(ownerStorage, 'users/user-1/profile.png'), 'avatar', 'image/png'));
     });
 
     await testEnv.clearFirestore();
@@ -233,14 +246,18 @@ async function main() {
 
       const ownerStorage = testEnv.authenticatedContext('user-1').storage();
       const otherStorage = testEnv.authenticatedContext('user-2').storage();
-      const attachmentPath = 'bids/bid-1/attachments/spec.txt';
+      const attachmentPath = 'bids/bid-1/attachments/spec.pdf';
 
-      await assertSucceeds(uploadString(ref(ownerStorage, attachmentPath), 'spec'));
+      await assertSucceeds(uploadWithType(ref(ownerStorage, attachmentPath), 'spec', 'application/pdf'));
+      await assertSucceeds(uploadWithType(ref(ownerStorage, 'bids/bid-1/attachments/detail.png'), 'detail', 'image/png'));
+      await assertFails(uploadWithType(ref(ownerStorage, 'bids/bid-1/attachments/script.svg'), '<svg></svg>', 'image/svg+xml'));
+      await assertFails(uploadWithType(ref(ownerStorage, 'bids/bid-1/attachments/spec.txt'), 'spec', 'application/pdf'));
+      await assertFails(uploadWithType(ref(ownerStorage, 'bids/bid-1/attachments/large.pdf'), 'x'.repeat(10 * MB + 1), 'application/pdf'));
       await assertSucceeds(getBytes(ref(ownerStorage, attachmentPath)));
       await assertFails(getBytes(ref(otherStorage, attachmentPath)));
-      await assertFails(uploadString(ref(otherStorage, attachmentPath), 'spec'));
-      await assertFails(uploadString(ref(ownerStorage, 'bids/missing-bid/attachments/spec.txt'), 'spec'));
-      await assertFails(uploadString(ref(ownerStorage, 'bids/bid-1/private/spec.txt'), 'spec'));
+      await assertFails(uploadWithType(ref(otherStorage, attachmentPath), 'spec', 'application/pdf'));
+      await assertFails(uploadWithType(ref(ownerStorage, 'bids/missing-bid/attachments/spec.pdf'), 'spec', 'application/pdf'));
+      await assertFails(uploadWithType(ref(ownerStorage, 'bids/bid-1/private/spec.pdf'), 'spec', 'application/pdf'));
       await assertSucceeds(deleteObject(ref(ownerStorage, attachmentPath)));
     });
   } finally {

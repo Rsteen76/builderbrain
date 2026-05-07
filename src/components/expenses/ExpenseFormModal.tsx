@@ -834,10 +834,13 @@ const ExpenseFormModal: React.FC<ExpenseFormModalProps> = ({
       fullWidth
       disableEnforceFocus
       disableScrollLock
+      aria-labelledby="expense-dialog-title"
     >
-      <DialogTitle sx={{ p: 2.5, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+      <DialogTitle component="div" sx={{ p: 2.5, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <Typography 
+          id="expense-dialog-title"
           variant="h6" 
+          component="h2"
           fontWeight="600" 
         >
           {isEditMode ? 'Edit Expense' : 'New Expense'}

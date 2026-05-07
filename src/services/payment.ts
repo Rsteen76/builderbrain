@@ -175,31 +175,39 @@ export class PaymentService {
     userId: string,
     expenses: Expense[]
   ): Promise<PaymentRecord[]> {
-    const transactionResults = await Promise.all(
-      expenses
-        .filter((expense) => expense.id && (expense.transactionIds || []).length > 0)
-        .map(async (expense) => {
-          try {
-            const transactions = await ExpenseTransactionService.getTransactionsForExpense(
-              userId,
-              expense.id!
-            );
-            return transactions
-              .filter((transaction) =>
-                ['completed', 'pending'].includes(transaction.status)
-              )
-              .map((transaction) => this.fromTransaction(transaction, expense));
-          } catch (error) {
-            logger.error(
-              `PaymentService: Failed to load transactions for expense ${expense.id}`,
-              error
-            );
-            return [this.fromExpensePayment(expense)];
-          }
-        })
+    const transactionBackedExpenses = expenses.filter(
+      (expense) => expense.id && (expense.transactionIds || []).length > 0
     );
+    if (transactionBackedExpenses.length === 0) {
+      return [];
+    }
 
-    return transactionResults.flat();
+    try {
+      const transactions = await ExpenseTransactionService.getTransactionsForExpenses(
+        userId,
+        transactionBackedExpenses.map((expense) => expense.id!)
+      );
+      const expensesById = new Map(
+        transactionBackedExpenses.map((expense) => [expense.id, expense])
+      );
+
+      return transactions
+        .filter((transaction) =>
+          ['completed', 'pending'].includes(transaction.status)
+        )
+        .flatMap((transaction) => {
+          const expense = expensesById.get(transaction.expenseId);
+          return expense ? [this.fromTransaction(transaction, expense)] : [];
+        });
+    } catch (error) {
+      logger.error(
+        'PaymentService: Failed to load transactions for payment dashboard',
+        error
+      );
+      return transactionBackedExpenses.map((expense) =>
+        this.fromExpensePayment(expense)
+      );
+    }
   }
 
   private static fromTransaction(

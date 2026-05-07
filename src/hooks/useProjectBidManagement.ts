@@ -3,6 +3,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { useProjectBids, useCreateBid, useUpdateBid, useDeleteBid } from './use-bids';
 import { Bid, BidPaymentStage, ProjectPhase } from '../types';
 import { showNotification } from '../utils/notifications';
+import { ensureExpensesForAcceptedBid } from '../utils/bidOperations';
 
 type BidFormData = {
   title: string;
@@ -304,9 +305,10 @@ export function useProjectBidManagement(projectId: string, userId: string, phase
       const cleanBidData = removeUndefinedFields(bidData);
       
       // Check if we're updating an existing bid or creating a new one
+      let savedBid: Bid;
       if (editingBidId) {
         // Update existing bid
-        await updateBidMutation.mutateAsync({ id: editingBidId, data: cleanBidData });
+        savedBid = await updateBidMutation.mutateAsync({ id: editingBidId, data: cleanBidData });
         
         // Show success notification
         showNotification('Bid updated successfully', 'success');
@@ -320,13 +322,17 @@ export function useProjectBidManagement(projectId: string, userId: string, phase
         } as Bid;
         
         // Save new bid to database
-        await createBidMutation.mutateAsync(newBid);
+        savedBid = await createBidMutation.mutateAsync(newBid);
         
         // Add to recent bids for easy comparison
         setRecentBids(prev => [newBid, ...prev].slice(0, 5));
         
         // Show success notification
         showNotification('Bid added successfully', 'success');
+      }
+
+      if (savedBid.status === 'accepted') {
+        await ensureExpensesForAcceptedBid(userId, savedBid);
       }
       
       // Reset editing state
@@ -352,7 +358,7 @@ export function useProjectBidManagement(projectId: string, userId: string, phase
   }, []);
   
   // Function to handle adding a quick bid
-  const handleAddQuickBid = useCallback((quickBid: QuickBidData) => {
+  const handleAddQuickBid = useCallback(async (quickBid: QuickBidData) => {
     // Only proceed if we have a valid phase ID and project
     if (!quickBid.phaseId || !projectId) return;
     
@@ -421,30 +427,17 @@ export function useProjectBidManagement(projectId: string, userId: string, phase
         }
       };
       
-      // Save the bid
-      createBidMutation.mutate(newBid as any, {
-        onSuccess: () => {
-          // Close the dialog
-          setNewBidDialogOpen(false);
-          setCurrentPhaseForBid(null);
-          
-          // Show success notification
-          showNotification(`Bid from ${quickBid.contractorName} added successfully`, 'success');
-          
-          // Refresh bids
-          refetch();
-        },
-        onError: (error: any) => {
-          console.error('Error adding quick bid:', error);
-          showNotification('Failed to add bid: ' + (error instanceof Error ? error.message : 'Unknown error'), 'error');
-        },
-        onSettled: () => {
-          setIsSaving(false);
-        }
-      });
+      const savedBid = await createBidMutation.mutateAsync(newBid as any);
+      await ensureExpensesForAcceptedBid(userId, savedBid);
+
+      setNewBidDialogOpen(false);
+      setCurrentPhaseForBid(null);
+      showNotification(`Bid from ${quickBid.contractorName} added successfully`, 'success');
+      refetch();
     } catch (error) {
       console.error('Error with quick bid:', error);
       showNotification('Failed to process bid: ' + (error instanceof Error ? error.message : 'Unknown error'), 'error');
+    } finally {
       setIsSaving(false);
     }
   }, [projectId, userId, phases, createBidMutation, refetch]);
