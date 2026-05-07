@@ -31,6 +31,14 @@ const emptyDashboard: PaymentsDashboardData = {
     pending: 0,
     overdue: 0,
     thisMonth: 0,
+    committed: 0,
+    commitmentOutstanding: 0,
+    vendorInvoiced: 0,
+    vendorPaid: 0,
+    retainageHeld: 0,
+    ownerBilled: 0,
+    ownerReceived: 0,
+    lienWaiversNeeded: 0,
   },
 };
 
@@ -128,6 +136,61 @@ const Payments: React.FC = () => {
           <Paper sx={{ p: 2, bgcolor: 'success.light', color: 'success.contrastText' }}>
             <Typography variant="h6">This Month</Typography>
             <Typography variant="h4">{formatCurrency(dashboard.summary.thisMonth)}</Typography>
+          </Paper>
+        </Grid>
+      </Grid>
+
+      <Typography variant="h5" sx={{ mt: 4, mb: 2 }}>
+        Commitments & Invoices
+      </Typography>
+
+      <Grid container spacing={3}>
+        <Grid item xs={12} md={3}>
+          <Paper sx={{ p: 2 }}>
+            <Typography variant="subtitle2" color="text.secondary">Committed</Typography>
+            <Typography variant="h5">{formatCurrency(dashboard.summary.committed)}</Typography>
+          </Paper>
+        </Grid>
+        <Grid item xs={12} md={3}>
+          <Paper sx={{ p: 2 }}>
+            <Typography variant="subtitle2" color="text.secondary">Commitment Balance</Typography>
+            <Typography variant="h5">{formatCurrency(dashboard.summary.commitmentOutstanding)}</Typography>
+          </Paper>
+        </Grid>
+        <Grid item xs={12} md={3}>
+          <Paper sx={{ p: 2 }}>
+            <Typography variant="subtitle2" color="text.secondary">Vendor Invoiced</Typography>
+            <Typography variant="h5">{formatCurrency(dashboard.summary.vendorInvoiced)}</Typography>
+          </Paper>
+        </Grid>
+        <Grid item xs={12} md={3}>
+          <Paper sx={{ p: 2 }}>
+            <Typography variant="subtitle2" color="text.secondary">Retainage Held</Typography>
+            <Typography variant="h5">{formatCurrency(dashboard.summary.retainageHeld)}</Typography>
+          </Paper>
+        </Grid>
+        <Grid item xs={12} md={3}>
+          <Paper sx={{ p: 2 }}>
+            <Typography variant="subtitle2" color="text.secondary">Vendor Paid</Typography>
+            <Typography variant="h5">{formatCurrency(dashboard.summary.vendorPaid)}</Typography>
+          </Paper>
+        </Grid>
+        <Grid item xs={12} md={3}>
+          <Paper sx={{ p: 2 }}>
+            <Typography variant="subtitle2" color="text.secondary">Owner Billed</Typography>
+            <Typography variant="h5">{formatCurrency(dashboard.summary.ownerBilled)}</Typography>
+          </Paper>
+        </Grid>
+        <Grid item xs={12} md={3}>
+          <Paper sx={{ p: 2 }}>
+            <Typography variant="subtitle2" color="text.secondary">Owner Received</Typography>
+            <Typography variant="h5">{formatCurrency(dashboard.summary.ownerReceived)}</Typography>
+          </Paper>
+        </Grid>
+        <Grid item xs={12} md={3}>
+          <Paper sx={{ p: 2 }}>
+            <Typography variant="subtitle2" color="text.secondary">Lien Waivers Needed</Typography>
+            <Typography variant="h5">{dashboard.summary.lienWaiversNeeded}</Typography>
           </Paper>
         </Grid>
       </Grid>

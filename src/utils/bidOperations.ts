@@ -1,5 +1,6 @@
 import { v4 as uuidv4 } from 'uuid';
 import { BidService } from '../services/bid';
+import { AccountingService } from '../services/accounting';
 import { ExpenseService } from '../services/expense';
 import { Bid, BidPaymentStage, Expense, ExpenseCategory } from '../types';
 import { db } from '../config/firebase';
@@ -220,6 +221,14 @@ export const submitBid = async (
     
     // Handle expenses ONLY when status transitions to 'accepted'
     const isNewlyAccepted = bidData.status === 'accepted' && (!existingBid || existingBid.status !== 'accepted');
+
+    if (resultBid.status === 'accepted') {
+      try {
+        await AccountingService.createOrUpdateCommitmentFromBid(userId, resultBid);
+      } catch (error) {
+        logger.error('Error creating accounting commitment for accepted bid:', error);
+      }
+    }
 
     if (isNewlyAccepted) {
       logger.log(`Bid ${editingBidId || resultBid.id} is newly accepted. Creating expenses...`);
@@ -447,6 +456,15 @@ export const createExtraBidExpense = async (
         paymentSchedule: recalculatedPaymentSchedule,
         paymentProgress: updatedProgress
       });
+
+      try {
+        const updatedBid = await BidService.getBid(userId, bidId);
+        if (updatedBid?.status === 'accepted') {
+          await AccountingService.createOrUpdateCommitmentFromBid(userId, updatedBid);
+        }
+      } catch (error) {
+        logger.error('Error updating accounting commitment for extra bid expense:', error);
+      }
       
       logger.log(`Updated bid ${bidId} with extra payment stage and adjusted payment schedule`);
     } else {
@@ -463,6 +481,15 @@ export const createExtraBidExpense = async (
           remaining: updatedTotalAmount - initialPaid
         }
       });
+
+      try {
+        const updatedBid = await BidService.getBid(userId, bidId);
+        if (updatedBid?.status === 'accepted') {
+          await AccountingService.createOrUpdateCommitmentFromBid(userId, updatedBid);
+        }
+      } catch (error) {
+        logger.error('Error updating accounting commitment for extra bid expense:', error);
+      }
       
       logger.log(`Created payment schedule with extra payment for bid ${bidId}`);
     }

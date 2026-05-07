@@ -29,6 +29,22 @@ const renderPayments = () =>
     </MemoryRouter>
   );
 
+const summary = (overrides = {}) => ({
+  totalReceived: 0,
+  pending: 0,
+  overdue: 0,
+  thisMonth: 0,
+  committed: 0,
+  commitmentOutstanding: 0,
+  vendorInvoiced: 0,
+  vendorPaid: 0,
+  retainageHeld: 0,
+  ownerBilled: 0,
+  ownerReceived: 0,
+  lienWaiversNeeded: 0,
+  ...overrides,
+});
+
 describe('Payments', () => {
   beforeEach(() => {
     jest.clearAllMocks();
@@ -38,10 +54,17 @@ describe('Payments', () => {
   test('loads and renders payment dashboard data', async () => {
     (PaymentService.getPaymentsDashboard as jest.Mock).mockResolvedValue({
       summary: {
-        totalReceived: 1250,
-        pending: 500,
-        overdue: 200,
-        thisMonth: 750,
+        ...summary({
+          totalReceived: 1250,
+          pending: 500,
+          overdue: 200,
+          thisMonth: 750,
+          committed: 4000,
+          commitmentOutstanding: 3000,
+          vendorInvoiced: 1500,
+          retainageHeld: 250,
+          lienWaiversNeeded: 2,
+        }),
       },
       payments: [
         {
@@ -69,6 +92,13 @@ describe('Payments', () => {
     expect(screen.getByText('$200.00')).toBeInTheDocument();
     expect(screen.getAllByText('$750.00')).toHaveLength(2);
     expect(screen.getByText('Total Paid')).toBeInTheDocument();
+    expect(screen.getByText('Commitments & Invoices')).toBeInTheDocument();
+    expect(screen.getByText('Committed')).toBeInTheDocument();
+    expect(screen.getByText('$4,000.00')).toBeInTheDocument();
+    expect(screen.getByText('Commitment Balance')).toBeInTheDocument();
+    expect(screen.getByText('$3,000.00')).toBeInTheDocument();
+    expect(screen.getByText('Lien Waivers Needed')).toBeInTheDocument();
+    expect(screen.getByText('2')).toBeInTheDocument();
     expect(screen.queryByText('Total Received')).not.toBeInTheDocument();
     expect(screen.getByText('Project One')).toBeInTheDocument();
     expect(screen.getByText('Material invoice')).toBeInTheDocument();
@@ -78,12 +108,7 @@ describe('Payments', () => {
 
   test('renders an empty state when there are no payments', async () => {
     (PaymentService.getPaymentsDashboard as jest.Mock).mockResolvedValue({
-      summary: {
-        totalReceived: 0,
-        pending: 0,
-        overdue: 0,
-        thisMonth: 0,
-      },
+      summary: summary(),
       payments: [],
     });
 
@@ -107,12 +132,7 @@ describe('Payments', () => {
 
   test('navigates to expenses for payment actions', async () => {
     (PaymentService.getPaymentsDashboard as jest.Mock).mockResolvedValue({
-      summary: {
-        totalReceived: 0,
-        pending: 0,
-        overdue: 0,
-        thisMonth: 0,
-      },
+      summary: summary(),
       payments: [],
     });
 

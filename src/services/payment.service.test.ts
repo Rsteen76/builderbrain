@@ -1,4 +1,5 @@
 import { PaymentService } from './payment';
+import { AccountingService } from './accounting';
 import { ExpenseService } from './expense';
 import { ExpenseTransactionService } from './expense-transaction';
 import { Expense, ExpenseTransaction } from '../types';
@@ -15,9 +16,36 @@ jest.mock('./expense-transaction', () => ({
   },
 }));
 
+const mockAccountingSummary = {
+  committed: 0,
+  commitmentOutstanding: 0,
+  vendorInvoiced: 0,
+  vendorPaid: 0,
+  retainageHeld: 0,
+  ownerBilled: 0,
+  ownerReceived: 0,
+  lienWaiversNeeded: 0,
+};
+
+jest.mock('./accounting', () => ({
+  AccountingService: {
+    getAccountingDashboard: jest.fn(),
+    emptyDashboard: jest.fn(() => ({
+      commitments: [],
+      vendorInvoices: [],
+      vendorPayments: [],
+      ownerInvoices: [],
+      ownerPayments: [],
+      summary: mockAccountingSummary,
+    })),
+  },
+}));
+
 const mockGetExpenses = ExpenseService.getExpenses as jest.Mock;
 const mockGetTransactionsForExpense =
   ExpenseTransactionService.getTransactionsForExpense as jest.Mock;
+const mockGetAccountingDashboard =
+  AccountingService.getAccountingDashboard as jest.Mock;
 
 const baseExpense = (overrides: Partial<Expense>): Expense => ({
   id: 'expense-1',
@@ -58,6 +86,14 @@ describe('PaymentService', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockGetTransactionsForExpense.mockResolvedValue([]);
+    mockGetAccountingDashboard.mockResolvedValue({
+      commitments: [],
+      vendorInvoices: [],
+      vendorPayments: [],
+      ownerInvoices: [],
+      ownerPayments: [],
+      summary: mockAccountingSummary,
+    });
   });
 
   test('builds dashboard totals from paid expense fields and open balances', async () => {
@@ -99,6 +135,7 @@ describe('PaymentService', () => {
       pending: 500,
       overdue: 250,
       thisMonth: 1000,
+      ...mockAccountingSummary,
     });
     expect(dashboard.payments).toHaveLength(1);
     expect(dashboard.payments[0]).toMatchObject({
@@ -107,6 +144,43 @@ describe('PaymentService', () => {
       paymentMethod: 'Check',
       referenceNumber: 'CHK-1',
       status: 'paid',
+    });
+  });
+
+  test('adds accounting commitment and invoice totals to the dashboard summary', async () => {
+    mockGetExpenses.mockResolvedValue([]);
+    mockGetAccountingDashboard.mockResolvedValue({
+      commitments: [],
+      vendorInvoices: [],
+      vendorPayments: [],
+      ownerInvoices: [],
+      ownerPayments: [],
+      summary: {
+        committed: 5000,
+        commitmentOutstanding: 4250,
+        vendorInvoiced: 1500,
+        vendorPaid: 750,
+        retainageHeld: 250,
+        ownerBilled: 3000,
+        ownerReceived: 2000,
+        lienWaiversNeeded: 2,
+      },
+    });
+
+    const dashboard = await PaymentService.getPaymentsDashboard('user-1', {
+      now: new Date('2026-05-07T00:00:00.000Z'),
+    });
+
+    expect(mockGetAccountingDashboard).toHaveBeenCalledWith('user-1');
+    expect(dashboard.summary).toMatchObject({
+      committed: 5000,
+      commitmentOutstanding: 4250,
+      vendorInvoiced: 1500,
+      vendorPaid: 750,
+      retainageHeld: 250,
+      ownerBilled: 3000,
+      ownerReceived: 2000,
+      lienWaiversNeeded: 2,
     });
   });
 

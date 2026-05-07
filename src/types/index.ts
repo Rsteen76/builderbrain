@@ -127,6 +127,7 @@ export * from './bid.types';
 export * from './task.types';
 export * from './expense.types';
 export * from './document.types';
+export * from './accounting.types';
 
 // Common types used across multiple domains
 export interface ApiResponse<T> {

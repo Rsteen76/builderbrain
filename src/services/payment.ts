@@ -1,6 +1,8 @@
 import { Expense, ExpenseTransaction, PaymentMethod } from '../types';
+import { AccountingService } from './accounting';
 import { ExpenseService } from './expense';
 import { ExpenseTransactionService } from './expense-transaction';
+import { logger } from '../utils/logger';
 
 export type PaymentStatus = 'paid' | 'pending' | 'overdue';
 
@@ -23,6 +25,14 @@ export interface PaymentSummary {
   pending: number;
   overdue: number;
   thisMonth: number;
+  committed: number;
+  commitmentOutstanding: number;
+  vendorInvoiced: number;
+  vendorPaid: number;
+  retainageHeld: number;
+  ownerBilled: number;
+  ownerReceived: number;
+  lienWaiversNeeded: number;
 }
 
 export interface PaymentsDashboardData {
@@ -74,6 +84,8 @@ const isSameMonth = (date: Date, referenceDate: Date): boolean =>
   date.getFullYear() === referenceDate.getFullYear() &&
   date.getMonth() === referenceDate.getMonth();
 
+const emptyAccountingSummary = () => AccountingService.emptyDashboard().summary;
+
 export class PaymentService {
   static async getPaymentsDashboard(
     userId: string,
@@ -84,7 +96,14 @@ export class PaymentService {
     }
 
     const now = options.now || new Date();
-    const expenses = await ExpenseService.getExpenses(userId);
+    const [expenses, accountingDashboard] = await Promise.all([
+      ExpenseService.getExpenses(userId),
+      AccountingService.getAccountingDashboard(userId).catch((error) => {
+        logger.error('PaymentService: Failed to load accounting dashboard', error);
+        return AccountingService.emptyDashboard();
+      }),
+    ]);
+    const accountingSummary = accountingDashboard.summary || emptyAccountingSummary();
     const explicitPaymentExpenseSourceIds = new Set(
       expenses
         .filter(isPaymentRecordExpense)
@@ -140,6 +159,14 @@ export class PaymentService {
             (payment) => payment.status === 'paid' && isSameMonth(payment.date, now)
           )
           .reduce((sum, payment) => sum + payment.amount, 0),
+        committed: accountingSummary.committed,
+        commitmentOutstanding: accountingSummary.commitmentOutstanding,
+        vendorInvoiced: accountingSummary.vendorInvoiced,
+        vendorPaid: accountingSummary.vendorPaid,
+        retainageHeld: accountingSummary.retainageHeld,
+        ownerBilled: accountingSummary.ownerBilled,
+        ownerReceived: accountingSummary.ownerReceived,
+        lienWaiversNeeded: accountingSummary.lienWaiversNeeded,
       },
     };
   }
@@ -163,7 +190,7 @@ export class PaymentService {
               )
               .map((transaction) => this.fromTransaction(transaction, expense));
           } catch (error) {
-            console.error(
+            logger.error(
               `PaymentService: Failed to load transactions for expense ${expense.id}`,
               error
             );
