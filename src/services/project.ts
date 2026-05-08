@@ -22,41 +22,13 @@ import {
   QueryDocumentSnapshot,
   DocumentData,
 } from 'firebase/firestore';
-import { Project, LineItem, Bid, Task, Phase, BudgetProjection } from '../types';
-import { v4 as uuidv4 } from 'uuid';
+import { Project } from '../types';
 import { StorageService } from './storage';
+import { convertFirestoreData, convertToProjectData } from './project/mappers';
+import { createResidentialPhases, getResidentialProjectEndDate } from './project/residential';
+import type { FirestoreProject } from './project/types';
 
-export interface FirestoreProject extends Omit<Project, 'id' | 'startDate' | 'endDate' | 'createdAt' | 'updatedAt' | 'budget' | 'location' | 'lineItems' | 'bids' | 'tasks' | 'team' | 'keyMilestones' | 'projections'> {
-  id?: string;
-  startDate?: Timestamp;
-  endDate?: Timestamp;
-  createdAt: Timestamp;
-  updatedAt: Timestamp;
-  budget: {
-    total: number;
-    spent: number;
-    remaining: number;
-    contingency?: number;
-  };
-  location: {
-    address: string;
-    city: string;
-    state: string;
-    zipCode: string;
-  };
-  lineItems: LineItem[];
-  bids: Bid[];
-  tasks: Task[];
-  team: string[];
-  keyMilestones: {
-    name: string;
-    date: Date | null;
-    description: string;
-  }[];
-  projections: BudgetProjection[];
-  status: 'estimate' | 'planning' | 'in_progress' | 'completed' | 'on_hold' | 'draft' | 'active' | 'cancelled';
-  progress: number;
-}
+export type { FirestoreProject } from './project/types';
 
 // Define as a non-export class here
 class ProjectService {
@@ -69,76 +41,6 @@ class ProjectService {
     'tasks',
     'documents',
   ];
-
-  // Utility function to safely convert dates to Firestore Timestamps
-  private static dateToTimestamp(date: Date | string | Timestamp | null | undefined): Timestamp | null {
-    if (!date) return null;
-    
-    if (date instanceof Timestamp) {
-      return date;
-    } else if (date instanceof Date) {
-      return Timestamp.fromDate(date);
-    } else if (typeof date === 'string') {
-      try {
-        return Timestamp.fromDate(new Date(date));
-      } catch (e) {
-        console.error('Failed to convert string date to Timestamp:', e);
-        return null;
-      }
-    }
-    
-    return null;
-  }
-
-  // Utility function to safely convert Timestamps or Date objects to JavaScript Date
-  private static convertTimestampToDate(value: any): Date | null {
-    if (!value) return null;
-    
-    if (value instanceof Timestamp && typeof value.toDate === 'function') {
-      return value.toDate();
-    } else if (value instanceof Date) {
-      return value;
-    } else if (typeof value === 'string') {
-      try {
-        return new Date(value);
-      } catch (e) {
-        console.error('Failed to convert string to Date:', e);
-        return null;
-      }
-    }
-    
-    return null;
-  }
-
-  private static convertToProjectData(data: FirestoreProject): Project {
-    const phases = (data.phases || []).map(phase => ({
-      ...phase,
-      startDate: this.convertTimestampToDate(phase.startDate),
-      endDate: this.convertTimestampToDate(phase.endDate)
-    }));
-
-    return {
-      id: data.id || '',
-      userId: data.userId,
-      name: data.name || '',
-      description: data.description || '',
-      status: data.status || 'estimate',
-      startDate: data.startDate ? data.startDate.toDate() : new Date(),
-      endDate: data.endDate ? data.endDate.toDate() : null,
-      createdAt: data.createdAt.toDate(),
-      updatedAt: data.updatedAt.toDate(),
-      budget: data.budget,
-      location: data.location,
-      phases,
-      lineItems: data.lineItems || [],
-      bids: data.bids || [],
-      tasks: data.tasks || [],
-      team: data.team || [],
-      keyMilestones: data.keyMilestones || [],
-      projections: data.projections || [],
-      progress: data.progress || 0
-    };
-  }
 
   private static async deleteDocsInBatches(
     docsToDelete: QueryDocumentSnapshot<DocumentData>[],
@@ -174,16 +76,6 @@ class ProjectService {
     );
 
     return snapshots.flat();
-  }
-
-  // Process phases to ensure dates are Firestore Timestamps
-  private static processPhasesDates(phases: Phase[] = []): Phase[] {
-    return phases.map(phase => ({
-      ...phase,
-      startDate: phase.startDate ? (phase.startDate instanceof Date ? Timestamp.fromDate(phase.startDate) : phase.startDate) : Timestamp.fromDate(new Date()),
-      endDate: phase.endDate ? (phase.endDate instanceof Date ? Timestamp.fromDate(phase.endDate) : phase.endDate) : 
-        Timestamp.fromDate(new Date(new Date().setDate(new Date().getDate() + 30)))
-    }));
   }
 
   static async createProject(userId: string, projectData: Partial<Project>): Promise<Project> {
@@ -291,7 +183,7 @@ class ProjectService {
       const projects: Project[] = [];
       querySnapshot.forEach((doc) => {
         const data = doc.data() as FirestoreProject;
-        projects.push(this.convertToProjectData({
+        projects.push(convertToProjectData({
           ...data,
           id: doc.id,
         }));
@@ -448,541 +340,8 @@ class ProjectService {
     
     return querySnapshot.docs.map(doc => {
       const data = doc.data() as FirestoreProject;
-      return this.convertFirestoreData(data, doc.id);
+      return convertFirestoreData(data, doc.id);
     });
-  }
-
-  private static convertFirestoreData(data: FirestoreProject, id: string): Project {
-    const convertedPhases = data.phases?.map((phase) => {
-      const startDate = this.convertTimestampToDate(phase.startDate);
-      const endDate =
-        this.convertTimestampToDate(phase.endDate) ??
-        (startDate ? this.addDays(startDate, 30) : null);
-
-      return {
-        ...phase,
-        projectId: phase.projectId || id,
-        startDate,
-        endDate,
-      };
-    }) || [];
-    const project: Project = {
-      ...data,
-      id: id,
-      userId: data.userId,
-      startDate: data.startDate?.toDate() || new Date(),
-      endDate: data.endDate ? data.endDate.toDate() : null,
-      createdAt: data.createdAt.toDate(),
-      updatedAt: data.updatedAt.toDate(),
-      budget: data.budget || {
-        total: 0,
-        spent: 0,
-        remaining: 0,
-      },
-      location: data.location || {
-        address: '',
-        city: '',
-        state: '',
-        zipCode: '',
-      },
-      lineItems: data.lineItems || [],
-      bids: data.bids || [],
-      tasks: data.tasks || [],
-      team: data.team || [],
-      phases: convertedPhases,
-      keyMilestones: data.keyMilestones || [],
-      requirements: data.requirements || { permits: [], inspections: [], documents: [] },
-      projections: data.projections || [],
-      progress: data.progress || 0,
-    };
-    return project;
-  }
-
-  /**
-   * Helper method to get phase description based on name
-   */
-  private static getPhasesDescription(phaseName: string): string {
-    switch(phaseName) {
-      case 'Pre-Construction':
-        return 'Planning, permits, site preparation, and initial design work';
-      case 'Site Work & Foundation':
-        return 'Clearing the site, excavation, pouring footings and foundation';
-      case 'Framing':
-        return 'Building the skeleton of the house including walls, floors, and roof';
-      case 'Exterior Finishing':
-        return 'Roofing, siding, windows, and doors';
-      case 'Rough-In Mechanical Systems':
-        return 'Electrical, plumbing, and HVAC rough-in installation';
-      case 'Insulation & Drywall':
-        return 'Installing insulation and hanging and finishing drywall';
-      case 'Interior Finishing':
-        return 'Painting, trim, cabinets, countertops, and flooring';
-      case 'Mechanical Trim-Out':
-        return 'Installing fixtures, outlets, switches, and appliances';
-      case 'Landscaping & Exterior Work':
-        return 'Basic grading, driveways, walkways, and plantings';
-      case 'Final Inspection & Closeout':
-        return 'Final walk-through, punch list items, and project delivery';
-      default:
-        return 'Construction phase';
-    }
-  }
-  
-  /**
-   * Helper method to create tasks based on phase name
-   */
-  private static createPhaseTasks(userId: string, projectId: string, phaseName: string): Task[] {
-    const tasks: Task[] = [];
-    
-    // Add common tasks for all phases
-    tasks.push({
-      id: uuidv4(),
-      userId,
-      projectId,
-      title: `Create ${phaseName} plan`,
-      status: 'todo',
-      priority: 'high',
-      createdAt: new Date(),
-      updatedAt: new Date()
-    });
-    tasks.push({
-      id: uuidv4(),
-      userId,
-      projectId,
-      title: `Assign ${phaseName} tasks`,
-      status: 'todo',
-      priority: 'high',
-      createdAt: new Date(),
-      updatedAt: new Date()
-    });
-    tasks.push({
-      id: uuidv4(),
-      userId,
-      projectId,
-      title: `Track ${phaseName} progress`,
-      status: 'todo',
-      priority: 'medium',
-      createdAt: new Date(),
-      updatedAt: new Date()
-    });
-    
-    // Add phase-specific tasks
-    switch(phaseName) {
-      case 'Pre-Construction':
-        tasks.push(
-          {
-            id: uuidv4(),
-            userId,
-            projectId,
-            title: 'Obtain building permits',
-            status: 'todo',
-            priority: 'high',
-            createdAt: new Date(),
-            updatedAt: new Date()
-          },
-          {
-            id: uuidv4(),
-            userId,
-            projectId,
-            title: 'Finalize architectural plans',
-            status: 'todo',
-            priority: 'high',
-            createdAt: new Date(),
-            updatedAt: new Date()
-          },
-          {
-            id: uuidv4(),
-            userId,
-            projectId,
-            title: 'Conduct site survey',
-            status: 'todo',
-            priority: 'medium',
-            createdAt: new Date(),
-            updatedAt: new Date()
-          }
-        );
-        break;
-      case 'Site Work & Foundation':
-        tasks.push(
-          {
-            id: uuidv4(),
-            userId,
-            projectId,
-            title: 'Clear and excavate site',
-            status: 'todo',
-            priority: 'high',
-            createdAt: new Date(),
-            updatedAt: new Date()
-          },
-          {
-            id: uuidv4(),
-            userId,
-            projectId,
-            title: 'Install footings',
-            status: 'todo',
-            priority: 'high',
-            createdAt: new Date(),
-            updatedAt: new Date()
-          },
-          {
-            id: uuidv4(),
-            userId,
-            projectId,
-            title: 'Pour foundation',
-            status: 'todo',
-            priority: 'high',
-            createdAt: new Date(),
-            updatedAt: new Date()
-          },
-          {
-            id: uuidv4(),
-            userId,
-            projectId,
-            title: 'Waterproof foundation',
-            status: 'todo',
-            priority: 'high',
-            createdAt: new Date(),
-            updatedAt: new Date()
-          }
-        );
-        break;
-      case 'Framing':
-        tasks.push(
-          {
-            id: uuidv4(),
-            userId,
-            projectId,
-            title: 'Frame exterior walls',
-            status: 'todo',
-            priority: 'high',
-            createdAt: new Date(),
-            updatedAt: new Date()
-          },
-          {
-            id: uuidv4(),
-            userId,
-            projectId,
-            title: 'Frame interior walls',
-            status: 'todo',
-            priority: 'high',
-            createdAt: new Date(),
-            updatedAt: new Date()
-          },
-          {
-            id: uuidv4(),
-            userId,
-            projectId,
-            title: 'Install roof trusses',
-            status: 'todo',
-            priority: 'high',
-            createdAt: new Date(),
-            updatedAt: new Date()
-          },
-          {
-            id: uuidv4(),
-            userId,
-            projectId,
-            title: 'Install roof sheathing',
-            status: 'todo',
-            priority: 'high',
-            createdAt: new Date(),
-            updatedAt: new Date()
-          }
-        );
-        break;
-      case 'Exterior Finishing':
-        tasks.push(
-          {
-            id: uuidv4(),
-            userId,
-            projectId,
-            title: 'Install roofing materials',
-            status: 'todo',
-            priority: 'high',
-            createdAt: new Date(),
-            updatedAt: new Date()
-          },
-          {
-            id: uuidv4(),
-            userId,
-            projectId,
-            title: 'Install exterior doors and windows',
-            status: 'todo',
-            priority: 'high',
-            createdAt: new Date(),
-            updatedAt: new Date()
-          },
-          {
-            id: uuidv4(),
-            userId,
-            projectId,
-            title: 'Install siding',
-            status: 'todo',
-            priority: 'medium',
-            createdAt: new Date(),
-            updatedAt: new Date()
-          }
-        );
-        break;
-      case 'Rough-In Mechanical Systems':
-        tasks.push(
-          {
-            id: uuidv4(),
-            userId,
-            projectId,
-            title: 'Install electrical rough-in',
-            status: 'todo',
-            priority: 'high',
-            createdAt: new Date(),
-            updatedAt: new Date()
-          },
-          {
-            id: uuidv4(),
-            userId,
-            projectId,
-            title: 'Install plumbing rough-in',
-            status: 'todo',
-            priority: 'high',
-            createdAt: new Date(),
-            updatedAt: new Date()
-          },
-          {
-            id: uuidv4(),
-            userId,
-            projectId,
-            title: 'Install HVAC rough-in',
-            status: 'todo',
-            priority: 'high',
-            createdAt: new Date(),
-            updatedAt: new Date()
-          }
-        );
-        break;
-      case 'Insulation & Drywall':
-        tasks.push(
-          {
-            id: uuidv4(),
-            userId,
-            projectId,
-            title: 'Install insulation',
-            status: 'todo',
-            priority: 'high',
-            createdAt: new Date(),
-            updatedAt: new Date()
-          },
-          {
-            id: uuidv4(),
-            userId,
-            projectId,
-            title: 'Hang drywall',
-            status: 'todo',
-            priority: 'high',
-            createdAt: new Date(),
-            updatedAt: new Date()
-          },
-          {
-            id: uuidv4(),
-            userId,
-            projectId,
-            title: 'Tape and mud drywall',
-            status: 'todo',
-            priority: 'medium',
-            createdAt: new Date(),
-            updatedAt: new Date()
-          },
-          {
-            id: uuidv4(),
-            userId,
-            projectId,
-            title: 'Sand and prime drywall',
-            status: 'todo',
-            priority: 'medium',
-            createdAt: new Date(),
-            updatedAt: new Date()
-          }
-        );
-        break;
-      case 'Interior Finishing':
-        tasks.push(
-          {
-            id: uuidv4(),
-            userId,
-            projectId,
-            title: 'Paint interior walls',
-            status: 'todo',
-            priority: 'medium',
-            createdAt: new Date(),
-            updatedAt: new Date()
-          },
-          {
-            id: uuidv4(),
-            userId,
-            projectId,
-            title: 'Install interior doors',
-            status: 'todo',
-            priority: 'medium',
-            createdAt: new Date(),
-            updatedAt: new Date()
-          },
-          {
-            id: uuidv4(),
-            userId,
-            projectId,
-            title: 'Install trim and molding',
-            status: 'todo',
-            priority: 'medium',
-            createdAt: new Date(),
-            updatedAt: new Date()
-          },
-          {
-            id: uuidv4(),
-            userId,
-            projectId,
-            title: 'Install cabinets and countertops',
-            status: 'todo',
-            priority: 'high',
-            createdAt: new Date(),
-            updatedAt: new Date()
-          },
-          {
-            id: uuidv4(),
-            userId,
-            projectId,
-            title: 'Install flooring',
-            status: 'todo',
-            priority: 'high',
-            createdAt: new Date(),
-            updatedAt: new Date()
-          }
-        );
-        break;
-      case 'Mechanical Trim-Out':
-        tasks.push(
-          {
-            id: uuidv4(),
-            userId,
-            projectId,
-            title: 'Install electrical fixtures',
-            status: 'todo',
-            priority: 'high',
-            createdAt: new Date(),
-            updatedAt: new Date()
-          },
-          {
-            id: uuidv4(),
-            userId,
-            projectId,
-            title: 'Install plumbing fixtures',
-            status: 'todo',
-            priority: 'high',
-            createdAt: new Date(),
-            updatedAt: new Date()
-          },
-          {
-            id: uuidv4(),
-            userId,
-            projectId,
-            title: 'Install HVAC registers and grilles',
-            status: 'todo',
-            priority: 'medium',
-            createdAt: new Date(),
-            updatedAt: new Date()
-          },
-          {
-            id: uuidv4(),
-            userId,
-            projectId,
-            title: 'Install appliances',
-            status: 'todo',
-            priority: 'medium',
-            createdAt: new Date(),
-            updatedAt: new Date()
-          }
-        );
-        break;
-      case 'Landscaping & Exterior Work':
-        tasks.push(
-          {
-            id: uuidv4(),
-            userId,
-            projectId,
-            title: 'Rough grade yard',
-            status: 'todo',
-            priority: 'medium',
-            createdAt: new Date(),
-            updatedAt: new Date()
-          },
-          {
-            id: uuidv4(),
-            userId,
-            projectId,
-            title: 'Install driveway and walkways',
-            status: 'todo',
-            priority: 'medium',
-            createdAt: new Date(),
-            updatedAt: new Date()
-          },
-          {
-            id: uuidv4(),
-            userId,
-            projectId,
-            title: 'Install basic landscaping',
-            status: 'todo',
-            priority: 'low',
-            createdAt: new Date(),
-            updatedAt: new Date()
-          }
-        );
-        break;
-      case 'Final Inspection & Closeout':
-        tasks.push(
-          {
-            id: uuidv4(),
-            userId,
-            projectId,
-            title: 'Schedule final inspections',
-            status: 'todo',
-            priority: 'high',
-            createdAt: new Date(),
-            updatedAt: new Date()
-          },
-          {
-            id: uuidv4(),
-            userId,
-            projectId,
-            title: 'Complete punch list items',
-            status: 'todo',
-            priority: 'high',
-            createdAt: new Date(),
-            updatedAt: new Date()
-          },
-          {
-            id: uuidv4(),
-            userId,
-            projectId,
-            title: 'Conduct final walk-through',
-            status: 'todo',
-            priority: 'high',
-            createdAt: new Date(),
-            updatedAt: new Date()
-          },
-          {
-            id: uuidv4(),
-            userId,
-            projectId,
-            title: 'Deliver project documentation',
-            status: 'todo',
-            priority: 'medium',
-            createdAt: new Date(),
-            updatedAt: new Date()
-          }
-        );
-        break;
-      default:
-        throw new Error(`Unknown phase: ${phaseName}`);
-    }
-
-    return tasks;
   }
 
   /**
@@ -996,107 +355,25 @@ class ProjectService {
     projectData: Omit<Project, 'id' | 'userId' | 'createdAt' | 'updatedAt' | 'phases'>
   ): Promise<Project> {
     try {
-      // First create the basic project
       const project = await this.createProject(userId, {
         ...projectData,
         projectType: 'Residential Construction'
       });
 
-      // Calculate total budget from project data
       const totalBudget = typeof projectData.budget === 'number'
         ? projectData.budget
         : (projectData.budget?.total || 0);
-      
-      // Get project start date from projectData or use today if not provided
       const projectStartDate = projectData.startDate || new Date();
+      const projectEndDate = getResidentialProjectEndDate(projectStartDate, projectData.endDate);
+      const residentialPhases = createResidentialPhases(
+        userId,
+        project.id,
+        projectStartDate,
+        projectEndDate,
+        totalBudget
+      );
+      const allTasks = residentialPhases.flatMap(phase => phase.tasks || []);
 
-      // Get project end date if provided, or calculate it based on standard duration
-      const hasUserProvidedEndDate = projectData.endDate !== undefined && projectData.endDate !== null;
-      // If user provided an end date, use it directly
-      const projectEndDate = hasUserProvidedEndDate 
-        ? (projectData.endDate instanceof Date 
-           ? projectData.endDate 
-           : (typeof projectData.endDate === 'string' || typeof projectData.endDate === 'number')
-             ? new Date(projectData.endDate)
-             : this.addDays(new Date(projectStartDate), 270))
-        : this.addDays(new Date(projectStartDate), 270); // Default to ~9 months if no end date specified
-
-      // Calculate total project duration in days
-      const totalProjectDays = Math.ceil((projectEndDate.getTime() - new Date(projectStartDate).getTime()) / (1000 * 60 * 60 * 24));
-
-      // Adjust phase duration based on total project days
-      const phaseDuration = Math.floor(totalProjectDays / 10); // Divide by number of phases for even distribution
-      
-      // Define standard residential construction phases with percentage allocations
-      const phaseAllocations = [
-        { name: 'Pre-Construction', percentage: 0.05 }, // 5%
-        { name: 'Site Work & Foundation', percentage: 0.15 }, // 15%
-        { name: 'Framing', percentage: 0.2 }, // 20%
-        { name: 'Exterior Finishing', percentage: 0.1 }, // 10%
-        { name: 'Rough-In Mechanical Systems', percentage: 0.1 }, // 10%
-        { name: 'Insulation & Drywall', percentage: 0.08 }, // 8%
-        { name: 'Interior Finishing', percentage: 0.15 }, // 15%
-        { name: 'Mechanical Trim-Out', percentage: 0.07 }, // 7%
-        { name: 'Landscaping & Exterior Work', percentage: 0.05 }, // 5%
-        { name: 'Final Inspection & Closeout', percentage: 0.05 }, // 5%
-      ];
-      
-      // Validate that percentages add up to 100%
-      const totalPercentage = phaseAllocations.reduce((sum, phase) => sum + phase.percentage, 0);
-      if (Math.abs(totalPercentage - 1) > 0.001) { // Allow for small floating point errors
-        console.warn(`Phase budget allocations don't add up to 100% (actual: ${totalPercentage * 100}%). Normalizing values.`);
-        // Normalize percentages to ensure they sum to exactly 1 (100%)
-        phaseAllocations.forEach(phase => {
-          phase.percentage = phase.percentage / totalPercentage;
-        });
-      }
-      
-      // Create phases with normalized budget allocations
-      const residentialPhases: Phase[] = [];
-      let remainingDays = 0;
-      
-      phaseAllocations.forEach((allocation, index) => {
-        // Calculate exact budget based on percentage
-        const phaseBudget = Math.round(totalBudget * allocation.percentage);
-        
-        // Calculate phase duration and dates based on project start date and total duration
-        const phaseStartDate = index === 0 
-          ? new Date(projectStartDate) 
-          : this.addDays(new Date(projectStartDate), remainingDays);
-        
-        // Use calculated phaseDuration (minimum 7 days per phase)
-        const actualPhaseDuration = Math.max(7, phaseDuration);
-        remainingDays += actualPhaseDuration;
-        
-        const phaseEndDate = this.addDays(phaseStartDate, actualPhaseDuration);
-        
-        // Create the phase
-        const phase: Phase = {
-          id: uuidv4(),
-          projectId: project.id,
-          name: allocation.name,
-          startDate: phaseStartDate,
-          endDate: phaseEndDate,
-          status: 'not_started',
-          progress: 0,
-          budget: phaseBudget,
-          actualCost: 0,
-          description: this.getPhasesDescription(allocation.name),
-          tasks: this.createPhaseTasks(userId, project.id, allocation.name),
-        };
-        
-        residentialPhases.push(phase);
-      });
-      
-      // Collect all tasks from phases to add to project tasks
-      const allTasks: Task[] = [];
-      residentialPhases.forEach(phase => {
-        if (phase.tasks && phase.tasks.length > 0) {
-          allTasks.push(...phase.tasks);
-        }
-      });
-
-      // Add phases to the project
       const updatedProject = {
         ...project,
         phases: residentialPhases,
@@ -1105,11 +382,10 @@ class ProjectService {
         endDate: projectEndDate,
       };
       
-      // Update project with phases, tasks, and updated dates
       await this.updateProject(project.id, { 
         phases: residentialPhases.map(phase => ({
           ...phase,
-          id: phase.id || uuidv4(),
+          id: phase.id,
           projectId: project.id,
           startDate: phase.startDate ?? undefined,
           endDate: phase.endDate ?? undefined,
@@ -1118,25 +394,11 @@ class ProjectService {
         startDate: updatedProject.startDate,
         endDate: updatedProject.endDate
       });
-
-      // Return the updated project
       return await this.getProjectById(project.id) as Project;
     } catch (error) {
       console.error('Error creating residential project:', error);
       throw error;
     }
-  }
-
-  /**
-   * Helper method to add days to a date
-   * @param date The starting date
-   * @param days Number of days to add
-   * @returns A new date with days added
-   */
-  private static addDays(date: Date, days: number): Date {
-    const result = new Date(date);
-    result.setDate(result.getDate() + days);
-    return result;
   }
 
   static async getProject(projectId: string, userId: string): Promise<Project | null> {

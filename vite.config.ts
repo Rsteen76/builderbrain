@@ -78,6 +78,84 @@ export default defineConfig(({ command, mode }) => {
     },
     build: {
       outDir: 'build',
+      rollupOptions: {
+        output: {
+          manualChunks(id) {
+            if (!id.includes('node_modules')) {
+              return undefined;
+            }
+
+            if (id.includes('/@mui/icons-material/')) {
+              return 'vendor-mui-icons';
+            }
+
+            if (id.includes('/@mui/x-date-pickers/')) {
+              return 'vendor-mui-date-pickers';
+            }
+
+            if (id.includes('/@mui/material/')) {
+              return 'vendor-mui-material';
+            }
+
+            if (id.includes('/@mui/') || id.includes('/@emotion/')) {
+              return 'vendor-mui-core';
+            }
+
+            if (id.includes('/firebase/') || id.includes('/@firebase/')) {
+              return 'vendor-firebase';
+            }
+
+            if (id.includes('/recharts/') || id.includes('/d3') || id.includes('/victory-vendor/')) {
+              return 'vendor-charts';
+            }
+
+            if (id.includes('/jspdf/')) {
+              return 'vendor-pdf';
+            }
+
+            if (id.includes('/html2canvas/')) {
+              return 'vendor-canvas';
+            }
+
+            if (id.includes('/date-fns/')) {
+              return 'vendor-date-fns';
+            }
+
+            if (id.includes('/react-query/')) {
+              return 'vendor-react-query';
+            }
+
+            if (id.includes('/uuid/')) {
+              return 'vendor-uuid';
+            }
+
+            if (id.includes('/lodash/') || id.includes('/lodash-es/')) {
+              return 'vendor-lodash';
+            }
+
+            if (id.includes('/@popperjs/') || id.includes('/react-popper/')) {
+              return 'vendor-popper';
+            }
+
+            if (id.includes('/react/') || id.includes('/react-dom/') || id.includes('/react-router-dom/') || id.includes('/react-router/')) {
+              return 'vendor-react';
+            }
+
+            if (
+              id.includes('/@babel/runtime/') ||
+              id.includes('/clsx/') ||
+              id.includes('/prop-types/') ||
+              id.includes('/react-is/') ||
+              id.includes('/react-transition-group/') ||
+              id.includes('/scheduler/')
+            ) {
+              return 'vendor-support';
+            }
+
+            return 'vendor';
+          },
+        },
+      },
     },
     preview: {
       port,

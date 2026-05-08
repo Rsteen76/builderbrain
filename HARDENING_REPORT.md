@@ -26,6 +26,9 @@ Generated: 2026-05-07
 - Replaced Settings stubs with real profile, password, and notification preference surfaces; removed the inactive appearance/dark-mode controls until a real theme system exists.
 - Moved Calendar and Timeline reads behind a shared service/hook boundary and removed per-event project lookups by reusing a project-name map.
 - Moved budget projection and project budget writes behind a budget service boundary with centralized projection ID creation and timestamp serialization.
+- Split the largest service modules into cohesive helper modules: project mapping/date/residential helpers, bid serialization/payment-schedule helpers, and dev data seed/storage helpers.
+- Split the expense page and expense form into focused list, dashboard, form-option, validation, line-item, and row components/helpers.
+- Added Vite manual vendor chunking and lazy-loaded the project expense tab's nested expense list to remove production build chunk warnings.
 - Added a mutation-oriented Playwright smoke test for creating an expense in local dev bypass mode.
 - Fixed the `ExpenseFormModal` render loop exposed by e2e tests.
 - Fixed DOM nesting warnings on the exercised project overview and expense dialog paths.
@@ -43,6 +46,16 @@ Generated: 2026-05-07
 - `src/services/project-detail-data.service.test.ts`
 - `src/services/calendar-timeline.service.test.ts`
 - `src/services/budget.service.test.ts`
+- `src/components/expenses/dashboard/expenseDashboardUtils.test.ts`
+- `src/components/expenses/form/expenseFormOptions.test.ts`
+- `src/components/expenses/form/expenseFormValidation.test.ts`
+- `src/components/expenses/form/expenseLineItems.test.ts`
+- `src/components/expenses/list/ExpenseRow.test.tsx`
+- `src/components/expenses/list/expenseListUtils.test.ts`
+- `src/services/bid/paymentSchedule.test.ts`
+- `src/services/devDataStore/storage.test.ts`
+- `src/services/project/dates.test.ts`
+- `src/services/project/residential.test.ts`
 - Expanded:
   - `src/components/expenses/PaymentFormModal.test.tsx`
   - `src/services/expense.service.test.ts`
@@ -57,11 +70,11 @@ Generated: 2026-05-07
 - `npm run typecheck`
   - Passed.
 - `npm run test:coverage -- --coverageReporters=text-summary`
-  - Passed: 29 suites, 132 tests.
-  - Coverage: statements 11.11%, branches 8.58%, functions 10.72%, lines 11.48%.
+  - Passed: 39 suites, 169 tests.
+  - Coverage: statements 13.28%, branches 9.96%, functions 13.02%, lines 13.72%.
 - `npm run build`
   - Passed.
-  - Remaining build warning: large Vite chunks, especially the main app chunk and dev demo data.
+  - No Vite chunk-size or ineffective dynamic import warnings remain.
 - `npm audit --json`
   - Passed: 0 vulnerabilities.
 - `npm run test:e2e -- --project=chromium --workers=1`
@@ -72,8 +85,8 @@ Generated: 2026-05-07
 
 ## Remaining Risks
 
-- Large module cleanup is not fully complete. The audit identifies `devDataStore.ts`, `bid.ts`, `project.ts`, `Expenses.tsx`, and `ExpenseFormModal.tsx` as structural refactor targets. Splitting them safely requires reviewable feature-by-feature PRs.
+- Large module cleanup is improved but not fully complete. `project.ts`, `bid.ts`, and `devDataStore.ts` are now split behind helper modules, and the expense page/form have focused helper/component boundaries. `Expenses.tsx`, `ExpenseFormModal.tsx`, and some older budget/project surfaces still exceed the target file-size ceiling and should continue shrinking in focused PRs.
 - Some direct-Firestore-in-UI cleanup may remain in secondary/admin utility surfaces, but the dashboard, project detail, calendar, timeline, and budget projection paths now have service boundaries.
 - Dashboard summaries are currently client-refreshed. That is acceptable for this SPA release; a future Cloud Function should maintain them immediately after writes if contractor accounts grow into very high project counts or multi-user write volume.
-- Vite build still reports large chunks. The next performance pass should split dev demo data, PDF/reporting libraries, and project/expense surfaces more aggressively.
+- React Query v3 remains. The migration to `@tanstack/react-query` v5 is bounded to the query provider and the project/bid/expense/task/document hooks, but it is a major dependency/API migration and should be handled separately.
 - React Router v7 future flags remain as warnings. They are not runtime failures, but should be addressed before a router major upgrade.

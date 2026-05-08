@@ -15,8 +15,8 @@ Generated: 2026-05-07
   - `audit/docs-dx.md`
 - Phase 3 complete: this summary ranks findings, dependencies, fix waves, and conflicts.
 - Phase 4 partially complete in this branch:
-  - Completed: dependency vulnerabilities, auth startup failure handling, payment save reliability, data reset reliability, partial expense update safety, shared report ID entropy, accepted-bid expense idempotency, storage validation, hosting headers/CSP, payments N+1 query, dashboard summary read model, project-detail data boundary, Calendar/Timeline data boundary, budget write boundary, Settings stub cleanup, Vite migration, docs/test gates.
-  - Not fully closed: large structural refactors require separate reviewable follow-up PRs.
+  - Completed: dependency vulnerabilities, auth startup failure handling, payment save reliability, data reset reliability, partial expense update safety, shared report ID entropy, accepted-bid expense idempotency, storage validation, hosting headers/CSP, payments N+1 query, dashboard summary read model, project-detail data boundary, Calendar/Timeline data boundary, budget write boundary, Settings stub cleanup, Vite migration, service/page module splits, production chunk cleanup, docs/test gates.
+  - Not fully closed: some UI modules still exceed the target file-size ceiling and React Query v3 remains a separate major migration.
 
 ## Ranked Findings
 
@@ -87,7 +87,7 @@ Generated: 2026-05-07
 12. Large god modules and page components block safe change.
     - Evidence: `src/services/devDataStore.ts:1`, `src/services/bid.ts:1`, `src/services/project.ts:1`, `src/components/expenses/ExpenseFormModal.tsx:165`, `src/components/expenses/Expenses.tsx:89`, `src/components/budget/BudgetDashboard.tsx:135`
     - Risk: mixed concerns make tests brittle and fixes risky.
-    - Fix: split by domain responsibility only after correctness blockers are patched.
+    - Fix: split project, bid, dev data store, expenses page, and expense form concerns into cohesive helper/component modules with focused tests. Continue shrinking remaining oversized UI surfaces in later focused PRs.
 
 13. UI components directly perform Firestore reads and writes.
     - Evidence: `src/components/timeline/Timeline.tsx:35`, `src/components/calendar/Calendar.tsx:28`, `src/components/budget/BudgetDashboard.tsx:68`, `src/components/budget/BudgetAllocationTracker.tsx:74`
@@ -122,7 +122,7 @@ Generated: 2026-05-07
 
 - Consolidate overlapping `src/api` and `src/services` responsibilities.
 - Move direct Firestore access out of page components into hooks/services.
-- Split `bid.ts`, `project.ts`, `devDataStore.ts`, `Expenses.tsx`, `ExpenseFormModal.tsx`, and budget dashboards along cohesive boundaries.
+- Continue shrinking oversized UI surfaces along cohesive boundaries; `bid.ts`, `project.ts`, `devDataStore.ts`, `Expenses.tsx`, and `ExpenseFormModal.tsx` now have extracted helper/component boundaries.
 - Create a shared event feed/query service for calendar and timeline.
 - Continue moving any remaining direct Firestore access out of secondary/admin utility surfaces.
 
@@ -132,7 +132,7 @@ Generated: 2026-05-07
 - Expand e2e tests from navigation smoke to project, bid, expense, payment, document, report, and settings mutation flows.
 - Update README, env docs, deploy docs, and runtime prerequisites.
 - Standardize redacted logging and add client-side web vitals reporting.
-- Lazy-load PDF export libraries and other heavy optional flows.
+- Keep heavy vendor chunks split and lazy-load optional flows; current Vite build no longer reports chunk-size warnings.
 
 ## Conflicts and Coordination Notes
 

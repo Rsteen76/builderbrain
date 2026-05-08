@@ -4,18 +4,9 @@ import {
   Typography,
   Button,
   Grid,
-  // Card, // Removed, was used by old summary cards
-  // CardContent, // Removed
-  // CardActions, // Removed
   Tabs,
   Tab,
-  // TextField, // Removed, used in ExpenseControls
-  // InputAdornment, // Removed, used in ExpenseControls
-  IconButton,
-  Chip,
   Paper, // Still used for remaining summary sections
-  Divider,
-  Stack,
   CircularProgress, // Still used for remaining summary sections
   Alert,
   Menu,
@@ -23,68 +14,53 @@ import {
   Avatar,
   useTheme,
   Snackbar,
-  // FormControl, // Removed, used in ExpenseControls
-  // InputLabel, // Removed, used in ExpenseControls
-  // Select, // Removed, used in ExpenseControls
-  // TableContainer, // Removed, used in ExpenseTable
-  // Table, // Removed, used in ExpenseTable
-  // TableHead, // Removed, used in ExpenseTable
-  // TableBody, // Removed, used in ExpenseTable
-  TableRow,
-  TableCell,
-  alpha, // Used by renderExpenseRow and ::-webkit-scrollbar
-  Tooltip, // Used by renderExpenseRow
+  alpha,
   LinearProgress, // Used in remaining summary section
 } from '@mui/material';
 import MuiAlert, { AlertProps } from '@mui/material/Alert';
 import { logger } from '../../utils/logger';
 import {
   Add as AddIcon,
-  // Search as SearchIcon, // Removed, used in ExpenseControls
-  // FilterList as FilterListIcon, // Removed, used in ExpenseControls
-  MoreVert as MoreVertIcon,
-  AttachMoney as MoneyIcon,
-  AccountBalance as AccountBalanceIcon,
-  Receipt as ReceiptIcon,
   Description as DescriptionIcon,
-  Category as CategoryIcon,
   Paid as PaidIcon,
-  CalendarToday as CalendarIcon,
-  Business as VendorIcon,
-  Assignment as ProjectIcon,
   Edit as EditIcon,
   Delete as DeleteIcon,
   CheckCircle as CheckCircleIcon,
-  // DeleteOutline as DeleteOutlineIcon, // Removed, used in ExpenseControls
-  Business as BusinessIcon,
-  Engineering as EngineeringIcon,
-  ArrowDropDown as ArrowDropDownIcon,
-  ArrowDropUp as ArrowDropUpIcon,
 } from '@mui/icons-material';
 import { ExpenseSummaryCards } from "./ExpenseSummaryCards";
 import { ExpenseControls } from "./ExpenseControls";
 import { ExpenseTable } from "./ExpenseTable";
 import { ExpenseService } from '../../services/expense'; // Will be indirectly used via useGetExpenses
 import { ProjectService } from '../../services/project';
-import { Expense, Project, ProjectPhase, ExpenseCategory, ExpenseStatus } from '../../types';
+import { Expense, Project, ProjectPhase } from '../../types';
 import { useAuth } from '../../contexts/AuthContext';
-import { useGetExpenses, UseExpensesFilters } from '../../hooks/use-expenses'; // Import the new hook
-import { formatCurrency, formatDate } from '../../utils/formatters';
+import { useGetExpenses } from '../../hooks/use-expenses'; // Import the new hook
+import { formatCurrency } from '../../utils/formatters';
 import ExpenseFormModal from './ExpenseFormModal';
 import PaymentFormModal from './PaymentFormModal';
 import { BidService } from '../../services/bid';
-import { BidPaymentStage } from '../../types';
 import { mapToProjectPhase } from '../../utils/projectUtils'; // Import mapToProjectPhase
 import { useExpensePayment } from '../../hooks/useExpensePayment'; // Import the hook
-
-// Category icons mapping
-const CATEGORY_ICONS = {
-  labor: <Avatar sx={{ bgcolor: '#E1F5FE', color: '#0288D1' }}><BusinessIcon /></Avatar>,
-  materials: <Avatar sx={{ bgcolor: '#E8F5E9', color: '#388E3C' }}><CategoryIcon /></Avatar>,
-  equipment: <Avatar sx={{ bgcolor: '#FFF8E1', color: '#FFA000' }}><CategoryIcon /></Avatar>,
-  permits: <Avatar sx={{ bgcolor: '#F3E5F5', color: '#7B1FA2' }}><ReceiptIcon /></Avatar>,
-  other: <Avatar sx={{ bgcolor: '#ECEFF1', color: '#607D8B' }}><DescriptionIcon /></Avatar>,
-};
+import { ExpenseRow } from './list/ExpenseRow';
+import { getExpenseCategoryIcon } from './list/ExpenseCategoryIcon';
+import {
+  ExpenseGroupBy,
+  ExpenseSortDirection,
+  ExpenseSortField,
+  addProjectNames,
+  buildExpenseHookFilters,
+  calculateGroupTotals,
+  filterExpensesBySearch,
+  getNextSortState,
+  groupExpenses,
+  sortExpenses,
+} from './list/expenseListUtils';
+import {
+  calculateTotalExpenseAmount,
+  getCategoryBreakdownItems,
+  getStatusSummaryItems,
+  getTopProjectExpenseItems,
+} from './dashboard/expenseDashboardUtils';
 
 const Expenses: React.FC<{ projectId?: string }> = ({ projectId }) => {
   const theme = useTheme();
@@ -115,24 +91,19 @@ const Expenses: React.FC<{ projectId?: string }> = ({ projectId }) => {
   });
 
   // NEW: Add sort state
-  const [sortField, setSortField] = useState<'amount' | 'date' | null>(null);
-  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
+  const [sortField, setSortField] = useState<ExpenseSortField | null>(null);
+  const [sortDirection, setSortDirection] = useState<ExpenseSortDirection>('desc');
 
   // NEW: Grouping functionality
-  const [groupBy, setGroupBy] = useState<'none' | 'project' | 'category' | 'vendor' | 'subcontractor'>('none');
+  const [groupBy, setGroupBy] = useState<ExpenseGroupBy>('none');
   // Hook for processing payments
   const { isProcessing: isPaymentProcessing, error: paymentError, processExpensePayment } = useExpensePayment();
 
   // Prepare filters for useGetExpenses hook
-  const expenseHookFilters = React.useMemo(() => {
-    const filters: UseExpensesFilters = {};
-    if (tabValue === 1) filters.status = ['pending', 'approved'] as ExpenseStatus[];
-    else if (tabValue === 2) filters.status = 'paid';
-    if (categoryFilter) filters.category = categoryFilter as ExpenseCategory;
-    if (projectId) filters.projectId = projectId; // If component has projectId prop, it takes precedence
-    else if (projectFilter) filters.projectId = projectFilter;
-    return filters;
-  }, [tabValue, categoryFilter, projectFilter, projectId]);
+  const expenseHookFilters = React.useMemo(
+    () => buildExpenseHookFilters(tabValue, categoryFilter, projectFilter, projectId),
+    [tabValue, categoryFilter, projectFilter, projectId],
+  );
 
   const {
     data: rawFetchedExpenses,
@@ -144,11 +115,7 @@ const Expenses: React.FC<{ projectId?: string }> = ({ projectId }) => {
 
   // Process fetched expenses to add project names and handle undefined data
   const expenses = React.useMemo(() => {
-    if (!rawFetchedExpenses) return [];
-    return rawFetchedExpenses.map(exp => ({
-      ...exp,
-      projectName: projects.find(p => p.id === exp.projectId)?.name || 'Unknown Project',
-    }));
+    return addProjectNames(rawFetchedExpenses, projects);
   }, [rawFetchedExpenses, projects]);
 
   useEffect(() => {
@@ -162,15 +129,10 @@ const Expenses: React.FC<{ projectId?: string }> = ({ projectId }) => {
   }, [user]);
 
   // Calculate summary data based on processed expenses
-  const totalExpensesValue = expenses.reduce((sum, expense) => sum + expense.amount, 0);
-  const needsPaymentExpensesValue = expenses.filter(e => e.status !== 'paid').reduce((sum, e) => sum + e.amount, 0);
-  const paidExpensesValue = expenses.filter(e => e.status === 'paid').reduce((sum, e) => sum + e.amount, 0);
-
-  // Calculate category breakdown
-  const categoryBreakdown = expenses.reduce((acc, expense) => {
-    acc[expense.category] = (acc[expense.category] || 0) + expense.amount;
-    return acc;
-  }, {} as Record<string, number>);
+  const totalExpensesValue = React.useMemo(() => calculateTotalExpenseAmount(expenses), [expenses]);
+  const categoryBreakdownItems = React.useMemo(() => getCategoryBreakdownItems(expenses), [expenses]);
+  const topProjectExpenseItems = React.useMemo(() => getTopProjectExpenseItems(expenses), [expenses]);
+  const statusSummaryItems = React.useMemo(() => getStatusSummaryItems(expenses), [expenses]);
 
   // Menu handlers
   const handleMenuOpen = (event: React.MouseEvent<HTMLElement>, expenseId: string) => {
@@ -311,6 +273,16 @@ const Expenses: React.FC<{ projectId?: string }> = ({ projectId }) => {
             .map(mapToProjectPhase);
     setSelectedProjectPhases(phases);
     setExpenseModalOpen(true);
+  };
+
+  const handleEditExpense = (expense: Expense) => {
+    setSelectedExpense(expense);
+    setExpenseModalOpen(true);
+  };
+
+  const handlePayExpense = (expense: Expense) => {
+    setSelectedExpense(expense);
+    setPaymentModalOpen(true);
   };
 
   const handleCloseModal = () => {
@@ -682,44 +654,22 @@ const Expenses: React.FC<{ projectId?: string }> = ({ projectId }) => {
     }
   };
 
-  // Filter expenses based on search term
-  const filteredExpenses = expenses.filter(expense => {
-    if (!searchTerm) return true;
-
-    return (
-      expense.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      expense.vendor?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      expense.projectName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      expense.subcontractorName?.toLowerCase().includes(searchTerm.toLowerCase())
-    );
-  });
+  const filteredExpenses = React.useMemo(
+    () => filterExpensesBySearch(expenses, searchTerm),
+    [expenses, searchTerm],
+  );
 
   // NEW: Add sorting function
   const sortedExpenses = React.useMemo(() => {
-    if (!sortField) return filteredExpenses;
-
-    return [...filteredExpenses].sort((a, b) => {
-      if (sortField === 'amount') {
-        return sortDirection === 'asc' ? a.amount - b.amount : b.amount - a.amount;
-      } else if (sortField === 'date') {
-        const dateA = new Date(a.date);
-        const dateB = new Date(b.date);
-        return sortDirection === 'asc' ? dateA.getTime() - dateB.getTime() : dateB.getTime() - dateA.getTime();
-      }
-      return 0;
-    });
+    return sortExpenses(filteredExpenses, sortField, sortDirection);
   }, [filteredExpenses, sortField, sortDirection]);
 
   // NEW: Handle sort click
-  const handleSortClick = (field: 'amount' | 'date') => {
-    if (sortField === field) {
-      // Toggle direction if same field
-      setSortDirection(prev => prev === 'asc' ? 'desc' : 'asc');
-    } else {
-      // Set new field and default to descending (newest/highest first)
-      setSortField(field);
-      setSortDirection('desc');
-    }
+  const handleSortClick = (field: ExpenseSortField) => {
+    const nextSortState = getNextSortState(sortField, sortDirection, field);
+    setSortField(nextSortState.sortField);
+    setSortDirection(nextSortState.sortDirection);
+
     // Clear any grouping when sorting
     if (groupBy !== 'none') {
       setGroupBy('none');
@@ -728,261 +678,28 @@ const Expenses: React.FC<{ projectId?: string }> = ({ projectId }) => {
 
   // Group expenses based on selected grouping
   const groupedExpenses = React.useMemo(() => {
-    // Use the sorted expenses list instead of filtered
-    if (groupBy === 'none') {
-      return { 'All Expenses': sortedExpenses };
-    }
-
-    const groups: Record<string, any[]> = {};
-
-    sortedExpenses.forEach(expense => {
-      let groupKey = '';
-
-      switch (groupBy) {
-        case 'project':
-          groupKey = expense.projectName || 'No Project';
-          break;
-        case 'category':
-          groupKey = expense.category ?
-            expense.category.charAt(0).toUpperCase() + expense.category.slice(1) :
-            'Other';
-          break;
-        case 'vendor':
-          groupKey = expense.vendor || 'No Vendor';
-          break;
-        case 'subcontractor':
-          groupKey = expense.subcontractorName || 'No Subcontractor';
-          break;
-        default:
-          groupKey = 'All Expenses';
-      }
-
-      if (!groups[groupKey]) {
-        groups[groupKey] = [];
-      }
-
-      groups[groupKey].push(expense);
-    });
-
-    return groups;
-  }, [sortedExpenses, groupBy, expenses]);
+    return groupExpenses(sortedExpenses, groupBy);
+  }, [sortedExpenses, groupBy]);
 
   // Calculate group totals
   const groupTotals = React.useMemo(() => {
-    const totals: Record<string, number> = {};
-
-    Object.entries(groupedExpenses).forEach(([groupName, groupExpenses]) => {
-      totals[groupName] = groupExpenses.reduce((sum, expense) => sum + expense.amount, 0);
-    });
-
-    return totals;
-  }, [groupedExpenses, expenses]);
+    return calculateGroupTotals(groupedExpenses);
+  }, [groupedExpenses]);
 
   const renderExpenseRow = (expense: Expense) => {
-    const amountPaid = expense.amountPaid || 0;
-    // When an expense is paid, we should use the original amount, not the remaining amount
-    const remainingAmount = expense.status === 'paid' ? expense.amount : expense.amount - amountPaid;
-
-    // Add log inside render function
-    logger.log(`[renderExpenseRow] ID: ${expense.id}, Status: ${expense.status}, Amount: ${expense.amount}, AmountPaid: ${amountPaid}, Remaining: ${remainingAmount}`);
-
-    let statusLabel: string;
-    let statusColor: 'success' | 'warning' | 'info' | 'error' | 'default' = 'warning';
-
-    switch (expense.status) {
-      case 'paid':
-        statusLabel = 'Paid';
-        statusColor = 'success';
-        break;
-      case 'partially_paid':
-        statusLabel = 'Partially Paid';
-        statusColor = 'info';
-        break;
-      case 'pending':
-        statusLabel = 'Pending';
-        statusColor = 'warning';
-        break;
-      case 'approved':
-        statusLabel = 'Approved';
-        statusColor = 'default'; // Use default color for approved
-        break;
-      case 'rejected':
-        statusLabel = 'Rejected';
-        statusColor = 'error';
-        break;
-      default:
-        statusLabel = expense.status; // Fallback
-    }
-
     return (
-      <TableRow
+      <ExpenseRow
         key={expense.id}
-        hover
-        onClick={() => handleViewExpense(expense)}
-        sx={{
-          cursor: 'pointer',
-          '&:last-child td, &:last-child th': { border: 0 },
-          // Optional: different styling for partially paid?
-          ...(expense.status === 'paid' && {
-            bgcolor: alpha(theme.palette.success.light, 0.08),
-          }),
-          ...(expense.status === 'partially_paid' && {
-            bgcolor: alpha(theme.palette.info.light, 0.08),
-          }),
-        }}
-      >
-        <TableCell component="th" scope="row">
-          <Box sx={{ display: 'flex', alignItems: 'center' }}>
-            {CATEGORY_ICONS[expense.category as keyof typeof CATEGORY_ICONS] || CATEGORY_ICONS.other}
-            <Typography sx={{ ml: 1.5, fontWeight: 'medium' }}>
-              {expense.description}
-            </Typography>
-
-            {/* Display tags if they exist */}
-            {expense.tags && expense.tags.length > 0 && (
-              <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5, mt: 0.5 }}>
-                {expense.tags.map((tag, index) => (
-                  <Chip
-                    key={index}
-                    label={tag}
-                    size="small"
-                    sx={{
-                      height: 20,
-                      fontSize: '0.6rem',
-                      bgcolor: alpha(theme.palette.primary.main, 0.1),
-                      color: theme.palette.primary.main,
-                      '& .MuiChip-label': {
-                        px: 1,
-                      }
-                    }}
-                  />
-                ))}
-              </Box>
-            )}
-          </Box>
-          {expense.lineItems && expense.lineItems.length > 0 && (
-            <Chip
-              size="small"
-              label={`${expense.lineItems.length} item${expense.lineItems.length > 1 ? 's' : ''}`}
-              color="primary"
-              variant="outlined"
-              sx={{ mt: 0.5 }}
-            />
-          )}
-        </TableCell>
-
-        {/* Amount Cell - Show Paid / Remaining */}
-        <TableCell
-          align="right"
-          onClick={(e) => {
-            e.stopPropagation();
-            handleSortClick('amount');
-          }}
-          sx={{
-            cursor: 'pointer',
-            '&:hover': { color: theme.palette.primary.main }
-          }}
-        >
-          <Tooltip title={`Total: ${formatCurrency(expense.amount)}`}>
-            <Box sx={{ textAlign: 'right' }}>
-              <Typography variant="body2" fontWeight="medium">
-                {formatCurrency(remainingAmount)}
-              </Typography>
-              {expense.status === 'partially_paid' && (
-                <Typography variant="caption" color="text.secondary">
-                  Paid: {formatCurrency(amountPaid)}
-                </Typography>
-              )}
-              {/* Sorting Indicator */}
-              {sortField === 'amount' && (
-                <span style={{ marginLeft: '4px', verticalAlign: 'middle', display: 'inline-block' }}>
-                  {sortDirection === 'asc' ? <ArrowDropUpIcon fontSize="small" /> : <ArrowDropDownIcon fontSize="small" />}
-                </span>
-              )}
-            </Box>
-          </Tooltip>
-        </TableCell>
-
-        {/* Date Cell - Unchanged */}
-        <TableCell
-          onClick={(e) => {
-            e.stopPropagation();
-            handleSortClick('date');
-          }}
-          sx={{
-            cursor: 'pointer',
-            '&:hover': { color: theme.palette.primary.main }
-          }}
-        >
-          {formatDate(expense.date)}
-          {/* Sorting Indicator */}
-          {sortField === 'date' && (
-            <Tooltip title={`Sort by date (${sortDirection === 'asc' ? 'oldest first' : 'newest first'})`}>
-              <span style={{ marginLeft: '4px', display: 'inline-block', verticalAlign: 'middle' }}>
-                {sortDirection === 'asc' ? <ArrowDropUpIcon fontSize="small" /> : <ArrowDropDownIcon fontSize="small" />}
-              </span>
-            </Tooltip>
-          )}
-        </TableCell>
-
-        {/* Status Cell - Updated */}
-        <TableCell>
-          <Chip
-            label={statusLabel}
-            size="small"
-            color={statusColor}
-            // Optional: Add variant for different statuses?
-            // variant={expense.status === 'partially_paid' ? 'outlined' : 'filled'}
-          />
-        </TableCell>
-
-        {/* Other Cells (Project, Category, Vendor, Subcontractor) - Unchanged */}
-        {groupBy !== 'project' && <TableCell>{expense.projectName}</TableCell>}
-        {groupBy !== 'category' && <TableCell>{expense.category.charAt(0).toUpperCase() + expense.category.slice(1)}</TableCell>}
-        {groupBy !== 'vendor' && <TableCell>{expense.vendor || '-'}</TableCell>}
-        {groupBy !== 'subcontractor' && <TableCell>{expense.subcontractorName || '-'}</TableCell>}
-
-        {/* Actions Cell - Unchanged */}
-        <TableCell align="center">
-          <Box sx={{ display: 'flex', justifyContent: 'center' }}>
-            <IconButton
-              size="small"
-              onClick={(e) => {
-                e.stopPropagation();
-                setSelectedExpense(expense);
-                setExpenseModalOpen(true);
-              }}
-            >
-              <EditIcon fontSize="small" />
-            </IconButton>
-
-            {expense.status !== 'paid' && (
-              <IconButton
-                size="small"
-                color="success"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setSelectedExpense(expense);
-                  setPaymentModalOpen(true);
-                }}
-              >
-                <PaidIcon fontSize="small" />
-              </IconButton>
-            )}
-
-            <IconButton
-              size="small"
-              color="default"
-              onClick={(e) => {
-                e.stopPropagation();
-                handleMenuOpen(e, expense.id || '');
-              }}
-            >
-              <MoreVertIcon fontSize="small" />
-            </IconButton>
-          </Box>
-        </TableCell>
-      </TableRow>
+        expense={expense}
+        groupBy={groupBy}
+        sortField={sortField}
+        sortDirection={sortDirection}
+        onView={handleViewExpense}
+        onSort={handleSortClick}
+        onEdit={handleEditExpense}
+        onPay={handlePayExpense}
+        onMenuOpen={handleMenuOpen}
+      />
     );
   };
 
@@ -1047,51 +764,45 @@ const Expenses: React.FC<{ projectId?: string }> = ({ projectId }) => {
                 <Grid item xs={12} sx={{ display: 'flex', justifyContent: 'center', p: 3 }}>
                   <CircularProgress size={30} />
                 </Grid>
-              ) : Object.keys(categoryBreakdown).length === 0 ? (
+              ) : categoryBreakdownItems.length === 0 ? (
                 <Grid item xs={12}>
                   <Typography variant="body2" color="text.secondary">No category data available</Typography>
                 </Grid>
               ) : (
-                Object.entries(categoryBreakdown).map(([category, amount]) => {
-                  // Calculate percentage of the total
-                  const percentage = totalExpensesValue > 0 ? (amount / totalExpensesValue) * 100 : 0;
-                  const categoryName = category.charAt(0).toUpperCase() + category.slice(1);
-
-                  return (
-                    <Grid item xs={12} key={category}>
-                      <Box sx={{ mb: 0.5 }}>
-                        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 0.5 }}>
-                          <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                            {CATEGORY_ICONS[category as keyof typeof CATEGORY_ICONS] || CATEGORY_ICONS.other}
-                            <Typography variant="body2" sx={{ ml: 1 }}>{categoryName}</Typography>
-                          </Box>
-                          <Box sx={{ textAlign: 'right' }}>
-                            <Typography variant="body2" fontWeight="medium">{formatCurrency(amount)}</Typography>
-                            <Typography variant="caption" color="text.secondary">
-                              {Math.round(percentage)}% of total
-                            </Typography>
-                          </Box>
+                categoryBreakdownItems.map(({ category, label, amount, percentage }) => (
+                  <Grid item xs={12} key={category}>
+                    <Box sx={{ mb: 0.5 }}>
+                      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 0.5 }}>
+                        <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                          {getExpenseCategoryIcon(category)}
+                          <Typography variant="body2" sx={{ ml: 1 }}>{label}</Typography>
                         </Box>
-                        <LinearProgress
-                          variant="determinate"
-                          value={percentage}
-                          sx={{
-                            height: 8,
-                            borderRadius: 4,
-                            bgcolor: alpha(theme.palette.primary.light, 0.2),
-                            '& .MuiLinearProgress-bar': {
-                              bgcolor: category === 'materials' ? theme.palette.success.main :
-                                      category === 'labor' ? theme.palette.info.main :
-                                      category === 'equipment' ? theme.palette.warning.main :
-                                      category === 'permits' ? theme.palette.error.main :
-                                      theme.palette.primary.main
-                            }
-                          }}
-                        />
+                        <Box sx={{ textAlign: 'right' }}>
+                          <Typography variant="body2" fontWeight="medium">{formatCurrency(amount)}</Typography>
+                          <Typography variant="caption" color="text.secondary">
+                            {Math.round(percentage)}% of total
+                          </Typography>
+                        </Box>
                       </Box>
-                    </Grid>
-                  );
-                })
+                      <LinearProgress
+                        variant="determinate"
+                        value={percentage}
+                        sx={{
+                          height: 8,
+                          borderRadius: 4,
+                          bgcolor: alpha(theme.palette.primary.light, 0.2),
+                          '& .MuiLinearProgress-bar': {
+                            bgcolor: category === 'materials' ? theme.palette.success.main :
+                                    category === 'labor' ? theme.palette.info.main :
+                                    category === 'equipment' ? theme.palette.warning.main :
+                                    category === 'permits' ? theme.palette.error.main :
+                                    theme.palette.primary.main
+                          }
+                        }}
+                      />
+                    </Box>
+                  </Grid>
+                ))
               )}
             </Grid>
           </Paper>
@@ -1108,53 +819,33 @@ const Expenses: React.FC<{ projectId?: string }> = ({ projectId }) => {
                   <CircularProgress size={30} />
                 </Box>
               ) : (
-                (() => {
-                  // Calculate project totals
-                  const projectTotals = expenses.reduce((acc, expense) => {
-                    const projectName = expense.projectName || 'Unknown Project';
-                    acc[projectName] = (acc[projectName] || 0) + expense.amount;
-                    return acc;
-                  }, {} as Record<string, number>);
-
-                  // Sort projects by expense amount and take top 5
-                  const topProjects = Object.entries(projectTotals)
-                    .sort(([, amountA], [, amountB]) => amountB - amountA)
-                    .slice(0, 5);
-
-                  return (
-                    <Box>
-                      {topProjects.map(([projectName, amount], index) => {
-                        const percentage = totalExpensesValue > 0 ? (amount / totalExpensesValue) * 100 : 0;
-
-                        return (
-                          <Box key={projectName} sx={{ mb: 2 }}>
-                            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 0.5 }}>
-                              <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                                <Avatar sx={{ width: 28, height: 28, fontSize: '0.875rem', bgcolor: `hsl(${index * 50}, 70%, 50%)` }}>
-                                  {projectName.charAt(0)}
-                                </Avatar>
-                                <Typography variant="body2" sx={{ ml: 1 }}>{projectName}</Typography>
-                              </Box>
-                              <Typography variant="body2" fontWeight="medium">{formatCurrency(amount)}</Typography>
-                            </Box>
-                            <LinearProgress
-                              variant="determinate"
-                              value={percentage}
-                              sx={{
-                                height: 6,
-                                borderRadius: 3,
-                                bgcolor: alpha(theme.palette.primary.light, 0.15),
-                                '& .MuiLinearProgress-bar': {
-                                  bgcolor: `hsl(${index * 50}, 70%, 50%)`
-                                }
-                              }}
-                            />
-                          </Box>
-                        );
-                      })}
+                <Box>
+                  {topProjectExpenseItems.map(({ projectName, amount, percentage }, index) => (
+                    <Box key={projectName} sx={{ mb: 2 }}>
+                      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 0.5 }}>
+                        <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                          <Avatar sx={{ width: 28, height: 28, fontSize: '0.875rem', bgcolor: `hsl(${index * 50}, 70%, 50%)` }}>
+                            {projectName.charAt(0)}
+                          </Avatar>
+                          <Typography variant="body2" sx={{ ml: 1 }}>{projectName}</Typography>
+                        </Box>
+                        <Typography variant="body2" fontWeight="medium">{formatCurrency(amount)}</Typography>
+                      </Box>
+                      <LinearProgress
+                        variant="determinate"
+                        value={percentage}
+                        sx={{
+                          height: 6,
+                          borderRadius: 3,
+                          bgcolor: alpha(theme.palette.primary.light, 0.15),
+                          '& .MuiLinearProgress-bar': {
+                            bgcolor: `hsl(${index * 50}, 70%, 50%)`
+                          }
+                        }}
+                      />
                     </Box>
-                  );
-                })()
+                  ))}
+                </Box>
               )}
             </Paper>
           </Grid>
@@ -1174,13 +865,9 @@ const Expenses: React.FC<{ projectId?: string }> = ({ projectId }) => {
                 {/* Status counts */}
                 <Grid item xs={12} md={6}>
                   <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                    {['pending', 'approved', 'partially_paid', 'paid', 'rejected'].map((status) => {
-                      const statusCount = expenses.filter(e => e.status === status).length;
-                      const statusAmount = expenses.filter(e => e.status === status).reduce((sum, e) => sum + e.amount, 0);
-                      const statusLabel = status.split('_').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ');
-
+                    {statusSummaryItems.map(({ status, label, count, amount }) => {
                       // Skip if no expenses with this status
-                      if (statusCount === 0) return null;
+                      if (count === 0) return null;
 
                       // Determine color based on status
                       let color: string;
@@ -1225,13 +912,13 @@ const Expenses: React.FC<{ projectId?: string }> = ({ projectId }) => {
                             {icon}
                           </Avatar>
                           <Box>
-                            <Typography variant="body2" fontWeight="medium">{statusLabel}</Typography>
+                            <Typography variant="body2" fontWeight="medium">{label}</Typography>
                             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                               <Typography variant="body2" color="text.secondary">
-                                {statusCount} {statusCount === 1 ? 'expense' : 'expenses'}
+                                {count} {count === 1 ? 'expense' : 'expenses'}
                               </Typography>
                               <Typography variant="body2" fontWeight="medium">
-                                {formatCurrency(statusAmount)}
+                                {formatCurrency(amount)}
                               </Typography>
                             </Box>
                           </Box>
@@ -1243,32 +930,20 @@ const Expenses: React.FC<{ projectId?: string }> = ({ projectId }) => {
 
                 {/* Visualization */}
                 <Grid item xs={12} md={6} sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
-                  {(() => {
-                    const statuses = ['pending', 'approved', 'partially_paid', 'paid', 'rejected'];
-                    const statusAmounts = statuses.map(status =>
-                      expenses.filter(e => e.status === status).reduce((sum, e) => sum + e.amount, 0)
-                    );
-
-                    // Calculate percentages
-                    const total = statusAmounts.reduce((a, b) => a + b, 0);
-                    let startPercentage = 0;
-
-                    return (
-                      <Box sx={{ position: 'relative', width: '100%', maxWidth: 200 }}>
-                        <Box
-                          sx={{
-                            position: 'relative',
-                            width: '100%',
-                            paddingBottom: '100%',
-                            borderRadius: '50%',
-                            overflow: 'hidden',
-                            bgcolor: '#f5f5f5',
-                          }}
-                        >
-                          {statusAmounts.map((amount, index) => {
+                  <Box sx={{ position: 'relative', width: '100%', maxWidth: 200 }}>
+                    <Box
+                      sx={{
+                        position: 'relative',
+                        width: '100%',
+                        paddingBottom: '100%',
+                        borderRadius: '50%',
+                        overflow: 'hidden',
+                        bgcolor: '#f5f5f5',
+                      }}
+                    >
+                      {statusSummaryItems.map(({ status, amount, percentage, startPercentage }, index) => {
                             if (amount === 0) return null;
 
-                            const percentage = total > 0 ? (amount / total) * 100 : 0;
                             const color = index === 0 ? theme.palette.warning.main :
                                         index === 1 ? theme.palette.primary.main :
                                         index === 2 ? theme.palette.info.main :
@@ -1277,7 +952,7 @@ const Expenses: React.FC<{ projectId?: string }> = ({ projectId }) => {
 
                             const slice = (
                               <Box
-                                key={statuses[index]}
+                                key={status}
                                 sx={{
                                   position: 'absolute',
                                   width: '100%',
@@ -1293,35 +968,31 @@ const Expenses: React.FC<{ projectId?: string }> = ({ projectId }) => {
                                 }}
                               />
                             );
-
-                            startPercentage += percentage;
                             return slice;
-                          })}
+                      })}
 
-                          {/* Center circle to create donut */}
-                          <Box
-                            sx={{
-                              position: 'absolute',
-                              top: '50%',
-                              left: '50%',
-                              transform: 'translate(-50%, -50%)',
-                              width: '60%',
-                              height: '60%',
-                              borderRadius: '50%',
-                              bgcolor: 'background.paper',
-                              display: 'flex',
-                              alignItems: 'center',
-                              justifyContent: 'center',
-                              flexDirection: 'column',
-                            }}
-                          >
-                            <Typography variant="caption" color="text.secondary">Total</Typography>
-                            <Typography variant="body2" fontWeight="bold">{formatCurrency(total)}</Typography>
-                          </Box>
-                        </Box>
+                      {/* Center circle to create donut */}
+                      <Box
+                        sx={{
+                          position: 'absolute',
+                          top: '50%',
+                          left: '50%',
+                          transform: 'translate(-50%, -50%)',
+                          width: '60%',
+                          height: '60%',
+                          borderRadius: '50%',
+                          bgcolor: 'background.paper',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          flexDirection: 'column',
+                        }}
+                      >
+                        <Typography variant="caption" color="text.secondary">Total</Typography>
+                        <Typography variant="body2" fontWeight="bold">{formatCurrency(totalExpensesValue)}</Typography>
                       </Box>
-                    );
-                  })()}
+                    </Box>
+                  </Box>
                 </Grid>
               </Grid>
             )}

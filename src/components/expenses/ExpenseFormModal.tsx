@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   Dialog,
   DialogTitle,
@@ -22,18 +22,10 @@ import {
   CircularProgress,
   useTheme,
   SelectChangeEvent,
-  Table,
-  TableBody,
-  TableCell,
-  TableContainer,
-  TableHead,
-  TableRow,
   Paper,
   Autocomplete,
   Tabs,
   Tab,
-  FormControlLabel,
-  Switch,
   Accordion,
   AccordionSummary,
   AccordionDetails,
@@ -44,7 +36,6 @@ import {
 } from '@mui/material';
 import {
   Close as CloseIcon,
-  AttachMoney as MoneyIcon,
   Category as CategoryIcon,
   Description as DescriptionIcon,
   CalendarToday as CalendarIcon,
@@ -52,8 +43,6 @@ import {
   Assignment as ProjectIcon,
   Receipt as ReceiptIcon,
   CloudUpload as UploadIcon,
-  Delete as DeleteIcon,
-  Add as AddIcon,
   Person as SubcontractorIcon,
   AccountBalance as BankIcon,
   Payment as PaymentIcon,
@@ -92,9 +81,13 @@ import { createExtraBidExpense } from '../../utils/bidOperations';
 import { useAuth } from '../../contexts/AuthContext';
 import { v4 as uuidv4 } from 'uuid';
 import { formatCurrency } from '../../utils/formatters';
-import { PHASE_EXPENSE_DESCRIPTIONS } from '../../data/expenseFormConstants';
 import { cleanForFirestore } from '../../utils/firestoreUtils';
 import { useExpenseLineItems, ExpenseLineItemFormData } from '../../hooks/useExpenseLineItems';
+import ExpenseLineItemsSection from './form/ExpenseLineItemsSection';
+import { availableExpenseCategories, formatCategoryName, getExpenseDescriptionOptions } from './form/expenseFormOptions';
+import { buildExpenseLineItems } from './form/expenseLineItems';
+import { validateExpenseForm } from './form/expenseFormValidation';
+import type { FormErrors } from './form/types';
 
 interface ExpenseFormModalProps {
   open: boolean;
@@ -104,63 +97,6 @@ interface ExpenseFormModalProps {
   projects: Project[];
   projectPhases?: ProjectPhase[];
 }
-
-// Interface for errors
-interface FormErrors {
-  [key: string]: any;
-  lineItems?: {
-    [id: string]: {
-  description?: string;
-      quantity?: string;
-      unitCost?: string;
-    }
-  } & { general?: string }
-}
-
-// Define form item interface (local to the component)
-interface ExpenseLineItemForm {
-  id: string;
-  description: string;
-  quantity: number;
-  unitCost: number;
-  totalPrice: number;
-}
-
-const PAYMENT_METHODS = [
-  { value: 'credit_card', label: 'Credit Card' },
-  { value: 'bank_transfer', label: 'Bank Transfer' },
-  { value: 'cash', label: 'Cash' },
-  { value: 'check', label: 'Check' },
-  { value: 'other', label: 'Other' },
-];
-
-// Define the available Expense Categories manually based on the type
-const availableExpenseCategories: ExpenseCategory[] = [
-  'subcontractor', 
-  'labor', 
-  'materials', 
-  'equipment', 
-  'permits', 
-  'other'
-];
-
-// Helper function to format category names for display
-const formatCategoryName = (category: string): string => {
-  return category.charAt(0).toUpperCase() + category.slice(1);
-};
-
-// Helper function to map ExpenseCategory (potentially plural) to LineItem category (singular)
-const mapExpenseCategoryToLineItemCategory = (expCategory: ExpenseCategory | undefined): ExpenseLineItem['category'] => {
-  switch (expCategory) {
-    case 'materials': return 'material'; // Convert plural
-    case 'permits': return 'permit';     // Convert plural
-    case 'labor': return 'labor';
-    case 'equipment': return 'equipment';
-    case 'subcontractor': return 'subcontractor';
-    case 'other': return 'other';
-    default: return 'other'; // Default for undefined or unexpected
-  }
-};
 
 const ExpenseFormModal: React.FC<ExpenseFormModalProps> = ({
   open,
@@ -219,117 +155,6 @@ const ExpenseFormModal: React.FC<ExpenseFormModalProps> = ({
       label: phase.name || 'Unnamed Phase'
     }));
   }, [currentProjectPhases]);
-
-  // Define getExpenseDescriptionOptions *before* the useEffect that uses it
-  const getExpenseDescriptionOptions = useCallback((phaseId: string | undefined, phases: ProjectPhase[]): string[] => {
-    const applicableKeys: string[] = ["common"];
-    let phaseNameForLog = "(No Phase)";
-
-    if (phaseId && phases.length > 0) {
-      const phase = phases.find(p => p.id === phaseId);
-      if (phase) {
-        phaseNameForLog = phase.name;
-        const phaseNameLower = phase.name.toLowerCase();
-        
-        console.log(`[getExpenseDescOptions] Analyzing phase: "${phase.name}" (ID: ${phase.id})`);
-
-        // More targeted category matching with fewer overlaps
-        // Site work - only match if explicitly site-related
-        if (phaseNameLower.includes("site work") || 
-            phaseNameLower.includes("excavation") || 
-            phaseNameLower.includes("demolition") || 
-            phaseNameLower.includes("clearing")) {
-          applicableKeys.push("site_work");
-        }
-        
-        // Foundation - more explicit matching
-        else if (phaseNameLower.includes("foundation") || 
-            phaseNameLower.includes("concrete") || 
-            phaseNameLower.includes("footings")) {
-          applicableKeys.push("foundation");
-        }
-        
-        // Framing - more explicit matching
-        else if (phaseNameLower.includes("framing") || 
-            phaseNameLower.includes("structural") ||
-            (phaseNameLower.includes("frame") && !phaseNameLower.includes("window"))) {
-          applicableKeys.push("framing");
-        }
-        
-        // Rough-ins - more explicit matching
-        else if (phaseNameLower.includes("rough") || 
-            phaseNameLower.includes("mech") || 
-            phaseNameLower.includes("electrical rough") ||
-            phaseNameLower.includes("plumbing rough")) {
-          applicableKeys.push("rough_ins");
-        }
-        
-        // Exterior - more explicit matching
-        else if (phaseNameLower.includes("exterior") || 
-            phaseNameLower.includes("siding") || 
-            phaseNameLower.includes("roofing")) {
-          applicableKeys.push("exterior");
-        }
-        
-        // Interior - more explicit matching
-        else if (phaseNameLower.includes("interior") &&
-            !phaseNameLower.includes("finish")) {
-          applicableKeys.push("interior");
-        }
-        
-        // Finishes - more explicit matching
-        else if (phaseNameLower.includes("finish") || 
-            phaseNameLower.includes("paint") ||
-            phaseNameLower.includes("flooring") ||
-            phaseNameLower.includes("trim")) {
-          applicableKeys.push("finishes");
-        }
-        
-        // Specialty items
-        else if (phaseNameLower.includes("special") || 
-            phaseNameLower.includes("pool") || 
-            phaseNameLower.includes("theater") || 
-            phaseNameLower.includes("automation")) {
-          applicableKeys.push("specialty");
-        }
-        
-        // Renovation
-        else if (phaseNameLower.includes("renovat") || 
-            phaseNameLower.includes("remodel")) {
-          applicableKeys.push("renovation");
-        }
-        
-        // Maintenance
-        else if (phaseNameLower.includes("maint") || 
-            phaseNameLower.includes("repair")) {
-          applicableKeys.push("maintenance");
-        }
-        
-        console.log(`[getExpenseDescOptions] Applicable categories for "${phase.name}": ${applicableKeys.join(', ')}`);
-      }
-    }
-    
-    // Create a Map to track seen descriptions (for case-insensitive deduplication)
-    const seenDescriptions = new Map<string, string>();
-    
-    // Gather all descriptions from applicable categories and deduplicate
-    for (const key of applicableKeys) {
-      const descriptions = PHASE_EXPENSE_DESCRIPTIONS[key] || [];
-      for (const desc of descriptions) {
-        // Use lowercase version as the key for deduplication, but keep original case for display
-        const lowerDesc = desc.toLowerCase().trim();
-        if (!seenDescriptions.has(lowerDesc)) {
-          seenDescriptions.set(lowerDesc, desc);
-        }
-      }
-    }
-    
-    // Get unique descriptions (preserving original casing)
-    const uniqueDescriptions = Array.from(seenDescriptions.values());
-    
-    // Sort alphabetically
-    return uniqueDescriptions.sort();
-  }, []);
 
   // Effect to initialize form when expense data is provided (for editing)
   useEffect(() => {
@@ -608,73 +433,12 @@ const ExpenseFormModal: React.FC<ExpenseFormModalProps> = ({
   };
 
   const validateForm = (): FormErrors => {
-    const validationErrors: FormErrors = {};
-
-    if (!formData.description?.trim()) {
-      validationErrors.description = 'Description is required';
-    }
-
-    if (!formData.projectId) {
-      validationErrors.projectId = 'Project is required';
-    }
-
-    // Only validate amount if not using line items
-    if (!showLineItems && (formData.amount === undefined || formData.amount <= 0)) {
-      validationErrors.amount = 'Amount must be greater than 0';
-    }
-
-    if (!formData.date) {
-      validationErrors.date = 'Date is required';
-    }
-    
-    // Validate subcontractor is selected when category is 'subcontractor'
-    if (formData.category === 'subcontractor' && !formData.subcontractorId) {
-      validationErrors.subcontractorId = 'Subcontractor is required';
-    }
-
-    // Validate line items if they are shown
-    if (showLineItems && lineItems.length > 0) {
-      let hasLineItemErrors = false;
-      const lineItemErrors: FormErrors['lineItems'] = {};
-      
-      lineItems.forEach(item => {
-        const itemErrors: { description?: string; quantity?: string; unitCost?: string } = {};
-        let hasItemError = false;
-        
-        if (!item.description.trim()) {
-          itemErrors.description = 'Description is required';
-          hasItemError = true;
-        }
-        
-        if (item.quantity <= 0) {
-          itemErrors.quantity = 'Quantity must be greater than 0';
-          hasItemError = true;
-        }
-        
-        if (item.unitCost < 0) {
-          itemErrors.unitCost = 'Unit cost cannot be negative';
-          hasItemError = true;
-        }
-        
-        if (hasItemError) {
-          lineItemErrors[item.id] = itemErrors;
-          hasLineItemErrors = true;
-        }
-      });
-      
-      if (hasLineItemErrors) {
-        validationErrors.lineItems = lineItemErrors;
-      }
-      
-      // If using line items, ensure the total is greater than 0
-      const totalAmount = calculateTotalFromLineItems();
-      if (totalAmount <= 0) {
-        if (!validationErrors.lineItems) {
-          validationErrors.lineItems = {};
-        }
-        validationErrors.lineItems.general = 'Total amount must be greater than 0';
-      }
-    }
+    const validationErrors = validateExpenseForm({
+      formData,
+      showLineItems,
+      lineItems,
+      lineItemsTotal: calculateTotalFromLineItems(),
+    });
 
     setErrors(validationErrors);
     return validationErrors;
@@ -718,31 +482,8 @@ const ExpenseFormModal: React.FC<ExpenseFormModalProps> = ({
       ? calculateTotalFromLineItems() // Use the useCallback version
       : formData.amount || 0;
 
-    // Corrected mapping logic using the helper function
     const finalLineItems: ExpenseLineItem[] = showLineItems 
-      ? lineItems.map((li): ExpenseLineItem => {
-          let itemCategory: ExpenseLineItem['category'];
-
-          // Determine the category, prioritizing specific keywords then mapping the form category
-          if (formData.category === 'subcontractor') {
-            itemCategory = 'subcontractor';
-          } else if (li.description.toLowerCase().includes('material')) {
-            itemCategory = 'material'; // Keyword match
-          } else {
-            // Fallback: Map the main expense category to the line item category type
-            itemCategory = mapExpenseCategoryToLineItemCategory(formData.category);
-          }
-
-          return {
-            id: li.id,
-            description: li.description,
-            quantity: li.quantity,
-            unit: '', // Adjust as needed
-            unitCost: li.unitCost > 0 ? li.unitCost : 0,
-            totalCost: li.totalPrice,
-            category: itemCategory, // Assign the correctly mapped category
-          };
-        })
+      ? buildExpenseLineItems(lineItems, formData.category)
       : [];
 
     const finalData: Partial<Expense> = cleanForFirestore({
@@ -1067,188 +808,21 @@ const ExpenseFormModal: React.FC<ExpenseFormModalProps> = ({
           )}
 
           <Grid item xs={12}>
-            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
-              <Typography variant="subtitle2" fontWeight={600} color="text.primary">
-                Amount Details
-              </Typography>
-               
-              <FormControlLabel
-                control={
-                  <Switch
-                    checked={showLineItems}
-                    onChange={toggleLineItems}
-                    color="primary"
-                    size="small"
-                  />
-                }
-                label={<Typography variant="caption">{showLineItems ? 'Itemized' : 'Simple'}</Typography>}
-                sx={{ m: 0 }}
-              />
-            </Box>
-
-            {/* Amount summary - clearer distinction between original and remaining */}
-            {(formData.amountPaid ?? 0) > 0 && (
-              <Box sx={{ mb: 2, p: 1, bgcolor: 'background.paper', borderRadius: 1, border: '1px solid', borderColor: 'divider' }}>
-                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <Typography variant="body2" color="text.secondary">Original Amount:</Typography>
-                  <Typography variant="body2" fontWeight="bold">${(formData.amount ?? 0).toFixed(2)}</Typography>
-                </Box>
-                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <Typography variant="body2" color="text.secondary">Amount Paid:</Typography>
-                  <Typography variant="body2" fontWeight="bold" color="success.main">${(formData.amountPaid ?? 0).toFixed(2)}</Typography>
-                </Box>
-                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mt: 0.5, pt: 0.5, borderTop: '1px dashed', borderColor: 'divider' }}>
-                  <Typography variant="body2" fontWeight="bold">Remaining:</Typography>
-                  <Typography variant="body2" fontWeight="bold" color="warning.main">
-                    ${((formData.amount ?? 0) - (formData.amountPaid ?? 0)).toFixed(2)}
-                  </Typography>
-                </Box>
-              </Box>
-            )}
-
-            {!showLineItems ? (
-              <Box>
-                <TextField
-                  fullWidth
-                  id="amount"
-                  name="amount"
-                  label={(formData.amountPaid ?? 0) > 0 ? "Original Total Amount" : "Amount"}
-                  type="number"
-                  value={formData.amount || ''}
-                  onChange={(e) => handleChange('amount', parseFloat(e.target.value))}
-                  error={!!errors.amount}
-                  helperText={(formData.amountPaid ?? 0) > 0 
-                    ? "Original amount cannot be changed after payments are recorded" 
-                    : errors.amount || null}
-                  size="small"
-                  disabled={(formData.amountPaid ?? 0) > 0} // Disable if partly paid
-                  InputProps={{
-                    startAdornment: (
-                      <InputAdornment position="start">
-                        <MoneyIcon fontSize="small" color="primary" />
-                      </InputAdornment>
-                    ),
-                    readOnly: (formData.amountPaid ?? 0) > 0, // Make it read-only if partly paid
-                  }}
-                />
-                
-                {/* Show payment status if paid or partially paid */}
-                {(formData.amountPaid ?? 0) > 0 && (
-                  <Box sx={{ mt: 1, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                      <CheckCircleIcon 
-                        fontSize="small" 
-                        color={formData.status === 'paid' ? 'success' : 'info'} 
-                        sx={{ mr: 0.5 }}
-                      />
-                      <Typography variant="body2" color={formData.status === 'paid' ? 'success.main' : 'info.main'}>
-                        {formData.status === 'paid' ? 'Fully Paid' : 'Partially Paid'}
-                      </Typography>
-                    </Box>
-                  </Box>
-                )}
-                </Box>
-              ) : (
-              <Box>
-                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
-                  <Button
-                    variant="outlined"
-                    color="primary"
-                    startIcon={<AddIcon />}
-                    onClick={addLineItem} // Use addLineItem from the hook
-                    size="small"
-                    sx={{ 
-                      textTransform: 'none',
-                    }}
-                  >
-                    Add Item
-                  </Button>
-                  
-                  <Typography variant="subtitle2" fontWeight={600} color="success.main">
-                    Total: ${totalLineItemsAmount.toFixed(2)} {/* Use totalLineItemsAmount from the hook */}
-                  </Typography>
-                </Box>
-                
-                <Box sx={{ 
-                  maxHeight: 220, 
-                  overflowY: 'auto',
-                }}>
-                  {lineItems.length === 0 ? (
-                    <Typography variant="body2" color="text.secondary" align="center" sx={{ py: 2 }}>
-                      No line items yet. Add some!
-                    </Typography>
-                  ) : (
-                    <TableContainer component={Paper} variant="outlined" sx={{ mt: 1 }}>
-                      <Table size="small">
-                        <TableHead>
-                          <TableRow>
-                            <TableCell>Description</TableCell>
-                            <TableCell align="right">Qty</TableCell>
-                                  <TableCell align="right">Unit Cost</TableCell>
-                            <TableCell align="right">Total</TableCell>
-                            <TableCell padding="checkbox"></TableCell>
-                          </TableRow>
-                        </TableHead>
-                        <TableBody>
-                          {lineItems.map((item: ExpenseLineItemForm, index) => (
-                            <TableRow key={item.id}>
-                              <TableCell>
-                                <TextField
-                                  fullWidth
-                                  placeholder="Description"
-                                  value={item.description}
-                                  onChange={(e) => handleLineItemChange(item.id, 'description', e.target.value)} // Use from hook
-                                  error={!!errors.lineItems?.[item.id]?.description}
-                                  helperText={errors.lineItems?.[item.id]?.description}
-                                  variant="standard"
-                                  size="small"
-                                />
-                              </TableCell>
-                              <TableCell align="right">
-                                <TextField
-                                  type="number"
-                                  value={item.quantity}
-                                  onChange={(e) => handleLineItemChange(item.id, 'quantity', parseFloat(e.target.value) || 0)} // Use from hook
-                                  error={!!errors.lineItems?.[item.id]?.quantity}
-                                  inputProps={{ min: 0, step: 0.01, style: { textAlign: 'right' } }}
-                                  variant="standard"
-                                  size="small"
-                                  sx={{ width: 70 }}
-                                />
-                              </TableCell>
-                              <TableCell align="right">
-                                <TextField
-                                  type="number"
-                                        value={item.unitCost}
-                                        onChange={(e) => handleLineItemChange(item.id, 'unitCost', parseFloat(e.target.value) || 0)} // Use from hook
-                                        error={!!errors.lineItems?.[item.id]?.unitCost}
-                                  inputProps={{ min: 0, step: 0.01, style: { textAlign: 'right' } }}
-                                  variant="standard"
-                                  size="small"
-                                  sx={{ width: 90 }}
-                                />
-                              </TableCell>
-                              <TableCell align="right">
-                                ${item.totalPrice.toFixed(2)}
-                              </TableCell>
-                              <TableCell padding="checkbox">
-                                <IconButton
-                                  size="small"
-                                  onClick={() => removeLineItem(item.id)} // Use from hook
-                                  color="error"
-                                >
-                                  <DeleteIcon fontSize="small" />
-                                </IconButton>
-                              </TableCell>
-                            </TableRow>
-                          ))}
-                        </TableBody>
-                      </Table>
-                    </TableContainer>
-                  )}
-                </Box>
-              </Box>
-            )}
+            <ExpenseLineItemsSection
+              amount={formData.amount}
+              amountPaid={formData.amountPaid}
+              status={formData.status}
+              showLineItems={showLineItems}
+              amountError={errors.amount}
+              lineItemErrors={errors.lineItems}
+              lineItems={lineItems}
+              totalLineItemsAmount={totalLineItemsAmount}
+              onToggleLineItems={toggleLineItems}
+              onAmountChange={(amount) => handleChange('amount', amount)}
+              onAddLineItem={addLineItem}
+              onRemoveLineItem={removeLineItem}
+              onLineItemChange={handleLineItemChange}
+            />
           </Grid>
 
           <Grid item xs={12} sm={6}>

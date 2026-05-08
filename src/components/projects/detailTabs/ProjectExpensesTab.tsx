@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { Suspense, lazy, useMemo } from 'react';
 import {
   Box,
   Typography,
@@ -28,9 +28,10 @@ import {
 } from 'recharts';
 import { useTheme } from '@mui/material/styles';
 import { useProjectDetail } from '../../../contexts/ProjectDetailContext';
-import ExpensesList from '../../expenses/Expenses';
 import { formatCurrency } from '../../../utils/formatters';
 import { calculateExpensesChartData, ExpenseChartData } from '../../../utils/expenseAnalytics';
+
+const ExpensesList = lazy(() => import('../../expenses/Expenses'));
 
 const ProjectExpensesTab: React.FC = () => {
   const theme = useTheme();
@@ -174,9 +175,11 @@ const ProjectExpensesTab: React.FC = () => {
         </Grid>
       </Grid>
       
-      <ExpensesList projectId={projectId} />
+      <Suspense fallback={<CircularProgress sx={{ display: 'block', margin: 'auto', mt: 2 }} />}>
+        <ExpensesList projectId={projectId} />
+      </Suspense>
     </Box>
   );
 };
 
-export default ProjectExpensesTab; 
+export default ProjectExpensesTab;
