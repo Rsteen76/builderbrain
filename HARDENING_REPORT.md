@@ -68,7 +68,7 @@ Generated: 2026-05-07
   - Passed: 5/5.
   - Remaining browser warnings: React Router v7 future-flag notices only.
 - `npm run test:rules`
-  - Blocked locally because Java is not installed/on PATH. CI installs Java 17 and should run this.
+  - Passed with OpenJDK 21.
 
 ## Remaining Risks
 

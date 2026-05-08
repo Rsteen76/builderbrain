@@ -19,7 +19,8 @@ const {
   uploadString,
 } = require('firebase/storage');
 
-const projectId = 'builderbrain-rules-test';
+const firebaseConfig = JSON.parse(fs.readFileSync(path.resolve(__dirname, '../.firebaserc'), 'utf8'));
+const projectId = process.env.GCLOUD_PROJECT || process.env.FIREBASE_PROJECT_ID || firebaseConfig.projects.default;
 const MB = 1024 * 1024;
 
 const now = () => new Date('2024-01-01T00:00:00.000Z');

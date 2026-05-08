@@ -109,7 +109,7 @@ The seeded data is stored under `localStorage["builderbrain:dev-data:v1"]`. Clea
 
 - Node.js 20 for CI parity
 - npm, using `npm ci` in clean CI-style installs
-- Java 17 for Firebase emulator-backed rules tests
+- Java 21 for Firebase emulator-backed rules tests
 - Playwright Chromium browser dependencies for e2e tests
 - Firebase CLI access through the checked-in `firebase-tools` dev dependency
 
@@ -137,7 +137,7 @@ Runs Jest once with coverage enabled. The repository currently enforces modest g
 npm run test:rules
 ```
 
-Runs Firestore and Storage rules tests through Firebase emulators. Requires Java 17.
+Runs Firestore and Storage rules tests through Firebase emulators. Requires Java 21.
 
 ```bash
 npm run test:e2e
@@ -171,7 +171,7 @@ npx playwright install --with-deps chromium
 npm run test:e2e
 ```
 
-CI uses Node 20 and Java 17, then runs the same coverage, typecheck, rules, build, and e2e gates. Pull requests run CI; pushes run CI on `simplification` and `codex/**` branches.
+CI uses Node 20 and Java 21, then runs the same coverage, typecheck, rules, build, and e2e gates. Pull requests run CI; pushes run CI on `simplification` and `codex/**` branches.
 
 ## App Structure
 
