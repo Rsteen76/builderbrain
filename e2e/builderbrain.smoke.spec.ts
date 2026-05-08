@@ -106,3 +106,16 @@ test('dev auth bypass can create an expense in local dev storage', async ({ page
     { expectedDescription: description, expectedCount: initialExpenseCount }
   );
 });
+
+test('settings notifications can be updated in dev auth bypass', async ({ page }) => {
+  await page.goto('/settings');
+
+  await expect(page.getByRole('heading', { name: 'Settings' })).toBeVisible();
+  await page.getByRole('tab', { name: /Notifications/i }).click();
+  await expect(page.getByRole('heading', { name: 'Notification Preferences' })).toBeVisible();
+
+  await page.getByLabel('Email notifications').click();
+  await page.getByRole('button', { name: /Save Preferences/i }).click();
+
+  await expect(page.getByText('Notification preferences saved.')).toBeVisible();
+});

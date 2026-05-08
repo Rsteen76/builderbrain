@@ -1,48 +1,21 @@
 import React, { useState, useEffect } from 'react';
 import {
   Box,
-  Typography,
-  Button,
-  Grid,
-  Tabs,
-  Tab,
-  Paper, // Still used for remaining summary sections
-  CircularProgress, // Still used for remaining summary sections
   Alert,
-  Menu,
-  MenuItem,
-  Avatar,
   useTheme,
-  Snackbar,
-  alpha,
-  LinearProgress, // Used in remaining summary section
 } from '@mui/material';
-import MuiAlert, { AlertProps } from '@mui/material/Alert';
 import { logger } from '../../utils/logger';
-import {
-  Add as AddIcon,
-  Description as DescriptionIcon,
-  Paid as PaidIcon,
-  Edit as EditIcon,
-  Delete as DeleteIcon,
-  CheckCircle as CheckCircleIcon,
-} from '@mui/icons-material';
 import { ExpenseSummaryCards } from "./ExpenseSummaryCards";
-import { ExpenseControls } from "./ExpenseControls";
 import { ExpenseTable } from "./ExpenseTable";
 import { ExpenseService } from '../../services/expense'; // Will be indirectly used via useGetExpenses
 import { ProjectService } from '../../services/project';
-import { Expense, Project, ProjectPhase } from '../../types';
+import { Expense, PaymentDetails, Project, ProjectPhase } from '../../types';
 import { useAuth } from '../../contexts/AuthContext';
 import { useGetExpenses } from '../../hooks/use-expenses'; // Import the new hook
-import { formatCurrency } from '../../utils/formatters';
-import ExpenseFormModal from './ExpenseFormModal';
-import PaymentFormModal from './PaymentFormModal';
 import { BidService } from '../../services/bid';
 import { mapToProjectPhase } from '../../utils/projectUtils'; // Import mapToProjectPhase
 import { useExpensePayment } from '../../hooks/useExpensePayment'; // Import the hook
 import { ExpenseRow } from './list/ExpenseRow';
-import { getExpenseCategoryIcon } from './list/ExpenseCategoryIcon';
 import {
   ExpenseGroupBy,
   ExpenseSortDirection,
@@ -55,12 +28,15 @@ import {
   groupExpenses,
   sortExpenses,
 } from './list/expenseListUtils';
+import { ExpenseActionMenu } from './page/ExpenseActionMenu';
+import { ExpenseDashboardPanels } from './page/ExpenseDashboardPanels';
+import { ExpensePageDialogs } from './page/ExpensePageDialogs';
+import { ExpensePageHeader } from './page/ExpensePageHeader';
 import {
-  calculateTotalExpenseAmount,
-  getCategoryBreakdownItems,
-  getStatusSummaryItems,
-  getTopProjectExpenseItems,
-} from './dashboard/expenseDashboardUtils';
+  ExpensePageNotifications,
+  ExpenseSnackbarState,
+} from './page/ExpensePageNotifications';
+import { ExpenseTabsAndControls } from './page/ExpenseTabsAndControls';
 
 const Expenses: React.FC<{ projectId?: string }> = ({ projectId }) => {
   const theme = useTheme();
@@ -80,11 +56,7 @@ const Expenses: React.FC<{ projectId?: string }> = ({ projectId }) => {
   const [selectedExpenseId, setSelectedExpenseId] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [selectedProjectPhases, setSelectedProjectPhases] = useState<ProjectPhase[]>([]);
-  const [snackbar, setSnackbar] = useState<{
-    open: boolean;
-    message: string;
-    severity: 'success' | 'error' | 'info' | 'warning';
-  }>({
+  const [snackbar, setSnackbar] = useState<ExpenseSnackbarState>({
     open: false,
     message: '',
     severity: 'success'
@@ -121,18 +93,12 @@ const Expenses: React.FC<{ projectId?: string }> = ({ projectId }) => {
   useEffect(() => {
     if (user?.uid) {
       fetchProjects();
-      // fetchExpenses(); // Removed, react-query handles this via useGetExpenses based on key changes
+      // Expense data is loaded by useGetExpenses based on its query key.
     }
   // Key dependencies for fetching projects.
   // useGetExpenses handles its own dependencies via its query key (userId, filters).
   // `submitting` is removed; refetchExpenses will be called explicitly in mutation onSuccess.
   }, [user]);
-
-  // Calculate summary data based on processed expenses
-  const totalExpensesValue = React.useMemo(() => calculateTotalExpenseAmount(expenses), [expenses]);
-  const categoryBreakdownItems = React.useMemo(() => getCategoryBreakdownItems(expenses), [expenses]);
-  const topProjectExpenseItems = React.useMemo(() => getTopProjectExpenseItems(expenses), [expenses]);
-  const statusSummaryItems = React.useMemo(() => getStatusSummaryItems(expenses), [expenses]);
 
   // Menu handlers
   const handleMenuOpen = (event: React.MouseEvent<HTMLElement>, expenseId: string) => {
@@ -710,30 +676,48 @@ const Expenses: React.FC<{ projectId?: string }> = ({ projectId }) => {
       return expenses.find(e => e.id === selectedExpense.id) || null;
   }, [selectedExpense, expenses]);
 
+  const handleSavePayment = async (actualAmountPaid: number, paymentDetails: PaymentDetails) => {
+    if (fullExpenseForPayment?.id && user) { // Ensure user is available
+      setSubmitting(true); // Use submitting state from Expenses.tsx for general feedback if desired
+      const result = await processExpensePayment(
+        user,
+        fullExpenseForPayment, // Pass the full expense object
+        actualAmountPaid,
+        paymentDetails
+      );
+      setSubmitting(false);
+      if (result.success) {
+        refetchExpenses(); // Refresh expenses list
+        setSnackbar({ open: true, message: result.message, severity: 'success' });
+        if (result.updatedBid) {
+          logger.log("Bid was updated as part of payment processing:", result.updatedBid);
+          // Optionally, could also trigger a refresh/update of bids list if displayed elsewhere
+        }
+      } else {
+        setSnackbar({ open: true, message: result.message, severity: 'error' });
+        // Display paymentError from hook if needed, though snackbar might be enough
+        if (paymentError) logger.error("Payment Processing Error:", paymentError);
+      }
+      handleClosePaymentModal(); // Close modal regardless of success/failure for now
+    } else {
+      logger.error('[Expenses] PaymentFormModal onSave called, but required data (expense ID or user) is missing.', {
+        fullExpenseForPaymentId: fullExpenseForPayment?.id, // Corrected logging variable name
+        userId: user?.uid,
+      });
+      setSnackbar({ open: true, message: 'Error: Missing expense data or user information.', severity: 'error'});
+    }
+  };
+
+  const selectedMenuExpense = React.useMemo(() => {
+    if (!selectedExpenseId) return null;
+    return expenses.find(e => e.id === selectedExpenseId) || null;
+  }, [selectedExpenseId, expenses]);
+
+  const handleSnackbarClose = () => setSnackbar(prev => ({ ...prev, open: false }));
+
   return (
     <Box sx={{ maxWidth: 1200, mx: 'auto', p: { xs: 2, sm: 3 } }}>
-      {/* Header section */}
-      <Box sx={{ mb: 4, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <Typography variant="h4" component="h1" fontWeight="bold">
-          Expenses & Payments
-        </Typography>
-
-        <Button
-          variant="contained"
-          size="medium"
-          startIcon={<AddIcon />}
-          onClick={handleAddExpense}
-          sx={{
-            backgroundImage: `linear-gradient(45deg, ${theme.palette.primary.main}, ${theme.palette.primary.dark})`,
-            boxShadow: '0 4px 10px rgba(0,0,0,0.15)',
-            '&:hover': {
-              boxShadow: '0 6px 12px rgba(0,0,0,0.2)',
-            }
-          }}
-        >
-          Add Expense
-        </Button>
-      </Box>
+      <ExpensePageHeader onAddExpense={handleAddExpense} />
 
       {/* Error message */}
       {expensesListIsError && (
@@ -751,289 +735,28 @@ const Expenses: React.FC<{ projectId?: string }> = ({ projectId }) => {
         />
       </Box>
 
-      {/* The following Grid is the "Expense Breakdown by Category", "Top Projects by Expense", and "Expense Status Summary" */}
-      {/* This content should remain as it's part of a different display section. */}
-      <Grid container spacing={3} sx={{ mb: 4 }}>
-        {/* Category breakdown row */}
-        <Grid item xs={12}>
-          <Paper sx={{ p: 3, borderRadius: 2 }}>
-            <Typography variant="h6" sx={{ mb: 2 }}>Expense Breakdown by Category</Typography>
+      <ExpenseDashboardPanels
+        expenses={expenses}
+        loading={expensesListIsLoading}
+        projectId={projectId}
+      />
 
-            <Grid container spacing={2}>
-              {expensesListIsLoading ? ( // Use hook's loading state
-                <Grid item xs={12} sx={{ display: 'flex', justifyContent: 'center', p: 3 }}>
-                  <CircularProgress size={30} />
-                </Grid>
-              ) : categoryBreakdownItems.length === 0 ? (
-                <Grid item xs={12}>
-                  <Typography variant="body2" color="text.secondary">No category data available</Typography>
-                </Grid>
-              ) : (
-                categoryBreakdownItems.map(({ category, label, amount, percentage }) => (
-                  <Grid item xs={12} key={category}>
-                    <Box sx={{ mb: 0.5 }}>
-                      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 0.5 }}>
-                        <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                          {getExpenseCategoryIcon(category)}
-                          <Typography variant="body2" sx={{ ml: 1 }}>{label}</Typography>
-                        </Box>
-                        <Box sx={{ textAlign: 'right' }}>
-                          <Typography variant="body2" fontWeight="medium">{formatCurrency(amount)}</Typography>
-                          <Typography variant="caption" color="text.secondary">
-                            {Math.round(percentage)}% of total
-                          </Typography>
-                        </Box>
-                      </Box>
-                      <LinearProgress
-                        variant="determinate"
-                        value={percentage}
-                        sx={{
-                          height: 8,
-                          borderRadius: 4,
-                          bgcolor: alpha(theme.palette.primary.light, 0.2),
-                          '& .MuiLinearProgress-bar': {
-                            bgcolor: category === 'materials' ? theme.palette.success.main :
-                                    category === 'labor' ? theme.palette.info.main :
-                                    category === 'equipment' ? theme.palette.warning.main :
-                                    category === 'permits' ? theme.palette.error.main :
-                                    theme.palette.primary.main
-                          }
-                        }}
-                      />
-                    </Box>
-                  </Grid>
-                ))
-              )}
-            </Grid>
-          </Paper>
-        </Grid>
-
-        {/* Project breakdown */}
-        {!projectId && expenses.length > 0 && (
-          <Grid item xs={12} md={6}>
-            <Paper sx={{ p: 3, borderRadius: 2, height: '100%' }}>
-              <Typography variant="h6" sx={{ mb: 2 }}>Top Projects by Expense</Typography>
-
-              {expensesListIsLoading ? ( // Use hook's loading state
-                <Box sx={{ display: 'flex', justifyContent: 'center', p: 3 }}>
-                  <CircularProgress size={30} />
-                </Box>
-              ) : (
-                <Box>
-                  {topProjectExpenseItems.map(({ projectName, amount, percentage }, index) => (
-                    <Box key={projectName} sx={{ mb: 2 }}>
-                      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 0.5 }}>
-                        <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                          <Avatar sx={{ width: 28, height: 28, fontSize: '0.875rem', bgcolor: `hsl(${index * 50}, 70%, 50%)` }}>
-                            {projectName.charAt(0)}
-                          </Avatar>
-                          <Typography variant="body2" sx={{ ml: 1 }}>{projectName}</Typography>
-                        </Box>
-                        <Typography variant="body2" fontWeight="medium">{formatCurrency(amount)}</Typography>
-                      </Box>
-                      <LinearProgress
-                        variant="determinate"
-                        value={percentage}
-                        sx={{
-                          height: 6,
-                          borderRadius: 3,
-                          bgcolor: alpha(theme.palette.primary.light, 0.15),
-                          '& .MuiLinearProgress-bar': {
-                            bgcolor: `hsl(${index * 50}, 70%, 50%)`
-                          }
-                        }}
-                      />
-                    </Box>
-                  ))}
-                </Box>
-              )}
-            </Paper>
-          </Grid>
-        )}
-
-        {/* Status breakdown */}
-        <Grid item xs={12} md={projectId ? 12 : 6}>
-          <Paper sx={{ p: 3, borderRadius: 2, height: '100%' }}>
-            <Typography variant="h6" sx={{ mb: 2 }}>Expense Status Summary</Typography>
-
-            {expensesListIsLoading ? ( // Use hook's loading state
-              <Box sx={{ display: 'flex', justifyContent: 'center', p: 3 }}>
-                <CircularProgress size={30} />
-              </Box>
-            ) : (
-              <Grid container spacing={2}>
-                {/* Status counts */}
-                <Grid item xs={12} md={6}>
-                  <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                    {statusSummaryItems.map(({ status, label, count, amount }) => {
-                      // Skip if no expenses with this status
-                      if (count === 0) return null;
-
-                      // Determine color based on status
-                      let color: string;
-                      let icon: JSX.Element;
-                      switch(status) {
-                        case 'paid':
-                          color = theme.palette.success.main;
-                          icon = <PaidIcon fontSize="small" />;
-                          break;
-                        case 'partially_paid':
-                          color = theme.palette.info.main;
-                          icon = <PaidIcon fontSize="small" />;
-                          break;
-                        case 'pending':
-                          color = theme.palette.warning.main;
-                          icon = <DescriptionIcon fontSize="small" />;
-                          break;
-                        case 'approved':
-                          color = theme.palette.primary.main;
-                          icon = <CheckCircleIcon fontSize="small" />;
-                          break;
-                        case 'rejected':
-                          color = theme.palette.error.main;
-                          icon = <DeleteIcon fontSize="small" />;
-                          break;
-                        default:
-                          color = theme.palette.text.secondary;
-                          icon = <DescriptionIcon fontSize="small" />;
-                      }
-
-                      return (
-                        <Box key={status} sx={{ display: 'flex', alignItems: 'center' }}>
-                          <Avatar
-                            sx={{
-                              width: 32,
-                              height: 32,
-                              bgcolor: alpha(color, 0.2),
-                              color: color,
-                              mr: 1.5
-                            }}
-                          >
-                            {icon}
-                          </Avatar>
-                          <Box>
-                            <Typography variant="body2" fontWeight="medium">{label}</Typography>
-                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                              <Typography variant="body2" color="text.secondary">
-                                {count} {count === 1 ? 'expense' : 'expenses'}
-                              </Typography>
-                              <Typography variant="body2" fontWeight="medium">
-                                {formatCurrency(amount)}
-                              </Typography>
-                            </Box>
-                          </Box>
-                        </Box>
-                      );
-                    })}
-                  </Box>
-                </Grid>
-
-                {/* Visualization */}
-                <Grid item xs={12} md={6} sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
-                  <Box sx={{ position: 'relative', width: '100%', maxWidth: 200 }}>
-                    <Box
-                      sx={{
-                        position: 'relative',
-                        width: '100%',
-                        paddingBottom: '100%',
-                        borderRadius: '50%',
-                        overflow: 'hidden',
-                        bgcolor: '#f5f5f5',
-                      }}
-                    >
-                      {statusSummaryItems.map(({ status, amount, percentage, startPercentage }, index) => {
-                            if (amount === 0) return null;
-
-                            const color = index === 0 ? theme.palette.warning.main :
-                                        index === 1 ? theme.palette.primary.main :
-                                        index === 2 ? theme.palette.info.main :
-                                        index === 3 ? theme.palette.success.main :
-                                        theme.palette.error.main;
-
-                            const slice = (
-                              <Box
-                                key={status}
-                                sx={{
-                                  position: 'absolute',
-                                  width: '100%',
-                                  height: '100%',
-                                  top: 0,
-                                  left: 0,
-                                  background: `conic-gradient(
-                                    ${color} ${startPercentage}%,
-                                    ${color} ${startPercentage + percentage}%,
-                                    transparent ${startPercentage + percentage}%,
-                                    transparent 100%
-                                  )`,
-                                }}
-                              />
-                            );
-                            return slice;
-                      })}
-
-                      {/* Center circle to create donut */}
-                      <Box
-                        sx={{
-                          position: 'absolute',
-                          top: '50%',
-                          left: '50%',
-                          transform: 'translate(-50%, -50%)',
-                          width: '60%',
-                          height: '60%',
-                          borderRadius: '50%',
-                          bgcolor: 'background.paper',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          flexDirection: 'column',
-                        }}
-                      >
-                        <Typography variant="caption" color="text.secondary">Total</Typography>
-                        <Typography variant="body2" fontWeight="bold">{formatCurrency(totalExpensesValue)}</Typography>
-                      </Box>
-                    </Box>
-                  </Box>
-                </Grid>
-              </Grid>
-            )}
-          </Paper>
-        </Grid>
-      </Grid>
-
-      {/* Tabs, search, and group controls */}
-      <Box sx={{ mb: 3, display: 'flex', flexDirection: { xs: 'column', md: 'row' }, gap: 2, alignItems: { xs: 'stretch', md: 'center' } }}>
-        <Box sx={{ flexGrow: 1 }}>
-          <Tabs
-            value={tabValue}
-            onChange={handleTabChange}
-            indicatorColor="primary"
-            textColor="primary"
-            aria-label="expense tabs"
-            variant="scrollable"
-            scrollButtons="auto"
-            sx={{ borderBottom: 1, borderColor: 'divider' }}
-          >
-            <Tab label="All Expenses" />
-            <Tab label="Needs Payment" />
-            <Tab label="Paid" />
-          </Tabs>
-        </Box>
-
-        <ExpenseControls
-          theme={theme}
-          searchTerm={searchTerm}
-          onSearchTermChange={setSearchTerm}
-          projectFilter={projectFilter}
-          onProjectFilterChange={setProjectFilter}
-          projects={projects}
-          categoryFilter={categoryFilter}
-          onCategoryFilterChange={setCategoryFilter}
-          groupBy={groupBy}
-          onGroupByChange={setGroupBy}
-          onRefresh={handleRefresh}
-          projectId={projectId} // Pass the projectId prop from Expenses
-        />
-      </Box>
+      <ExpenseTabsAndControls
+        theme={theme}
+        tabValue={tabValue}
+        onTabChange={handleTabChange}
+        searchTerm={searchTerm}
+        onSearchTermChange={setSearchTerm}
+        projectFilter={projectFilter}
+        onProjectFilterChange={setProjectFilter}
+        projects={projects}
+        categoryFilter={categoryFilter}
+        onCategoryFilterChange={setCategoryFilter}
+        groupBy={groupBy}
+        onGroupByChange={setGroupBy}
+        onRefresh={handleRefresh}
+        projectId={projectId}
+      />
 
       {/* Expenses table */}
       <ExpenseTable
@@ -1050,108 +773,33 @@ const Expenses: React.FC<{ projectId?: string }> = ({ projectId }) => {
         searchTerm={searchTerm}
       />
 
-      {/* Action Menu */}
-      <Menu
+      <ExpenseActionMenu
         anchorEl={anchorEl}
-        open={Boolean(anchorEl)}
+        selectedExpense={selectedMenuExpense}
         onClose={handleMenuClose}
-      >
-        <MenuItem onClick={handleEditFromMenu}>
-          <EditIcon fontSize="small" sx={{ mr: 1 }} />
-          Edit Expense
-        </MenuItem>
+        onEdit={handleEditFromMenu}
+        onPay={handlePayFromMenu}
+        onDelete={handleDeleteFromMenu}
+      />
 
-        {selectedExpenseId && expenses.find(e => e.id === selectedExpenseId)?.status !== 'paid' && (
-          <MenuItem onClick={handlePayFromMenu}>
-            <PaidIcon fontSize="small" sx={{ mr: 1 }} />
-            Mark as Paid
-          </MenuItem>
-        )}
-
-        <MenuItem onClick={handleDeleteFromMenu} sx={{ color: 'error.main' }}>
-          <DeleteIcon fontSize="small" sx={{ mr: 1 }} />
-          Delete
-        </MenuItem>
-      </Menu>
-
-      {/* Expense Form Modal - Props should be correct now */}
-      <ExpenseFormModal
-        key={`expense-form-${selectedExpense?.id || 'new'}`}
-        open={expenseModalOpen}
-        onClose={handleCloseModal}
-        expense={selectedExpense || undefined}
-        onSave={handleSaveExpense}
+      <ExpensePageDialogs
+        expenseModalOpen={expenseModalOpen}
+        paymentModalOpen={paymentModalOpen}
+        selectedExpense={selectedExpense}
+        fullExpenseForPayment={fullExpenseForPayment}
         projects={projects}
         projectPhases={selectedProjectPhases}
+        onCloseExpenseModal={handleCloseModal}
+        onClosePaymentModal={handleClosePaymentModal}
+        onSaveExpense={handleSaveExpense}
+        onSavePayment={handleSavePayment}
       />
 
-      {/* Payment Modal - Pass the full expense object or null */}
-      <PaymentFormModal
-        key={`payment-form-${fullExpenseForPayment?.id || 'none'}`}
-        open={paymentModalOpen}
-        onClose={handleClosePaymentModal}
-        expense={fullExpenseForPayment} // Pass the full object or null
-        onSave={async (actualAmountPaid, paymentDetails) => { // Make async
-          if (fullExpenseForPayment?.id && user) { // Ensure user is available
-            setSubmitting(true); // Use submitting state from Expenses.tsx for general feedback if desired
-            const result = await processExpensePayment(
-              user,
-              fullExpenseForPayment, // Pass the full expense object
-              actualAmountPaid,
-              paymentDetails
-            );
-            setSubmitting(false);
-            if (result.success) {
-              refetchExpenses(); // Refresh expenses list
-              setSnackbar({ open: true, message: result.message, severity: 'success' });
-              if (result.updatedBid) {
-                logger.log("Bid was updated as part of payment processing:", result.updatedBid);
-                // Optionally, could also trigger a refresh/update of bids list if displayed elsewhere
-              }
-            } else {
-              setSnackbar({ open: true, message: result.message, severity: 'error' });
-              // Display paymentError from hook if needed, though snackbar might be enough
-              if (paymentError) logger.error("Payment Processing Error:", paymentError);
-            }
-            handleClosePaymentModal(); // Close modal regardless of success/failure for now
-          } else {
-            logger.error('[Expenses] PaymentFormModal onSave called, but required data (expense ID or user) is missing.', {
-              fullExpenseForPaymentId: fullExpenseForPayment?.id, // Corrected logging variable name
-              userId: user?.uid,
-            });
-            setSnackbar({ open: true, message: 'Error: Missing expense data or user information.', severity: 'error'});
-          }
-        }}
+      <ExpensePageNotifications
+        paymentError={paymentError}
+        snackbar={snackbar}
+        onSnackbarClose={handleSnackbarClose}
       />
-
-      {/* Add Snackbar for notifications */}
-      {/* Snackbar for paymentError from the hook */}
-      {paymentError && (
-        <Snackbar
-          open={!!paymentError}
-          autoHideDuration={6000}
-          onClose={() => { /* setError(null) might be needed if error state is managed in hook */ }}
-          anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
-        >
-          <MuiAlert elevation={6} variant="filled" severity="error" onClose={() => { /* setError(null) */ }}>
-            Payment Error: {paymentError}
-          </MuiAlert>
-        </Snackbar>
-      )}
-      <Snackbar
-        open={snackbar.open}
-        autoHideDuration={6000}
-        onClose={() => setSnackbar(prev => ({ ...prev, open: false }))}
-      >
-        <MuiAlert
-          elevation={6}
-          variant="filled"
-          severity={snackbar.severity}
-          onClose={() => setSnackbar(prev => ({ ...prev, open: false }))}
-        >
-          {snackbar.message}
-        </MuiAlert>
-      </Snackbar>
     </Box>
   );
 };

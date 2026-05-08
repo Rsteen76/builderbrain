@@ -19,6 +19,7 @@ import {
 } from '../config/devMode';
 import { ensureDevDataSeeded } from '../services/devDataStore';
 import { UserService, User, UserRole } from '../services/user';
+import { logger } from '../utils/logger';
 
 const PROFILE_AUTH_ERROR =
   'Unable to load your user profile. Please try signing in again.';
@@ -72,7 +73,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
 
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
-      console.log("Auth state changed:", firebaseUser ? `User: ${firebaseUser.uid}` : "User signed out");
+      logger.debug('Auth state changed', { signedIn: Boolean(firebaseUser), uid: firebaseUser?.uid });
       setLoading(true);
       setError(null);
       
@@ -83,16 +84,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           
           // If user document doesn't exist in Firestore yet, create it
           if (!userDoc) {
-            console.log(`Creating new user document for uid: ${firebaseUser.uid}`);
+            logger.info('Creating missing user profile', { uid: firebaseUser.uid });
             userDoc = await UserService.createUser(firebaseUser);
           } else {
-            console.log(`Found existing user data:`, userDoc);
+            logger.debug('Loaded existing user profile', { uid: firebaseUser.uid, role: userDoc.role });
           }
           
           setUser(firebaseUser);
           setUserData(userDoc);
         } catch (err) {
-          console.error('Error fetching user data:', err);
+          logger.error('Error fetching user data', err);
           setUser(null);
           setUserData(null);
           setError(err instanceof Error ? `${PROFILE_AUTH_ERROR} ${err.message}` : PROFILE_AUTH_ERROR);

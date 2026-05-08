@@ -1,6 +1,6 @@
 import React, { PropsWithChildren } from 'react';
 import { act, renderHook, waitFor } from '@testing-library/react';
-import { QueryClient, QueryClientProvider, setLogger } from 'react-query';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { expenseService } from '../api';
 import { Expense } from '../types';
 import {
@@ -21,12 +21,6 @@ jest.mock('../api', () => ({
     update: jest.fn(),
   },
 }));
-
-setLogger({
-  log: console.log,
-  warn: console.warn,
-  error: () => undefined,
-});
 
 const mockedExpenseService = expenseService as jest.Mocked<typeof expenseService>;
 
@@ -172,10 +166,10 @@ describe('use-expenses React Query hooks', () => {
       createdAt: expect.any(Date),
       updatedAt: expect.any(Date),
     }));
-    expect(invalidateSpy).toHaveBeenCalledWith(['expenses', 'project', 'project-1']);
-    expect(invalidateSpy).toHaveBeenCalledWith(['expenses', 'phase', 'phase-1']);
-    expect(invalidateSpy).toHaveBeenCalledWith(['expenses', 'vendor', 'Lumber Yard']);
-    expect(invalidateSpy).toHaveBeenCalledWith(['expenses', 'subcontractor', 'sub-1']);
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['expenses', 'project', 'project-1'] });
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['expenses', 'phase', 'phase-1'] });
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['expenses', 'vendor', 'Lumber Yard'] });
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['expenses', 'subcontractor', 'sub-1'] });
     expect(setQueryDataSpy).toHaveBeenCalledWith(['expenses', 'expense-1'], createdExpense);
   });
 
@@ -208,8 +202,8 @@ describe('use-expenses React Query hooks', () => {
       paymentDetails: null,
     });
     expect(setQueryDataSpy).toHaveBeenCalledWith(['expenses', 'expense-1'], updatedExpense);
-    expect(invalidateSpy).toHaveBeenCalledWith(['expenses', 'project', 'project-1']);
-    expect(invalidateSpy).toHaveBeenCalledWith(['expenses', 'phase', 'phase-1']);
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['expenses', 'project', 'project-1'] });
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['expenses', 'phase', 'phase-1'] });
   });
 
   test('useDeleteExpense fetches the expense first, deletes it, and removes related caches', async () => {
@@ -233,10 +227,10 @@ describe('use-expenses React Query hooks', () => {
 
     expect(mockedExpenseService.getById).toHaveBeenCalledWith('expense-1');
     expect(mockedExpenseService.delete).toHaveBeenCalledWith('expense-1');
-    expect(removeQueriesSpy).toHaveBeenCalledWith(['expenses', 'expense-1']);
-    expect(invalidateSpy).toHaveBeenCalledWith(['expenses', 'project', 'project-1']);
-    expect(invalidateSpy).toHaveBeenCalledWith(['expenses', 'phase', 'phase-1']);
-    expect(invalidateSpy).toHaveBeenCalledWith(['expenses', 'vendor', 'Lumber Yard']);
-    expect(invalidateSpy).toHaveBeenCalledWith(['expenses', 'subcontractor', 'sub-1']);
+    expect(removeQueriesSpy).toHaveBeenCalledWith({ queryKey: ['expenses', 'expense-1'] });
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['expenses', 'project', 'project-1'] });
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['expenses', 'phase', 'phase-1'] });
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['expenses', 'vendor', 'Lumber Yard'] });
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['expenses', 'subcontractor', 'sub-1'] });
   });
 });

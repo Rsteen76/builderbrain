@@ -20,7 +20,7 @@ This repository is the frontend application. It uses Firebase Auth, Firestore, a
 - TypeScript
 - Material UI
 - React Router
-- React Query
+- TanStack Query
 - Firebase Auth
 - Cloud Firestore
 - Firebase Storage

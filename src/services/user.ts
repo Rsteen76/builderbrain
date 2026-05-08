@@ -12,6 +12,7 @@ import {
   Timestamp,
 } from 'firebase/firestore';
 import { User as FirebaseUser } from 'firebase/auth';
+import { logger } from '../utils/logger';
 
 // Define user roles
 export type UserRole = 'admin' | 'project_manager' | 'team_member' | 'client';
@@ -96,9 +97,9 @@ export class UserService {
    * Get a user by their ID
    */
   static async getUser(userId: string): Promise<User | null> {
-    console.log(`UserService: Getting user with ID: ${userId}`);
+    logger.debug('UserService: loading user', { userId });
     if (!userId) {
-      console.error("UserService: No userId provided to getUser");
+      logger.error('UserService: no userId provided to getUser');
       return null;
     }
     
@@ -106,12 +107,12 @@ export class UserService {
     const userDoc = await getDoc(userRef);
 
     if (!userDoc.exists()) {
-      console.log(`UserService: User with ID ${userId} not found`);
+      logger.debug('UserService: user not found', { userId });
       return null;
     }
 
     const data = userDoc.data() as FirestoreUser;
-    console.log(`UserService: Found user with ID ${userId}: ${data.displayName}`);
+    logger.debug('UserService: user loaded', { userId, role: data.role });
     return this.convertFirestoreData(data);
   }
 
@@ -121,11 +122,11 @@ export class UserService {
   static async getCurrentUser(): Promise<User | null> {
     const currentUser = auth.currentUser;
     if (!currentUser) {
-      console.log("UserService: No authenticated user found");
+      logger.debug('UserService: no authenticated user found');
       return null;
     }
 
-    console.log(`UserService: Current authenticated user: ${currentUser.uid} (${currentUser.email})`);
+    logger.debug('UserService: loading current user', { uid: currentUser.uid, email: currentUser.email });
     return this.getUser(currentUser.uid);
   }
 

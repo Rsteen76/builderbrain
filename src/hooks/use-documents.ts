@@ -1,4 +1,4 @@
-import { useQuery, useMutation, useQueryClient } from 'react-query';
+import { keepPreviousData, useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Document } from '../types';
 import { documentService } from '../api';
 
@@ -16,40 +16,36 @@ export const useProjectDocuments = (
   },
   enabled = true
 ) => {
-  return useQuery(
-    [DOCUMENTS_QUERY_KEY, 'project', projectId, filters],
-    async () => {
+  return useQuery({
+    queryKey: [DOCUMENTS_QUERY_KEY, 'project', projectId, filters],
+    queryFn: async () => {
       const response = await documentService.getDocumentsByProject(projectId, filters);
       if (response.status === 'error') {
         throw new Error(response.error);
       }
       return response.data;
     },
-    {
-      enabled: !!projectId && enabled,
-      keepPreviousData: true,
-      staleTime: 5 * 60 * 1000, // 5 minutes
-    }
-  );
+    enabled: !!projectId && enabled,
+    placeholderData: keepPreviousData,
+    staleTime: 5 * 60 * 1000, // 5 minutes
+  });
 };
 
 /**
  * Hook to fetch a single document by ID
  */
 export const useDocument = (documentId: string, enabled = true) => {
-  return useQuery(
-    [DOCUMENTS_QUERY_KEY, documentId],
-    async () => {
+  return useQuery({
+    queryKey: [DOCUMENTS_QUERY_KEY, documentId],
+    queryFn: async () => {
       const response = await documentService.getById(documentId);
       if (response.status === 'error') {
         throw new Error(response.error);
       }
       return response.data;
     },
-    {
-      enabled: !!documentId && enabled,
-    }
-  );
+    enabled: !!documentId && enabled,
+  });
 };
 
 /**
@@ -58,26 +54,24 @@ export const useDocument = (documentId: string, enabled = true) => {
 export const useCreateDocument = () => {
   const queryClient = useQueryClient();
 
-  return useMutation(
-    async (document: Omit<Document, 'id' | 'createdAt' | 'updatedAt'>) => {
+  return useMutation({
+    mutationFn: async (document: Omit<Document, 'id' | 'createdAt' | 'updatedAt'>) => {
       const response = await documentService.create(document as any);
       if (response.status === 'error') {
         throw new Error(response.error);
       }
       return response.data;
     },
-    {
-      onSuccess: (newDocument) => {
+    onSuccess: (newDocument) => {
         if (!newDocument) return;
 
         // Invalidate project documents query
-        queryClient.invalidateQueries([DOCUMENTS_QUERY_KEY, 'project', newDocument.projectId]);
-        
+        queryClient.invalidateQueries({ queryKey: [DOCUMENTS_QUERY_KEY, 'project', newDocument.projectId] });
+
         // Add the new document to the cache
         queryClient.setQueryData([DOCUMENTS_QUERY_KEY, newDocument.id], newDocument);
-      },
-    }
-  );
+    },
+  });
 };
 
 /**
@@ -86,26 +80,24 @@ export const useCreateDocument = () => {
 export const useUpdateDocument = () => {
   const queryClient = useQueryClient();
 
-  return useMutation(
-    async ({ id, document }: { id: string; document: Partial<Document> }) => {
+  return useMutation({
+    mutationFn: async ({ id, document }: { id: string; document: Partial<Document> }) => {
       const response = await documentService.update(id, document);
       if (response.status === 'error') {
         throw new Error(response.error);
       }
       return response.data;
     },
-    {
-      onSuccess: (updatedDocument) => {
+    onSuccess: (updatedDocument) => {
         if (!updatedDocument) return;
 
         // Update the cache for this specific document
         queryClient.setQueryData([DOCUMENTS_QUERY_KEY, updatedDocument.id], updatedDocument);
-        
+
         // Invalidate project documents query
-        queryClient.invalidateQueries([DOCUMENTS_QUERY_KEY, 'project', updatedDocument.projectId]);
-      },
-    }
-  );
+        queryClient.invalidateQueries({ queryKey: [DOCUMENTS_QUERY_KEY, 'project', updatedDocument.projectId] });
+    },
+  });
 };
 
 /**
@@ -114,26 +106,24 @@ export const useUpdateDocument = () => {
 export const useArchiveDocument = () => {
   const queryClient = useQueryClient();
 
-  return useMutation(
-    async (documentId: string) => {
+  return useMutation({
+    mutationFn: async (documentId: string) => {
       const response = await documentService.archiveDocument(documentId);
       if (response.status === 'error') {
         throw new Error(response.error);
       }
       return response.data;
     },
-    {
-      onSuccess: (archivedDocument) => {
+    onSuccess: (archivedDocument) => {
         if (!archivedDocument) return;
 
         // Update the cache for this specific document
         queryClient.setQueryData([DOCUMENTS_QUERY_KEY, archivedDocument.id], archivedDocument);
-        
+
         // Invalidate project documents query
-        queryClient.invalidateQueries([DOCUMENTS_QUERY_KEY, 'project', archivedDocument.projectId]);
-      },
-    }
-  );
+        queryClient.invalidateQueries({ queryKey: [DOCUMENTS_QUERY_KEY, 'project', archivedDocument.projectId] });
+    },
+  });
 };
 
 /**
@@ -142,26 +132,24 @@ export const useArchiveDocument = () => {
 export const useUnarchiveDocument = () => {
   const queryClient = useQueryClient();
 
-  return useMutation(
-    async (documentId: string) => {
+  return useMutation({
+    mutationFn: async (documentId: string) => {
       const response = await documentService.unarchiveDocument(documentId);
       if (response.status === 'error') {
         throw new Error(response.error);
       }
       return response.data;
     },
-    {
-      onSuccess: (unarchivedDocument) => {
+    onSuccess: (unarchivedDocument) => {
         if (!unarchivedDocument) return;
 
         // Update the cache for this specific document
         queryClient.setQueryData([DOCUMENTS_QUERY_KEY, unarchivedDocument.id], unarchivedDocument);
-        
+
         // Invalidate project documents query
-        queryClient.invalidateQueries([DOCUMENTS_QUERY_KEY, 'project', unarchivedDocument.projectId]);
-      },
-    }
-  );
+        queryClient.invalidateQueries({ queryKey: [DOCUMENTS_QUERY_KEY, 'project', unarchivedDocument.projectId] });
+    },
+  });
 };
 
 /**
@@ -170,26 +158,24 @@ export const useUnarchiveDocument = () => {
 export const useUpdateDocumentVersion = () => {
   const queryClient = useQueryClient();
 
-  return useMutation(
-    async ({ documentId, newUrl, newSize }: { documentId: string; newUrl: string; newSize?: number }) => {
+  return useMutation({
+    mutationFn: async ({ documentId, newUrl, newSize }: { documentId: string; newUrl: string; newSize?: number }) => {
       const response = await documentService.updateVersion(documentId, newUrl, newSize);
       if (response.status === 'error') {
         throw new Error(response.error);
       }
       return response.data;
     },
-    {
-      onSuccess: (updatedDocument) => {
+    onSuccess: (updatedDocument) => {
         if (!updatedDocument) return;
 
         // Update the cache for this specific document
         queryClient.setQueryData([DOCUMENTS_QUERY_KEY, updatedDocument.id], updatedDocument);
-        
+
         // Invalidate project documents query
-        queryClient.invalidateQueries([DOCUMENTS_QUERY_KEY, 'project', updatedDocument.projectId]);
-      },
-    }
-  );
+        queryClient.invalidateQueries({ queryKey: [DOCUMENTS_QUERY_KEY, 'project', updatedDocument.projectId] });
+    },
+  });
 };
 
 /**
@@ -198,29 +184,27 @@ export const useUpdateDocumentVersion = () => {
 export const useDeleteDocument = () => {
   const queryClient = useQueryClient();
 
-  return useMutation(
-    async (documentId: string) => {
+  return useMutation({
+    mutationFn: async (documentId: string) => {
       // Get the document first so we can invalidate related queries
       const documentResponse = await documentService.getById(documentId);
       const document = documentResponse.data;
-      
+
       const response = await documentService.delete(documentId);
       if (response.status === 'error') {
         throw new Error(response.error);
       }
-      
+
       return document;
     },
-    {
-      onSuccess: (document) => {
+    onSuccess: (document) => {
         if (!document) return;
 
         // Remove from the cache
-        queryClient.removeQueries([DOCUMENTS_QUERY_KEY, document.id]);
-        
+        queryClient.removeQueries({ queryKey: [DOCUMENTS_QUERY_KEY, document.id] });
+
         // Invalidate project documents query
-        queryClient.invalidateQueries([DOCUMENTS_QUERY_KEY, 'project', document.projectId]);
-      },
-    }
-  );
-}; 
+        queryClient.invalidateQueries({ queryKey: [DOCUMENTS_QUERY_KEY, 'project', document.projectId] });
+    },
+  });
+};
