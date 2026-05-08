@@ -71,9 +71,12 @@ import { Expense, Bid, ProjectPhase, Project, BudgetProjection, ExpenseStatus, B
 import { formatCurrency, formatPercentage } from '../../../utils/formatters';
 import { getProjectById, updateProject } from '../../../services/project';
 import { useAuth } from '../../../contexts/AuthContext';
-import { Timestamp } from 'firebase/firestore';
-import { doc, updateDoc } from 'firebase/firestore';
-import { db } from '../../../config/firebase';
+import {
+  createBudgetProjection,
+  normalizeBudgetProjection,
+  saveProjectProjections,
+  updateProjectBudget,
+} from '../../../services/budget';
 
 import { 
   addCategoryMapping, 
@@ -167,7 +170,7 @@ const BudgetAllocationTracker: React.FC<BudgetAllocationTrackerProps> = ({
           
           // Get projections from the project and load them to local state
           if (project.projections && Array.isArray(project.projections)) {
-            setLocalProjections(project.projections);
+            setLocalProjections(project.projections.map(normalizeBudgetProjection));
           }
         }
         
@@ -214,34 +217,21 @@ const BudgetAllocationTracker: React.FC<BudgetAllocationTrackerProps> = ({
     }
 
     try {
-      const newProjection: Omit<BudgetProjection, 'id' | 'createdAt'> = {
+      const newProjectionData: Omit<BudgetProjection, 'id' | 'createdAt'> = {
         categoryId: currentProjectionCategory.id,
         amount: typeof projectionAmount === 'number' ? projectionAmount : parseFloat(projectionAmount as string),
         notes: projectionNotes || null,
         userId: user.uid,
         projectId: projectId
       };
+      const newProjection = createBudgetProjection(newProjectionData);
 
       // Add to local state right away for immediate visual feedback
-      const tempId = `temp-${Date.now()}`;
-      setLocalProjections(prev => [
-        ...prev,
-        {
-          ...newProjection,
-          id: tempId, // Will be replaced on next data fetch
-          createdAt: new Date()
-        }
-      ]);
+      const updatedProjections = [...localProjections, newProjection];
+      setLocalProjections(updatedProjections);
 
       // Also update in the database (project.projections array)
-      const projectRef = doc(db, 'projects', projectId);
-      await updateDoc(projectRef, {
-        projections: [...localProjections, {
-          ...newProjection, 
-          id: tempId,
-          createdAt: Timestamp.now()
-        }]
-      });
+      await saveProjectProjections(projectId, updatedProjections);
 
       // Close dialog and reset values
       setProjectionDialogOpen(false);
@@ -324,10 +314,7 @@ const BudgetAllocationTracker: React.FC<BudgetAllocationTrackerProps> = ({
                   onClick={async () => {
                     try {
                       const budget = tempBudget ? parseFloat(tempBudget) : null;
-                      await updateDoc(doc(db, 'projects', projectId), {
-                        budget: budget,
-                        updatedAt: Timestamp.now()
-                      });
+                      await updateProjectBudget(projectId, budget);
                       setProjectBudget(budget);
                       setEditingBudget(false);
                       setSuccess('Budget updated successfully');

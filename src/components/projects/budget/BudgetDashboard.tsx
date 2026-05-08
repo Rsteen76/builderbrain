@@ -65,10 +65,6 @@ import {
   ThumbUp as ThumbUpIcon,
   GroupWork as GroupWorkIcon,
 } from "@mui/icons-material";
-import { Timestamp } from "firebase/firestore";
-import { doc, updateDoc } from 'firebase/firestore';
-import { db } from '../../../config/firebase';
-
 import {
   ResponsiveContainer,
   PieChart,
@@ -112,6 +108,11 @@ import { useAuth } from '../../../contexts/AuthContext';
 import { getCategoryMappingsForProject } from '../../../services/category.service';
 import { MAIN_CATEGORIES, getCategoryById, getParentCategory, mapSimpleToDetailedCategory } from '../../../data/hierarchicalCategories';
 import { Category } from '../../../types/category.types';
+import {
+  addProjectProjection,
+  normalizeBudgetProjection,
+  saveProjectProjections,
+} from '../../../services/budget';
 
 interface BudgetDashboardProps {}
 
@@ -154,10 +155,7 @@ const BudgetDashboard: React.FC<BudgetDashboardProps> = () => {
   const loading = contextLoading; 
   const error = contextError;
   const projections = useMemo(() => (
-      contextProject?.projections?.map(p => ({ 
-          ...p, 
-          createdAt: p.createdAt instanceof Timestamp ? p.createdAt.toDate() : new Date(p.createdAt)
-      })) || []
+      contextProject?.projections?.map(normalizeBudgetProjection) || []
   ), [contextProject?.projections]);
   
   const [categoryMappings, setCategoryMappings] = useState<Record<string, string>>({});
@@ -674,18 +672,7 @@ const BudgetDashboard: React.FC<BudgetDashboardProps> = () => {
     );
 
     try {
-      const projectRef = doc(db, 'projects', contextProject.id);
-      const projectionsToSave = updatedRawProjections.map(p => ({
-        id: p.id,
-        categoryId: p.categoryId,
-        amount: p.amount,
-        notes: p.notes || null,
-        createdAt: p.createdAt instanceof Date ? Timestamp.fromDate(p.createdAt) : p.createdAt 
-      }));
-
-      await updateDoc(projectRef, { 
-        projections: projectionsToSave
-      });
+      await saveProjectProjections(contextProject.id, updatedRawProjections);
 
       setSnackbar({ open: true, message: 'Projection category updated successfully!', severity: 'success' });
 
@@ -710,28 +697,10 @@ const BudgetDashboard: React.FC<BudgetDashboardProps> = () => {
       throw new Error("Project context data missing");
     }
 
-    const newProjection: BudgetProjection = {
-      ...newProjectionData,
-      id: `projection-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
-      createdAt: new Date(),
-    };
-
     const currentRawProjections = contextProject.projections || [];
-    const updatedRawProjections = [...currentRawProjections, newProjection];
 
     try {
-      const projectRef = doc(db, 'projects', contextProject.id);
-      const projectionsToSave = updatedRawProjections.map(p => ({
-        id: p.id,
-        categoryId: p.categoryId,
-        amount: p.amount,
-        notes: p.notes || null,
-        createdAt: p.createdAt instanceof Date ? Timestamp.fromDate(p.createdAt) : p.createdAt 
-      }));
-
-      await updateDoc(projectRef, { 
-        projections: projectionsToSave
-      });
+      await addProjectProjection(contextProject.id, currentRawProjections, newProjectionData);
       
       setSnackbar({ open: true, message: 'Projection added successfully!', severity: 'success' });
 
@@ -762,18 +731,7 @@ const BudgetDashboard: React.FC<BudgetDashboardProps> = () => {
     setLocalProjections(prev => prev.filter(p => p.id !== projectionId));
 
     try {
-      const projectRef = doc(db, 'projects', contextProject.id);
-      const projectionsToSave = updatedRawProjections.map(p => ({
-        id: p.id,
-        categoryId: p.categoryId,
-        amount: p.amount,
-        notes: p.notes || null,
-        createdAt: p.createdAt instanceof Date ? Timestamp.fromDate(p.createdAt) : p.createdAt 
-      }));
-
-      await updateDoc(projectRef, { 
-        projections: projectionsToSave
-      });
+      await saveProjectProjections(contextProject.id, updatedRawProjections);
       
       setSnackbar({ open: true, message: 'Projection deleted successfully!', severity: 'success' });
 
@@ -808,18 +766,7 @@ const BudgetDashboard: React.FC<BudgetDashboardProps> = () => {
     ));
 
     try {
-      const projectRef = doc(db, 'projects', contextProject.id);
-      const projectionsToSave = updatedRawProjections.map(p => ({
-        id: p.id,
-        categoryId: p.categoryId,
-        amount: p.amount,
-        notes: p.notes || null,
-        createdAt: p.createdAt instanceof Date ? Timestamp.fromDate(p.createdAt) : p.createdAt 
-      }));
-
-      await updateDoc(projectRef, { 
-        projections: projectionsToSave
-      });
+      await saveProjectProjections(contextProject.id, updatedRawProjections);
       
       setSnackbar({ open: true, message: 'Projection updated successfully!', severity: 'success' });
 

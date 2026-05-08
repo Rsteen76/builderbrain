@@ -15,7 +15,7 @@ Generated: 2026-05-07
   - `audit/docs-dx.md`
 - Phase 3 complete: this summary ranks findings, dependencies, fix waves, and conflicts.
 - Phase 4 partially complete in this branch:
-  - Completed: dependency vulnerabilities, auth startup failure handling, payment save reliability, data reset reliability, partial expense update safety, shared report ID entropy, accepted-bid expense idempotency, storage validation, hosting headers/CSP, payments N+1 query, dashboard summary read model, project-detail data boundary, Settings stub cleanup, Vite migration, docs/test gates.
+  - Completed: dependency vulnerabilities, auth startup failure handling, payment save reliability, data reset reliability, partial expense update safety, shared report ID entropy, accepted-bid expense idempotency, storage validation, hosting headers/CSP, payments N+1 query, dashboard summary read model, project-detail data boundary, Calendar/Timeline data boundary, budget write boundary, Settings stub cleanup, Vite migration, docs/test gates.
   - Not fully closed: large structural refactors require separate reviewable follow-up PRs.
 
 ## Ranked Findings
@@ -92,7 +92,7 @@ Generated: 2026-05-07
 13. UI components directly perform Firestore reads and writes.
     - Evidence: `src/components/timeline/Timeline.tsx:35`, `src/components/calendar/Calendar.tsx:28`, `src/components/budget/BudgetDashboard.tsx:68`, `src/components/budget/BudgetAllocationTracker.tsx:74`
     - Risk: no consistent authorization, error handling, caching, or test seams.
-    - Fix: move persistence into services/hooks and test those boundaries.
+    - Fix: moved Calendar/Timeline reads into `CalendarTimelineService` plus hooks, and moved budget projection/project budget writes into `budget.ts`.
 
 ## Dependency Graph
 
@@ -124,7 +124,7 @@ Generated: 2026-05-07
 - Move direct Firestore access out of page components into hooks/services.
 - Split `bid.ts`, `project.ts`, `devDataStore.ts`, `Expenses.tsx`, `ExpenseFormModal.tsx`, and budget dashboards along cohesive boundaries.
 - Create a shared event feed/query service for calendar and timeline.
-- Continue moving direct Firestore access out of calendar, timeline, and budget surfaces.
+- Continue moving any remaining direct Firestore access out of secondary/admin utility surfaces.
 
 ### Wave 3: Polish and Gates
 
