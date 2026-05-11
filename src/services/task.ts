@@ -23,6 +23,7 @@ import {
 
 // Import Task, TaskPriority, TaskStatus from the central types file
 import { Task, /*TaskPriority, TaskStatus*/ } from '../types'; // Assuming Priority/Status are string unions in types/index.ts
+import { logger } from '../utils/logger';
 
 // Interface for Firestore data (handles Timestamps and userId)
 interface FirestoreTask extends Omit<Task, 'id' | 'dueDate' | 'createdAt' | 'updatedAt' | 'completedAt'> {
@@ -98,7 +99,7 @@ export class TaskService {
     const docRef = doc(this.collectionRef, id);
     const docSnap = await getDoc(docRef);
     if (!docSnap.exists()) {
-      console.log(`TaskService: Task ${id} not found.`);
+      logger.debug('TaskService: task not found', { id });
       return null;
     }
 
@@ -106,7 +107,11 @@ export class TaskService {
 
     // *** Crucial Check ***
     if (data.userId !== userId) {
-      console.warn(`TaskService: User ${userId} attempted to access unauthorized task ${id} owned by ${data.userId}.`);
+      logger.warn('TaskService: unauthorized task access attempt', {
+        requestedUserId: userId,
+        taskId: id,
+        ownerUserId: data.userId,
+      });
       return null; // Or throw an error
     }
 

@@ -21,6 +21,7 @@ import {
   Timestamp,
 } from 'firebase/firestore';
 import { Subcontractor } from '../types';
+import { logger } from '../utils/logger';
 
 interface FirestoreSubcontractor extends Omit<Subcontractor, 'id' | 'lastBid' | 'createdAt' | 'updatedAt'> {
   userId: string;
@@ -125,14 +126,18 @@ export class SubcontractorService {
     const subcontractorDoc = await getDoc(subcontractorRef);
 
     if (!subcontractorDoc.exists()) {
-      console.log(`SubcontractorService: Subcontractor ${id} not found.`);
+      logger.debug('SubcontractorService: subcontractor not found', { id });
       return null;
     }
 
     const data = subcontractorDoc.data() as FirestoreSubcontractor;
 
     if (data.userId !== userId) {
-      console.warn(`SubcontractorService: User ${userId} attempted to access unauthorized subcontractor ${id} owned by ${data.userId}.`);
+      logger.warn('SubcontractorService: unauthorized subcontractor access attempt', {
+        requestedUserId: userId,
+        subcontractorId: id,
+        ownerUserId: data.userId,
+      });
       return null;
     }
 
@@ -148,10 +153,10 @@ export class SubcontractorService {
       return listDevSubcontractors(userId, filters);
     }
 
-    console.log(`SubcontractorService: Fetching subcontractors for user: ${userId}, with filters:`, filters);
+    logger.debug('SubcontractorService: fetching subcontractors', { userId, filters });
     
     if (!userId) {
-      console.error("SubcontractorService: No userId provided to getSubcontractors");
+      logger.error('SubcontractorService: no userId provided to getSubcontractors');
       return [];
     }
     
@@ -172,10 +177,10 @@ export class SubcontractorService {
     q = query(q, orderBy('createdAt', 'desc'));
 
     const snapshot = await getDocs(q);
-    console.log(`SubcontractorService: Found ${snapshot.docs.length} subcontractors`);
+    logger.debug('SubcontractorService: subcontractors loaded', { count: snapshot.docs.length });
     
     if (snapshot.empty) {
-      console.log("SubcontractorService: No subcontractors found for user:", userId);
+      logger.debug('SubcontractorService: no subcontractors found', { userId });
       return [];
     }
 
