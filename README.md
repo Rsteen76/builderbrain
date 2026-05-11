@@ -227,6 +227,22 @@ npm run build
 npx firebase deploy --only hosting
 ```
 
+Automated Hosting deploys run through GitHub Actions. After a push to `simplification` passes the existing `CI` workflow, the `Deploy Firebase Hosting` workflow checks out that tested commit, rebuilds the existing `build/` output, and deploys it to the live Hosting channel for `constructionbrain-9ff10`.
+
+Required GitHub repository secret:
+
+- `FIREBASE_SERVICE_ACCOUNT_CONSTRUCTIONBRAIN_9FF10`: full JSON credentials for a service account with Firebase Hosting deploy access to `constructionbrain-9ff10`
+
+Required GitHub Actions repository variables:
+
+- `REACT_APP_FIREBASE_API_KEY`
+- `REACT_APP_FIREBASE_APP_ID`
+- `REACT_APP_FIREBASE_AUTH_DOMAIN`
+- `REACT_APP_FIREBASE_MESSAGING_SENDER_ID`
+- `REACT_APP_FIREBASE_STORAGE_BUCKET`
+
+See [RELEASE_CHECKLIST.md](./RELEASE_CHECKLIST.md) for release and rollback steps.
+
 Rules and indexes are also described in Firebase config, but deploy them deliberately:
 
 ```bash
