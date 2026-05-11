@@ -1,5 +1,10 @@
 import { expect, test } from '@playwright/test';
-import { installSmokeTestGuards, selectMuiOption } from './test-utils';
+import {
+  getDevDataState,
+  installSmokeTestGuards,
+  selectMuiOption,
+  waitForDevDataState,
+} from './test-utils';
 
 const seededProject = {
   id: 'proj-hillside',
@@ -10,6 +15,11 @@ const acceptedFoundationBid = {
   id: 'bid-hillside-foundation',
   title: 'Foundation and retaining wall package',
   subcontractor: 'Summit Foundations',
+};
+
+const submittedFramingBid = {
+  id: 'bid-hillside-framing',
+  title: 'Structural framing package',
 };
 
 test.beforeEach(async ({ page }) => {
@@ -41,6 +51,56 @@ test('project detail deep link loads and renders overview data', async ({ page }
   await expect(page.getByRole('heading', { name: seededProject.name })).toBeVisible();
   await expect(page.getByRole('tab', { name: /Overview/i })).toBeVisible();
   await expect(page.getByText(/Financial Overview/i)).toBeVisible();
+});
+
+test('dev auth bypass can edit project details and move project to on hold', async ({ page }) => {
+  const editedProjectName = 'Hillside Custom Home - Playwright Edit';
+
+  await page.goto(`/projects/${seededProject.id}`);
+
+  await page.getByRole('button', { name: 'project actions' }).click();
+  await page.getByRole('menuitem', { name: 'Edit Project' }).click();
+
+  await expect(page).toHaveURL(new RegExp(`/projects/${seededProject.id}/edit$`));
+  await expect(page.getByRole('heading', { name: 'Edit Project' })).toBeVisible();
+  await expect(page.getByLabel('Project Name')).toHaveValue(seededProject.name);
+
+  await page.getByLabel('Project Name').fill(editedProjectName);
+  await page.getByLabel('Client Name').fill('Playwright Owner');
+  await page.getByRole('button', { name: 'Save Changes' }).click();
+
+  await expect(page.getByText('Project updated successfully')).toBeVisible();
+  await waitForDevDataState(
+    page,
+    (state) =>
+      state.projects.some(
+        (project: { id: string; name: string; clientId?: string }) =>
+          project.id === 'proj-hillside' &&
+          project.name === 'Hillside Custom Home - Playwright Edit' &&
+          project.clientId === 'Playwright Owner'
+      )
+  );
+
+  await expect(page).toHaveURL(new RegExp(`/projects/${seededProject.id}$`));
+  await expect(page.getByRole('heading', { name: editedProjectName })).toBeVisible();
+
+  page.once('dialog', async (dialog) => {
+    expect(dialog.message()).toContain('Move this project to On Hold');
+    await dialog.accept();
+  });
+
+  await page.getByRole('button', { name: 'project actions' }).click();
+  await page.getByRole('menuitem', { name: 'Move to On Hold' }).click();
+
+  await expect(page.getByText('Project moved to On Hold.')).toBeVisible();
+  await waitForDevDataState(
+    page,
+    (state) =>
+      state.projects.some(
+        (project: { id: string; status: string }) =>
+          project.id === 'proj-hillside' && project.status === 'on_hold'
+      )
+  );
 });
 
 test('project detail exposes bids, accepted payment stages, and expense workflow surfaces', async ({ page }) => {
@@ -89,8 +149,28 @@ test('accepted bid detail shows payment management controls and schedule progres
   await expect(page.getByRole('cell', { name: 'Inspection signoff', exact: true })).toBeVisible();
 });
 
+test('submitted bid edit form exposes lifecycle status controls', async ({ page }) => {
+  await page.goto(`/bids/${submittedFramingBid.id}`);
+
+  await expect(page.getByRole('heading', { name: submittedFramingBid.title })).toBeVisible();
+  await expect(page.getByText('Submitted')).toBeVisible();
+
+  await page.getByRole('button', { name: 'Edit' }).click();
+  await expect(page.getByRole('heading', { name: 'Edit Bid' })).toBeVisible();
+
+  await selectMuiOption(page, 'Status', 'Accepted');
+  await expect(page.getByRole('button', { name: 'Update Bid' })).toBeDisabled();
+
+  await selectMuiOption(page, 'Status', 'Rejected');
+  await expect(page.getByText('Rejected')).toBeVisible();
+
+  await page.getByRole('button', { name: 'Cancel' }).click();
+  await expect(page.getByRole('heading', { name: 'Edit Bid' })).toBeHidden();
+  await expect(page.getByText('Submitted')).toBeVisible();
+});
+
 test('dev auth bypass can add a payment stage to an accepted bid schedule', async ({ page }) => {
-  const stageName = `Playwright retainage release ${Date.now()}`;
+  const stageName = 'Playwright retainage release';
   const stageAmount = 1234;
 
   await page.goto(`/bids/${acceptedFoundationBid.id}`);
@@ -154,6 +234,48 @@ test('dev auth bypass can add a payment stage to an accepted bid schedule', asyn
       expectedExpenseCount: initialState.expenseCount,
     }
   );
+});
+
+test('dev auth bypass can mark a bid payment stage paid and create the linked expense', async ({ page }) => {
+  const stageName = 'Walls complete';
+
+  await page.goto(`/bids/${acceptedFoundationBid.id}`);
+
+  await expect(page.getByRole('heading', { name: acceptedFoundationBid.title })).toBeVisible();
+  await page.getByText('Payment Schedule').last().click();
+
+  const stageRow = page.getByRole('row').filter({ hasText: stageName });
+  await expect(stageRow).toBeVisible();
+  await expect(stageRow.getByText('Pending')).toBeVisible();
+
+  await stageRow.getByRole('button', { name: 'Create Expense' }).click();
+  await expect(page.getByRole('heading', { name: 'Create Expense for Payment Stage' })).toBeVisible();
+  await page.getByRole('button', { name: 'Create Expense' }).click();
+  await expect(page.getByRole('heading', { name: 'Create Expense for Payment Stage' })).toBeHidden();
+  await expect(page.getByText('Expense created successfully')).toBeVisible();
+
+  await stageRow.getByRole('button', { name: 'Mark as Paid' }).click();
+
+  await expect(page.getByRole('heading', { name: 'Edit Payment Stage' })).toBeVisible();
+  await expect(page.getByLabel('Stage Name')).toHaveValue(stageName);
+  await page.getByRole('button', { name: 'Save' }).click();
+
+  await expect(page.getByRole('heading', { name: 'Edit Payment Stage' })).toBeHidden();
+  await expect(page.getByText('Payment stage updated successfully')).toBeVisible();
+  await expect(stageRow.getByText('Paid')).toBeVisible();
+
+  const state = await getDevDataState(page);
+  const bid = state.bids.find((item: { id: string }) => item.id === acceptedFoundationBid.id);
+  const stage = bid.paymentSchedule.find((item: { id: string }) => item.id === 'stage-foundation-2');
+  const linkedExpense = state.expenses.find((expense: { id?: string }) => expense.id === stage.expenseId);
+
+  expect(stage.status).toBe('paid');
+  expect(stage.expenseId).toBe(linkedExpense.id);
+  expect(linkedExpense).toMatchObject({
+    status: 'paid',
+    amount: 30400,
+    projectId: seededProject.id,
+  });
 });
 
 test('payments dashboard reflects seeded paid expenses and accepted bid commitments', async ({ page }) => {
@@ -235,7 +357,7 @@ test('project expenses tab renders basic expense UI', async ({ page }) => {
 });
 
 test('dev auth bypass can create an expense in local dev storage', async ({ page }) => {
-  const description = `Playwright lumber package ${Date.now()}`;
+  const description = 'Playwright lumber package';
 
   await page.goto('/expenses');
   await expect(page.getByRole('heading', { name: 'Expenses & Payments' })).toBeVisible();
@@ -282,4 +404,24 @@ test('settings notifications can be updated in dev auth bypass', async ({ page }
   await page.getByRole('button', { name: /Save Preferences/i }).click();
 
   await expect(page.getByText('Notification preferences saved.')).toBeVisible();
+});
+
+test('dev auth boundaries redirect signed-out protected routes and allow local sign in', async ({ page }) => {
+  await page.goto('/login');
+  await expect(page.getByText('Development auth bypass is enabled.')).toBeVisible();
+
+  await page.getByLabel('Email Address').fill('local-e2e@example.test');
+  await page.getByLabel('Password').fill('local-dev-password');
+  await page.getByRole('button', { name: 'Sign In' }).click();
+
+  await expect(page).toHaveURL(/\/$/);
+  await page.goto('/projects');
+  await expect(page.getByRole('heading', { name: 'Projects' })).toBeVisible();
+
+  await page.getByRole('button', { name: 'Sign Out' }).click();
+  await expect(page).toHaveURL(/\/login$/);
+  await expect(page.getByText('Development auth bypass is enabled.')).toBeVisible();
+
+  const state = await getDevDataState(page);
+  expect(state.projects.some((project: { id: string }) => project.id === seededProject.id)).toBe(true);
 });

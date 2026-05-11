@@ -1,0 +1,85 @@
+name: Deploy Firebase Hosting
+
+on:
+  workflow_run:
+    workflows:
+      - CI
+    types:
+      - completed
+    branches:
+      - simplification
+
+permissions:
+  contents: read
+
+concurrency:
+  group: firebase-hosting-live
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Deploy live Hosting channel
+    runs-on: ubuntu-latest
+    env:
+      REACT_APP_FIREBASE_API_KEY: ${{ vars.REACT_APP_FIREBASE_API_KEY }}
+      REACT_APP_FIREBASE_APP_ID: ${{ vars.REACT_APP_FIREBASE_APP_ID }}
+      REACT_APP_FIREBASE_AUTH_DOMAIN: ${{ vars.REACT_APP_FIREBASE_AUTH_DOMAIN }}
+      REACT_APP_FIREBASE_MESSAGING_SENDER_ID: ${{ vars.REACT_APP_FIREBASE_MESSAGING_SENDER_ID }}
+      REACT_APP_FIREBASE_PROJECT_ID: constructionbrain-9ff10
+      REACT_APP_FIREBASE_STORAGE_BUCKET: ${{ vars.REACT_APP_FIREBASE_STORAGE_BUCKET }}
+      REACT_APP_DEV_AUTH_BYPASS: 'false'
+      REACT_APP_ENABLE_CLIENT_LOGS: 'false'
+    if: >-
+      github.event.workflow_run.event == 'push' &&
+      github.event.workflow_run.head_branch == 'simplification' &&
+      github.event.workflow_run.conclusion == 'success'
+
+    steps:
+      - name: Checkout tested commit
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+
+      - name: Set up Node
+        uses: actions/setup-node@v5
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Validate Hosting build environment
+        shell: bash
+        run: |
+          required_vars=(
+            REACT_APP_FIREBASE_API_KEY
+            REACT_APP_FIREBASE_APP_ID
+            REACT_APP_FIREBASE_AUTH_DOMAIN
+            REACT_APP_FIREBASE_MESSAGING_SENDER_ID
+            REACT_APP_FIREBASE_PROJECT_ID
+            REACT_APP_FIREBASE_STORAGE_BUCKET
+          )
+          missing_vars=()
+
+          for var_name in "${required_vars[@]}"; do
+            if [[ -z "${!var_name}" ]]; then
+              missing_vars+=("$var_name")
+            fi
+          done
+
+          if (( ${#missing_vars[@]} > 0 )); then
+            printf 'Missing required GitHub Actions variables: %s\n' "${missing_vars[*]}" >&2
+            exit 1
+          fi
+
+      - name: Build Hosting output
+        run: npm run build
+
+      - name: Deploy to Firebase Hosting
+        uses: FirebaseExtended/action-hosting-deploy@v0
+        with:
+          repoToken: ${{ secrets.GITHUB_TOKEN }}
+          firebaseServiceAccount: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_CONSTRUCTIONBRAIN_9FF10 }}
+          projectId: constructionbrain-9ff10
+          channelId: live

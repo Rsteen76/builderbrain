@@ -1,5 +1,5 @@
 import React, { Suspense, lazy } from 'react';
-import { BrowserRouter as Router, Navigate, Routes, Route } from 'react-router-dom';
+import { BrowserRouter as Router, Navigate, Routes, Route, useLocation } from 'react-router-dom';
 import { ThemeProvider, CssBaseline, GlobalStyles } from '@mui/material';
 import { LocalizationProvider } from '@mui/x-date-pickers';
 import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns';
@@ -13,6 +13,7 @@ import BidDeletePortal from './components/dialogs/BidDeletePortal';
 import SharedReportView from './pages/SharedReportView';
 import ProjectWizard from './components/project-wizard/ProjectWizard';
 import { PROJECT_WIZARD_ROUTE } from './constants/projectRoutes';
+import ErrorBoundary from './components/common/ErrorBoundary';
 
 // Lazy load components
 const Dashboard = lazy(() => import('./components/dashboard/Dashboard'));
@@ -31,6 +32,16 @@ const SignUp = lazy(() => import('./components/auth/SignUp'));
 const Payments = lazy(() => import('./components/payments/Payments'));
 const Timeline = lazy(() => import('./components/timeline/Timeline'));
 const Calendar = lazy(() => import('./components/calendar/Calendar'));
+
+const RouteErrorBoundary: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const location = useLocation();
+
+  return (
+    <ErrorBoundary resetKey={location.key}>
+      {children}
+    </ErrorBoundary>
+  );
+};
 
 // Create a wrapper component for the BidDeletePortal
 const BidDeletePortalWrapper = () => {
@@ -149,42 +160,44 @@ const App: React.FC = () => {
         <QueryProvider>
           <AuthProvider>
             <Router future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
-              <Suspense fallback={<div>Loading...</div>}>
-                <Routes>
-                  <Route path="/login" element={<Login />} />
-                  <Route path="/signup" element={<SignUp />} />
-                  <Route path="/" element={<MainLayout />}>
-                    <Route index element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
-                    <Route path="dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
-                    <Route path="projects" element={<ProtectedRoute><Projects /></ProtectedRoute>} />
-                    <Route path="projects/new" element={<ProtectedRoute><Navigate to={PROJECT_WIZARD_ROUTE} replace /></ProtectedRoute>} />
-                    <Route path="projects/new-custom" element={<ProtectedRoute><Navigate to={PROJECT_WIZARD_ROUTE} replace /></ProtectedRoute>} />
-                    <Route path="projects/new-residential" element={<ProtectedRoute><Navigate to={PROJECT_WIZARD_ROUTE} replace /></ProtectedRoute>} />
-                    <Route path="projects/residential-template" element={<ProtectedRoute><Navigate to={PROJECT_WIZARD_ROUTE} replace /></ProtectedRoute>} />
-                    <Route path="projects/wizard" element={<ProtectedRoute><ProjectWizard /></ProtectedRoute>} />
-                    <Route path="projects/:id/edit" element={<ProtectedRoute><ProjectForm /></ProtectedRoute>} />
-                    <Route path="projects/:projectId" element={<ProtectedRoute><ProjectDetailPage /></ProtectedRoute>} />
-                    <Route path="tasks" element={<ProtectedRoute><Tasks /></ProtectedRoute>} />
-                    <Route path="expenses" element={<ProtectedRoute><Expenses /></ProtectedRoute>} />
-                    <Route path="documents" element={<ProtectedRoute><Navigate to="/projects" replace /></ProtectedRoute>} />
-                    <Route path="bids" element={<ProtectedRoute><Bids /></ProtectedRoute>} />
-                    <Route path="bids/:id" element={<ProtectedRoute><BidDetails /></ProtectedRoute>} />
-                    <Route path="payments" element={<ProtectedRoute><Payments /></ProtectedRoute>} />
-                    <Route path="subcontractors" element={<ProtectedRoute><Subcontractors /></ProtectedRoute>} />
-                    <Route path="subcontractors/new" element={<ProtectedRoute><SubcontractorForm /></ProtectedRoute>} />
-                    <Route path="subcontractors/:id" element={<ProtectedRoute><SubcontractorDetails /></ProtectedRoute>} />
-                    <Route path="subcontractors/:id/edit" element={<ProtectedRoute><SubcontractorForm /></ProtectedRoute>} />
-                    <Route path="settings" element={<ProtectedRoute><Settings /></ProtectedRoute>} />
-                    <Route path="templates" element={<ProtectedRoute><Navigate to={PROJECT_WIZARD_ROUTE} replace /></ProtectedRoute>} />
-                    <Route path="timeline" element={<ProtectedRoute><Timeline /></ProtectedRoute>} />
-                    <Route path="calendar" element={<ProtectedRoute><Calendar /></ProtectedRoute>} />
-                    <Route path="shared-reports/:shareId" element={<ProtectedRoute><SharedReportView /></ProtectedRoute>} />
-                  </Route>
-                </Routes>
-                
-                {/* Add the global bid delete portal */}
-                <BidDeletePortalWrapper />
-              </Suspense>
+              <RouteErrorBoundary>
+                <Suspense fallback={<div>Loading...</div>}>
+                  <Routes>
+                    <Route path="/login" element={<Login />} />
+                    <Route path="/signup" element={<SignUp />} />
+                    <Route path="/" element={<MainLayout />}>
+                      <Route index element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
+                      <Route path="dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
+                      <Route path="projects" element={<ProtectedRoute><Projects /></ProtectedRoute>} />
+                      <Route path="projects/new" element={<ProtectedRoute><Navigate to={PROJECT_WIZARD_ROUTE} replace /></ProtectedRoute>} />
+                      <Route path="projects/new-custom" element={<ProtectedRoute><Navigate to={PROJECT_WIZARD_ROUTE} replace /></ProtectedRoute>} />
+                      <Route path="projects/new-residential" element={<ProtectedRoute><Navigate to={PROJECT_WIZARD_ROUTE} replace /></ProtectedRoute>} />
+                      <Route path="projects/residential-template" element={<ProtectedRoute><Navigate to={PROJECT_WIZARD_ROUTE} replace /></ProtectedRoute>} />
+                      <Route path="projects/wizard" element={<ProtectedRoute><ProjectWizard /></ProtectedRoute>} />
+                      <Route path="projects/:id/edit" element={<ProtectedRoute><ProjectForm /></ProtectedRoute>} />
+                      <Route path="projects/:projectId" element={<ProtectedRoute><ProjectDetailPage /></ProtectedRoute>} />
+                      <Route path="tasks" element={<ProtectedRoute><Tasks /></ProtectedRoute>} />
+                      <Route path="expenses" element={<ProtectedRoute><Expenses /></ProtectedRoute>} />
+                      <Route path="documents" element={<ProtectedRoute><Navigate to="/projects" replace /></ProtectedRoute>} />
+                      <Route path="bids" element={<ProtectedRoute><Bids /></ProtectedRoute>} />
+                      <Route path="bids/:id" element={<ProtectedRoute><BidDetails /></ProtectedRoute>} />
+                      <Route path="payments" element={<ProtectedRoute><Payments /></ProtectedRoute>} />
+                      <Route path="subcontractors" element={<ProtectedRoute><Subcontractors /></ProtectedRoute>} />
+                      <Route path="subcontractors/new" element={<ProtectedRoute><SubcontractorForm /></ProtectedRoute>} />
+                      <Route path="subcontractors/:id" element={<ProtectedRoute><SubcontractorDetails /></ProtectedRoute>} />
+                      <Route path="subcontractors/:id/edit" element={<ProtectedRoute><SubcontractorForm /></ProtectedRoute>} />
+                      <Route path="settings" element={<ProtectedRoute><Settings /></ProtectedRoute>} />
+                      <Route path="templates" element={<ProtectedRoute><Navigate to={PROJECT_WIZARD_ROUTE} replace /></ProtectedRoute>} />
+                      <Route path="timeline" element={<ProtectedRoute><Timeline /></ProtectedRoute>} />
+                      <Route path="calendar" element={<ProtectedRoute><Calendar /></ProtectedRoute>} />
+                      <Route path="shared-reports/:shareId" element={<ProtectedRoute><SharedReportView /></ProtectedRoute>} />
+                    </Route>
+                  </Routes>
+
+                  {/* Add the global bid delete portal */}
+                  <BidDeletePortalWrapper />
+                </Suspense>
+              </RouteErrorBoundary>
             </Router>
           </AuthProvider>
         </QueryProvider>
