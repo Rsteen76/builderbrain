@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Outlet, useNavigate, useLocation } from 'react-router-dom';
+import { logger } from '../../utils/logger';
 import {
   Box,
   AppBar,
@@ -62,7 +63,7 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
       await logout();
       navigate('/login');
     } catch (error) {
-      console.error('Error signing out:', error);
+      logger.error('Error signing out:', error);
     }
   };
 

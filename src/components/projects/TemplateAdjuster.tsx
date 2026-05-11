@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { logger } from '../../utils/logger';
 import {
   Box,
   Button,
@@ -294,7 +295,7 @@ const TemplateAdjuster: React.FC<TemplateAdjusterProps> = ({
       // Close the dialog
       onClose();
     } catch (err) {
-      console.error('Error updating project template:', err);
+      logger.error('Error updating project template:', err);
       setError('Failed to update project template. Please try again.');
     } finally {
       setIsLoading(false);

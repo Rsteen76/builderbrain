@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { logger } from '../../utils/logger';
 import {
   Dialog,
   DialogTitle,
@@ -57,15 +58,15 @@ const QuickBidDialog: React.FC<QuickBidDialogProps> = ({
 
   // Update local subcontractors when props change
   useEffect(() => {
-    console.log('QuickBidDialog - subcontractors received:', subcontractors);
+    logger.log('QuickBidDialog - subcontractors received:', subcontractors);
     setLocalSubcontractors(subcontractors);
   }, [subcontractors]);
 
   // Log when dialog opens or closes
   useEffect(() => {
     if (open) {
-      console.log('QuickBidDialog opened with phaseId:', phaseId);
-      console.log('QuickBidDialog - subcontractors count:', subcontractors.length);
+      logger.log('QuickBidDialog opened with phaseId:', phaseId);
+      logger.log('QuickBidDialog - subcontractors count:', subcontractors.length);
     }
   }, [open, phaseId, subcontractors]);
 
@@ -73,7 +74,7 @@ const QuickBidDialog: React.FC<QuickBidDialogProps> = ({
     try {
       // Check for required projectId
       if (!projectId) {
-        console.error('ProjectId is required to create a bid');
+        logger.error('ProjectId is required to create a bid');
         toast.error('Cannot create bid: Project ID is missing');
         return;
       }
@@ -103,7 +104,7 @@ const QuickBidDialog: React.FC<QuickBidDialogProps> = ({
       // Show success message
       toast.success('Bid created successfully');
     } catch (error) {
-      console.error('Error creating bid:', error);
+      logger.error('Error creating bid:', error);
       toast.error('Failed to create bid');
     }
   };
@@ -134,7 +135,7 @@ const QuickBidDialog: React.FC<QuickBidDialogProps> = ({
       // Close the dialog
       setShowAddSubcontractor(false);
     } catch (error) {
-      console.error('Error adding subcontractor:', error);
+      logger.error('Error adding subcontractor:', error);
     } finally {
       setIsAddingSubcontractor(false);
     }

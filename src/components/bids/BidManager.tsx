@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { logger } from '../../utils/logger';
 import {
   Box,
   Paper,
@@ -259,7 +260,7 @@ const BidManager: React.FC = () => {
       
       setBids(fetchedBids);
     } catch (err) {
-      console.error("Error fetching bids:", err);
+      logger.error("Error fetching bids:", err);
       setError('Failed to load bids. Please try again.');
     } finally {
       setLoading(false);
@@ -296,7 +297,7 @@ const BidManager: React.FC = () => {
   };
 
   const handleBidDeleted = (bidId: string) => {
-    console.log(`Bid ${bidId} successfully deleted`);
+    logger.log(`Bid ${bidId} successfully deleted`);
     // Remove the bid from the local state
     setBids(prevBids => prevBids.filter(b => b.id !== bidId));
   };

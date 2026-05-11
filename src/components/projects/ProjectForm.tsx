@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
+import { logger } from '../../utils/logger';
 import {
   Box,
   Paper,
@@ -111,21 +112,21 @@ const ProjectForm: React.FC = () => {
       try {
         setLoading(true);
         setError(null);
-        console.log(`Fetching project ${id} for editing by user ${user.uid}`);
+        logger.log(`Fetching project ${id} for editing by user ${user.uid}`);
         
         // Ensure we're passing parameters in the correct order (projectId, userId)
         const projectData = await ProjectService.getProject(id, user.uid);
         
         if (!projectData) {
-          console.error(`Project with ID ${id} not found`);
+          logger.error(`Project with ID ${id} not found`);
           setError(`Project with ID ${id} not found or not accessible. Please check the project ID and try again.`);
           return;
         }
         
-        console.log('Project data loaded successfully:', projectData.name);
+        logger.log('Project data loaded successfully:', projectData.name);
         setProject(projectData);
       } catch (err) {
-        console.error('Error fetching project:', err);
+        logger.error('Error fetching project:', err);
         setError(`Failed to load project: ${err instanceof Error ? err.message : 'Unknown error'}`);
       } finally {
         setLoading(false);
@@ -264,19 +265,19 @@ const ProjectForm: React.FC = () => {
 
       if (isEditMode && id) {
         // Update existing project
-        console.log('Updating project:', project);
+        logger.log('Updating project:', project);
         await ProjectService.updateProject(id, project);
         setSuccess('Project updated successfully');
         setTimeout(() => navigate(`/projects/${id}`), 1500);
       } else {
         // Create new project
-        console.log('Creating new project:', project);
+        logger.log('Creating new project:', project);
         const newProject = await ProjectService.createProject(user.uid, project as Omit<Project, 'id' | 'userId' | 'createdAt' | 'updatedAt'>);
         setSuccess('Project created successfully');
         setTimeout(() => navigate(`/projects/${newProject.id}`), 1500);
       }
     } catch (err) {
-      console.error('Error saving project:', err);
+      logger.error('Error saving project:', err);
       setError(err instanceof Error ? err.message : 'Failed to save project');
     } finally {
       setSubmitting(false);

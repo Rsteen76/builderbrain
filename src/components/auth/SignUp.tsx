@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { logger } from '../../utils/logger';
 import {
   Box,
   Paper,
@@ -35,7 +36,7 @@ const SignUp: React.FC = () => {
       await signUp(email, password);
       navigate('/');
     } catch (err) {
-      console.error('Sign up failed:', err);
+      logger.error('Sign up failed:', err);
     } finally {
       setLoading(false);
     }
@@ -48,7 +49,7 @@ const SignUp: React.FC = () => {
       await signInWithGoogle();
       navigate('/');
     } catch (err) {
-      console.error('Google sign in failed:', err);
+      logger.error('Google sign in failed:', err);
     } finally {
       setLoading(false);
     }

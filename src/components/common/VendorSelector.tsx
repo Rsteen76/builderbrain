@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { logger } from '../../utils/logger';
 import {
   TextField,
   Box,
@@ -46,11 +47,11 @@ const VendorSelector: React.FC<VendorSelectorProps> = ({
 
   // Fetch vendors from user's expenses
   useEffect(() => {
-    console.log('VendorSelector - Fetching vendors, user:', user?.uid);
+    logger.log('VendorSelector - Fetching vendors, user:', user?.uid);
     setIsLoading(true);
     
     if (!user?.uid) {
-      console.log('VendorSelector - No user ID available');
+      logger.log('VendorSelector - No user ID available');
       setIsLoading(false);
       return;
     }
@@ -59,7 +60,7 @@ const VendorSelector: React.FC<VendorSelectorProps> = ({
       try {
         // Fetch all expenses for the user
         const expenses = await ExpenseService.getExpenses(user.uid);
-        console.log(`VendorSelector - Fetched ${expenses.length} expenses`);
+        logger.log(`VendorSelector - Fetched ${expenses.length} expenses`);
         
         // Extract unique vendor names from expenses
         const vendorNames = expenses
@@ -71,7 +72,7 @@ const VendorSelector: React.FC<VendorSelectorProps> = ({
           );
           
         const uniqueVendors = Array.from(new Set(vendorNames)).sort();
-        console.log('VendorSelector - Unique vendors from expenses:', uniqueVendors);
+        logger.log('VendorSelector - Unique vendors from expenses:', uniqueVendors);
         
         // Combine with any vendors stored in localStorage
         try {
@@ -85,12 +86,12 @@ const VendorSelector: React.FC<VendorSelectorProps> = ({
               // Combine and deduplicate vendors
               const combinedVendors = Array.from(new Set([...uniqueVendors, ...parsedVendors])).sort();
               setVendors(combinedVendors);
-              console.log('VendorSelector - Combined vendors:', combinedVendors);
+              logger.log('VendorSelector - Combined vendors:', combinedVendors);
               return;
             }
           }
         } catch (storageError) {
-          console.error('VendorSelector - Error loading vendors from localStorage:', storageError);
+          logger.error('VendorSelector - Error loading vendors from localStorage:', storageError);
         }
         
         // If we have vendors from expenses, use those
@@ -100,11 +101,11 @@ const VendorSelector: React.FC<VendorSelectorProps> = ({
         }
         
         // Fallback to default vendors if no vendors found
-        console.log('VendorSelector - No vendors found, using defaults');
+        logger.log('VendorSelector - No vendors found, using defaults');
         setVendors(DEFAULT_VENDORS);
         
       } catch (error) {
-        console.error('VendorSelector - Error fetching vendors from expenses:', error);
+        logger.error('VendorSelector - Error fetching vendors from expenses:', error);
         setVendors(DEFAULT_VENDORS);
       } finally {
         setIsLoading(false);
@@ -120,7 +121,7 @@ const VendorSelector: React.FC<VendorSelectorProps> = ({
     
     try {
       const vendorName = newVendor.trim();
-      console.log('VendorSelector - Saving new vendor:', vendorName);
+      logger.log('VendorSelector - Saving new vendor:', vendorName);
       
       // Add to vendors list if not already there
       if (!vendors.some(v => v.toLowerCase() === vendorName.toLowerCase())) {
@@ -129,15 +130,15 @@ const VendorSelector: React.FC<VendorSelectorProps> = ({
         // Save to localStorage
         const storageKey = `vendors_${user.uid}`;
         localStorage.setItem(storageKey, JSON.stringify(updatedVendors));
-        console.log('VendorSelector - Saved updated vendors to localStorage:', updatedVendors);
+        logger.log('VendorSelector - Saved updated vendors to localStorage:', updatedVendors);
         
         // Update state
         setVendors(updatedVendors);
       } else {
-        console.log('VendorSelector - Vendor already exists, not saving');
+        logger.log('VendorSelector - Vendor already exists, not saving');
       }
     } catch (error) {
-      console.error('VendorSelector - Error adding vendor:', error);
+      logger.error('VendorSelector - Error adding vendor:', error);
     }
   };
 

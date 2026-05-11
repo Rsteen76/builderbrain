@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { logger } from '../../utils/logger';
 import {
   Dialog,
   DialogTitle,
@@ -106,7 +107,7 @@ const PaymentFormModal: React.FC<PaymentFormModalProps> = ({
             // Don't auto-set the amount for bid-related expenses
           }
         } catch (error) {
-          console.error('Error fetching bid data:', error);
+          logger.error('Error fetching bid data:', error);
         } finally {
           setLoadingBidData(false);
         }
@@ -157,7 +158,7 @@ const PaymentFormModal: React.FC<PaymentFormModalProps> = ({
     
     setErrors(newErrors);
     if (Object.keys(newErrors).length > 0) {
-      console.log('[PaymentFormModal] Validation errors:', newErrors);
+      logger.log('[PaymentFormModal] Validation errors:', newErrors);
     }
     return Object.keys(newErrors).length === 0;
   };
@@ -170,7 +171,7 @@ const PaymentFormModal: React.FC<PaymentFormModalProps> = ({
     setLoading(true);
     setSubmitError(null);
     const finalAmount = Number(actualAmount);
-    console.log(`[PaymentFormModal] Processing payment - Amount: ${finalAmount}`);
+    logger.log(`[PaymentFormModal] Processing payment - Amount: ${finalAmount}`);
     
     // Create the payment details object
     const paymentDetailsObj: ExpensePaymentDetails = {
@@ -198,7 +199,7 @@ const PaymentFormModal: React.FC<PaymentFormModalProps> = ({
 
       handleClose();
     } catch (error) {
-      console.error('[PaymentFormModal] Error processing payment:', error);
+      logger.error('[PaymentFormModal] Error processing payment:', error);
       setSubmitError(`Failed to process payment: ${error instanceof Error ? error.message : String(error)}`);
     } finally {
       setLoading(false);

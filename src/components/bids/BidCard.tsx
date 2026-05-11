@@ -71,147 +71,26 @@ import {
   Business as BusinessIcon,
   Payments as PaymentsIcon,
 } from '@mui/icons-material';
-import { formatCurrency, formatDate } from '../../utils/formatters';
-import { Bid, BidSummary, BidPaymentStage } from '../../types';
+import { formatCurrency } from '../../utils/formatters';
+import { Bid, BidSummary } from '../../types';
 import SpeedDial from '@mui/material/SpeedDial';
 import SpeedDialIcon from '@mui/material/SpeedDialIcon';
 import SpeedDialAction from '@mui/material/SpeedDialAction';
 import SendIcon from '@mui/icons-material/Send';
 import MoneyIcon from '@mui/icons-material/Money';
 import { darken } from '@mui/material/styles';
-
-// Status colors
-const bidStatusColors: Record<string, string> = {
-  draft: 'default',
-  submitted: 'info',
-  accepted: 'success',
-  rejected: 'error',
-  expired: 'warning',
-  withdrawn: 'default',
-  revision_requested: 'warning',
-};
-
-// Priority colors
-const bidPriorityColors: Record<string, string> = {
-  low: 'default',
-  medium: 'info',
-  high: 'warning',
-  urgent: 'error',
-};
-
-// Status display names
-const STATUS_DISPLAY: Record<string, string> = {
-  draft: 'Draft',
-  submitted: 'Submitted',
-  accepted: 'Accepted',
-  rejected: 'Rejected',
-  expired: 'Expired',
-  withdrawn: 'Withdrawn',
-  revision_requested: 'Revision Requested',
-};
-
-// Priority display names
-const PRIORITY_DISPLAY: Record<string, string> = {
-  low: 'Low',
-  medium: 'Medium',
-  high: 'High',
-  urgent: 'Urgent',
-};
-
-// Helper function for safe palette access with string keys
-const getPaletteColor = (theme: any, colorKey: string, variant: string = 'main') => {
-  try {
-    // First try to access as a direct palette property
-    if (colorKey === 'default') {
-      return theme.palette.grey[500];
-    }
-    if (theme.palette[colorKey as keyof typeof theme.palette]?.[variant]) {
-      return theme.palette[colorKey as keyof typeof theme.palette][variant];
-    }
-    // Fallback to grey
-    return theme.palette.grey[variant === 'main' ? 500 : 300];
-  } catch (e) {
-    console.warn('Error accessing palette color:', e);
-    return theme.palette.grey[500];
-  }
-};
-
-// Type guard to check if bid is a full Bid or just a BidSummary
-const isFullBid = (bid: BidSummary | Bid): bid is Bid => {
-  // Check for specific properties that only exist in the full Bid interface
-  return !!(bid as Bid).paymentSchedule || !!(bid as Bid).paymentProgress || !!(bid as Bid).attachments;
-};
-
-// Safe date formatter to handle possibly null/undefined dates
-const safeFormatDate = (date: string | Date | null | undefined): string => {
-  if (!date) return 'N/A';
-  try {
-    return formatDate(date);
-  } catch (e) {
-    console.warn('Error formatting date:', e);
-    return 'Invalid date';
-  }
-};
-
-// Generate status chip props
-const getStatusChipProps = (status: string, theme: any) => {
-  let bgColor;
-  let textColor;
-  let icon: React.ReactElement | undefined;
-
-  switch (status) {
-    case 'draft':
-      bgColor = alpha(theme.palette.grey[500], 0.2);
-      textColor = theme.palette.text.secondary;
-      icon = <DescriptionIcon sx={{ fontSize: '0.8rem' }} />;
-      break;
-    case 'submitted':
-      bgColor = alpha(theme.palette.info.main, 0.2);
-      textColor = theme.palette.info.dark;
-      icon = <AssignmentIcon sx={{ fontSize: '0.8rem' }} />;
-      break;
-    case 'accepted':
-      bgColor = alpha(theme.palette.success.main, 0.2);
-      textColor = theme.palette.success.dark;
-      icon = <CheckCircleIcon sx={{ fontSize: '0.8rem' }} />;
-      break;
-    case 'rejected':
-      bgColor = alpha(theme.palette.error.main, 0.2);
-      textColor = theme.palette.error.dark;
-      icon = <CancelIcon sx={{ fontSize: '0.8rem' }} />;
-      break;
-    case 'expired':
-      bgColor = alpha(theme.palette.warning.main, 0.2);
-      textColor = theme.palette.warning.dark;
-      icon = <ScheduleIcon sx={{ fontSize: '0.8rem' }} />;
-      break;
-    case 'revision_requested':
-      bgColor = alpha(theme.palette.warning.main, 0.2);
-      textColor = theme.palette.warning.dark;
-      icon = <EditIcon sx={{ fontSize: '0.8rem' }} />;
-      break;
-    default:
-      bgColor = alpha(theme.palette.grey[500], 0.2);
-      textColor = theme.palette.text.secondary;
-      icon = undefined;
-  }
-
-  return {
-    label: STATUS_DISPLAY[status] || status,
-    icon,
-    size: 'small' as 'small',
-    sx: {
-      backgroundColor: bgColor,
-      color: textColor,
-      borderRadius: '4px',
-      fontWeight: 600,
-      '& .MuiChip-icon': {
-        color: 'inherit',
-        marginLeft: '4px',
-      },
-    },
-  };
-};
+import {
+  bidStatusColors,
+  getPaletteColor,
+  getPaymentProgress,
+  getPaymentSchedule,
+  getUpcomingPayment,
+  isDeadlineClose as calculateDeadlineClose,
+  isNearDueDate,
+  safeFormatDate,
+  STATUS_DISPLAY,
+} from './card/bidCardUtils';
+import BidCardHeaderContent from './card/BidCardHeaderContent';
 
 export interface BidCardProps {
   bid: BidSummary | Bid;
@@ -226,28 +105,6 @@ export interface BidCardProps {
   onAddNote?: (bid: BidSummary | Bid, note: string) => void;
   onGenerateContract?: (bid: BidSummary | Bid) => void;
 }
-
-// Interface for TabPanel props
-interface TabPanelProps {
-  children?: React.ReactNode;
-  value: number;
-  index: number;
-}
-
-// TabPanel component
-const TabPanel: React.FC<TabPanelProps> = ({ children, value, index }) => {
-  return (
-    <Box
-      role="tabpanel"
-      hidden={value !== index}
-      id={`bid-tabpanel-${index}`}
-      aria-labelledby={`bid-tab-${index}`}
-      sx={{ p: 2, maxHeight: 320, overflow: 'auto' }}
-    >
-      {value === index && children}
-    </Box>
-  );
-};
 
 const BidCard: React.FC<BidCardProps> = ({ 
   bid, 
@@ -265,17 +122,10 @@ const BidCard: React.FC<BidCardProps> = ({
   const theme = useTheme();
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
   const [expanded, setExpanded] = useState(false);
-  const [activeTab, setActiveTab] = useState(0);
   const [note, setNote] = useState("");
   const [showNoteDialog, setShowNoteDialog] = useState(false);
   const menuOpen = Boolean(anchorEl);
-  const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
   
-  // Use type guard to check if we have full bid data
-  const hasFull = isFullBid(bid);
-  // Cast to Bid if full features are needed, otherwise use BidSummary properties
-  const fullBid = hasFull ? bid as Bid : null;
-
   const handleToggleExpand = (event: React.MouseEvent<HTMLButtonElement>) => {
     event.stopPropagation();
     setExpanded(!expanded);
@@ -294,10 +144,6 @@ const BidCard: React.FC<BidCardProps> = ({
     event?.stopPropagation();
     action(bid);
     handleMenuClose();
-  };
-
-  const handleChangeTab = (event: React.SyntheticEvent, newValue: number) => {
-    setActiveTab(newValue);
   };
 
   const handleShowNoteDialog = (e: React.MouseEvent) => {
@@ -331,360 +177,30 @@ const BidCard: React.FC<BidCardProps> = ({
   };
 
   // Calculate if deadline is close (within 3 days)
-  const isDeadlineClose = useMemo(() => {
-    if (!bid.submissionDeadline) {
-      return false;
-    }
-    const now = new Date();
-    const deadlineDate = new Date(bid.submissionDeadline);
-    if (isNaN(deadlineDate.getTime())) return false; // Invalid date
-    const diffTime = deadlineDate.getTime() - now.getTime();
-    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-    return diffDays <= 3 && diffDays >= 0;
-  }, [bid.submissionDeadline]);
+  const isDeadlineClose = useMemo(
+    () => calculateDeadlineClose(bid.submissionDeadline),
+    [bid.submissionDeadline]
+  );
 
-  // Get payment progress with improved calculation
-  const paymentProgress = useMemo(() => {
-    // Default values if no payment progress is available
-    const totalAmount = bid.totalAmount || 0;
-    
-    // Calculate from payment schedule if payment progress is not available but schedule is
-    if (!fullBid?.paymentProgress && fullBid?.paymentSchedule && fullBid.paymentSchedule.length > 0) {
-      let paid = 0;
-      let pending = 0;
+  const paymentProgress = useMemo(() => getPaymentProgress(bid), [bid]);
 
-      fullBid.paymentSchedule.forEach(stage => {
-        const isStagePaid = stage.isPaid === true || stage.status === 'paid';
-        const isStagePending = !isStagePaid && (stage.status === 'pending' || stage.status === 'in_progress');
-        
-        // Calculate amount based on either percentage or fixed amount
-        // Use the amount already present if it exists, otherwise calculate percentage
-        const stageAmount = stage.isFixedAmount 
-          ? (stage.fixedAmount || 0) 
-          : (stage.amount || (totalAmount * (stage.percentage || 0) / 100));
+  const paymentSchedule = useMemo(() => getPaymentSchedule(bid), [bid]);
+  const upcomingPayment = useMemo(
+    () => getUpcomingPayment(paymentSchedule),
+    [paymentSchedule]
+  );
 
-        if (isStagePaid) {
-          paid += stageAmount;
-        } else if (isStagePending) {
-          pending += stageAmount;
-        }
-      });
-        
-      return {
-        percentage: totalAmount > 0 ? Math.round((paid / totalAmount) * 100) : 0,
-        paid,
-        pending,
-        remaining: Math.max(0, totalAmount - paid) // Ensure remaining isn't negative
-      };
-    }
-    
-    // Use existing paymentProgress object if available
-    if (fullBid?.paymentProgress && totalAmount > 0) {
-      const paid = fullBid.paymentProgress.paid || 0;
-      return {
-        percentage: Math.round((paid / totalAmount) * 100),
-        paid,
-        pending: fullBid.paymentProgress.pending || 0,
-        remaining: Math.max(0, fullBid.paymentProgress.remaining ?? (totalAmount - paid)) // Ensure remaining isn't negative
-      };
-    }
-    
-    // We always return a valid object with defaults
-    return { 
-      percentage: 0, 
-      paid: 0,
-      pending: 0,
-      remaining: totalAmount 
-    };
-  }, [bid.totalAmount, fullBid]);
-
-  // Get payment schedule with improved normalization
-  const paymentSchedule = useMemo(() => {
-    if (!fullBid?.paymentSchedule) return [];
-    
-    return fullBid.paymentSchedule.map(stage => {
-      const isPaid = stage.isPaid === true || stage.status === 'paid';
-      const isPending = !isPaid && (stage.status === 'pending' || stage.status === 'in_progress');
-
-      // Calculate amount if not explicitly set
-      let calculatedAmount = stage.amount;
-      if (!stage.isFixedAmount && !calculatedAmount && stage.percentage) {
-        calculatedAmount = (fullBid.totalAmount * stage.percentage) / 100;
-      }
-      
-      return {
-        ...stage,
-        amount: calculatedAmount, // Use the calculated or existing amount
-        paid: isPaid,
-        pending: isPending,
-        isFixedAmount: stage.isFixedAmount || false,
-        fixedAmount: stage.fixedAmount || 0,
-        hasPhase: !!(stage.phaseId && stage.phaseName),
-        dueDateFormatted: stage.dueDate ? safeFormatDate(stage.dueDate) : 'N/A',
-        paymentDateFormatted: stage.paymentDate ? safeFormatDate(stage.paymentDate) : null
-      };
-    });
-  }, [fullBid]);
-
-  // Get documents
-  const documents = useMemo(() => {
-    if (fullBid?.attachments) {
-      if (Array.isArray(fullBid.attachments)) {
-        return fullBid.attachments.map(att => {
-          if (typeof att === 'string') {
-            // Try to extract a name from URL, otherwise use 'Attachment'
-            const name = att.substring(att.lastIndexOf('/') + 1).split('?')[0] || 'Attachment';
-            return { url: att, name: decodeURIComponent(name) };
-          } else if (att && typeof att === 'object' && att.url) {
-            return { url: att.url, name: att.name || 'Attachment' };
-          }
-          return null;
-        }).filter(Boolean) as { name: string; url: string }[];
-      }
-    }
-    return [];
-  }, [fullBid]);
-
-  const statusChipProps = getStatusChipProps(bid.status, theme);
-
-  const renderHeaderContent = () => {
-  return (
-      <Box sx={{ 
-        display: 'flex', 
-        flexDirection: 'column', 
-        width: '100%',
-        position: 'relative',
-        '&::before': expanded ? {
-          content: '""',
-          position: 'absolute',
-          left: -8,
-          top: 0,
-          bottom: 0,
-          width: 4,
-          borderRadius: 4,
-          backgroundColor: getPaletteColor(theme, bidStatusColors[bid.status] as string || 'grey'),
-        } : {},
-      }}>
-        <Box sx={{ display: 'flex', alignItems: 'flex-start', mb: 1 }}>
-          <Box 
-      sx={{ 
-              display: 'flex', 
-              alignItems: 'flex-start', 
-              flexGrow: 1 
-            }}
-          >
-            <Avatar 
-        sx={{ 
-                bgcolor: alpha(getPaletteColor(theme, bidStatusColors[bid.status] as string || 'grey'), 0.9),
-                color: getPaletteColor(theme, bidStatusColors[bid.status] as string || 'grey', 'contrastText'),
-                mr: 1.5,
-                width: 46,
-                height: 46,
-                boxShadow: `0 3px 5px ${alpha(theme.palette.common.black, 0.2)}`
-              }}
-            >
-              {getStatusIcon(bid.status)}
-            </Avatar>
-            <Box>
-              <Typography 
-                variant="h6" 
-                component="div" 
-                sx={{ 
-                  fontWeight: 600,
-                  lineHeight: 1.2,
-                  mb: 0.5, 
-                  display: 'flex',
-                  alignItems: 'center'
-                }}
-              >
-                {bid.title || bid.projectName}
-                {bid.priority === 'high' && (
-                  <PriorityHighIcon 
-                    color="error" 
-                    fontSize="small" 
-                    sx={{ ml: 1 }} 
-                    titleAccess="High Priority"
-                  />
-                )}
-                {isDeadlineClose && (
-                  <Tooltip title="Deadline Approaching">
-                    <AlarmIcon 
-                    color="warning" 
-                      fontSize="small" 
-                      sx={{ ml: 1 }} 
-                    />
-                  </Tooltip>
-                )}
-              </Typography>
-              <Typography 
-                color="text.secondary" 
-                variant="body2" 
-              sx={{ 
-                  display: 'flex',
-                  alignItems: 'center',
-                }}
-              >
-                <LocalOfferIcon fontSize="inherit" sx={{ mr: 0.5 }} />
-                {formatCurrency(bid.totalAmount)} • 
-                <AccessTimeIcon fontSize="inherit" sx={{ mx: 0.5 }} />
-                {safeFormatDate((bid as any).submissionDate || new Date().toISOString())}
-                {bid.subcontractorName && (
-                  <>
-                    <BusinessIcon fontSize="inherit" sx={{ mx: 0.5 }} />
-                    {bid.subcontractorName}
-                </>
-              )}
-              </Typography>
-            </Box>
-          </Box>
-          
-          {/* Status badge */}
-          <Chip
-            label={STATUS_DISPLAY[bid.status] || bid.status}
-                size="small" 
-            sx={{
-              bgcolor: alpha(getPaletteColor(theme, bidStatusColors[bid.status] as string || 'grey'), 0.15),
-              color: getPaletteColor(theme, bidStatusColors[bid.status] as string || 'grey'),
-              fontWeight: 600,
-              borderRadius: '4px',
-              mr: 1,
-              '&:hover': {
-                bgcolor: alpha(getPaletteColor(theme, bidStatusColors[bid.status] as string || 'grey'), 0.25),
-              }
-            }}
-          />
-        </Box>
-        
-        {/* Alert for rejected bids */}
-        {bid.status === 'rejected' && (bid as any).rejectionReason && (
-          <Alert severity="error" sx={{ mb: 1, py: 0 }}>
-            {(bid as any).rejectionReason}
-          </Alert>
-        )}
-        
-        {/* Alert for accepted bids with upcoming payments */}
-        {bid.status === 'accepted' && getUpcomingPayment() && (
-          <Alert severity="info" sx={{ mb: 1, py: 0 }}>
-            Payment of {formatCurrency(getUpcomingPayment()?.amount || 0)} due on {safeFormatDate(getUpcomingPayment()?.dueDate || '')}
-          </Alert>
-        )}
-        
-        {/* Progress section with better visualization */}
-        <Box sx={{ mt: 1 }}>
-          <Box sx={{ 
-            display: 'flex', 
-            justifyContent: 'space-between', 
-            alignItems: 'center',
-            mb: 0.5 
-          }}>
-            <Typography variant="body2" color="text.secondary">
-              {paymentProgress.percentage === 100 ? 'Payment Completed' : 'Payment Progress'}
-            </Typography>
-            <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
-              <Typography variant="body2" fontWeight="medium">
-                <Box component="span" sx={{ color: 'success.main' }}>
-                  {formatCurrency(paymentProgress.paid)}
-                </Box>
-                {paymentProgress.remaining > 0 && (
-                  <Box component="span" sx={{ color: 'text.secondary' }}>
-                    {' / '}{formatCurrency(paymentProgress.paid + paymentProgress.remaining)}
-                  </Box>
-                )}
-              </Typography>
-              <Typography 
-                variant="body2" 
-                sx={{ 
-                  fontWeight: "600", 
-                  color: paymentProgress.percentage === 100 
-                    ? 'success.main' 
-                    : 'primary.main',
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  minWidth: 36,
-                  height: 20,
-                  borderRadius: 1,
-                  fontSize: '0.75rem',
-                  bgcolor: paymentProgress.percentage === 100 
-                    ? alpha(theme.palette.success.main, 0.1)
-                    : alpha(theme.palette.primary.main, 0.1),
-                  px: 0.5
-                }}
-              >
-                {Math.round(paymentProgress.percentage)}%
-                  </Typography>
-            </Box>
-                </Box>
-                <LinearProgress 
-                  variant="determinate" 
-            value={Math.min(paymentProgress.percentage, 100)}
-            sx={{
-              height: 10,
-              borderRadius: 5,
-              bgcolor: alpha(theme.palette.grey[300], 0.8),
-              '& .MuiLinearProgress-bar': {
-                borderRadius: 5,
-                backgroundImage: paymentProgress.percentage === 100
-                  ? `linear-gradient(90deg, ${theme.palette.success.dark}, ${theme.palette.success.main})`
-                  : `linear-gradient(90deg, ${theme.palette.primary.dark}, ${theme.palette.primary.main})`
-              }
-            }}
-          />
-          {expanded || (
-            <Box sx={{ 
-              display: 'flex', 
-              justifyContent: 'center', 
-              mt: 1, 
-              opacity: 0.7,
-              color: 'text.secondary' 
-            }}>
-              <Typography 
-                variant="caption" 
-                sx={{ 
-                  display: 'flex', 
-                  alignItems: 'center',
-                  fontStyle: 'italic'
-                }}
-              >
-                <ExpandMoreIcon fontSize="inherit" sx={{ mr: 0.5 }} />
-                Click to expand for details
-              </Typography>
-              </Box>
-            )}
-        </Box>
-      </Box>
-    );
-  };
+  const renderHeaderContent = () => (
+    <BidCardHeaderContent
+      bid={bid}
+      expanded={expanded}
+      isDeadlineClose={isDeadlineClose}
+      paymentProgress={paymentProgress}
+      upcomingPayment={upcomingPayment}
+      theme={theme}
+    />
+  );
   
-  // Helper function to get status icon
-  const getStatusIcon = (status: string) => {
-    switch(status) {
-      case 'draft':
-        return <EditIcon />;
-      case 'submitted':
-        return <SendIcon />;
-      case 'accepted':
-        return <CheckCircleIcon />;
-      case 'rejected':
-        return <CancelIcon />;
-      default:
-        return <EditIcon />;
-    }
-  };
-  
-  // Helper function to get upcoming payment
-  const getUpcomingPayment = () => {
-    if (!paymentSchedule || !paymentSchedule.length) return null;
-    
-    return paymentSchedule
-      .filter(stage => !stage.paid && stage.dueDate && new Date(stage.dueDate).getTime() > new Date().getTime())
-      .sort((a, b) => {
-        const dateA = a.dueDate ? new Date(a.dueDate).getTime() : Infinity;
-        const dateB = b.dueDate ? new Date(b.dueDate).getTime() : Infinity;
-        return dateA - dateB;
-      })[0];
-  };
-
   return (
     <Card
       sx={{
@@ -1334,19 +850,6 @@ const BidCard: React.FC<BidCardProps> = ({
       </Menu>
     </Card>
   );
-};
-
-// Helper to check if a date is coming up soon (within 7 days)
-const isNearDueDate = (dateStr: string | Date | null | undefined): boolean => {
-  if (!dateStr) return false;
-
-  const now = new Date();
-  const date = new Date(dateStr);
-  if (isNaN(date.getTime())) return false;
-  
-  const diffTime = date.getTime() - now.getTime();
-  const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-  return diffDays <= 7 && diffDays >= 0;
 };
 
 export default BidCard;

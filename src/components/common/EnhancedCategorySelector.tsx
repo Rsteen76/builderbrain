@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import { logger } from '../../utils/logger';
 import {
   Box,
   FormControl,
@@ -127,7 +128,7 @@ const EnhancedCategorySelector: React.FC<EnhancedCategorySelectorProps> = ({
           setCustomCategories(prefs.customCategories);
         }
       } catch (error) {
-        console.error("Error loading custom categories:", error);
+        logger.error("Error loading custom categories:", error);
       } finally {
         setLoading(false);
       }
@@ -267,7 +268,7 @@ const EnhancedCategorySelector: React.FC<EnhancedCategorySelectorProps> = ({
       setNewCategoryParentId('');
       setAddDialogOpen(false);
     } catch (error) {
-      console.error("Error adding custom category:", error);
+      logger.error("Error adding custom category:", error);
     } finally {
       setLoading(false);
     }

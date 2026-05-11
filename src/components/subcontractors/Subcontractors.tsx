@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { logger } from '../../utils/logger';
 import {
   Box,
   Grid,
@@ -337,7 +338,7 @@ const Subcontractors: React.FC = () => {
       );
       setSubcontractors(filteredData);
     } catch (err) {
-      console.error('Error fetching subcontractors:', err);
+      logger.error('Error fetching subcontractors:', err);
       setError('Failed to load subcontractors');
     } finally {
       setLoading(false);
@@ -384,7 +385,7 @@ const Subcontractors: React.FC = () => {
         await SubcontractorService.deleteSubcontractor(id);
         setSubcontractors(subcontractors.filter(s => s.id !== id));
       } catch (err) {
-        console.error("Error deleting subcontractor:", err);
+        logger.error("Error deleting subcontractor:", err);
         setError("Failed to delete subcontractor. Please try again.");
       }
     }
@@ -406,7 +407,7 @@ const Subcontractors: React.FC = () => {
       const csvData = exportSubcontractorsToCSV(allSubcontractors);
       downloadFile(csvData, 'subcontractors.csv', 'text/csv;charset=utf-8;');
     } catch (err) {
-      console.error("Export failed:", err);
+      logger.error("Export failed:", err);
       setError("Failed to export subcontractors.");
     }
   };
@@ -439,7 +440,7 @@ const Subcontractors: React.FC = () => {
         fileInputRef.current.value = '';
       }
     } catch (err) {
-      console.error('Import failed:', err);
+      logger.error('Import failed:', err);
       setError(`Import failed: ${err instanceof Error ? err.message : 'Unknown error'}`);
     } finally {
       setLoading(false);

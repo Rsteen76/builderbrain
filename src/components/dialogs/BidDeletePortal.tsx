@@ -4,6 +4,7 @@ import { Bid, BidSummary } from '../../types';
 import BidDeletionDialog from './BidDeletionDialog';
 import { deleteBid } from '../../utils/bidOperations';
 
+import { logger } from '../../utils/logger';
 // Define a global type for the event
 declare global {
   interface WindowEventMap {
@@ -13,7 +14,7 @@ declare global {
 
 // Create a helper function to trigger the deletion
 export const openBidDeleteDialog = (bid: Bid | BidSummary) => {
-  console.log(`Dispatching open-bid-delete-dialog event for bid ID: ${bid.id}`);
+  logger.log(`Dispatching open-bid-delete-dialog event for bid ID: ${bid.id}`);
   window.dispatchEvent(new CustomEvent('open-bid-delete-dialog', { detail: bid }));
 };
 
@@ -31,7 +32,7 @@ const BidDeletePortal: React.FC<BidDeletePortalProps> = ({ userId, onBidDeleted 
   // Listen for the custom event
   useEffect(() => {
     const handleOpenDeleteDialog = (event: CustomEvent<Bid | BidSummary>) => {
-      console.log('BidDeletePortal: Received open-bid-delete-dialog event', event.detail);
+      logger.log('BidDeletePortal: Received open-bid-delete-dialog event', event.detail);
       setCurrentBid(event.detail);
       setDialogOpen(true);
     };
@@ -46,41 +47,41 @@ const BidDeletePortal: React.FC<BidDeletePortalProps> = ({ userId, onBidDeleted 
   }, []);
 
   const handleCloseDialog = () => {
-    console.log(`BidDeletePortal: handleCloseDialog called`);
+    logger.log(`BidDeletePortal: handleCloseDialog called`);
     setDialogOpen(false);
     setSelectedExpenses([]);
   };
 
   const handleExpensesSelected = (expenseIds: string[]) => {
-    console.log(`BidDeletePortal: handleExpensesSelected called`, expenseIds);
+    logger.log(`BidDeletePortal: handleExpensesSelected called`, expenseIds);
     setSelectedExpenses(expenseIds);
   };
 
   const handleConfirmDeletion = async () => {
     if (!currentBid) return;
     
-    console.log(`BidDeletePortal: handleConfirmDeletion called for bid ID: ${currentBid.id}`);
+    logger.log(`BidDeletePortal: handleConfirmDeletion called for bid ID: ${currentBid.id}`);
     setDeleting(true);
     let success = false;
     
     try {
-      console.log(`BidDeletePortal: Calling deleteBid utility for bid ID: ${currentBid.id}`);
+      logger.log(`BidDeletePortal: Calling deleteBid utility for bid ID: ${currentBid.id}`);
       success = await deleteBid(currentBid.id, selectedExpenses);
-      console.log(`BidDeletePortal: deleteBid utility returned: ${success} for bid ID: ${currentBid.id}`);
+      logger.log(`BidDeletePortal: deleteBid utility returned: ${success} for bid ID: ${currentBid.id}`);
 
       if (success) {
-        console.log(`BidDeletePortal: Deletion successful for bid ID: ${currentBid.id}`);
+        logger.log(`BidDeletePortal: Deletion successful for bid ID: ${currentBid.id}`);
         if (onBidDeleted) {
           onBidDeleted(currentBid.id);
         }
       } else {
-        console.error(`BidDeletePortal: deleteBid returned false for bid ID: ${currentBid.id}`);
+        logger.error(`BidDeletePortal: deleteBid returned false for bid ID: ${currentBid.id}`);
       }
     } catch (error) {
       success = false;
-      console.error(`BidDeletePortal: Error during handleConfirmDeletion for bid ID: ${currentBid.id}`, error);
+      logger.error(`BidDeletePortal: Error during handleConfirmDeletion for bid ID: ${currentBid.id}`, error);
     } finally {
-      console.log(`BidDeletePortal: handleConfirmDeletion finally block. Success: ${success}`);
+      logger.log(`BidDeletePortal: handleConfirmDeletion finally block. Success: ${success}`);
       setDeleting(false);
       setDialogOpen(false);
       setCurrentBid(null);

@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react';
+import { logger } from '../../utils/logger';
 import {
   Box, Typography, Button, Paper, Table, TableBody, TableCell, 
   TableContainer, TableHead, TableRow, IconButton, Chip, Alert, CircularProgress,
@@ -170,7 +171,7 @@ const BidManager: React.FC<BidManagerProps> = ({ project, userId, onProjectUpdat
         const fetchedBids = await BidService.getBids(userId, bidFilters);
         setBids(fetchedBids);
       } catch (err) {
-        console.error("Error fetching bids for project:", err);
+        logger.error("Error fetching bids for project:", err);
         setError(err instanceof Error ? err.message : "Failed to load bids for this project.");
         setBids([]);
       } finally {
@@ -272,7 +273,7 @@ const BidManager: React.FC<BidManagerProps> = ({ project, userId, onProjectUpdat
   };
 
   const handleFormSubmit = async (submittedBidData: Omit<Bid, 'id' | 'createdAt' | 'updatedAt' | 'userId'>) => {
-    console.log('Bid Form submitted:', submittedBidData);
+    logger.log('Bid Form submitted:', submittedBidData);
     setLoading(true);
     setError(null);
 
@@ -341,12 +342,12 @@ const BidManager: React.FC<BidManagerProps> = ({ project, userId, onProjectUpdat
           setSuccess(`Bid accepted with payment schedule. ${savedBid.paymentSchedule?.length || 0} payment expense(s) are ready for draw tracking.`);
           setTimeout(() => setSuccess(null), 5000);
         } catch (err) {
-          console.error("Error creating expense:", err);
+          logger.error("Error creating expense:", err);
           setError("Bid was saved but there was an error creating the related expense.");
         }
       }
     } catch (err) {
-      console.error("Error saving bid:", err);
+      logger.error("Error saving bid:", err);
       setError(err instanceof Error ? err.message : "Failed to save bid. Please try again.");
     } finally {
       setLoading(false);
@@ -362,7 +363,7 @@ const BidManager: React.FC<BidManagerProps> = ({ project, userId, onProjectUpdat
         return;
     }
 
-    console.log('Delete bid with ID:', bidId);
+    logger.log('Delete bid with ID:', bidId);
     setLoading(true);
     setError(null);
 
@@ -374,7 +375,7 @@ const BidManager: React.FC<BidManagerProps> = ({ project, userId, onProjectUpdat
       onProjectUpdate({ ...project, bids: updatedBidsList }); // Then notify parent
 
     } catch (err) {
-      console.error("Error deleting bid:", err);
+      logger.error("Error deleting bid:", err);
       setError(err instanceof Error ? err.message : "Failed to delete bid. Please try again.");
     } finally {
       setLoading(false);

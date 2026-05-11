@@ -1,4 +1,5 @@
 import React, { useMemo, useState, useEffect } from "react";
+import { logger } from '../../../utils/logger';
 import {
   Box,
   Grid,
@@ -134,10 +135,10 @@ const BudgetDashboard: React.FC<BudgetDashboardProps> = () => {
         getCategoryMappingsForProject(projectId)
           .then((mappings) => {
             setCategoryMappings(mappings);
-            console.log(`Successfully loaded ${Object.keys(mappings).length} category mappings for project ${projectId}`);
+            logger.log(`Successfully loaded ${Object.keys(mappings).length} category mappings for project ${projectId}`);
           })
           .catch((error) => {
-            console.error("Error loading category mappings for dashboard:", error);
+            logger.error("Error loading category mappings for dashboard:", error);
             setSnackbar({ 
               open: true, 
               message: 'Error loading category settings. Using default categories.', 

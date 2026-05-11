@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { logger } from '../../utils/logger';
 import {
   Dialog, DialogTitle, DialogContent, DialogActions, Button, TextField,
   Grid, MenuItem, FormControl, InputLabel, Select, Alert, CircularProgress,
@@ -63,7 +64,7 @@ const TaskFormModal: React.FC<TaskFormModalProps> = ({ open, onClose, onSubmitSu
 
       const fetchAssigneeOptions = async () => {
           if (!userId) {
-              console.error("TaskFormModal: userId not provided, cannot fetch subcontractors.");
+              logger.error("TaskFormModal: userId not provided, cannot fetch subcontractors.");
               setSubmitError("User information missing.");
               return;
           }
@@ -81,7 +82,7 @@ const TaskFormModal: React.FC<TaskFormModalProps> = ({ open, onClose, onSubmitSu
               setSubcontractors(subs);
               setUsers(userOptions);
               setProjects(userProjects);
-          } catch (err) { console.error("Failed to fetch task assignee options", err); }
+          } catch (err) { logger.error("Failed to fetch task assignee options", err); }
       };
       
       if (userId) {
@@ -226,7 +227,7 @@ const TaskFormModal: React.FC<TaskFormModalProps> = ({ open, onClose, onSubmitSu
       onSubmitSuccess(savedTask);
       onClose();
     } catch (err) {
-      console.error("Error saving task:", err);
+      logger.error("Error saving task:", err);
       setSubmitError(err instanceof Error ? err.message : "Failed to save task. Please try again.");
       setLoading(false);
     }

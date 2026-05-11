@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import { logger } from '../../utils/logger';
 import {
   Dialog,
   DialogTitle,
@@ -106,26 +107,26 @@ const ExpenseFormModal: React.FC<ExpenseFormModalProps> = ({
   // Effect to initialize form when expense data is provided (for editing)
   useEffect(() => {
     // Add logging at the start
-    console.log(`[Phase Init] Effect Run. Open: ${open}, Has Expense: ${!!expense}, Projects Count: ${projects?.length}`);
+    logger.log(`[Phase Init] Effect Run. Open: ${open}, Has Expense: ${!!expense}, Projects Count: ${projects?.length}`);
 
     if (open && expense) {
       // Log relevant IDs from the expense prop
-      console.log(`[Phase Init] Expense Data: projectId='${expense.projectId}', phaseId='${expense.phaseId}'`);
+      logger.log(`[Phase Init] Expense Data: projectId='${expense.projectId}', phaseId='${expense.phaseId}'`);
 
       const nextState = buildExpenseFormStateFromExpense(expense, projects);
       setFormData(nextState.formData);
       
       // Phase list initialization
       if (expense.projectId) {
-        console.log(`[Phase Init] Looking for project with ID: '${expense.projectId}'`);
+        logger.log(`[Phase Init] Looking for project with ID: '${expense.projectId}'`);
         const currentProject = projects.find(p => p.id === expense.projectId);
         // Log if project was found and its phases
-        console.log(`[Phase Init] Found project: ${currentProject ? `'${currentProject.name}'` : 'Not Found'}`);
+        logger.log(`[Phase Init] Found project: ${currentProject ? `'${currentProject.name}'` : 'Not Found'}`);
         const phasesToSet = nextState.currentProjectPhases;
-        console.log(`[Phase Init] Setting currentProjectPhases to:`, phasesToSet.map(p => ({ id: p.id, name: p.name }))); // Log concise phase info
+        logger.log(`[Phase Init] Setting currentProjectPhases to:`, phasesToSet.map(p => ({ id: p.id, name: p.name }))); // Log concise phase info
         setCurrentProjectPhases(phasesToSet);
     } else {
-        console.log(`[Phase Init] No expense.projectId, clearing phases.`);
+        logger.log(`[Phase Init] No expense.projectId, clearing phases.`);
         setCurrentProjectPhases(nextState.currentProjectPhases);
       }
       
@@ -145,7 +146,7 @@ const ExpenseFormModal: React.FC<ExpenseFormModalProps> = ({
       }
     } else if (open) {
       // Reset logic
-      console.log(`[Phase Init] Resetting form for new expense.`);
+      logger.log(`[Phase Init] Resetting form for new expense.`);
       const nextState = buildNewExpenseFormState(projects);
       setFormData(nextState.formData);
       setHookLineItems(nextState.lineItems); // Reset hook line items
@@ -193,9 +194,9 @@ const ExpenseFormModal: React.FC<ExpenseFormModalProps> = ({
         const acceptedBids = projectBids.filter(bid => bid.status === 'accepted');
         setAvailableBids(acceptedBids);
         
-        console.log(`[ExpenseFormModal] Fetched ${acceptedBids.length} accepted bids for project ${formData.projectId}`);
+        logger.log(`[ExpenseFormModal] Fetched ${acceptedBids.length} accepted bids for project ${formData.projectId}`);
       } catch (error) {
-        console.error('Error fetching bids for project:', error);
+        logger.error('Error fetching bids for project:', error);
         setAvailableBids([]);
       } finally {
         setLoadingBids(false);
@@ -232,11 +233,11 @@ const ExpenseFormModal: React.FC<ExpenseFormModalProps> = ({
     // When project changes, update the project phases
     if (name === 'projectId' && value) {
       const selectedProject = projects.find(p => p.id === value);
-      console.log(`[Project Changed] Selected Project: ${selectedProject?.name}, with ${selectedProject?.phases?.length || 0} phases`);
+      logger.log(`[Project Changed] Selected Project: ${selectedProject?.name}, with ${selectedProject?.phases?.length || 0} phases`);
       
       if (selectedProject?.phases) {
         const phasesToSet = getProjectPhasesForExpense(value, projects);
-        console.log(`[Project Changed] Setting phases: `, phasesToSet.map(p => ({ id: p.id, name: p.name })));
+        logger.log(`[Project Changed] Setting phases: `, phasesToSet.map(p => ({ id: p.id, name: p.name })));
         setCurrentProjectPhases(phasesToSet);
         
         // Reset phase selection when project changes
@@ -367,7 +368,7 @@ const ExpenseFormModal: React.FC<ExpenseFormModalProps> = ({
       
       return false;
     } catch (error) {
-      console.error("Error checking for duplicates:", error);
+      logger.error("Error checking for duplicates:", error);
       return false;
     }
   };
@@ -376,7 +377,7 @@ const ExpenseFormModal: React.FC<ExpenseFormModalProps> = ({
     const formErrors = validateForm();
     if (Object.keys(formErrors).length > 0) {
       setErrors(formErrors);
-      console.log("Form Validation Errors:", formErrors);
+      logger.log("Form Validation Errors:", formErrors);
       return;
     }
 
@@ -408,7 +409,7 @@ const ExpenseFormModal: React.FC<ExpenseFormModalProps> = ({
       await onSave(finalData);
       handleCloseModal();
     } catch (error) {
-      console.error("Error saving expense:", error);
+      logger.error("Error saving expense:", error);
       setBackendError(`Failed to save expense: ${error instanceof Error ? error.message : String(error)}`);
     } finally {
       setIsSubmitting(false);

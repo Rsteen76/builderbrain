@@ -9,6 +9,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { submitBid } from '../../utils/bidOperations';
 import { toast } from 'react-hot-toast';
 
+import { logger } from '../../utils/logger';
 interface BidFormDialogProps {
   open: boolean;
   onClose: () => void;
@@ -56,11 +57,11 @@ const BidFormDialog: React.FC<BidFormDialogProps> = ({
           setAvailableProjects(fetchedProjects);
         }
         
-        console.log('BidFormDialog - Data fetched:', {
+        logger.log('BidFormDialog - Data fetched:', {
           projects: fetchedProjects.length,
         });
       } catch (err) {
-        console.error('BidFormDialog - Error fetching data:', err);
+        logger.error('BidFormDialog - Error fetching data:', err);
         setError('Failed to load necessary data. Please try again.');
       } finally {
         setIsLoadingData(false);
@@ -77,7 +78,7 @@ const BidFormDialog: React.FC<BidFormDialogProps> = ({
       return;
     }
     
-    console.log('BidFormDialog - DEBUG - handleInternalSubmit started with bidFormData:', bidFormData);
+    logger.log('BidFormDialog - DEBUG - handleInternalSubmit started with bidFormData:', bidFormData);
     setIsSaving(true);
     setError(null);
     
@@ -102,7 +103,7 @@ const BidFormDialog: React.FC<BidFormDialogProps> = ({
         throw new Error('Project ID is missing. Please select a project.');
       }
       
-      console.log('BidFormDialog - DEBUG - About to submit bid with:', {
+      logger.log('BidFormDialog - DEBUG - About to submit bid with:', {
         userId: user.uid,
         formData: bidFormData,
         editingId: editingBidId,
@@ -120,28 +121,28 @@ const BidFormDialog: React.FC<BidFormDialogProps> = ({
         finalProjectName // Use the determined project name
       );
 
-      console.log('BidFormDialog - DEBUG - submitBid returned:', savedBid);
+      logger.log('BidFormDialog - DEBUG - submitBid returned:', savedBid);
 
       if (savedBid) {
-        console.log('BidFormDialog - Bid saved successfully:', savedBid);
+        logger.log('BidFormDialog - Bid saved successfully:', savedBid);
         toast.success(editingBidId ? 'Bid updated successfully' : 'Bid created successfully');
-        console.log('BidFormDialog - DEBUG - About to call onSubmitSuccess with bid:', savedBid.id);
+        logger.log('BidFormDialog - DEBUG - About to call onSubmitSuccess with bid:', savedBid.id);
         
         // Add additional debugging for callback execution
         try {
           onSubmitSuccess(savedBid); // Call the success callback
-          console.log('BidFormDialog - DEBUG - onSubmitSuccess called successfully');
+          logger.log('BidFormDialog - DEBUG - onSubmitSuccess called successfully');
         } catch (callbackError) {
-          console.error('BidFormDialog - DEBUG - Error in onSubmitSuccess callback:', callbackError);
+          logger.error('BidFormDialog - DEBUG - Error in onSubmitSuccess callback:', callbackError);
         }
         
         onClose(); // Close the dialog
-        console.log('BidFormDialog - DEBUG - Dialog closed');
+        logger.log('BidFormDialog - DEBUG - Dialog closed');
       } else {
         throw new Error('Failed to save bid.');
       }
     } catch (err: any) {
-      console.error('BidFormDialog - Error saving bid:', err);
+      logger.error('BidFormDialog - Error saving bid:', err);
       setError(err.message || 'Failed to save bid. Please try again.');
       toast.error(err.message || 'Failed to save bid. Please try again.');
     } finally {

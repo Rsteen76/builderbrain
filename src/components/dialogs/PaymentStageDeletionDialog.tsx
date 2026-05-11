@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { logger } from '../../utils/logger';
 import {
   Dialog,
   DialogTitle,
@@ -104,7 +105,7 @@ const PaymentStageDeletionDialog: React.FC<PaymentStageDeletionDialogProps> = ({
         <Button onClick={onClose} variant="outlined">Cancel</Button>
         <Button 
           onClick={() => {
-            console.log(`Confirming deletion with deleteExpense=${deleteExpense}`);
+            logger.log(`Confirming deletion with deleteExpense=${deleteExpense}`);
             onConfirm(deleteExpense);
           }} 
           color="error" 

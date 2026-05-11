@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { logger } from '../../../utils/logger';
 import {
   Box,
   Typography,
@@ -94,7 +95,7 @@ const CategoryMigrationInterface: React.FC<CategoryMigrationInterfaceProps> = ({
         
         setSuggestedMappings(suggested);
       } catch (err) {
-        console.error('Error loading categories:', err);
+        logger.error('Error loading categories:', err);
         setError('Failed to load categories');
       } finally {
         setLoading(false);
@@ -168,7 +169,7 @@ const CategoryMigrationInterface: React.FC<CategoryMigrationInterfaceProps> = ({
         setSuggestedMappings(remainingSuggestions);
       }
     } catch (err) {
-      console.error('Error saving mapping:', err);
+      logger.error('Error saving mapping:', err);
       setError(`Failed to update mapping for ${legacyCategoryId}`);
     } finally {
       setSaving(null);
@@ -208,7 +209,7 @@ const CategoryMigrationInterface: React.FC<CategoryMigrationInterfaceProps> = ({
       
       setError(null);
     } catch (err) {
-      console.error('Error saving mappings:', err);
+      logger.error('Error saving mappings:', err);
       setError('Failed to save all mappings');
     } finally {
       setLoading(false);

@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { logger } from '../../../utils/logger';
 import {
   Alert,
   Box,
@@ -139,7 +140,7 @@ const ProjectTaskManager: React.FC = () => {
           setTasks(projectTasks);
         }
       } catch (err) {
-        console.error('ProjectTaskManager: Failed to load tasks', err);
+        logger.error('ProjectTaskManager: Failed to load tasks', err);
         if (isMounted) {
           setError('Failed to load project tasks.');
         }
@@ -260,7 +261,7 @@ const ProjectTaskManager: React.FC = () => {
       await refreshAllProjectData();
       closeFormDialog();
     } catch (err) {
-      console.error('ProjectTaskManager: Failed to save task', err);
+      logger.error('ProjectTaskManager: Failed to save task', err);
       setError('Failed to save task.');
       showNotification('Failed to save task.', 'error');
     } finally {
@@ -280,7 +281,7 @@ const ProjectTaskManager: React.FC = () => {
       showNotification('Task deleted successfully.', 'success');
       await refreshAllProjectData();
     } catch (err) {
-      console.error('ProjectTaskManager: Failed to delete task', err);
+      logger.error('ProjectTaskManager: Failed to delete task', err);
       setError('Failed to delete task.');
       showNotification('Failed to delete task.', 'error');
     } finally {

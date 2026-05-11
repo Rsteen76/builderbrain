@@ -1,4 +1,5 @@
 import React, { useMemo, useState, useEffect } from 'react';
+import { logger } from '../../../utils/logger';
 import {
   Box,
   Paper,
@@ -179,7 +180,7 @@ const BudgetAllocationTracker: React.FC<BudgetAllocationTrackerProps> = ({
         setCategoryMapping(mappings || {});
 
       } catch (error) {
-        console.error("Error loading project data:", error);
+        logger.error("Error loading project data:", error);
         setError("Error loading project budget data");
       } finally {
         setLoading(false);
@@ -245,7 +246,7 @@ const BudgetAllocationTracker: React.FC<BudgetAllocationTrackerProps> = ({
         severity: 'success'
       });
     } catch (error) {
-      console.error('Error adding projection:', error);
+      logger.error('Error adding projection:', error);
       setSnackbar({
         open: true,
         message: 'Failed to add projection',
@@ -320,7 +321,7 @@ const BudgetAllocationTracker: React.FC<BudgetAllocationTrackerProps> = ({
                       setSuccess('Budget updated successfully');
                       setTimeout(() => setSuccess(null), 3000);
                     } catch (err) {
-                      console.error('Error updating budget:', err);
+                      logger.error('Error updating budget:', err);
                       setError('Failed to update budget');
                       setTimeout(() => setError(null), 3000);
                     }

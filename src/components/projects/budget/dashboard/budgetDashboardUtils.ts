@@ -1,4 +1,5 @@
 import type { BudgetProjection, Expense, Project, ProjectPhase } from "../../../../types";
+import { logger } from '../../../../utils/logger';
 import {
   getCategoryById,
   getParentCategory,
@@ -448,7 +449,7 @@ function getExpenseCategoryId(
       expense.description || "",
     );
   } catch (error) {
-    console.error("Mapping error in getExpenseCategoryId:", error);
+    logger.error("Mapping error in getExpenseCategoryId:", error);
     return "uncategorized";
   }
 }

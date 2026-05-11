@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { logger } from '../../utils/logger';
 import {
   IconButton,
   Menu,
@@ -61,7 +62,7 @@ const SettingsMenu: React.FC = () => {
       setResetDialogOpen(false);
       // The service will reload the page after successful reset
     } catch (error) {
-      console.error('Error resetting data:', error);
+      logger.error('Error resetting data:', error);
       alert('Failed to reset data. Please try again or contact support.');
     } finally {
       setIsResetting(false);
@@ -75,7 +76,7 @@ const SettingsMenu: React.FC = () => {
       setCacheDialogOpen(false);
       window.location.reload(); // Reload to ensure clean state
     } catch (error) {
-      console.error('Error clearing cache:', error);
+      logger.error('Error clearing cache:', error);
       alert('Failed to clear cache. Please try again.');
     } finally {
       setIsClearing(false);
@@ -96,7 +97,7 @@ const SettingsMenu: React.FC = () => {
         severity: 'success'
       });
     } catch (error) {
-      console.error('Error during migration:', error);
+      logger.error('Error during migration:', error);
       setSnackbar({
         open: true,
         message: 'Migration failed: ' + (error instanceof Error ? error.message : 'Unknown error'),

@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import { logger } from '../../utils/logger';
 import {
   Box,
   Grid,
@@ -284,7 +285,7 @@ const Dashboard: React.FC = () => {
       const dashboardData = await DashboardSummaryService.getDashboardData(user.uid, { forceRefresh });
       applyDashboardData(dashboardData);
     } catch (err) {
-      console.error(forceRefresh ? 'Error refreshing dashboard data:' : 'Error fetching dashboard data:', err);
+      logger.error(forceRefresh ? 'Error refreshing dashboard data:' : 'Error fetching dashboard data:', err);
       setError(forceRefresh
         ? 'Failed to refresh dashboard data. Please try again.'
         : 'Failed to load dashboard data. Please try again.'

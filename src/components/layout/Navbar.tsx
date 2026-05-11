@@ -1,5 +1,6 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
+import { logger } from '../../utils/logger';
 import {
   AppBar,
   Toolbar,
@@ -40,7 +41,7 @@ const Navbar: React.FC<NavbarProps> = ({ open, toggleDrawer }) => {
       await logout();
       navigate('/login');
     } catch (error) {
-      console.error('Logout failed:', error);
+      logger.error('Logout failed:', error);
     }
   };
 
