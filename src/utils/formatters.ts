@@ -1,3 +1,4 @@
+import { logger } from './logger';
 /**
  * Format a number as currency (USD)
  * @param value The number to format
@@ -40,7 +41,7 @@ export const formatDate = (
     
     // Check if the date is valid
     if (isNaN(dateObj.getTime())) {
-      console.warn(`Invalid date value encountered: ${JSON.stringify(date)}`);
+      logger.warn(`Invalid date value encountered: ${JSON.stringify(date)}`);
       return '';
     }
     
@@ -50,7 +51,7 @@ export const formatDate = (
       dateStyle: format
     } as Intl.DateTimeFormatOptions);
   } catch (error) {
-    console.error('Error formatting date:', error, date);
+    logger.error('Error formatting date:', error, date);
     return '';
   }
 };
@@ -182,7 +183,7 @@ export const safelyParseDate = (dateInput: Date | string | { toDate(): Date } | 
     
     return new Date(); // Fallback
   } catch (error) {
-    console.error('Error parsing date:', error, dateInput);
+    logger.error('Error parsing date:', error, dateInput);
     return new Date(); // Fallback to current date on error
   }
 }; 

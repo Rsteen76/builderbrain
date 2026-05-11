@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { Project, Expense, Bid, ProjectPhase, Subcontractor } from '../types';
 import { useAuth } from '../contexts/AuthContext';
 import { ProjectDetailDataService } from '../services/project-detail-data';
+import { logger } from '../utils/logger';
 
 interface UseProjectDataReturn {
   project: Project | null;
@@ -52,7 +53,7 @@ export const useProjectData = (projectId: string | undefined): UseProjectDataRet
       setSubcontractors(detailData.subcontractors);
       setError(detailData.project ? null : 'Project not found');
     } catch (err) {
-      console.error(`useProjectData: Error loading project detail data for ${projectId}:`, err);
+      logger.error(`useProjectData: Error loading project detail data for ${projectId}:`, err);
       setProject(null);
       setPhases([]);
       setBids([]);

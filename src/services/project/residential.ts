@@ -1,6 +1,7 @@
 import { v4 as uuidv4 } from 'uuid';
 import type { Phase, Task } from '../../types';
 import { addDays } from './dates';
+import { logger } from '../../utils/logger';
 
 export interface PhaseAllocation {
   name: string;
@@ -100,7 +101,7 @@ export const normalizePhaseAllocations = (phaseAllocations: PhaseAllocation[]): 
     return phaseAllocations.map(phase => ({ ...phase }));
   }
 
-  console.warn(`Phase budget allocations don't add up to 100% (actual: ${totalPercentage * 100}%). Normalizing values.`);
+  logger.warn(`Phase budget allocations don't add up to 100% (actual: ${totalPercentage * 100}%). Normalizing values.`);
   return phaseAllocations.map(phase => ({
     ...phase,
     percentage: phase.percentage / totalPercentage,

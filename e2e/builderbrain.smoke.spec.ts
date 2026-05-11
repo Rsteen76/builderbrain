@@ -6,6 +6,12 @@ const seededProject = {
   name: 'Hillside Custom Home',
 };
 
+const acceptedFoundationBid = {
+  id: 'bid-hillside-foundation',
+  title: 'Foundation and retaining wall package',
+  subcontractor: 'Summit Foundations',
+};
+
 test.beforeEach(async ({ page }) => {
   await installSmokeTestGuards(page);
 });
@@ -18,12 +24,103 @@ test('projects page loads seeded projects with dev auth bypass', async ({ page }
   await expect(page.getByRole('button', { name: /New Project/i })).toBeVisible();
 });
 
+test('projects list can navigate to a seeded project detail view', async ({ page }) => {
+  await page.goto('/projects');
+
+  await page.getByText(seededProject.name).first().click();
+
+  await expect(page).toHaveURL(new RegExp(`/projects/${seededProject.id}$`));
+  await expect(page.getByRole('heading', { name: seededProject.name })).toBeVisible();
+  await expect(page.getByRole('tab', { name: /Overview/i })).toBeVisible();
+  await expect(page.getByText(/Financial Overview/i)).toBeVisible();
+});
+
 test('project detail deep link loads and renders overview data', async ({ page }) => {
   await page.goto(`/projects/${seededProject.id}`);
 
   await expect(page.getByRole('heading', { name: seededProject.name })).toBeVisible();
   await expect(page.getByRole('tab', { name: /Overview/i })).toBeVisible();
   await expect(page.getByText(/Financial Overview/i)).toBeVisible();
+});
+
+test('project detail exposes bids, accepted payment stages, and expense workflow surfaces', async ({ page }) => {
+  await page.goto(`/projects/${seededProject.id}`);
+
+  await page.getByRole('tab', { name: /Bids/i }).click();
+  await expect(page.getByRole('heading', { name: 'Project Bids' })).toBeVisible();
+  await expect(page.getByText(acceptedFoundationBid.title)).toBeVisible();
+  await expect(page.getByText('Electrical rough-in and finish package')).toBeVisible();
+  await expect(page.getByText('Structural framing package')).toBeVisible();
+
+  await page.getByRole('tab', { name: /^Accepted$/i }).click();
+  await expect(page.getByText(acceptedFoundationBid.title)).toBeVisible();
+  await page.getByText(acceptedFoundationBid.title).first().click();
+  await expect(page.getByText('Mobilization')).toBeVisible();
+  await expect(page.getByText('Payment Progress').first()).toBeVisible();
+
+  await page.getByRole('tab', { name: /^Expenses$/i }).click();
+  await expect(page.getByRole('heading', { name: 'Expenses & Payments' })).toBeVisible();
+  await expect(page.getByRole('tab', { name: /Needs Payment/i })).toBeVisible();
+  await expect(page.getByText('Expense Categories')).toBeVisible();
+  await expect(page.getByText('Phase Budget vs Actual')).toBeVisible();
+  await expect(page.getByRole('button', { name: /Add Expense/i })).toBeVisible();
+});
+
+test('accepted bid detail shows payment management controls and schedule progress', async ({ page }) => {
+  await page.goto(`/bids/${acceptedFoundationBid.id}`);
+
+  await expect(page.getByRole('heading', { name: acceptedFoundationBid.title })).toBeVisible();
+  await expect(page.getByText('Bid Details')).toBeVisible();
+  await expect(page.getByText('Accepted')).toBeVisible();
+  await expect(page.getByText(seededProject.name)).toBeVisible();
+  await expect(page.getByText(acceptedFoundationBid.subcontractor)).toBeVisible();
+
+  await expect(page.getByText('Payment Progress')).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Paid' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Pending' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Remaining' })).toBeVisible();
+
+  await expect(page.getByText('Payment Management')).toBeVisible();
+  await page.getByText('Payment Schedule').last().click();
+  await expect(page.getByRole('button', { name: /Add Extra Payment/i })).toBeVisible();
+  await expect(page.getByRole('button', { name: /Add Payment Stage/i })).toBeVisible();
+  await expect(page.getByRole('cell', { name: 'Mobilization', exact: true })).toBeVisible();
+  await expect(page.getByRole('cell', { name: 'Walls complete', exact: true })).toBeVisible();
+  await expect(page.getByRole('cell', { name: 'Inspection signoff', exact: true })).toBeVisible();
+});
+
+test('payments dashboard reflects seeded paid expenses and accepted bid commitments', async ({ page }) => {
+  await page.goto('/payments');
+
+  await expect(page.getByRole('heading', { name: 'Payments' })).toBeVisible();
+  await expect(page.getByRole('button', { name: /Record Payment/i })).toBeVisible();
+  await expect(page.getByText('Total Paid')).toBeVisible();
+  await expect(page.getByText('Commitments & Invoices')).toBeVisible();
+  await expect(page.getByText('Committed')).toBeVisible();
+  await expect(page.getByText('Commitment Balance')).toBeVisible();
+  await expect(page.getByText('Recent Transactions')).toBeVisible();
+  await expect(page.getByText('Electrical procurement deposit')).toBeVisible();
+  await expect(page.getByText('Foundation mobilization and initial grading invoice')).toBeVisible();
+});
+
+test('documents and budget report surfaces are reachable from project detail', async ({ page }) => {
+  await page.goto(`/projects/${seededProject.id}`);
+
+  await page.getByRole('tab', { name: /Documents/i }).click();
+  await expect(page.getByRole('heading', { name: 'Project Documents' })).toBeVisible();
+  await expect(page.getByText('Builder Checklist')).toBeVisible();
+  await expect(page.getByText('Document Categories')).toBeVisible();
+  await expect(page.getByText('Site survey')).toBeVisible();
+  await expect(page.getByText('Structural drawings')).toBeVisible();
+
+  await page.getByRole('tab', { name: /^Budget$/i }).click();
+  await expect(page.getByText('Budget Dashboard')).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Budget Report' })).toBeVisible();
+
+  await page.getByRole('button', { name: 'Budget Report' }).click();
+  await expect(page.getByRole('heading', { name: 'Budget Report' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: seededProject.name })).toBeVisible();
+  await expect(page.getByText('Financial Summary')).toBeVisible();
 });
 
 test('create project wizard reaches submit path', async ({ page }) => {

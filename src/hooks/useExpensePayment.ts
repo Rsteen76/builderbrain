@@ -1,4 +1,5 @@
 // src/hooks/useExpensePayment.ts
+import { logger } from '../utils/logger';
 import { useState } from 'react';
 import { ExpenseService } from '../services/expense'; // Adjusted path
 import { BidService } from '../services/bid'; // Adjusted path
@@ -25,19 +26,19 @@ const adjustBidPaymentScheduleInternal = async (
     bidService: typeof BidService
 ): Promise<Bid | null> => {
     if (!originalExpense.bidId || !originalExpense.paymentStageId) {
-        console.log('[adjustBidPaymentScheduleInternal] Expense not linked to a Bid or Payment Stage. Skipping adjustment.');
+        logger.log('[adjustBidPaymentScheduleInternal] Expense not linked to a Bid or Payment Stage. Skipping adjustment.');
         return null;
     }
 
     // Assuming getBid returns a Bid or null directly, or throws an error
     const bid = await bidService.getBid(userId, originalExpense.bidId);
     if (!bid) {
-        console.warn(`[adjustBidPaymentScheduleInternal] Bid ${originalExpense.bidId} not found. Skipping adjustment.`);
+        logger.warn(`[adjustBidPaymentScheduleInternal] Bid ${originalExpense.bidId} not found. Skipping adjustment.`);
         return null;
     }
 
     if (!bid.paymentSchedule || !bid.paymentProgress) {
-        console.warn(`[adjustBidPaymentScheduleInternal] Bid ${bid.id} is missing paymentSchedule or paymentProgress. Skipping adjustment.`);
+        logger.warn(`[adjustBidPaymentScheduleInternal] Bid ${bid.id} is missing paymentSchedule or paymentProgress. Skipping adjustment.`);
         return null;
     }
 
@@ -46,7 +47,7 @@ const adjustBidPaymentScheduleInternal = async (
     const stageIndex = schedule.findIndex(stage => stage.id === originalExpense.paymentStageId);
 
     if (stageIndex === -1) {
-        console.warn(`[adjustBidPaymentScheduleInternal] Payment Stage ${originalExpense.paymentStageId} not found in Bid's schedule. Skipping adjustment.`);
+        logger.warn(`[adjustBidPaymentScheduleInternal] Payment Stage ${originalExpense.paymentStageId} not found in Bid's schedule. Skipping adjustment.`);
         return null;
     }
 
@@ -79,7 +80,7 @@ const adjustBidPaymentScheduleInternal = async (
         paymentSchedule: schedule,
         paymentProgress: progress,
     });
-    console.log(`[adjustBidPaymentScheduleInternal] Successfully updated bid ${bid.id} payment schedule and progress.`);
+    logger.log(`[adjustBidPaymentScheduleInternal] Successfully updated bid ${bid.id} payment schedule and progress.`);
     const updatedBid = await bidService.getBid(userId, bid.id);
     return updatedBid || bid;
 };
@@ -169,7 +170,7 @@ export const useExpensePayment = (): UseExpensePaymentReturn => {
       };
 
     } catch (err: any) {
-      console.error('[useExpensePayment] Error:', err);
+      logger.error('[useExpensePayment] Error:', err);
       setError(err.message || 'Failed to process payment.');
       setIsProcessing(false);
       return { success: false, message: err.message || 'Failed to process payment.' };

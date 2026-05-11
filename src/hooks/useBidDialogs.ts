@@ -4,6 +4,7 @@ import { BidService } from '../services/bid';
 import { Bid, BidSummary, BidCallbacks } from '../types';
 import { BidFormData } from '../types/form.types';
 import { safelyParseDate } from '../utils/formatters';
+import { logger } from '../utils/logger';
 
 /**
  * Options for initializing the useBidFormDialog hook
@@ -121,7 +122,7 @@ export function useBidFormDialog(userId: string | undefined, options: UseBidForm
       }
     } catch (err) {
       const errorMsg = 'Error loading bid data.';
-      console.error(errorMsg, err);
+      logger.error(errorMsg, err);
       setError(errorMsg);
       if (options.onError) options.onError(errorMsg);
     } finally {

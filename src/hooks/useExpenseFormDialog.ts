@@ -1,5 +1,6 @@
 import { useState, useCallback } from 'react';
 import { Expense } from '../types'; // Use the existing Expense type
+import { logger } from '../utils/logger';
 // import { ExpenseService } from '../services'; // Might need for fetching full expense data
 
 // Define options for the hook
@@ -49,7 +50,7 @@ export const useExpenseFormDialog = (userId?: string, options: UseExpenseDialogO
       setEditingExpenseId(expense.id);
       setIsExpenseDialogOpen(true);
     } else {
-      console.error('Cannot edit expense without a valid ID', expense);
+      logger.error('Cannot edit expense without a valid ID', expense);
       // Optionally call onError callback
       if (options.onError) {
         options.onError('Cannot edit expense without a valid ID.');
@@ -74,4 +75,4 @@ export const useExpenseFormDialog = (userId?: string, options: UseExpenseDialogO
     openEditExpenseDialog,
     closeExpenseDialog,
   };
-}; 
+};

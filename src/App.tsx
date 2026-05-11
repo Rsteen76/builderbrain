@@ -148,7 +148,7 @@ const App: React.FC = () => {
       <LocalizationProvider dateAdapter={AdapterDateFns}>
         <QueryProvider>
           <AuthProvider>
-            <Router>
+            <Router future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
               <Suspense fallback={<div>Loading...</div>}>
                 <Routes>
                   <Route path="/login" element={<Login />} />

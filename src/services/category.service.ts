@@ -3,6 +3,8 @@ import { db } from '../config/firebase';
 import { Category, CategoryMapping } from '../types/category.types';
 import { getAllCategories } from '../data/hierarchicalCategories';
 import { DEFAULT_CATEGORY_MAPPINGS } from '../utils/categoryMappingUtils';
+import { logger } from '../utils/logger';
+import { isDevAuthBypassEnabled } from '../config/devMode';
 
 // Collection references
 const CATEGORIES_COLLECTION = 'categories';
@@ -18,7 +20,7 @@ export const initializeCategories = async (): Promise<void> => {
   const categoriesSnapshot = await getDocs(categoriesRef);
   
   if (!categoriesSnapshot.empty) {
-    console.log('Categories already initialized.');
+    logger.log('Categories already initialized.');
     return;
   }
   
@@ -38,7 +40,7 @@ export const initializeCategories = async (): Promise<void> => {
   });
   
   await batch.commit();
-  console.log('Categories initialized successfully.');
+  logger.log('Categories initialized successfully.');
 };
 
 /**
@@ -141,7 +143,7 @@ export const addCategoryMapping = async (
     const docRef = await addDoc(mappingsRef, newMapping);
     return docRef.id;
   } catch (error) {
-    console.error("Error in addCategoryMapping:", error);
+    logger.error("Error in addCategoryMapping:", error);
     // Return a string to avoid breaking the caller
     return '';
   }
@@ -185,6 +187,10 @@ export const getCategoryForItem = async (
 export const getCategoryMappingsForProject = async (
   projectId: string
 ): Promise<Record<string, string>> => {
+  if (isDevAuthBypassEnabled) {
+    return DEFAULT_CATEGORY_MAPPINGS;
+  }
+
   try {
     const docRef = doc(db, 'projectSettings', projectId);
     const docSnap = await getDoc(docRef);
@@ -201,7 +207,7 @@ export const getCategoryMappingsForProject = async (
     
     return DEFAULT_CATEGORY_MAPPINGS;
   } catch (error) {
-    console.error('Error getting category mappings:', error);
+    logger.error('Error getting category mappings:', error);
     return {};
   }
 };
@@ -235,7 +241,7 @@ export const saveCategoryMapping = async (
       });
     }
   } catch (error) {
-    console.error('Error saving category mapping:', error);
+    logger.error('Error saving category mapping:', error);
     throw error;
   }
 };
@@ -273,7 +279,7 @@ export const addCategoryMappingBatch = async (
       });
     }
   } catch (error) {
-    console.error('Error adding category mappings:', error);
+    logger.error('Error adding category mappings:', error);
     throw error;
   }
 };
@@ -296,7 +302,7 @@ export const getProjectCategorySystem = async (
     // Default to legacy unless explicitly set to enhanced
     return data.categorySystem === 'enhanced' ? 'enhanced' : 'legacy';
   } catch (error) {
-    console.error('Error getting project category system:', error);
+    logger.error('Error getting project category system:', error);
     return 'legacy'; // Default to legacy on error
   }
 };
@@ -316,7 +322,7 @@ export const updateProjectCategorySystem = async (
       updatedAt: Timestamp.now()
     });
   } catch (error) {
-    console.error('Error updating project category system:', error);
+    logger.error('Error updating project category system:', error);
     throw error;
   }
 };
@@ -364,7 +370,7 @@ export const autoAssignCategory = async (
       await batch.commit();
     }
   } catch (error) {
-    console.error('Error auto-assigning categories:', error);
+    logger.error('Error auto-assigning categories:', error);
     throw error;
   }
 };

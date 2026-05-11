@@ -18,6 +18,7 @@ import {
 } from 'firebase/firestore';
 import { db } from '../config/firebase';
 import { ApiResponse, FilterOptions, PaginatedResponse } from '../types';
+import { logger } from '../utils/logger';
 
 export type FirestoreConverter<T> = {
   toFirestore: (data: T) => DocumentData;
@@ -56,7 +57,7 @@ export abstract class BaseService<T extends { id?: string }> {
    * Handle errors in a consistent way
    */
   protected handleError<R>(error: unknown, operation: string): ApiResponse<R> {
-    console.error(`Error in ${this.collectionName} service during ${operation}:`, error);
+    logger.error(`Error in ${this.collectionName} service during ${operation}:`, error);
     const errorMessage = error instanceof Error ? error.message : String(error);
     return {
       error: `Failed to ${operation}: ${errorMessage}`,

@@ -1,5 +1,6 @@
 import { Subcontractor } from '../types';
 import { SubcontractorService } from '../services/subcontractor';
+import { logger } from './logger';
 
 /**
  * Parse CSV data into an array of objects
@@ -147,7 +148,7 @@ export const importSubcontractorsFromCSV = async (file: File, userId: string): P
           result.success++;
         } catch (error) {
           const message = error instanceof Error ? error.message : String(error);
-          console.error(`Error processing row ${i + 2}:`, message, row);
+          logger.error(`Error processing row ${i + 2}:`, message, row);
           result.failed++;
           result.errors.push(`Row ${i + 2}: ${message}`);
         }
@@ -156,7 +157,7 @@ export const importSubcontractorsFromCSV = async (file: File, userId: string): P
     };
 
     reader.onerror = (error) => {
-      console.error("File reading error:", error);
+      logger.error("File reading error:", error);
       reject(new Error('Failed to read the file.'));
     };
 

@@ -3,6 +3,7 @@ import { Project, ProjectPhase } from '../types';
 import { useAuth } from './useAuth'; // To get userId
 import { toast } from 'react-hot-toast';
 import { ProjectService } from '../services/project';
+import { logger } from '../utils/logger';
 
 // Define the status union type explicitly for clarity if desired, or use Phase['status']
 export type PhaseStatusType = ProjectPhase['status'];
@@ -74,7 +75,7 @@ export const usePhaseOperations = ({
       onPhaseUpdate?.(updatedPhase);
       toast.success('Phase status updated.');
     } catch (error) {
-      console.error('usePhaseOperations: Error updating phase status:', error);
+      logger.error('usePhaseOperations: Error updating phase status:', error);
       toast.error('Failed to update phase status.');
     } finally {
       setIsUpdatingPhase(false);
@@ -99,7 +100,7 @@ export const usePhaseOperations = ({
       toast.success('Phase added.');
       return phase;
     } catch (error) {
-      console.error('usePhaseOperations: Error adding phase:', error);
+      logger.error('usePhaseOperations: Error adding phase:', error);
       toast.error('Failed to add phase.');
       return null;
     } finally {
@@ -129,7 +130,7 @@ export const usePhaseOperations = ({
       await savePhases(updatedPhases);
       toast.success('Phase deleted.');
     } catch (error) {
-      console.error('usePhaseOperations: Error deleting phase:', error);
+      logger.error('usePhaseOperations: Error deleting phase:', error);
       toast.error('Failed to delete phase.');
     } finally {
       setIsUpdatingPhase(false);

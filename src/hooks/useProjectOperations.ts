@@ -4,6 +4,7 @@ import { Project } from '../types'; // Assuming Project type exists
 import { useAuth } from './useAuth';
 import { toast } from 'react-hot-toast';
 import { useNavigate } from 'react-router-dom'; // For redirecting after delete
+import { logger } from '../utils/logger';
 
 // Define options/arguments for the hook
 interface UseProjectOperationsOptions {
@@ -45,7 +46,7 @@ export const useProjectOperations = (
         options.onProjectUpdate(updatedProject);
       }
     } catch (error) {
-      console.error('Error updating project details:', error);
+      logger.error('Error updating project details:', error);
       toast.error('Failed to update project details.');
     } finally {
       setIsOperating(false);
@@ -77,7 +78,7 @@ export const useProjectOperations = (
         navigate('/projects'); 
       }
     } catch (error) {
-      console.error('Error deleting project:', error);
+      logger.error('Error deleting project:', error);
       toast.error('Failed to delete project.');
     } finally {
       setIsOperating(false);
@@ -89,4 +90,4 @@ export const useProjectOperations = (
     updateProjectDetails,
     deleteProject,
   };
-}; 
+};

@@ -13,6 +13,7 @@ import {
 } from 'firebase/firestore';
 import { db } from '../config/firebase';
 import { Category } from '../types/category.types';
+import { logger } from '../utils/logger';
 
 /**
  * User preferences interface with custom categories and settings
@@ -59,7 +60,7 @@ export const getUserPreferences = async (userId: string): Promise<UserPreference
     
     return null;
   } catch (error) {
-    console.error('Error getting user preferences:', error);
+    logger.error('Error getting user preferences:', error);
     throw error;
   }
 };
@@ -93,7 +94,7 @@ export const updateUserPreference = async <K extends keyof UserPreferences>(
       });
     }
   } catch (error) {
-    console.error('Error updating user preference:', error);
+    logger.error('Error updating user preference:', error);
     throw error;
   }
 };
@@ -145,7 +146,7 @@ export const addCustomCategory = async (userId: string, category: Category): Pro
       });
     }
   } catch (error) {
-    console.error('Error adding custom category:', error);
+    logger.error('Error adding custom category:', error);
     throw error;
   }
 };
@@ -176,7 +177,7 @@ export const removeCustomCategory = async (userId: string, categoryId: string): 
       }
     }
   } catch (error) {
-    console.error('Error removing custom category:', error);
+    logger.error('Error removing custom category:', error);
     throw error;
   }
 };
@@ -220,7 +221,7 @@ export const updateCustomCategory = async (
       }
     }
   } catch (error) {
-    console.error('Error updating custom category:', error);
+    logger.error('Error updating custom category:', error);
     throw error;
   }
 };
@@ -261,7 +262,7 @@ export const createDefaultUserPreferences = async (userId: string): Promise<void
       await setDoc(userPrefsRef, defaultPreferences);
     }
   } catch (error) {
-    console.error('Error creating default user preferences:', error);
+    logger.error('Error creating default user preferences:', error);
     throw error;
   }
 };

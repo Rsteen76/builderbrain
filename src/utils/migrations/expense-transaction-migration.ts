@@ -10,6 +10,7 @@ import {
   writeBatch,
   limit,
 } from 'firebase/firestore';
+import { logger } from '../logger';
 
 /**
  * Migration script to update existing expenses and bids to the new transaction-based model
@@ -17,7 +18,7 @@ import {
  */
 export async function migrateExpenseAndBidData(userId: string): Promise<{ success: boolean, message: string }> {
   try {
-    console.log('Starting expense and bid data migration...');
+    logger.log('Starting expense and bid data migration...');
     
     // Step 1: Update expenses to add amountRemaining field
     await migrateExpenses(userId);
@@ -25,13 +26,13 @@ export async function migrateExpenseAndBidData(userId: string): Promise<{ succes
     // Step 2: Update bids to sync payment stages with expenses
     await migrateBids(userId);
     
-    console.log('Migration completed successfully');
+    logger.log('Migration completed successfully');
     return {
       success: true,
       message: 'Migration completed successfully. All expenses and bids have been updated to the new structure.'
     };
   } catch (error) {
-    console.error('Migration failed:', error);
+    logger.error('Migration failed:', error);
     return {
       success: false,
       message: `Migration failed: ${error instanceof Error ? error.message : String(error)}`
@@ -43,7 +44,7 @@ export async function migrateExpenseAndBidData(userId: string): Promise<{ succes
  * Update existing expenses to add the amountRemaining field
  */
 async function migrateExpenses(userId: string): Promise<void> {
-  console.log('Migrating expenses...');
+  logger.log('Migrating expenses...');
   
   const expensesRef = collection(db, 'expenses');
   const expensesQuery = query(expensesRef, limit(500)); // Process in batches
@@ -74,7 +75,7 @@ async function migrateExpenses(userId: string): Promise<void> {
     
     // Commit batch every 500 operations
     if (batchCount >= 500) {
-      console.log(`Committing batch of ${batchCount} expense updates...`);
+      logger.log(`Committing batch of ${batchCount} expense updates...`);
       await batch.commit();
       batch = writeBatch(db);
       batchCount = 0;
@@ -83,18 +84,18 @@ async function migrateExpenses(userId: string): Promise<void> {
   
   // Commit any remaining updates
   if (batchCount > 0) {
-    console.log(`Committing final batch of ${batchCount} expense updates...`);
+    logger.log(`Committing final batch of ${batchCount} expense updates...`);
     await batch.commit();
   }
   
-  console.log(`Migrated ${processedCount} expenses`);
+  logger.log(`Migrated ${processedCount} expenses`);
 }
 
 /**
  * Update bid payment stages to link with expenses
  */
 async function migrateBids(userId: string): Promise<void> {
-  console.log('Migrating bids...');
+  logger.log('Migrating bids...');
   
   const bidsRef = collection(db, 'bids');
   const bidsQuery = query(bidsRef, limit(500)); // Process in batches
@@ -160,7 +161,7 @@ async function migrateBids(userId: string): Promise<void> {
     
     // Commit batch every 500 operations
     if (batchCount >= 500) {
-      console.log(`Committing batch of ${batchCount} bid updates...`);
+      logger.log(`Committing batch of ${batchCount} bid updates...`);
       await batch.commit();
       batch = writeBatch(db);
       batchCount = 0;
@@ -169,9 +170,9 @@ async function migrateBids(userId: string): Promise<void> {
   
   // Commit any remaining updates
   if (batchCount > 0) {
-    console.log(`Committing final batch of ${batchCount} bid updates...`);
+    logger.log(`Committing final batch of ${batchCount} bid updates...`);
     await batch.commit();
   }
   
-  console.log(`Migrated ${processedCount} bids`);
+  logger.log(`Migrated ${processedCount} bids`);
 } 

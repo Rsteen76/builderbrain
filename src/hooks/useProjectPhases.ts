@@ -3,6 +3,7 @@ import { ProjectService } from '../services/project';
 import { ProjectPhase } from '../types';
 import { useAuth } from '../contexts/AuthContext';
 import { safelyParseDate } from '../utils/formatters'; // Assuming this utility exists
+import { logger } from '../utils/logger';
 
 interface UseProjectPhasesResult {
   phases: ProjectPhase[];
@@ -25,13 +26,13 @@ const ensureValidPhaseDates = (phases: ProjectPhase[]): ProjectPhase[] => {
 
     // Check if startDate is valid
     if (!startDate || isNaN(safelyParseDate(startDate).getTime())) {
-      console.warn(`Phase "${phase.name}" (ID: ${phase.id}) has invalid start date. Resetting.`);
+      logger.warn(`Phase "${phase.name}" (ID: ${phase.id}) has invalid start date. Resetting.`);
       startDate = new Date();
     }
 
     // Check if endDate is valid
     if (!endDate || isNaN(safelyParseDate(endDate).getTime())) {
-      console.warn(`Phase "${phase.name}" (ID: ${phase.id}) has invalid end date. Resetting.`);
+      logger.warn(`Phase "${phase.name}" (ID: ${phase.id}) has invalid end date. Resetting.`);
       // Set endDate relative to the (potentially corrected) startDate
       const validStartDate = safelyParseDate(startDate);
       const newEndDate = new Date(validStartDate.getTime());
@@ -42,7 +43,7 @@ const ensureValidPhaseDates = (phases: ProjectPhase[]): ProjectPhase[] => {
       const validStartDate = safelyParseDate(startDate);
       const validEndDate = safelyParseDate(endDate);
       if (validEndDate < validStartDate) {
-        console.warn(`Phase "${phase.name}" (ID: ${phase.id}) has end date before start date. Resetting end date.`);
+        logger.warn(`Phase "${phase.name}" (ID: ${phase.id}) has end date before start date. Resetting end date.`);
         const newEndDate = new Date(validStartDate.getTime());
         newEndDate.setDate(validStartDate.getDate() + 30);
         endDate = newEndDate;
@@ -94,7 +95,7 @@ export const useProjectPhases = (projectId: string | undefined): UseProjectPhase
         setPhases([]);
       }
     } catch (err) {
-      console.error('useProjectPhases: Error fetching phases:', err);
+      logger.error('useProjectPhases: Error fetching phases:', err);
       setError('Failed to load project phases');
       setPhases([]); // Clear phases on error
     } finally {

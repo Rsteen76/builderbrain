@@ -7,6 +7,7 @@ import {
   Timestamp,
   where,
 } from 'firebase/firestore';
+import { logger } from '../utils/logger';
 
 export type ScheduleEventType = 'milestone' | 'task' | 'payment' | 'meeting' | 'delivery' | 'note';
 export type SchedulePriority = 'low' | 'medium' | 'high' | 'urgent';
@@ -193,7 +194,7 @@ export class CalendarTimelineService {
         });
       });
     } catch (error) {
-      console.error('Error fetching tasks:', error);
+      logger.error('Error fetching tasks:', error);
     }
 
     appendProjectMilestones(calendarEvents, projects, startDate, endDate);
@@ -223,7 +224,7 @@ export class CalendarTimelineService {
         });
       });
     } catch (error) {
-      console.error('Error fetching payments:', error);
+      logger.error('Error fetching payments:', error);
     }
 
     try {
@@ -252,7 +253,7 @@ export class CalendarTimelineService {
         });
       });
     } catch (error) {
-      console.error('Error fetching events:', error);
+      logger.error('Error fetching events:', error);
     }
 
     try {
@@ -280,7 +281,7 @@ export class CalendarTimelineService {
         });
       });
     } catch (error) {
-      console.error('Error fetching deliveries:', error);
+      logger.error('Error fetching deliveries:', error);
     }
 
     return calendarEvents;
@@ -365,7 +366,7 @@ export class CalendarTimelineService {
         });
       });
     } catch (error) {
-      console.error('Error fetching payments:', error);
+      logger.error('Error fetching payments:', error);
     }
 
     try {
@@ -393,7 +394,7 @@ export class CalendarTimelineService {
         });
       });
     } catch (error) {
-      console.error('Error fetching deliveries:', error);
+      logger.error('Error fetching deliveries:', error);
     }
 
     try {
@@ -422,7 +423,7 @@ export class CalendarTimelineService {
         });
       });
     } catch (error) {
-      console.error('Error fetching events:', error);
+      logger.error('Error fetching events:', error);
     }
 
     timelineEvents.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
