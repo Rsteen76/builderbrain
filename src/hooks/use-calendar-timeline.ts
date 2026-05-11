@@ -4,6 +4,7 @@ import {
   CalendarTimelineService,
   TimelineData,
 } from '../services/calendar-timeline';
+import { logger } from '../utils/logger';
 
 export const useCalendarEvents = (userId: string | undefined, currentDate: Date) => {
   const [events, setEvents] = useState<CalendarEvent[]>([]);
@@ -27,7 +28,7 @@ export const useCalendarEvents = (userId: string | undefined, currentDate: Date)
         if (isMounted) setEvents(calendarEvents);
       })
       .catch(error => {
-        console.error('Error fetching calendar data:', error);
+        logger.error('Error fetching calendar data:', error);
         if (isMounted) setEvents([]);
       })
       .finally(() => {
@@ -64,7 +65,7 @@ export const useTimelineData = (userId: string | undefined) => {
         if (isMounted) setData(timelineData);
       })
       .catch(error => {
-        console.error('Error fetching timeline data:', error);
+        logger.error('Error fetching timeline data:', error);
         if (isMounted) setData({ events: [], projects: [] });
       })
       .finally(() => {

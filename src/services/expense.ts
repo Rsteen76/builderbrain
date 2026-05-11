@@ -24,6 +24,7 @@ import {
 } from 'firebase/firestore';
 import { Expense, ExpenseStatus } from '../types';
 import { toTimestamp, toDate } from '../utils/firestoreConverter'; // Added converter imports
+import { logger } from '../utils/logger';
 
 type FirestoreExpense = Omit<Expense, 'date' | 'createdAt' | 'updatedAt' | 'paymentDetails' | 'lastPaymentDate'> & {
   date: Timestamp;
@@ -84,7 +85,7 @@ export class ExpenseService {
         id: docRef.id,
       };
     } catch (error) {
-      console.error('Error creating expense:', error);
+      logger.error('Error creating expense:', error);
       throw error;
     }
   }
@@ -170,7 +171,7 @@ export class ExpenseService {
     // Standardize on phaseName field (buildingPhase logic removed)
     const standardizedPayload = { ...updatePayload };
     // if (updatePayload.buildingPhase && !updatePayload.phaseName) { // Removed buildingPhase logic
-    //   console.log(`ExpenseService: Standardizing on phaseName instead of buildingPhase: ${updatePayload.buildingPhase}`);
+    //   logger.log(`ExpenseService: Standardizing on phaseName instead of buildingPhase: ${updatePayload.buildingPhase}`);
     //   standardizedPayload.phaseName = updatePayload.buildingPhase;
     // }
 
@@ -246,7 +247,7 @@ export class ExpenseService {
     try {
       await updateDoc(expenseRef, firestoreUpdateData as Record<string, any>);
     } catch (error) {
-      console.error(`ExpenseService: Error updating expense ${id}:`, error);
+      logger.error(`ExpenseService: Error updating expense ${id}:`, error);
       throw error;
     }
   }
@@ -277,7 +278,7 @@ export class ExpenseService {
 
     // Check authorization - only the expense owner or the one who created it can access
     if (data.userId !== userId && data.createdBy !== userId) {
-      console.warn(`ExpenseService: User ${userId} attempted to access unauthorized expense ${id}.`);
+      logger.warn(`ExpenseService: User ${userId} attempted to access unauthorized expense ${id}.`);
       return null;
     }
 
@@ -298,7 +299,7 @@ export class ExpenseService {
     }
 
     if (!userId) {
-      console.error("ExpenseService: No userId provided to getExpenses");
+      logger.error("ExpenseService: No userId provided to getExpenses");
       return [];
     }
     
@@ -319,7 +320,7 @@ export class ExpenseService {
             if (filters.status.length > 0 && filters.status.length <= 10) {
               q = query(q, where('status', 'in', filters.status));
             } else if (filters.status.length > 10) {
-              console.warn("ExpenseService: Cannot filter by more than 10 statuses at once.");
+              logger.warn("ExpenseService: Cannot filter by more than 10 statuses at once.");
             }
           } else {
             q = query(q, where('status', '==', filters.status));
@@ -354,14 +355,14 @@ export class ExpenseService {
         return this.convertFromFirestore(doc);
       });
     } catch (error) {
-      console.error("ExpenseService: Error fetching expenses:", error);
+      logger.error("ExpenseService: Error fetching expenses:", error);
       throw error;
     }
   }
   
   static async getProjectExpenses(userId: string, projectId: string): Promise<Expense[]> {
     if (!userId || !projectId) {
-      console.error("ExpenseService: Missing userId or projectId in getProjectExpenses");
+      logger.error("ExpenseService: Missing userId or projectId in getProjectExpenses");
       return [];
     }
 
@@ -383,7 +384,7 @@ export class ExpenseService {
         return this.convertFromFirestore(doc);
       });
     } catch (error) {
-      console.error(`ExpenseService: Error fetching expenses for project ${projectId}:`, error);
+      logger.error(`ExpenseService: Error fetching expenses for project ${projectId}:`, error);
       throw error;
     }
   }
@@ -394,7 +395,7 @@ export class ExpenseService {
       const expenses = await this.getExpenses(userId, { projectId, phaseId });
       return expenses;
     } catch (error) {
-      console.error(`ExpenseService.getPhaseExpenses - Error retrieving expenses:`, error);
+      logger.error(`ExpenseService.getPhaseExpenses - Error retrieving expenses:`, error);
       return [];
     }
   }
@@ -589,7 +590,7 @@ export class ExpenseService {
       
       return potentialDuplicates;
     } catch (error) {
-      console.error("Error checking for duplicate expenses:", error);
+      logger.error("Error checking for duplicate expenses:", error);
       return [];
     }
   }
@@ -736,7 +737,7 @@ export class ExpenseService {
 
       return uniqueVendors;
     } catch (error) {
-      console.error("ExpenseService: Error fetching unique vendors:", error);
+      logger.error("ExpenseService: Error fetching unique vendors:", error);
       return [];
     }
   }

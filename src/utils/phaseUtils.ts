@@ -1,3 +1,4 @@
+import { logger } from './logger';
 /**
  * Generates initials from a phase name.
  * @param phaseName - The name of the phase.
@@ -50,7 +51,7 @@ export const formatPhaseDate = (date: Date | string | { toDate(): Date } | null 
     }
     return 'N/A';
   } catch (error) {
-    console.error('Error formatting phase date:', error);
+    logger.error('Error formatting phase date:', error);
     return 'Invalid Date';
   }
 }; 

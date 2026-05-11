@@ -7,6 +7,7 @@ import {
   doc,
   writeBatch,
 } from 'firebase/firestore';
+import { logger } from '../utils/logger';
 
 /**
  * Utility service to reset data in the application
@@ -62,7 +63,7 @@ export class DataResetService {
         throw new Error(`Failed to reset user data for ${failures.length} collection(s): ${failedCollections}`);
       }
 
-      console.log('All user data has been reset');
+      logger.log('All user data has been reset');
       
       // Clear any local storage that might be keeping activity data
       localStorage.removeItem('recentActivity');
@@ -71,7 +72,7 @@ export class DataResetService {
       // Reload the page after deletion to ensure clean state
       window.location.href = '/';
     } catch (error) {
-      console.error('Error resetting user data:', error);
+      logger.error('Error resetting user data:', error);
       throw error;
     }
   }
@@ -89,7 +90,7 @@ export class DataResetService {
       const snapshot = await getDocs(q);
       
       if (snapshot.empty) {
-        console.log(`No documents found in ${collectionName} for user ${userId}`);
+        logger.log(`No documents found in ${collectionName} for user ${userId}`);
         return;
       }
       
@@ -109,9 +110,9 @@ export class DataResetService {
         numDeleted += currentBatch.length;
       }
       
-      console.log(`Deleted ${numDeleted} documents from ${collectionName}`);
+      logger.log(`Deleted ${numDeleted} documents from ${collectionName}`);
     } catch (error) {
-      console.error(`Error with collection ${collectionName}:`, error);
+      logger.error(`Error with collection ${collectionName}:`, error);
       throw error;
     }
   }
@@ -137,7 +138,7 @@ export class DataResetService {
     const snapshot = await getDocs(q);
     
     if (snapshot.empty) {
-      console.log(`No documents found in ${collectionName} for project ${projectId}`);
+      logger.log(`No documents found in ${collectionName} for project ${projectId}`);
       return;
     }
     
@@ -147,7 +148,7 @@ export class DataResetService {
     });
     
     await batch.commit();
-    console.log(`Deleted ${snapshot.docs.length} documents from ${collectionName} for project ${projectId}`);
+    logger.log(`Deleted ${snapshot.docs.length} documents from ${collectionName} for project ${projectId}`);
   }
   
   /**
@@ -164,6 +165,6 @@ export class DataResetService {
       }
     }
     
-    console.log('Local storage data cleared');
+    logger.log('Local storage data cleared');
   }
 } 

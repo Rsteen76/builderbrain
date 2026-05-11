@@ -1,5 +1,6 @@
 import { Timestamp } from 'firebase/firestore';
 import type { Phase } from '../../types';
+import { logger } from '../../utils/logger';
 
 export type TimestampInput = Date | string | Timestamp | null | undefined;
 
@@ -18,7 +19,7 @@ export const dateToTimestamp = (date: TimestampInput): Timestamp | null => {
     try {
       return Timestamp.fromDate(new Date(date));
     } catch (e) {
-      console.error('Failed to convert string date to Timestamp:', e);
+      logger.error('Failed to convert string date to Timestamp:', e);
       return null;
     }
   }
@@ -41,7 +42,7 @@ export const timestampToDate = (value: unknown): Date | null => {
     try {
       return new Date(value);
     } catch (e) {
-      console.error('Failed to convert string to Date:', e);
+      logger.error('Failed to convert string to Date:', e);
       return null;
     }
   }

@@ -1,6 +1,7 @@
 import { collection, doc, getDoc, setDoc, addDoc, updateDoc, deleteDoc, getDocs, query, where } from 'firebase/firestore';
 import { db } from '../config/firebase';
 import { LineItem } from '../types/project.types';
+import { logger } from '../utils/logger';
 
 export const LineItemService = {
   /**
@@ -16,7 +17,7 @@ export const LineItemService = {
         ...doc.data()
       })) as LineItem[];
     } catch (error) {
-      console.error('Error getting line items:', error);
+      logger.error('Error getting line items:', error);
       throw error;
     }
   },
@@ -36,7 +37,7 @@ export const LineItemService = {
         ...snapshot.data()
       } as LineItem;
     } catch (error) {
-      console.error('Error getting line item:', error);
+      logger.error('Error getting line item:', error);
       throw error;
     }
   },
@@ -58,7 +59,7 @@ export const LineItemService = {
         ...lineItemData
       } as LineItem;
     } catch (error) {
-      console.error('Error creating line item:', error);
+      logger.error('Error creating line item:', error);
       throw error;
     }
   },
@@ -80,7 +81,7 @@ export const LineItemService = {
         ...lineItemData
       } as LineItem;
     } catch (error) {
-      console.error('Error updating line item:', error);
+      logger.error('Error updating line item:', error);
       throw error;
     }
   },
@@ -93,7 +94,7 @@ export const LineItemService = {
       const lineItemRef = doc(db, `users/${userId}/projects/${projectId}/lineItems`, lineItemId);
       await deleteDoc(lineItemRef);
     } catch (error) {
-      console.error('Error deleting line item:', error);
+      logger.error('Error deleting line item:', error);
       throw error;
     }
   }

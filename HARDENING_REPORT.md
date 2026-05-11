@@ -78,16 +78,17 @@ Generated: 2026-05-07
 - `npm run typecheck`
   - Passed.
 - `npm run test:coverage -- --coverageReporters=text-summary`
-  - Passed: 44 suites, 186 tests.
-  - Coverage: statements 14.88%, branches 11.29%, functions 15.03%, lines 15.25%.
+  - Passed: 46 suites, 196 tests.
+  - Coverage: statements 15.09%, branches 12.12%, functions 15.41%, lines 15.43%.
 - `npm run build`
   - Passed.
   - No Vite chunk-size or ineffective dynamic import warnings remain.
 - `npm audit --json`
   - Passed: 0 vulnerabilities.
 - `npm run test:e2e -- --project=chromium --workers=1`
-  - Passed: 6/6.
-  - Remaining browser warnings: React Router v7 future-flag notices only.
+  - Passed: 11/11.
+  - Expanded coverage now includes project detail navigation, accepted bid payment stages, payments dashboard commitments, documents, budget report, project creation, expense creation, and settings notifications.
+  - React Router v7 future-flag notices were addressed by opting into the supported v6 future flags.
 - `npm run test:rules`
   - Passed with OpenJDK 21.
 
@@ -96,5 +97,5 @@ Generated: 2026-05-07
 - Large module cleanup is improved but not fully complete. `project.ts`, `bid.ts`, `devDataStore.ts`, and `BudgetDashboard.tsx` are now split behind helper modules/components. `Expenses.tsx` and `ExpenseFormModal.tsx` have focused section boundaries but still exceed the target file-size ceiling and should continue shrinking in focused PRs.
 - Some direct-Firestore-in-UI cleanup may remain in secondary/admin utility surfaces, but the dashboard, project detail, calendar, timeline, and budget projection paths now have service boundaries.
 - Dashboard summaries are currently client-refreshed. That is acceptable for this SPA release; a future Cloud Function should maintain them immediately after writes if contractor accounts grow into very high project counts or multi-user write volume.
-- Direct `console.*` calls remain in lower-priority surfaces. Core auth/user/task/subcontractor logging now goes through the redacting logger, but a broader logging sweep is still needed.
-- React Router v7 future flags remain as warnings. They are not runtime failures, but should be addressed before a router major upgrade.
+- Direct `console.*` calls remain in lower-priority UI surfaces. Core services/hooks/utilities now go through the redacting logger, and the remaining sweep should focus on component-level debug output.
+- CI should continue to run on GitHub-hosted runners or self-hosted Actions Runner `v2.327.1+` because the official checkout/setup actions now use Node 24 runtimes.

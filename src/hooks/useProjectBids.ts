@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { BidService } from '../services/bid';
 import { Bid } from '../types';
 import { useAuth } from '../contexts/AuthContext';
+import { logger } from '../utils/logger';
 
 interface UseProjectBidsResult {
   bids: Bid[];
@@ -40,7 +41,7 @@ export const useProjectBids = (projectId: string | undefined): UseProjectBidsRes
       // Ensure the state is typed as Bid[]
       setBids(bidData);
     } catch (err) {
-      console.error('useProjectBids: Error fetching bids:', err);
+      logger.error('useProjectBids: Error fetching bids:', err);
       setError('Failed to load project bids');
       setBids([]); // Clear bids on error
     } finally {

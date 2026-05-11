@@ -5,6 +5,7 @@ import { isDevAuthBypassEnabled } from '../config/devMode';
 import { Project } from '../types';
 import { formatDate } from '../utils/formatters';
 import { ProjectService } from './project';
+import { logger } from '../utils/logger';
 
 export type DashboardPriority = 'urgent' | 'high' | 'medium' | 'low';
 
@@ -284,7 +285,7 @@ export class DashboardSummaryService {
           }
         }
       } catch (error) {
-        console.error('Failed to read dashboard summary; falling back to project aggregation:', error);
+        logger.error('Failed to read dashboard summary; falling back to project aggregation:', error);
       }
     }
 
@@ -296,7 +297,7 @@ export class DashboardSummaryService {
         const { source: _source, ...summaryDocument } = derivedSummary;
         await setDoc(summaryRef, summaryDocument, { merge: true });
       } catch (error) {
-        console.error('Failed to update dashboard summary:', error);
+        logger.error('Failed to update dashboard summary:', error);
       }
     }
 

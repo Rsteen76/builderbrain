@@ -7,6 +7,7 @@ import {
   listAll,
   StorageReference,
 } from 'firebase/storage';
+import { logger } from '../utils/logger';
 
 export interface UploadProgress {
   progress: number;
@@ -164,7 +165,7 @@ export class StorageService {
       );
       return downloadURLs;
     } catch (error) {
-      console.error('Error listing files:', error);
+      logger.error('Error listing files:', error);
       return [];
     }
   }
@@ -180,7 +181,7 @@ export class StorageService {
       const fileRef = ref(storage, path);
       await deleteObject(fileRef);
     } catch (error) {
-      console.error('Error deleting file:', error);
+      logger.error('Error deleting file:', error);
       throw error;
     }
   }

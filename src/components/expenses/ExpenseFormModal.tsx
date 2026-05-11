@@ -26,11 +26,17 @@ import {
 import { ExpenseService } from '../../services/expense';
 import { BidService } from '../../services/bid';
 import { useAuth } from '../../contexts/AuthContext';
-import { v4 as uuidv4 } from 'uuid';
-import { useExpenseLineItems, ExpenseLineItemFormData } from '../../hooks/useExpenseLineItems';
+import { useExpenseLineItems } from '../../hooks/useExpenseLineItems';
 import ExpenseDuplicateWarningDialog from './form/ExpenseDuplicateWarningDialog';
 import ExpenseMainInfoSection from './form/ExpenseMainInfoSection';
 import ExpensePaymentHistorySection from './form/ExpensePaymentHistorySection';
+import {
+  buildExpenseFormStateFromExpense,
+  buildNewExpenseFormState,
+  buildPhaseOptions,
+  getProjectPhasesForExpense,
+  getTodayInputValue,
+} from './form/expenseFormState';
 import { getExpenseDescriptionOptions } from './form/expenseFormOptions';
 import { buildExpenseSavePayload } from './form/expenseFormSavePayload';
 import { validateExpenseForm } from './form/expenseFormValidation';
@@ -95,12 +101,7 @@ const ExpenseFormModal: React.FC<ExpenseFormModalProps> = ({
   const isEditMode = useMemo(() => !!expense?.id, [expense]);
 
   // Get phase options based on the currentProjectPhases state
-  const PHASE_OPTIONS = useMemo(() => {
-    return currentProjectPhases.map(phase => ({
-      value: phase.id || '',
-      label: phase.name || 'Unnamed Phase'
-    }));
-  }, [currentProjectPhases]);
+  const PHASE_OPTIONS = useMemo(() => buildPhaseOptions(currentProjectPhases), [currentProjectPhases]);
 
   // Effect to initialize form when expense data is provided (for editing)
   useEffect(() => {
@@ -111,27 +112,8 @@ const ExpenseFormModal: React.FC<ExpenseFormModalProps> = ({
       // Log relevant IDs from the expense prop
       console.log(`[Phase Init] Expense Data: projectId='${expense.projectId}', phaseId='${expense.phaseId}'`);
 
-      setFormData({
-        projectId: expense.projectId || projects[0]?.id || 'undefined', // Ensure projectId is always set
-        description: expense.description || '',
-        amount: expense.amount || 0,
-        date: expense.date ? new Date(expense.date) : new Date(),
-        category: expense.category || 'other',
-        categoryId: expense.categoryId || '',
-        vendor: expense.vendor || '',
-        subcontractorId: expense.subcontractorId || '',
-        subcontractorName: expense.subcontractorName || '',
-        phaseId: expense.phaseId || '',
-        status: expense.status || 'pending',
-        notes: expense.notes || '',
-        tags: expense.tags || [],
-        // Preserve payment information
-        amountPaid: expense.amountPaid || 0,
-        paymentDetails: expense.paymentDetails || null,
-        // Preserve bid information
-        bidId: expense.bidId || '',
-        paymentStageId: expense.paymentStageId || '',
-      });
+      const nextState = buildExpenseFormStateFromExpense(expense, projects);
+      setFormData(nextState.formData);
       
       // Phase list initialization
       if (expense.projectId) {
@@ -139,71 +121,42 @@ const ExpenseFormModal: React.FC<ExpenseFormModalProps> = ({
         const currentProject = projects.find(p => p.id === expense.projectId);
         // Log if project was found and its phases
         console.log(`[Phase Init] Found project: ${currentProject ? `'${currentProject.name}'` : 'Not Found'}`);
-        const phasesToSet = (currentProject?.phases || []).filter(p => typeof p.id === 'string' && p.id !== '');
+        const phasesToSet = nextState.currentProjectPhases;
         console.log(`[Phase Init] Setting currentProjectPhases to:`, phasesToSet.map(p => ({ id: p.id, name: p.name }))); // Log concise phase info
-        setCurrentProjectPhases(phasesToSet as ProjectPhase[]);
+        setCurrentProjectPhases(phasesToSet);
     } else {
         console.log(`[Phase Init] No expense.projectId, clearing phases.`);
-        setCurrentProjectPhases([]);
+        setCurrentProjectPhases(nextState.currentProjectPhases);
       }
       
       // Initialize line items if they exist using the hook's setter
-      if (expense.lineItems && expense.lineItems.length > 0) {
-        const initialItemsForHook: ExpenseLineItemFormData[] = expense.lineItems.map(li => ({
-          id: li.id || uuidv4(),
-          description: li.description || '',
-          quantity: li.quantity || 1,
-          unitCost: li.unitCost || 0,
-          totalPrice: (li.quantity || 1) * (li.unitCost || 0) // Ensure totalPrice is calculated
-        }));
-        setHookLineItems(initialItemsForHook); // Use the setter from the hook
-        setShowLineItems(true);
-      } else {
-        setHookLineItems([]); // Reset for new or expense without line items
-        setShowLineItems(false);
-      }
+      setHookLineItems(nextState.lineItems); // Use the setter from the hook
+      setShowLineItems(nextState.showLineItems);
       
       // Initialize receipt preview
-      setReceiptPreview(expense.receiptUrl || null);
+      setReceiptPreview(nextState.receiptPreview);
       
       // Initialize payment details if status is 'paid' or 'partially_paid'
       if ((expense.status === 'paid' || expense.status === 'partially_paid') && expense.paymentDetails) {
-        setPaymentMethod(expense.paymentDetails.method || 'other');
-        const paymentDateObj = expense.paymentDetails.date ? new Date(expense.paymentDetails.date) : new Date();
-        setPaymentDate(paymentDateObj.toISOString().split('T')[0]);
-        setReferenceNumber(expense.paymentDetails.referenceNumber || '');
-        setPaymentNotes(expense.paymentDetails.notes || '');
+        setPaymentMethod(nextState.paymentMethod);
+        setPaymentDate(nextState.paymentDate);
+        setReferenceNumber(nextState.referenceNumber);
+        setPaymentNotes(nextState.paymentNotes);
       }
     } else if (open) {
       // Reset logic
       console.log(`[Phase Init] Resetting form for new expense.`);
-       setFormData({
-        projectId: projects[0]?.id || 'undefined',
-        description: '',
-        amount: 0,
-        date: new Date(),
-        category: 'other',
-        categoryId: '',
-        vendor: '',
-        subcontractorId: '',
-        subcontractorName: '',
-        phaseId: '',
-        status: 'pending',
-        notes: '',
-        tags: [],
-        amountPaid: 0,
-        bidId: '',
-        paymentStageId: '',
-      });
-      setHookLineItems([]); // Reset hook line items
-      setShowLineItems(false);
-      setReceiptPreview(null);
+      const nextState = buildNewExpenseFormState(projects);
+      setFormData(nextState.formData);
+      setHookLineItems(nextState.lineItems); // Reset hook line items
+      setShowLineItems(nextState.showLineItems);
+      setReceiptPreview(nextState.receiptPreview);
       setReceiptFile(null);
-      setPaymentMethod('other');
-      setPaymentDate(new Date().toISOString().split('T')[0]);
-      setReferenceNumber('');
-      setPaymentNotes('');
-      setCurrentProjectPhases([]);
+      setPaymentMethod(nextState.paymentMethod);
+      setPaymentDate(nextState.paymentDate);
+      setReferenceNumber(nextState.referenceNumber);
+      setPaymentNotes(nextState.paymentNotes);
+      setCurrentProjectPhases(nextState.currentProjectPhases);
     }
     // Reset errors and saving state whenever modal opens or expense changes
     setErrors({});
@@ -217,7 +170,7 @@ const ExpenseFormModal: React.FC<ExpenseFormModalProps> = ({
     if (!(expense?.status === 'paid' || expense?.status === 'partially_paid')) {
       setPaymentMethod('');
       setReferenceNumber('');
-      setPaymentDate(new Date().toISOString().split('T')[0]);
+      setPaymentDate(getTodayInputValue());
       setPaymentNotes('');
     }
   }, [open, expense, projects, setHookLineItems]); // Added setHookLineItems to dependency array
@@ -282,10 +235,9 @@ const ExpenseFormModal: React.FC<ExpenseFormModalProps> = ({
       console.log(`[Project Changed] Selected Project: ${selectedProject?.name}, with ${selectedProject?.phases?.length || 0} phases`);
       
       if (selectedProject?.phases) {
-        const phasesToSet = (selectedProject.phases || []).filter(p => 
-          typeof p.id === 'string' && p.id !== '');
+        const phasesToSet = getProjectPhasesForExpense(value, projects);
         console.log(`[Project Changed] Setting phases: `, phasesToSet.map(p => ({ id: p.id, name: p.name })));
-        setCurrentProjectPhases(phasesToSet as ProjectPhase[]);
+        setCurrentProjectPhases(phasesToSet);
         
         // Reset phase selection when project changes
         setFormData(prev => ({
@@ -493,7 +445,7 @@ const ExpenseFormModal: React.FC<ExpenseFormModalProps> = ({
     setCurrentProjectPhases([]);
     setPaymentMethod('');
     setReferenceNumber('');
-    setPaymentDate(new Date().toISOString().split('T')[0]);
+    setPaymentDate(getTodayInputValue());
     setPaymentNotes('');
     setDuplicateCheckDone(false);
     onClose();

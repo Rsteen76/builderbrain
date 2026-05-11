@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { ProjectService } from '../services/project';
 import { Project } from '../types';
 import { useAuth } from '../contexts/AuthContext';
+import { logger } from '../utils/logger';
 
 interface UseProjectResult {
   project: Project | null;
@@ -36,14 +37,14 @@ export const useProject = (projectId: string | undefined): UseProjectResult => {
     try {
       const projectData = await ProjectService.getProject(projectId, user.uid);
       if (!projectData) {
-        console.warn(`useProject: Project not found for ID: ${projectId}`);
+        logger.warn(`useProject: Project not found for ID: ${projectId}`);
         setError('Project not found');
         setProject(null);
       } else {
         setProject(projectData);
       }
     } catch (err) {
-      console.error('useProject: Error fetching project:', err);
+      logger.error('useProject: Error fetching project:', err);
       setError('Failed to load project');
       setProject(null); // Clear project data on error
     } finally {

@@ -2,6 +2,7 @@ import { collection, addDoc, query, where, getDocs, updateDoc, Timestamp, server
 import type { DocumentData, DocumentReference } from 'firebase/firestore';
 import { db } from '../config/firebase';
 import { hashReportPassword, verifyStoredReportPassword } from '../utils/reportPasswords';
+import { logger } from '../utils/logger';
 
 interface SharedReportData {
   projectId: string;
@@ -91,7 +92,7 @@ export class ReportService {
         password: deleteField(),
       });
     } catch (error) {
-      console.warn('Failed to migrate legacy shared report password:', error);
+      logger.warn('Failed to migrate legacy shared report password:', error);
     }
   }
 
@@ -151,7 +152,7 @@ export class ReportService {
       
       return shareId;
     } catch (error) {
-      console.error('Error generating share link:', error);
+      logger.error('Error generating share link:', error);
       throw new Error('Failed to generate share link');
     }
   }
@@ -178,7 +179,7 @@ export class ReportService {
         isExpired: isReportExpired(reportData),
       };
     } catch (error) {
-      console.error('Error getting shared report metadata:', error);
+      logger.error('Error getting shared report metadata:', error);
       throw new Error('Failed to inspect shared report');
     }
   }
@@ -225,12 +226,12 @@ export class ReportService {
           lastAccessedAt: serverTimestamp()
         });
       } catch (error) {
-        console.warn('Failed to update shared report access metadata:', error);
+        logger.warn('Failed to update shared report access metadata:', error);
       }
       
       return sanitizeReportData(reportData);
     } catch (error) {
-      console.error('Error getting shared report:', error);
+      logger.error('Error getting shared report:', error);
       throw new Error('Failed to access shared report');
     }
   }
@@ -249,7 +250,7 @@ export class ReportService {
         sanitizeReportData(reportDoc.data() as StoredReportData)
       );
     } catch (error) {
-      console.error('Error getting user shared reports:', error);
+      logger.error('Error getting user shared reports:', error);
       throw new Error('Failed to retrieve shared reports');
     }
   }

@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { ExpenseService } from '../services/expense';
 import { Expense } from '../types/expense.types'; // Ensure correct path
 import { useAuth } from '../contexts/AuthContext';
+import { logger } from '../utils/logger';
 
 interface ExpenseChartData {
   name: string; // Category name
@@ -67,7 +68,7 @@ export const useProjectExpenses = (projectId: string | undefined): UseProjectExp
       setExpensesChartData(chartData);
 
     } catch (err) {
-      console.error('useProjectExpenses: Error fetching expenses:', err);
+      logger.error('useProjectExpenses: Error fetching expenses:', err);
       setError('Failed to load project expenses');
       setExpenses([]); // Clear expenses on error
       setExpensesChartData([]); // Clear chart data on error

@@ -3,6 +3,7 @@ import { Subcontractor } from '../types';
 import { SubcontractorService } from '../services/subcontractor'; // Assuming service
 import { useAuth } from './useAuth';
 import { toast } from 'react-hot-toast';
+import { logger } from '../utils/logger';
 
 // Data expected from the dialog form
 interface SubcontractorFormData {
@@ -71,7 +72,7 @@ export const useQuickAddSubcontractorDialog = (
         options.onSubmitSuccess(savedSub); // Call the original success callback
       }
     } catch (error) {
-      console.error("Error saving subcontractor:", error);
+      logger.error("Error saving subcontractor:", error);
       toast.error("Failed to add subcontractor.");
       // Optionally keep dialog open on error?
     } finally {

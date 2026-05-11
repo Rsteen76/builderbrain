@@ -27,6 +27,7 @@ import { StorageService } from './storage';
 import { convertFirestoreData, convertToProjectData } from './project/mappers';
 import { createResidentialPhases, getResidentialProjectEndDate } from './project/residential';
 import type { FirestoreProject } from './project/types';
+import { logger } from '../utils/logger';
 
 export type { FirestoreProject } from './project/types';
 
@@ -125,7 +126,7 @@ class ProjectService {
       }
       return project;
     } catch (error) {
-      console.error("Error creating project:", error);
+      logger.error("Error creating project:", error);
       throw error;
     }
   }
@@ -166,7 +167,7 @@ class ProjectService {
       }
       return null;
     } catch (error) {
-      console.error("Error getting project:", error);
+      logger.error("Error getting project:", error);
       throw error;
     }
   }
@@ -191,7 +192,7 @@ class ProjectService {
       
       return projects;
     } catch (error) {
-      console.error("Error getting user projects:", error);
+      logger.error("Error getting user projects:", error);
       throw error;
     }
   }
@@ -255,7 +256,7 @@ class ProjectService {
       }
       return project;
     } catch (error) {
-      console.error("Error updating project:", error);
+      logger.error("Error updating project:", error);
       throw error;
     }
   }
@@ -280,7 +281,7 @@ class ProjectService {
       await StorageService.deleteProjectFiles(projectId);
       await this.deleteDocsInBatches(relatedDocs, projectId);
     } catch (error) {
-      console.error("Error deleting project:", error);
+      logger.error("Error deleting project:", error);
       throw error;
     }
   }
@@ -306,7 +307,7 @@ class ProjectService {
     }
 
     if (!userId) {
-      console.error("ProjectService: No userId provided to getProjects");
+      logger.error("ProjectService: No userId provided to getProjects");
       return [];
     }
     
@@ -396,7 +397,7 @@ class ProjectService {
       });
       return await this.getProjectById(project.id) as Project;
     } catch (error) {
-      console.error('Error creating residential project:', error);
+      logger.error('Error creating residential project:', error);
       throw error;
     }
   }
@@ -455,7 +456,7 @@ export const deleteProject = async (projectId: string): Promise<void> => {
 export const getAllProjects = async (): Promise<Project[]> => {
   // This function should be defined in the class if it exists
   // For now, providing a simple implementation
-  console.error('getAllProjects is not implemented');
+  logger.error('getAllProjects is not implemented');
   return [];
 };
 

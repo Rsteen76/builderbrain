@@ -16,6 +16,7 @@ import {
 import { ExpenseTransaction, TransactionStatus } from '../types/expense-transaction.types';
 import { ExpenseService } from './expense';
 import { Expense, ExpenseStatus } from '../types';
+import { logger } from '../utils/logger';
 
 interface FirestoreExpenseTransaction extends Omit<ExpenseTransaction, 'id' | 'transactionDate' | 'createdAt' | 'updatedAt'> {
   transactionDate: Timestamp;
@@ -95,7 +96,7 @@ export class ExpenseTransactionService {
         updatedExpense
       };
     } catch (error) {
-      console.error('Error creating expense transaction:', error);
+      logger.error('Error creating expense transaction:', error);
       throw error;
     }
   }
@@ -179,7 +180,7 @@ export class ExpenseTransactionService {
       
       await batch.commit();
     } catch (error) {
-      console.error('Error deleting expense transaction:', error);
+      logger.error('Error deleting expense transaction:', error);
       throw error;
     }
   }
@@ -220,7 +221,7 @@ export class ExpenseTransactionService {
       const querySnapshot = await getDocs(q);
       return querySnapshot.docs.map(doc => this.convertFromFirestore(doc));
     } catch (error) {
-      console.error('Error fetching transactions for expense:', error);
+      logger.error('Error fetching transactions for expense:', error);
       throw error;
     }
   }
@@ -269,7 +270,7 @@ export class ExpenseTransactionService {
             new Date(a.transactionDate).getTime()
         );
     } catch (error) {
-      console.error('Error fetching transactions for expenses:', error);
+      logger.error('Error fetching transactions for expenses:', error);
       throw error;
     }
   }
@@ -289,7 +290,7 @@ export class ExpenseTransactionService {
       const querySnapshot = await getDocs(q);
       return querySnapshot.docs.map(doc => this.convertFromFirestore(doc));
     } catch (error) {
-      console.error('Error fetching project transactions:', error);
+      logger.error('Error fetching project transactions:', error);
       throw error;
     }
   }

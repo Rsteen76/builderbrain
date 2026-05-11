@@ -4,6 +4,7 @@ import { Bid, BidSummary } from '../types'; // Assuming Bid types exist
 import { useAuth } from './useAuth';
 import { toast } from 'react-hot-toast';
 import { openBidDeleteDialog } from '../components/dialogs/BidDeletePortal';
+import { logger } from '../utils/logger';
 
 // Define options/arguments for the hook
 interface UseBidOperationsOptions {
@@ -77,7 +78,7 @@ export const useBidOperations = (
         options.onBidUpdate(newBid.id, 'duplicate');
       }
     } catch (error) {
-      console.error('Error duplicating bid:', error);
+      logger.error('Error duplicating bid:', error);
       toast.error('Failed to duplicate bid.');
     } finally {
       setIsOperating(false);

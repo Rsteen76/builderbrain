@@ -4,6 +4,7 @@ import { useProjectBids, useCreateBid, useUpdateBid, useDeleteBid } from './use-
 import { Bid, BidPaymentStage, ProjectPhase } from '../types';
 import { showNotification } from '../utils/notifications';
 import { ensureExpensesForAcceptedBid } from '../utils/bidOperations';
+import { logger } from '../utils/logger';
 
 type BidFormData = {
   title: string;
@@ -180,7 +181,7 @@ export function useProjectBidManagement(projectId: string, userId: string, phase
       // Open the form modal
       setBidFormOpen(true);
     } else {
-      console.error(`Bid with ID ${bidId} not found`);
+      logger.error(`Bid with ID ${bidId} not found`);
     }
   }, [bids, phases]);
   
@@ -203,7 +204,7 @@ export function useProjectBidManagement(projectId: string, userId: string, phase
           showNotification('Bid deleted successfully', 'success');
         },
         onError: (error: any) => {
-          console.error('Error deleting bid:', error);
+          logger.error('Error deleting bid:', error);
           showNotification('Failed to delete bid: ' + (error instanceof Error ? error.message : 'Unknown error'), 'error');
         }
       }
@@ -344,7 +345,7 @@ export function useProjectBidManagement(projectId: string, userId: string, phase
       // Refresh bids
       refetch();
     } catch (error) {
-      console.error('Error saving bid:', error);
+      logger.error('Error saving bid:', error);
       showNotification('Failed to save bid: ' + (error instanceof Error ? error.message : 'Unknown error'), 'error');
     } finally {
       setIsSaving(false);
@@ -435,7 +436,7 @@ export function useProjectBidManagement(projectId: string, userId: string, phase
       showNotification(`Bid from ${quickBid.contractorName} added successfully`, 'success');
       refetch();
     } catch (error) {
-      console.error('Error with quick bid:', error);
+      logger.error('Error with quick bid:', error);
       showNotification('Failed to process bid: ' + (error instanceof Error ? error.message : 'Unknown error'), 'error');
     } finally {
       setIsSaving(false);

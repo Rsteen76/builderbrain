@@ -3,6 +3,7 @@ import { ExpenseService } from '../services/expense';
 import { Expense } from '../types';
 import { useAuth } from './useAuth';
 import { toast } from 'react-hot-toast';
+import { logger } from '../utils/logger';
 
 // Define options/arguments for the hook
 interface UseExpenseOperationsOptions {
@@ -56,7 +57,7 @@ export const useExpenseOperations = ({
         onExpenseUpdate(newExpense, 'add');
       }
     } catch (error) {
-      console.error('Error adding expense:', error);
+      logger.error('Error adding expense:', error);
       toast.error('Failed to add expense.');
     } finally {
       setIsOperating(false);
@@ -82,7 +83,7 @@ export const useExpenseOperations = ({
       // For now, let's assume the caller handles the UI update optimistically or refetches.
       // Example: if (onExpenseUpdate) { onExpenseUpdate({id: expenseId, ...expenseData} as Expense, 'update'); }
     } catch (error) {
-      console.error('Error updating expense:', error);
+      logger.error('Error updating expense:', error);
       toast.error('Failed to update expense.');
     } finally {
       setIsOperating(false);
@@ -106,7 +107,7 @@ export const useExpenseOperations = ({
         onExpenseDelete(expenseId);
       }
     } catch (error) {
-      console.error('Error deleting expense:', error);
+      logger.error('Error deleting expense:', error);
       toast.error('Failed to delete expense.');
     } finally {
       setIsOperating(false);
