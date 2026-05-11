@@ -1,4 +1,5 @@
 import React from 'react';
+import { logger } from '../../utils/logger';
 import {
   Box,
   Typography,
@@ -221,7 +222,7 @@ const UpcomingDeadlines: React.FC<UpcomingDeadlinesProps> = ({ nextMilestone, ta
         daysUntilMilestone = -daysUntilMilestone;
       }
     } catch (error) {
-      console.error('Error parsing milestone date:', error);
+      logger.error('Error parsing milestone date:', error);
     }
   }
   

@@ -1,4 +1,5 @@
 import React, { useRef, useState, useEffect, useMemo } from 'react';
+import { logger } from '../../../utils/logger';
 import {
   Box, 
   Button,
@@ -126,7 +127,7 @@ const BudgetReport: React.FC<BudgetReportProps> = ({
           setCategoryMappings(mappings);
         })
         .catch((error) => {
-          console.error("Error loading category mappings for report:", error);
+          logger.error("Error loading category mappings for report:", error);
           setSnackbar({ open: true, message: 'Error loading category data', severity: 'error' });
         })
         .finally(() => {
@@ -242,7 +243,7 @@ const BudgetReport: React.FC<BudgetReportProps> = ({
             
             return mapSimpleToDetailedCategory(itemTypeHint, vendorOrSub, itemDescription);
         } catch (e) { 
-            console.error("Mapping error in getItemCategoryId:", e);
+            logger.error("Mapping error in getItemCategoryId:", e);
             return 'uncategorized';
         }
     };
@@ -343,7 +344,7 @@ const BudgetReport: React.FC<BudgetReportProps> = ({
       await new Promise(resolve => setTimeout(resolve, 300));
       
       if (!reportRef.current) {
-        console.error('Report element not found');
+        logger.error('Report element not found');
         setIsPrinting(false);
         return;
       }
@@ -450,7 +451,7 @@ const BudgetReport: React.FC<BudgetReportProps> = ({
       
       await processSections();
     } catch (error) {
-      console.error('Error exporting PDF:', error);
+      logger.error('Error exporting PDF:', error);
       setIsPrinting(false);
       alert('Failed to generate PDF. Please try again.');
     }
@@ -492,7 +493,7 @@ const BudgetReport: React.FC<BudgetReportProps> = ({
       setShareDialogOpen(true);
       setIsPrinting(false);
     } catch (error) {
-      console.error('Error generating share link:', error);
+      logger.error('Error generating share link:', error);
       setIsPrinting(false);
       alert('Failed to generate share link. Please try again.');
     }
@@ -521,7 +522,7 @@ const BudgetReport: React.FC<BudgetReportProps> = ({
         text: `Budget Report for ${project?.name || 'Construction Project'} - Total Budget: ${formatCurrency(budgetSummary.totalBudget)}`,
         url: shareLink,
       }).catch(err => {
-        console.error('Share failed:', err);
+        logger.error('Share failed:', err);
       });
     } else {
       // Fallback for browsers that don't support native sharing

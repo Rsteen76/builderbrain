@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { logger } from '../../utils/logger';
 import {
   Dialog,
   DialogTitle,
@@ -64,7 +65,7 @@ const BidDeletionDialog: React.FC<BidDeletionDialogProps> = ({
       setSelectAll(true);
       onExpensesSelected?.(expenseIds);
     } catch (err) {
-      console.error('Error loading expenses:', err);
+      logger.error('Error loading expenses:', err);
       setError('Failed to load associated expenses');
     } finally {
       setLoading(false);

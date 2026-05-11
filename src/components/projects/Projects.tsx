@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import { logger } from '../../utils/logger';
 import {
   Box,
   Grid,
@@ -422,7 +423,7 @@ const Projects: React.FC = () => {
         const validProjects = projectsData.filter(project => !!project.id);
         setProjects(validProjects);
       } catch (err) {
-        console.error('Error fetching projects:', err);
+        logger.error('Error fetching projects:', err);
         setError('Failed to load projects. Please try again.');
       } finally {
         setLoading(false);
@@ -432,7 +433,7 @@ const Projects: React.FC = () => {
     if (user?.uid) {
       fetchProjects(user.uid);
     } else {
-      console.error('User is not authenticated');
+      logger.error('User is not authenticated');
       setError('Failed to load projects. Please try again.');
     }
   }, [selectedTab, user]);
@@ -560,7 +561,7 @@ const Projects: React.FC = () => {
         // ...
       } catch (err) {
         // Handle error
-        console.error('Error deleting project:', err);
+        logger.error('Error deleting project:', err);
         // Show error message
         // ...
       }

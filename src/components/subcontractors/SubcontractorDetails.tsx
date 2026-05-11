@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
+import { logger } from '../../utils/logger';
 import {
   Box,
   Typography,
@@ -73,7 +74,7 @@ const SubcontractorDetails: React.FC = () => {
           setSubcontractor(data);
         }
       } catch (err) {
-        console.error('Error fetching subcontractor:', err);
+        logger.error('Error fetching subcontractor:', err);
         setError('Failed to load subcontractor data');
       } finally {
         setLoading(false);
@@ -98,7 +99,7 @@ const SubcontractorDetails: React.FC = () => {
       await SubcontractorService.deleteSubcontractor(id);
       navigate('/subcontractors');
     } catch (err) {
-      console.error('Error deleting subcontractor:', err);
+      logger.error('Error deleting subcontractor:', err);
       setError('Failed to delete subcontractor');
     } finally {
       setDeleteDialogOpen(false);

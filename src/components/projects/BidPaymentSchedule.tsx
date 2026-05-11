@@ -1,55 +1,31 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
+import { logger } from '../../utils/logger';
 import {
   Paper,
   Box,
-  Typography,
-  IconButton,
   Collapse,
   Button,
-  Table,
-  TableContainer,
-  TableHead,
-  TableBody,
-  TableRow,
-  TableCell,
-  Chip,
   LinearProgress,
   Alert,
   Dialog,
   DialogTitle,
   DialogContent,
-  Tooltip,
-  Grid,
-  TextField,
-  InputAdornment,
-  FormControl,
-  InputLabel,
-  Select,
-  MenuItem,
-  SelectChangeEvent,
-  FormControlLabel,
-  Switch,
-  AlertTitle,
-  Box as MuiBox,
 } from '@mui/material';
 import {
-  ExpandLess as ExpandLessIcon,
-  ExpandMore as ExpandMoreIcon,
-  Edit as EditIcon,
-  Delete as DeleteIcon,
-  Receipt as ReceiptIcon,
-  Payment as PaymentIcon,
   Add as AddIcon,
-  Info as InfoIcon,
 } from '@mui/icons-material';
-import { LocalizationProvider, DatePicker } from '@mui/x-date-pickers';
-import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns';
 import { v4 as uuidv4 } from 'uuid';
-import { Bid, BidPaymentStage, Expense, ExpenseCategory, ExpenseStatus } from '../../types';
+import { Bid, BidPaymentStage, Expense, ExpenseCategory } from '../../types';
 import { BidService } from '../../services/bid';
 import { ExpenseService } from '../../services/expense';
 import { createExtraBidExpense } from '../../utils/bidOperations';
 import PaymentStageDeletionDialog from '../dialogs/PaymentStageDeletionDialog';
+import ExpenseForm from './bidPaymentSchedule/ExpenseForm';
+import ExtraPaymentForm, { ExtraPaymentData } from './bidPaymentSchedule/ExtraPaymentForm';
+import PaymentProgressHeader from './bidPaymentSchedule/PaymentProgressHeader';
+import PaymentScheduleTable from './bidPaymentSchedule/PaymentScheduleTable';
+import PaymentStageForm from './bidPaymentSchedule/PaymentStageForm';
+import { calculatePaymentProgress } from './bidPaymentSchedule/paymentScheduleUtils';
 
 interface BidPaymentScheduleProps {
   bid: Bid;
@@ -57,23 +33,6 @@ interface BidPaymentScheduleProps {
   projectId: string;
   onBidUpdate?: (updatedBid: Bid) => void;
 }
-
-const getStatusColor = (status: BidPaymentStage['status']) => {
-  switch (status) {
-    case 'pending':
-      return 'default';
-    case 'in_progress':
-      return 'info';
-    case 'completed':
-      return 'warning';
-    case 'paid':
-      return 'success';
-    case 'overdue':
-      return 'error';
-    default:
-      return 'default';
-  }
-};
 
 const BidPaymentSchedule: React.FC<BidPaymentScheduleProps> = ({ bid, userId, projectId, onBidUpdate }) => {
   const [expanded, setExpanded] = useState(false);
@@ -91,11 +50,6 @@ const BidPaymentSchedule: React.FC<BidPaymentScheduleProps> = ({ bid, userId, pr
   // Payment schedule data
   const paymentSchedule = bid.paymentSchedule || [];
   const paymentProgress = bid.paymentProgress || { paid: 0, pending: bid.totalAmount, remaining: bid.totalAmount };
-  
-  // Calculate payment completion percentage
-  const completionPercentage = bid.totalAmount > 0 
-    ? Math.round((paymentProgress.paid / bid.totalAmount) * 100) 
-    : 0;
   
   const handleToggleExpand = () => {
     setExpanded(!expanded);
@@ -149,8 +103,8 @@ const BidPaymentSchedule: React.FC<BidPaymentScheduleProps> = ({ bid, userId, pr
   const handleConfirmDeletion = (deleteExpense: boolean) => {
     if (!stageToDelete) return;
     
-    console.log(`Deleting payment stage: ${stageToDelete.name} (ID: ${stageToDelete.id})`);
-    console.log(`User chose to ${deleteExpense ? 'DELETE' : 'KEEP'} the associated expense`);
+    logger.log(`Deleting payment stage: ${stageToDelete.name} (ID: ${stageToDelete.id})`);
+    logger.log(`User chose to ${deleteExpense ? 'DELETE' : 'KEEP'} the associated expense`);
     
     // Perform the deletion with the user's choice
     deletePaymentStage(stageToDelete.id, deleteExpense);
@@ -193,7 +147,7 @@ const BidPaymentSchedule: React.FC<BidPaymentScheduleProps> = ({ bid, userId, pr
         return Math.abs(calculatedAmount - actualAmount) > 0.01;
       });
       
-      console.log(`Using fixed amount mode: ${isFixedAmountBid}`);
+      logger.log(`Using fixed amount mode: ${isFixedAmountBid}`);
       
       // If there are remaining stages, redistribute the deleted amount
       if (updatedSchedule.length > 0) {
@@ -226,10 +180,10 @@ const BidPaymentSchedule: React.FC<BidPaymentScheduleProps> = ({ bid, userId, pr
                 amount: stage.amount,
                 notes: `Amount adjusted after deleting payment stage: ${stageToDelete.name}`
               }).catch(error => {
-                console.error(`Error updating expense ${stage.expenseId} after stage deletion:`, error);
+                logger.error(`Error updating expense ${stage.expenseId} after stage deletion:`, error);
               });
             } catch (expenseUpdateError) {
-              console.error(`Error updating expense ${stage.expenseId} after stage deletion:`, expenseUpdateError);
+              logger.error(`Error updating expense ${stage.expenseId} after stage deletion:`, expenseUpdateError);
             }
           }
         });
@@ -259,9 +213,9 @@ const BidPaymentSchedule: React.FC<BidPaymentScheduleProps> = ({ bid, userId, pr
       if (stageToDelete && stageToDelete.expenseId && deleteExpense) {
         try {
           await ExpenseService.deleteExpense(stageToDelete.expenseId);
-          console.log(`Deleted expense ${stageToDelete.expenseId} associated with payment stage ${stageId}`);
+          logger.log(`Deleted expense ${stageToDelete.expenseId} associated with payment stage ${stageId}`);
         } catch (expenseError) {
-          console.error(`Error deleting expense ${stageToDelete.expenseId}:`, expenseError);
+          logger.error(`Error deleting expense ${stageToDelete.expenseId}:`, expenseError);
           // Continue with deleting the stage even if we fail to delete the expense
         }
       }
@@ -280,7 +234,7 @@ const BidPaymentSchedule: React.FC<BidPaymentScheduleProps> = ({ bid, userId, pr
         setTimeout(() => setSuccess(null), 3000);
       }
     } catch (error) {
-      console.error('Error deleting payment stage:', error);
+      logger.error('Error deleting payment stage:', error);
       setError('Failed to delete payment stage');
     } finally {
       setLoading(false);
@@ -323,7 +277,7 @@ const BidPaymentSchedule: React.FC<BidPaymentScheduleProps> = ({ bid, userId, pr
         return Math.abs(calculatedAmount - actualAmount) > 0.01;
       });
       
-      console.log(`Creating/editing stage using fixed amount mode: ${isFixedAmountBid}`);
+      logger.log(`Creating/editing stage using fixed amount mode: ${isFixedAmountBid}`);
       
       let newStageId: string | null = null;
       let isNewStage = false;
@@ -419,9 +373,9 @@ const BidPaymentSchedule: React.FC<BidPaymentScheduleProps> = ({ bid, userId, pr
             
             // Update expense with new amount and description
             await ExpenseService.updateExpense(originalStage.expenseId, updatedExpenseData);
-            console.log(`Updated expense ${originalStage.expenseId} for payment stage ${cleanStage.id}${cleanStage.status === 'paid' ? ' (marked as paid)' : ''}`);
+            logger.log(`Updated expense ${originalStage.expenseId} for payment stage ${cleanStage.id}${cleanStage.status === 'paid' ? ' (marked as paid)' : ''}`);
           } catch (expenseError) {
-            console.error(`Error updating expense for payment stage ${cleanStage.id}:`, expenseError);
+            logger.error(`Error updating expense for payment stage ${cleanStage.id}:`, expenseError);
           }
         }
       } else {
@@ -471,9 +425,9 @@ const BidPaymentSchedule: React.FC<BidPaymentScheduleProps> = ({ bid, userId, pr
                 description: `${finalPaymentStage.name} (adjusted) - ${bid.title || 'Untitled Bid'}`,
                 notes: `Amount adjusted after adding new payment stage: ${cleanStage.name}`
               });
-              console.log(`Updated expense ${finalPaymentStage.expenseId} for adjusted final payment stage`);
+              logger.log(`Updated expense ${finalPaymentStage.expenseId} for adjusted final payment stage`);
             } catch (expenseError) {
-              console.error(`Error updating expense for final payment stage:`, expenseError);
+              logger.error(`Error updating expense for final payment stage:`, expenseError);
             }
           }
         }
@@ -518,7 +472,7 @@ const BidPaymentSchedule: React.FC<BidPaymentScheduleProps> = ({ bid, userId, pr
             try {
               await createExpenseForStage(newStageData, bid);
             } catch (expenseError) {
-              console.error('Error creating expense for new payment stage:', expenseError);
+              logger.error('Error creating expense for new payment stage:', expenseError);
               // We'll continue even if expense creation fails
             }
           }
@@ -531,7 +485,7 @@ const BidPaymentSchedule: React.FC<BidPaymentScheduleProps> = ({ bid, userId, pr
             try {
               await createExpenseForStage(remainingStageData, bid);
             } catch (expenseError) {
-              console.error('Error creating expense for remaining amount stage:', expenseError);
+              logger.error('Error creating expense for remaining amount stage:', expenseError);
               // We'll continue even if expense creation fails
             }
           }
@@ -561,7 +515,7 @@ const BidPaymentSchedule: React.FC<BidPaymentScheduleProps> = ({ bid, userId, pr
       
       handleCloseModal();
     } catch (error) {
-      console.error('Error saving payment stage:', error);
+      logger.error('Error saving payment stage:', error);
       setError('Failed to save payment stage');
     } finally {
       setLoading(false);
@@ -656,21 +610,14 @@ const BidPaymentSchedule: React.FC<BidPaymentScheduleProps> = ({ bid, userId, pr
       
       handleCloseExpenseModal();
     } catch (error) {
-      console.error('Error creating expense:', error);
+      logger.error('Error creating expense:', error);
       setError('Failed to create expense');
     } finally {
       setLoading(false);
     }
   };
   
-  const handleExtraPaymentSubmit = async (extraPaymentData: {
-    amount: number;
-    description: string;
-    notes: string;
-    date: Date;
-    category: string;
-    status: 'pending' | 'approved' | 'paid';
-  }) => {
+  const handleExtraPaymentSubmit = async (extraPaymentData: ExtraPaymentData) => {
     setLoading(true);
     setError(null);
     
@@ -695,111 +642,21 @@ const BidPaymentSchedule: React.FC<BidPaymentScheduleProps> = ({ bid, userId, pr
       
       setExtraPaymentModalOpen(false);
     } catch (error) {
-      console.error('Error creating extra payment:', error);
+      logger.error('Error creating extra payment:', error);
       setError('Failed to create extra payment');
     } finally {
       setLoading(false);
     }
   };
   
-  // Helper function to calculate payment progress
-  const calculatePaymentProgress = (schedule: BidPaymentStage[]) => {
-    // Ensure we work with numeric values by explicitly converting any string amounts
-    const paid = schedule
-      .filter(stage => stage.status === 'paid')
-      .reduce((sum, stage) => {
-        // Convert string amounts to numbers
-        const amount = typeof stage.amount === 'string' ? parseFloat(stage.amount) : stage.amount;
-        return sum + (isNaN(amount) ? 0 : amount);
-      }, 0);
-    
-    const total = schedule.reduce((sum, stage) => {
-      // Convert string amounts to numbers
-      const amount = typeof stage.amount === 'string' ? parseFloat(stage.amount) : stage.amount;
-      return sum + (isNaN(amount) ? 0 : amount);
-    }, 0);
-    
-    // Validate the calculated values to prevent inconsistencies
-    let validatedPaid = Math.min(paid, total); // Paid should never exceed total
-    validatedPaid = Math.max(0, validatedPaid); // Paid should never be negative
-    
-    const validatedPending = Math.max(0, total - validatedPaid); // Pending should never be negative
-    
-    // If total is 0, both paid and pending should be 0
-    if (total === 0) {
-      return {
-        paid: 0,
-        pending: 0,
-        remaining: 0
-      };
-    }
-    
-    // Log any corrections made to help with debugging
-    if (validatedPaid !== paid) {
-      console.warn(`Payment calculation corrected: original paid ${paid} -> corrected to ${validatedPaid}`);
-    }
-    
-    return {
-      paid: validatedPaid,
-      pending: validatedPending,
-      remaining: validatedPending
-    };
-  };
-  
-  // Format currency helper
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency: 'USD',
-      minimumFractionDigits: 2
-    }).format(amount);
-  };
-  
   return (
     <Paper sx={{ mt: 2, p: 2 }}>
-      <Box 
-        sx={{ 
-          display: 'flex', 
-          justifyContent: 'space-between', 
-          alignItems: 'center',
-          cursor: 'pointer',
-          p: 1
-        }}
-        onClick={handleToggleExpand}
-      >
-        <Box sx={{ display: 'flex', alignItems: 'center' }}>
-          <IconButton size="small">
-            {expanded ? <ExpandLessIcon /> : <ExpandMoreIcon />}
-          </IconButton>
-          <Typography variant="h6" component="div" sx={{ ml: 1 }}>
-            Payment Schedule
-          </Typography>
-        </Box>
-        
-        {/* Payment progress indicator */}
-        <Box sx={{ display: 'flex', alignItems: 'center', width: '40%' }}>
-          <Typography variant="body2" sx={{ mr: 1, minWidth: '100px' }}>
-            {formatCurrency(paymentProgress.paid)} / {formatCurrency(bid.totalAmount)}
-          </Typography>
-          <Box sx={{ width: '100%' }}>
-            <LinearProgress 
-              variant="determinate" 
-              value={completionPercentage} 
-              sx={{ 
-                height: 8, 
-                borderRadius: 4,
-                backgroundColor: '#e0e0e0',
-                '& .MuiLinearProgress-bar': {
-                  backgroundColor: completionPercentage === 100 ? 'success.main' : 'primary.main',
-                }
-              }}
-            />
-          </Box>
-          <Typography variant="body2" sx={{ ml: 1, minWidth: '40px' }}>
-            {completionPercentage}%
-          </Typography>
-        </Box>
-      </Box>
+      <PaymentProgressHeader
+        expanded={expanded}
+        paidAmount={paymentProgress.paid}
+        totalAmount={bid.totalAmount}
+        onToggleExpand={handleToggleExpand}
+      />
       
       <Collapse in={expanded}>
         <Box sx={{ mt: 2 }}>
@@ -827,101 +684,13 @@ const BidPaymentSchedule: React.FC<BidPaymentScheduleProps> = ({ bid, userId, pr
             </Button>
           </Box>
           
-          <TableContainer>
-            <Table size="small">
-              <TableHead>
-                <TableRow>
-                  <TableCell>Stage</TableCell>
-                  <TableCell>Description</TableCell>
-                  <TableCell align="right">Percentage</TableCell>
-                  <TableCell align="right">Amount</TableCell>
-                  <TableCell>Status</TableCell>
-                  <TableCell>Requirements</TableCell>
-                  <TableCell>Due Date</TableCell>
-                  <TableCell align="center">Actions</TableCell>
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {paymentSchedule.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={8} align="center">
-                      No payment stages defined
-                    </TableCell>
-                  </TableRow>
-                ) : (
-                  paymentSchedule.map((stage) => (
-                    <TableRow key={stage.id}>
-                      <TableCell>{stage.name}</TableCell>
-                      <TableCell>{stage.description || '-'}</TableCell>
-                      <TableCell align="right">{stage.percentage}%</TableCell>
-                      <TableCell align="right">{formatCurrency(stage.amount)}</TableCell>
-                      <TableCell>
-                        <Chip 
-                          label={stage.status.charAt(0).toUpperCase() + stage.status.slice(1)} 
-                          color={getStatusColor(stage.status)}
-                          size="small"
-                        />
-                      </TableCell>
-                      <TableCell>{stage.completionRequirements || '-'}</TableCell>
-                      <TableCell>
-                        {stage.dueDate ? new Date(stage.dueDate).toLocaleDateString() : '-'}
-                      </TableCell>
-                      <TableCell align="center">
-                        <Box sx={{ display: 'flex', justifyContent: 'center' }}>
-                          <Tooltip title="Edit">
-                            <IconButton 
-                              size="small" 
-                              onClick={() => handleEditStage(stage)}
-                              disabled={loading}
-                            >
-                              <EditIcon fontSize="small" />
-                            </IconButton>
-                          </Tooltip>
-                          
-                          {!stage.expenseId && (
-                            <Tooltip title="Create Expense">
-                              <IconButton 
-                                size="small"
-                                color="primary" 
-                                onClick={() => handleCreateExpense(stage)}
-                                disabled={loading}
-                              >
-                                <ReceiptIcon fontSize="small" />
-                              </IconButton>
-                            </Tooltip>
-                          )}
-                          
-                          <Tooltip title="Delete">
-                            <IconButton 
-                              size="small"
-                              color="error" 
-                              onClick={() => handleDeleteStage(stage.id)}
-                              disabled={loading}
-                            >
-                              <DeleteIcon fontSize="small" />
-                            </IconButton>
-                          </Tooltip>
-                          
-                          {stage.status !== 'paid' && (
-                            <Tooltip title="Mark as Paid">
-                              <IconButton 
-                                size="small"
-                                color="success" 
-                                onClick={() => handleEditStage({...stage, status: 'paid'})}
-                                disabled={loading}
-                              >
-                                <PaymentIcon fontSize="small" />
-                              </IconButton>
-                            </Tooltip>
-                          )}
-                        </Box>
-                      </TableCell>
-                    </TableRow>
-                  ))
-                )}
-              </TableBody>
-            </Table>
-          </TableContainer>
+          <PaymentScheduleTable
+            paymentSchedule={paymentSchedule}
+            loading={loading}
+            onEditStage={handleEditStage}
+            onCreateExpense={handleCreateExpense}
+            onDeleteStage={handleDeleteStage}
+          />
         </Box>
       </Collapse>
       
@@ -986,633 +755,6 @@ const BidPaymentSchedule: React.FC<BidPaymentScheduleProps> = ({ bid, userId, pr
         loading={loading}
       />
     </Paper>
-  );
-};
-
-// Payment Stage Form Component
-interface PaymentStageFormProps {
-  initialData?: BidPaymentStage;
-  bidTotalAmount: number;
-  onSubmit: (data: BidPaymentStage) => void;
-  onCancel: () => void;
-}
-
-const PaymentStageForm: React.FC<PaymentStageFormProps> = ({ initialData, bidTotalAmount, onSubmit, onCancel }) => {
-  const [formData, setFormData] = useState<Partial<BidPaymentStage>>(
-    initialData || {
-      name: '',
-      description: '',
-      percentage: 0,
-      amount: 0,
-      status: 'pending',
-      completionRequirements: '',
-      dueDate: undefined,
-      paymentDate: undefined
-    }
-  );
-  
-  // Track if status is changing to paid
-  const [isChangingToPaid, setIsChangingToPaid] = useState(false);
-  // Add state for partial payment
-  const [isPartialPayment, setIsPartialPayment] = useState(false);
-  const [partialAmount, setPartialAmount] = useState<number>(0);
-  const [remainingAmount, setRemainingAmount] = useState<number>(0);
-  
-  // Initialize partial amount when a stage is selected
-  useEffect(() => {
-    if (initialData) {
-      const stageAmount = typeof initialData.amount === 'string' ? 
-        parseFloat(initialData.amount) : initialData.amount;
-      setPartialAmount(stageAmount);
-      setRemainingAmount(0);
-    }
-  }, [initialData]);
-  
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | { name?: string; value: unknown }>) => {
-    const { name, value } = e.target;
-    setFormData(prev => ({ ...prev, [name!]: value }));
-    
-    // If percentage changes, update amount
-    if (name === 'percentage') {
-      const percentage = parseFloat(value as string) || 0;
-      const amount = Math.round((percentage / 100) * bidTotalAmount * 100) / 100;
-      setFormData(prev => ({ ...prev, amount }));
-      
-      // Update partial amount if partial payment is enabled
-      if (isPartialPayment) {
-        setPartialAmount(amount);
-      }
-    }
-    
-    // If amount changes, update percentage
-    if (name === 'amount') {
-      const amount = parseFloat(value as string) || 0;
-      const percentage = bidTotalAmount > 0 ? Math.round((amount / bidTotalAmount) * 100 * 100) / 100 : 0;
-      setFormData(prev => ({ ...prev, percentage }));
-      
-      // Update partial amount if partial payment is enabled
-      if (isPartialPayment) {
-        setPartialAmount(amount);
-      }
-    }
-  };
-
-  const handleSelectChange = (e: SelectChangeEvent<string>) => {
-    const { name, value } = e.target;
-    
-    // Check if status is changing to paid
-    if (name === 'status' && value === 'paid' && formData.status !== 'paid') {
-      setIsChangingToPaid(true);
-      // Automatically set payment date to today if changing to paid
-      setFormData(prev => ({ 
-        ...prev, 
-        [name]: value,
-        paymentDate: new Date()
-      }));
-    } else {
-      setFormData(prev => ({ ...prev, [name!]: value }));
-    }
-  };
-  
-  const handleDateChange = (field: 'dueDate' | 'paymentDate') => (date: Date | null) => {
-    setFormData(prev => ({ ...prev, [field]: date || undefined }));
-  };
-
-  // Add handler for partial payment toggle
-  const handlePartialPaymentToggle = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setIsPartialPayment(e.target.checked);
-    
-    // Initialize partial amount with the full amount
-    if (e.target.checked) {
-      const fullAmount = typeof formData.amount === 'string' ? 
-        parseFloat(formData.amount) : (formData.amount || 0);
-      setPartialAmount(fullAmount / 2); // Default to 50% for partial payments
-      setRemainingAmount(fullAmount / 2);
-    }
-  };
-  
-  // Add handler for partial amount change
-  const handlePartialAmountChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const newPartialAmount = parseFloat(e.target.value) || 0;
-    const fullAmount = typeof formData.amount === 'string' ? 
-      parseFloat(formData.amount) : (formData.amount || 0);
-    
-    // Calculate remaining amount
-    const newRemainingAmount = Math.max(0, fullAmount - newPartialAmount);
-    
-    // Make sure partial amount doesn't exceed the full amount
-    const validatedPartialAmount = Math.min(newPartialAmount, fullAmount);
-    
-    setPartialAmount(validatedPartialAmount);
-    setRemainingAmount(newRemainingAmount);
-  };
-  
-  const handleSubmit = () => {
-    if (!formData.name || !(formData.amount !== undefined && formData.amount > 0)) {
-      alert('Please fill in all required fields');
-      return;
-    }
-    
-    // Ensure all required fields are defined and properly typed before submitting
-    const cleanedData: BidPaymentStage = {
-      id: formData.id || uuidv4(), // Generate ID if not present
-      name: formData.name || '',
-      description: formData.description || '',
-      percentage: typeof formData.percentage === 'string' ? parseFloat(formData.percentage) : (formData.percentage || 0),
-      amount: typeof formData.amount === 'string' ? parseFloat(formData.amount) : (formData.amount || 0),
-      status: (formData.status as BidPaymentStage['status']) || 'pending',
-      completionRequirements: formData.completionRequirements || '',
-      dueDate: formData.dueDate,
-      createdAt: formData.createdAt || new Date(),
-      updatedAt: formData.updatedAt || new Date(),
-      // Payment date is included if status is paid
-      ...(formData.status === 'paid' ? { paymentDate: formData.paymentDate || new Date() } : {}),
-      // Only include defined fields
-      ...(formData.phaseId ? { phaseId: formData.phaseId } : {}),
-      ...(formData.phaseName ? { phaseName: formData.phaseName } : {}),
-      ...(formData.expenseId ? { expenseId: formData.expenseId } : {}),
-    };
-    
-    // Handle partial payment
-    if (isPartialPayment && formData.status === 'paid') {
-      // For partial payment, modify the stage amount to be the partial amount
-      cleanedData.partialPayment = true;
-      cleanedData.originalAmount = cleanedData.amount;
-      cleanedData.amount = partialAmount;
-      cleanedData.remainingAmount = remainingAmount;
-      
-      // Add note about partial payment
-      cleanedData.description = (cleanedData.description || '') + 
-        `\nPartial payment: $${partialAmount.toFixed(2)} of $${cleanedData.originalAmount.toFixed(2)}`;
-    }
-    
-    onSubmit(cleanedData);
-  };
-  
-  return (
-    <Box sx={{ mt: 2 }}>
-      <Grid container spacing={2}>
-        <Grid item xs={12} sm={6}>
-          <TextField
-            fullWidth
-            label="Stage Name"
-            name="name"
-            value={formData.name || ''}
-            onChange={handleChange}
-            required
-          />
-        </Grid>
-        
-        <Grid item xs={12} sm={6}>
-          <FormControl fullWidth>
-            <InputLabel>Status</InputLabel>
-            <Select
-              name="status"
-              value={formData.status || 'pending'}
-              onChange={handleSelectChange}
-              label="Status"
-            >
-              <MenuItem value="pending">Pending</MenuItem>
-              <MenuItem value="in_progress">In Progress</MenuItem>
-              <MenuItem value="completed">Completed</MenuItem>
-              <MenuItem value="paid">Paid</MenuItem>
-              <MenuItem value="overdue">Overdue</MenuItem>
-            </Select>
-          </FormControl>
-        </Grid>
-        
-        <Grid item xs={12} sm={6}>
-          <TextField
-            fullWidth
-            label="Percentage"
-            name="percentage"
-            type="number"
-            value={formData.percentage || ''}
-            onChange={handleChange}
-            InputProps={{
-              endAdornment: <InputAdornment position="end">%</InputAdornment>,
-            }}
-          />
-        </Grid>
-        
-        <Grid item xs={12} sm={6}>
-          <TextField
-            fullWidth
-            label="Amount"
-            name="amount"
-            type="number"
-            value={formData.amount || ''}
-            onChange={handleChange}
-            InputProps={{
-              startAdornment: <InputAdornment position="start">$</InputAdornment>,
-            }}
-          />
-        </Grid>
-        
-        {/* Add partial payment option for paid status */}
-        {formData.status === 'paid' && (
-          <>
-            <Grid item xs={12}>
-              <Box sx={{ display: 'flex', alignItems: 'center', mt: 1 }}>
-                <FormControlLabel
-                  control={
-                    <Switch
-                      checked={isPartialPayment}
-                      onChange={handlePartialPaymentToggle}
-                      color="primary"
-                    />
-                  }
-                  label="Make a partial payment"
-                />
-                {isPartialPayment && (
-                  <Tooltip title="Record a partial payment instead of marking the entire stage as paid">
-                    <IconButton size="small">
-                      <InfoIcon fontSize="small" />
-                    </IconButton>
-                  </Tooltip>
-                )}
-              </Box>
-            </Grid>
-            
-            {isPartialPayment && (
-              <>
-                <Grid item xs={12} sm={6}>
-                  <TextField
-                    fullWidth
-                    label="Amount to Pay Now"
-                    type="number"
-                    value={partialAmount}
-                    onChange={handlePartialAmountChange}
-                    InputProps={{
-                      startAdornment: <InputAdornment position="start">$</InputAdornment>,
-                    }}
-                    helperText={`Remaining: $${remainingAmount.toFixed(2)}`}
-                  />
-                </Grid>
-                
-                <Grid item xs={12} sm={6}>
-                  <Box sx={{ mt: 2 }}>
-                    <Alert severity="info" sx={{ display: 'flex', alignItems: 'center' }}>
-                      <Box>
-                        This will create a new payment stage for the remaining amount.
-                      </Box>
-                    </Alert>
-                  </Box>
-                </Grid>
-              </>
-            )}
-          </>
-        )}
-        
-        <Grid item xs={12}>
-          <TextField
-            fullWidth
-            label="Description"
-            name="description"
-            value={formData.description || ''}
-            onChange={handleChange}
-            multiline
-            rows={2}
-          />
-        </Grid>
-        
-        <Grid item xs={12}>
-          <TextField
-            fullWidth
-            label="Completion Requirements"
-            name="completionRequirements"
-            value={formData.completionRequirements || ''}
-            onChange={handleChange}
-          />
-        </Grid>
-        
-        <Grid item xs={12} sm={6}>
-          <LocalizationProvider dateAdapter={AdapterDateFns}>
-            <DatePicker
-              label="Due Date"
-              value={formData.dueDate ? new Date(formData.dueDate) : null}
-              onChange={handleDateChange('dueDate')}
-              slotProps={{
-                textField: {
-                  fullWidth: true,
-                  variant: 'outlined'
-                }
-              }}
-            />
-          </LocalizationProvider>
-        </Grid>
-        
-        {/* Show payment date field if status is paid */}
-        {formData.status === 'paid' && (
-          <Grid item xs={12} sm={6}>
-            <LocalizationProvider dateAdapter={AdapterDateFns}>
-              <DatePicker
-                label="Payment Date"
-                value={formData.paymentDate ? new Date(formData.paymentDate) : new Date()}
-                onChange={handleDateChange('paymentDate')}
-                slotProps={{
-                  textField: {
-                    fullWidth: true,
-                    variant: 'outlined'
-                  }
-                }}
-              />
-            </LocalizationProvider>
-          </Grid>
-        )}
-      </Grid>
-      
-      <Box sx={{ display: 'flex', justifyContent: 'flex-end', mt: 3 }}>
-        <Button onClick={onCancel} sx={{ mr: 1 }}>
-          Cancel
-        </Button>
-        <Button variant="contained" color="primary" onClick={handleSubmit}>
-          Save
-        </Button>
-      </Box>
-    </Box>
-  );
-};
-
-// Simple Expense Form Component
-interface ExpenseFormProps {
-  initialData: Partial<Expense>;
-  onSubmit: (data: Partial<Expense>) => void;
-  onCancel: () => void;
-}
-
-const ExpenseForm: React.FC<ExpenseFormProps> = ({ initialData, onSubmit, onCancel }) => {
-  const [formData, setFormData] = useState<Partial<Expense>>(initialData);
-  
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | { name?: string; value: unknown }>) => {
-    const { name, value } = e.target;
-    setFormData(prev => ({ ...prev, [name!]: value }));
-  };
-
-  const handleSelectChange = (e: SelectChangeEvent<string>) => {
-    const { name, value } = e.target;
-    setFormData(prev => ({ ...prev, [name!]: value }));
-  };
-  
-  const handleDateChange = (date: Date | null) => {
-    setFormData(prev => ({ ...prev, date: date || new Date() }));
-  };
-  
-  const handleSubmit = () => {
-    if (!formData.description || !formData.amount) {
-      alert('Please fill in all required fields');
-      return;
-    }
-    
-    onSubmit(formData);
-  };
-  
-  return (
-    <Box sx={{ mt: 2 }}>
-      <Grid container spacing={2}>
-        <Grid item xs={12}>
-          <TextField
-            fullWidth
-            label="Description"
-            name="description"
-            value={formData.description || ''}
-            onChange={handleChange}
-            required
-          />
-        </Grid>
-        
-        <Grid item xs={12} sm={6}>
-          <TextField
-            fullWidth
-            label="Amount"
-            name="amount"
-            type="number"
-            value={formData.amount || ''}
-            onChange={handleChange}
-            required
-            InputProps={{
-              startAdornment: <InputAdornment position="start">$</InputAdornment>,
-            }}
-          />
-        </Grid>
-        
-        <Grid item xs={12} sm={6}>
-          <FormControl fullWidth>
-            <InputLabel>Category</InputLabel>
-            <Select
-              name="category"
-              value={formData.category || 'other'}
-              onChange={handleSelectChange}
-              label="Category"
-            >
-              <MenuItem value="labor">Labor</MenuItem>
-              <MenuItem value="materials">Materials</MenuItem>
-              <MenuItem value="equipment">Equipment</MenuItem>
-              <MenuItem value="permits">Permits</MenuItem>
-              <MenuItem value="other">Other</MenuItem>
-            </Select>
-          </FormControl>
-        </Grid>
-        
-        <Grid item xs={12} sm={6}>
-          <LocalizationProvider dateAdapter={AdapterDateFns}>
-            <DatePicker
-              label="Date"
-              value={formData.date ? new Date(formData.date) : null}
-              onChange={handleDateChange}
-              slotProps={{
-                textField: {
-                  fullWidth: true,
-                  variant: 'outlined'
-                }
-              }}
-            />
-          </LocalizationProvider>
-        </Grid>
-        
-        <Grid item xs={12} sm={6}>
-          <TextField
-            fullWidth
-            label="Vendor/Supplier"
-            name="vendor"
-            value={formData.vendor || ''}
-            onChange={handleChange}
-          />
-        </Grid>
-        
-        <Grid item xs={12}>
-          <TextField
-            fullWidth
-            label="Notes"
-            name="notes"
-            value={formData.notes || ''}
-            onChange={handleChange}
-            multiline
-            rows={3}
-          />
-        </Grid>
-      </Grid>
-      
-      <Box sx={{ display: 'flex', justifyContent: 'flex-end', mt: 3 }}>
-        <Button onClick={onCancel} sx={{ mr: 1 }}>
-          Cancel
-        </Button>
-        <Button variant="contained" color="primary" onClick={handleSubmit}>
-          Create Expense
-        </Button>
-      </Box>
-    </Box>
-  );
-};
-
-// Extra Payment Form Component
-interface ExtraPaymentFormProps {
-  bid: Bid;
-  onSubmit: (data: {
-    amount: number;
-    description: string;
-    notes: string;
-    date: Date;
-    category: string;
-    status: 'pending' | 'approved' | 'paid';
-  }) => void;
-  onCancel: () => void;
-}
-
-const ExtraPaymentForm: React.FC<ExtraPaymentFormProps> = ({ bid, onSubmit, onCancel }) => {
-  const [formData, setFormData] = useState({
-    description: `Extra payment for bid: ${bid.title || 'Untitled'}`,
-    amount: 0,
-    notes: 'Additional payment outside of the regular payment schedule',
-    date: new Date(),
-    category: 'construction',
-    status: 'pending' as 'pending' | 'approved' | 'paid'
-  });
-  
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
-    const { name, value } = e.target;
-    setFormData(prev => ({ ...prev, [name]: value }));
-  };
-
-  const handleSelectChange = (e: SelectChangeEvent<string>) => {
-    const { name, value } = e.target;
-    setFormData(prev => ({ ...prev, [name]: value }));
-  };
-  
-  const handleDateChange = (date: Date | null) => {
-    setFormData(prev => ({ ...prev, date: date || new Date() }));
-  };
-  
-  const handleSubmit = () => {
-    if (!formData.description || formData.amount <= 0) {
-      alert('Please enter a description and a valid amount');
-      return;
-    }
-    
-    onSubmit(formData);
-  };
-  
-  return (
-    <Box sx={{ mt: 2 }}>
-      <Grid container spacing={2}>
-        <Grid item xs={12}>
-          <TextField
-            fullWidth
-            label="Description"
-            name="description"
-            value={formData.description}
-            onChange={handleChange}
-            required
-          />
-        </Grid>
-        
-        <Grid item xs={12} sm={6}>
-          <TextField
-            fullWidth
-            label="Amount"
-            name="amount"
-            type="number"
-            value={formData.amount}
-            onChange={handleChange}
-            required
-            InputProps={{
-              startAdornment: <InputAdornment position="start">$</InputAdornment>,
-            }}
-          />
-        </Grid>
-        
-        <Grid item xs={12} sm={6}>
-          <FormControl fullWidth>
-            <InputLabel>Category</InputLabel>
-            <Select
-              name="category"
-              value={formData.category}
-              onChange={handleSelectChange}
-              label="Category"
-            >
-              <MenuItem value="labor">Labor</MenuItem>
-              <MenuItem value="materials">Materials</MenuItem>
-              <MenuItem value="construction">Construction</MenuItem>
-              <MenuItem value="change_order">Change Order</MenuItem>
-              <MenuItem value="other">Other</MenuItem>
-            </Select>
-          </FormControl>
-        </Grid>
-        
-        <Grid item xs={12} sm={6}>
-          <LocalizationProvider dateAdapter={AdapterDateFns}>
-            <DatePicker
-              label="Date"
-              value={formData.date}
-              onChange={handleDateChange}
-              slotProps={{
-                textField: {
-                  fullWidth: true,
-                  variant: 'outlined'
-                }
-              }}
-            />
-          </LocalizationProvider>
-        </Grid>
-        
-        <Grid item xs={12} sm={6}>
-          <FormControl fullWidth>
-            <InputLabel>Status</InputLabel>
-            <Select
-              name="status"
-              value={formData.status}
-              onChange={handleSelectChange}
-              label="Status"
-            >
-              <MenuItem value="pending">Pending</MenuItem>
-              <MenuItem value="approved">Approved</MenuItem>
-              <MenuItem value="paid">Paid</MenuItem>
-            </Select>
-          </FormControl>
-        </Grid>
-        
-        <Grid item xs={12}>
-          <TextField
-            fullWidth
-            label="Notes"
-            name="notes"
-            value={formData.notes}
-            onChange={handleChange}
-            multiline
-            rows={3}
-          />
-        </Grid>
-      </Grid>
-      
-      <Box sx={{ display: 'flex', justifyContent: 'flex-end', mt: 3 }}>
-        <Button onClick={onCancel} sx={{ mr: 1 }}>
-          Cancel
-        </Button>
-        <Button variant="contained" color="primary" onClick={handleSubmit}>
-          Create Extra Payment
-        </Button>
-      </Box>
-    </Box>
   );
 };
 

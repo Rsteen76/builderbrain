@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { logger } from '../../utils/logger';
 import {
   Dialog,
   DialogTitle,
@@ -176,7 +177,7 @@ const BidPaymentTermsModal: React.FC<BidPaymentTermsModalProps> = ({ open, onClo
       await onSubmit(paymentSchedule);
       onClose();
     } catch (err) {
-      console.error('Error saving payment schedule:', err);
+      logger.error('Error saving payment schedule:', err);
       setError(err instanceof Error ? err.message : 'Failed to save payment schedule');
     } finally {
       setLoading(false);

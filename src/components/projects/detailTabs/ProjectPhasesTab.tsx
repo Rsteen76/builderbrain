@@ -1,4 +1,5 @@
 import React, { useCallback, useMemo, useState } from 'react';
+import { logger } from '../../../utils/logger';
 import {
   Box,
   Typography,
@@ -191,7 +192,7 @@ const ProjectPhasesTab: React.FC = () => {
   }, [openNewExpenseDialog, project?.id]);
 
   const handleOpenPhaseDetails = useCallback((phaseId: string) => {
-    console.log("Open details for phase ID:", phaseId);
+    logger.log("Open details for phase ID:", phaseId);
     const phase = phases.find(p => p.id === phaseId);
     if (phase) {
       phaseDetailsDialog.openPhaseDetailsDialog(phase as ProjectPhase);

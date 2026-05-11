@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { logger } from '../../../utils/logger';
 import {
   Box,
   Stepper,
@@ -68,7 +69,7 @@ const CategoryMigrationWizard: React.FC<CategoryMigrationWizardProps> = ({
         const mappings = await getCategoryMappingsForProject(projectId);
         setCategoryMappings(mappings || {});
       } catch (err) {
-        console.error('Error loading category mappings:', err);
+        logger.error('Error loading category mappings:', err);
         setError('Failed to load category mappings');
       } finally {
         setLoading(false);
@@ -88,7 +89,7 @@ const CategoryMigrationWizard: React.FC<CategoryMigrationWizardProps> = ({
       }));
       return true;
     } catch (err) {
-      console.error('Error updating category mapping:', err);
+      logger.error('Error updating category mapping:', err);
       setError('Failed to update category mapping');
       throw err;
     }
@@ -119,7 +120,7 @@ const CategoryMigrationWizard: React.FC<CategoryMigrationWizardProps> = ({
         onMigrationComplete();
       }
     } catch (err) {
-      console.error('Error completing migration:', err);
+      logger.error('Error completing migration:', err);
       setError('Failed to complete migration');
     } finally {
       setLoading(false);

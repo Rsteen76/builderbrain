@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { logger } from '../../utils/logger';
 import {
   FormControl,
   TextField,
@@ -48,7 +49,7 @@ const SubcontractorSelector: React.FC<SubcontractorSelectorProps> = ({
         const fetchedSubcontractors = await SubcontractorService.getSubcontractors(user.uid);
         setSubcontractors(fetchedSubcontractors);
       } catch (error) {
-        console.error('Error fetching subcontractors:', error);
+        logger.error('Error fetching subcontractors:', error);
       } finally {
         setIsLoading(false);
       }
@@ -86,7 +87,7 @@ const SubcontractorSelector: React.FC<SubcontractorSelectorProps> = ({
       setShowNewField(false);
       
     } catch (error) {
-      console.error('Error creating subcontractor:', error);
+      logger.error('Error creating subcontractor:', error);
     } finally {
       setIsCreating(false);
     }

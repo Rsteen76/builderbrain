@@ -1,4 +1,5 @@
 import React from 'react';
+import { logger } from '../../utils/logger';
 import {
   Stack,
   Button,
@@ -175,7 +176,7 @@ const ProjectDetailHeaderActions: React.FC<ProjectDetailHeaderActionsProps> = ({
           <ListItemIcon><UpdateIcon fontSize="small" /></ListItemIcon>
           Quick Update Mode
         </MenuItem>
-        <MenuItem onClick={() => console.log('Share project')}>
+        <MenuItem onClick={() => logger.log('Share project')}>
           <ListItemIcon><ShareIcon fontSize="small" /></ListItemIcon>
           Share Project
         </MenuItem>

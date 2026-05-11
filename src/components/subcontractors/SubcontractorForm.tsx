@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
+import { logger } from '../../utils/logger';
 import {
   Box,
   Typography,
@@ -106,7 +107,7 @@ const SubcontractorForm: React.FC = () => {
         const { id: _id, userId: _userId, createdAt: _createdAt, updatedAt: _updatedAt, ...dataToSet } = subcontractor;
         setFormData(dataToSet);
       } catch (err) {
-        console.error('Error fetching subcontractor:', err);
+        logger.error('Error fetching subcontractor:', err);
         setError('Failed to load subcontractor data');
       } finally {
         setLoading(false);
@@ -228,7 +229,7 @@ const SubcontractorForm: React.FC = () => {
         setTimeout(() => navigate('/subcontractors'), 1500);
       }
     } catch (err) {
-      console.error('Error saving subcontractor:', err);
+      logger.error('Error saving subcontractor:', err);
       setError('Failed to save subcontractor. Please try again.');
     } finally {
       setSaveLoading(false);

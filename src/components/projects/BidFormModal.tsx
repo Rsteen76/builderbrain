@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { logger } from '../../utils/logger';
 import {
   Dialog,
   DialogTitle,
@@ -51,7 +52,7 @@ const BidFormModal: React.FC<BidFormModalProps> = ({
         const fetchedSubcontractors = await SubcontractorService.getSubcontractors(userId);
         setSubcontractors(fetchedSubcontractors);
       } catch (err) {
-        console.error('Error fetching subcontractors:', err);
+        logger.error('Error fetching subcontractors:', err);
         setError('Failed to load subcontractors');
       }
     };
@@ -70,7 +71,7 @@ const BidFormModal: React.FC<BidFormModalProps> = ({
     setError(null);
 
     try {
-      console.log('[Category Mapping Inputs]', {
+      logger.log('[Category Mapping Inputs]', {
         title: bidFormData.title || '',
         subcontractor: bidFormData.subcontractorName || '',
         scope: bidFormData.scope || ''
@@ -142,7 +143,7 @@ const BidFormModal: React.FC<BidFormModalProps> = ({
       await onSubmit(submitPayload);
       onClose();
     } catch (err) {
-      console.error('Error submitting bid:', err);
+      logger.error('Error submitting bid:', err);
       setError('Failed to submit bid');
     } finally {
       setIsSaving(false);

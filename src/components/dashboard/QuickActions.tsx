@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { logger } from '../../utils/logger';
 import {
   Paper,
   Stack,
@@ -221,7 +222,7 @@ const QuickActions: React.FC<QuickActionsProps> = ({ onNewProjectClick }) => {
           const fetchedProjects = await ProjectService.getProjects(user.uid);
           setProjects(fetchedProjects);
         } catch (error) {
-          console.error('Error fetching projects:', error);
+          logger.error('Error fetching projects:', error);
         }
       }
     };
@@ -238,7 +239,7 @@ const QuickActions: React.FC<QuickActionsProps> = ({ onNewProjectClick }) => {
         await ExpenseService.createExpense(user.uid, expenseData);
         // You might want to show a success message or refresh the dashboard data here
       } catch (error) {
-        console.error('Error creating expense:', error);
+        logger.error('Error creating expense:', error);
       }
     }
   };

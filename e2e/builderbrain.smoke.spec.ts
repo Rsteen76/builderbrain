@@ -89,6 +89,73 @@ test('accepted bid detail shows payment management controls and schedule progres
   await expect(page.getByRole('cell', { name: 'Inspection signoff', exact: true })).toBeVisible();
 });
 
+test('dev auth bypass can add a payment stage to an accepted bid schedule', async ({ page }) => {
+  const stageName = `Playwright retainage release ${Date.now()}`;
+  const stageAmount = 1234;
+
+  await page.goto(`/bids/${acceptedFoundationBid.id}`);
+  await expect(page.getByRole('heading', { name: acceptedFoundationBid.title })).toBeVisible();
+
+  const initialState = await page.evaluate((bidId) => {
+    const rawState = window.localStorage.getItem('builderbrain:dev-data:v1');
+    const state = rawState ? JSON.parse(rawState) : { bids: [], expenses: [] };
+    const bid = state.bids.find((item: { id: string }) => item.id === bidId);
+
+    return {
+      stageCount: bid?.paymentSchedule?.length || 0,
+      expenseCount: state.expenses?.length || 0,
+    };
+  }, acceptedFoundationBid.id);
+
+  await expect(page.getByText('Payment Progress').first()).toBeVisible();
+  await page.getByText('Payment Schedule').last().click();
+  await page.getByRole('button', { name: /Add Payment Stage/i }).click();
+
+  await expect(page.getByRole('heading', { name: 'Add Payment Stage' })).toBeVisible();
+  await page.getByLabel('Stage Name').fill(stageName);
+  await page.getByLabel('Amount').fill(String(stageAmount));
+  await page.getByLabel('Description').fill('Retainage release created by Playwright.');
+  await page.getByRole('button', { name: 'Save' }).click();
+
+  await expect(page.getByRole('heading', { name: 'Add Payment Stage' })).toBeHidden();
+  await expect(page.getByRole('cell', { name: stageName, exact: true })).toBeVisible();
+
+  await page.waitForFunction(
+    ({ bidId, expectedStageName, expectedAmount, expectedStageCount, expectedExpenseCount }) => {
+      const rawState = window.localStorage.getItem('builderbrain:dev-data:v1');
+      if (!rawState) return false;
+
+      const state = JSON.parse(rawState);
+      const bid = state.bids.find((item: { id: string }) => item.id === bidId);
+      const stage = bid?.paymentSchedule?.find(
+        (item: { name?: string; amount?: number; expenseId?: string }) =>
+          item.name === expectedStageName && item.amount === expectedAmount && item.expenseId
+      );
+      const linkedExpense = state.expenses?.find(
+        (expense: { id?: string; paymentStageId?: string; bidId?: string; amount?: number }) =>
+          expense.id === stage?.expenseId &&
+          expense.paymentStageId === stage?.id &&
+          expense.bidId === bidId &&
+          expense.amount === expectedAmount
+      );
+
+      return (
+        bid?.paymentSchedule?.length === expectedStageCount + 1 &&
+        state.expenses?.length === expectedExpenseCount + 1 &&
+        Boolean(stage) &&
+        Boolean(linkedExpense)
+      );
+    },
+    {
+      bidId: acceptedFoundationBid.id,
+      expectedStageName: stageName,
+      expectedAmount: stageAmount,
+      expectedStageCount: initialState.stageCount,
+      expectedExpenseCount: initialState.expenseCount,
+    }
+  );
+});
+
 test('payments dashboard reflects seeded paid expenses and accepted bid commitments', async ({ page }) => {
   await page.goto('/payments');
 

@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import { logger } from '../../utils/logger';
 import {
   Box,
   Card,
@@ -415,7 +416,7 @@ const TasksList: React.FC = () => {
           setTasks(tasksWithNames);
         }
       } catch (err) {
-        console.error('Error fetching tasks:', err);
+        logger.error('Error fetching tasks:', err);
         setError('Failed to load tasks');
       } finally {
         setLoading(false);
@@ -461,7 +462,7 @@ const TasksList: React.FC = () => {
       await TaskService.deleteTask(taskId);
       setTasks(tasks.filter((t) => t.id !== taskId));
     } catch (err) {
-      console.error('Error deleting task:', err);
+      logger.error('Error deleting task:', err);
       setError('Failed to delete task');
     }
   };
@@ -489,7 +490,7 @@ const TasksList: React.FC = () => {
         return t;
       }));
     } catch (err) {
-      console.error('Error updating task status:', err);
+      logger.error('Error updating task status:', err);
       setError('Failed to update task status');
     }
   };

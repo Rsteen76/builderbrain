@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { logger } from '../../utils/logger';
 import {
   Box,
   Button,
@@ -102,7 +103,7 @@ const LineItemManager: React.FC<LineItemManagerProps> = ({ project, userId, onPr
       const items = await LineItemService.getLineItems(userId, project.id);
       setLineItems(items);
     } catch (err) {
-      console.error('Error fetching line items:', err);
+      logger.error('Error fetching line items:', err);
       setError('Failed to load line items');
     } finally {
       setLoading(false);
@@ -204,7 +205,7 @@ const LineItemManager: React.FC<LineItemManagerProps> = ({ project, userId, onPr
       handleCloseDialog();
       
     } catch (err) {
-      console.error('Error saving line item:', err);
+      logger.error('Error saving line item:', err);
       setError('Failed to save line item');
     } finally {
       setLoading(false);
@@ -228,7 +229,7 @@ const LineItemManager: React.FC<LineItemManagerProps> = ({ project, userId, onPr
       const updatedProject = { ...project };
       onProjectUpdate(updatedProject);
     } catch (err) {
-      console.error('Error deleting line item:', err);
+      logger.error('Error deleting line item:', err);
       setError('Failed to delete line item');
     } finally {
       setLoading(false);

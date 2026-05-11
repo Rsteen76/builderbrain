@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { logger } from '../../utils/logger';
 import {
   Box,
   Paper,
@@ -89,7 +90,7 @@ const CategoryManagementPanel: React.FC<CategoryManagementPanelProps> = ({
         }
       }
     } catch (error) {
-      console.error("Error loading user preferences:", error);
+      logger.error("Error loading user preferences:", error);
       setSnackbar({
         open: true,
         message: "Failed to load preferences. Using default settings.",
@@ -119,7 +120,7 @@ const CategoryManagementPanel: React.FC<CategoryManagementPanelProps> = ({
           severity: 'success'
         });
       } catch (error) {
-        console.error("Error saving category preference:", error);
+        logger.error("Error saving category preference:", error);
         setSnackbar({
           open: true,
           message: "Failed to save preference",
