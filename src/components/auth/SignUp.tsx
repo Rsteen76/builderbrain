@@ -21,15 +21,18 @@ const SignUp: React.FC = () => {
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [loading, setLoading] = useState(false);
+  const [formError, setFormError] = useState<string | null>(null);
   const { signUp, signInWithGoogle, error } = useAuth();
   const navigate = useNavigate();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (password !== confirmPassword) {
+      setFormError('Passwords do not match.');
       return;
     }
 
+    setFormError(null);
     setLoading(true);
 
     try {
@@ -85,6 +88,12 @@ const SignUp: React.FC = () => {
             </Alert>
           )}
 
+          {formError && (
+            <Alert severity="error" sx={{ width: '100%', mb: 2 }}>
+              {formError}
+            </Alert>
+          )}
+
           {isDevAuthBypassEnabled && (
             <Alert severity="info" sx={{ width: '100%', mb: 2 }}>
               Development auth bypass is enabled. Create any local session here without hitting Firebase Auth.
@@ -102,7 +111,10 @@ const SignUp: React.FC = () => {
               autoComplete="email"
               autoFocus
               value={email}
-              onChange={(e) => setEmail(e.target.value)}
+              onChange={(e) => {
+                setFormError(null);
+                setEmail(e.target.value);
+              }}
             />
             <TextField
               margin="normal"
@@ -114,7 +126,10 @@ const SignUp: React.FC = () => {
               id="password"
               autoComplete="new-password"
               value={password}
-              onChange={(e) => setPassword(e.target.value)}
+              onChange={(e) => {
+                setFormError(null);
+                setPassword(e.target.value);
+              }}
             />
             <TextField
               margin="normal"
@@ -125,7 +140,10 @@ const SignUp: React.FC = () => {
               type="password"
               id="confirmPassword"
               value={confirmPassword}
-              onChange={(e) => setConfirmPassword(e.target.value)}
+              onChange={(e) => {
+                setFormError(null);
+                setConfirmPassword(e.target.value);
+              }}
             />
             <Button
               type="submit"
