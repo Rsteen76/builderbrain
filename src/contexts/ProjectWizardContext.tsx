@@ -1,4 +1,16 @@
-import React, { createContext, useContext, useReducer, ReactNode } from 'react';
+import React, { createContext, useContext, useEffect, useReducer, ReactNode } from 'react';
+import { v4 as uuidv4 } from 'uuid';
+import { useAuth } from './AuthContext';
+import { ProjectService } from '../services/project';
+import type { ProjectPhase, Task } from '../types';
+import {
+  buildTemplateBudgetItems,
+  buildTemplateMilestones,
+  buildTemplatePhases,
+  getDefaultBudgetForSize,
+  getProjectWizardTemplate,
+  type ProjectTemplateId,
+} from '../data/projectWizardTemplates';
 
 // Define types for the project info
 export interface ProjectInfo {
@@ -40,6 +52,20 @@ export interface ScheduleMilestone {
   isCompleted?: boolean;
 }
 
+export interface WizardProjectPhase {
+  id: string;
+  name: string;
+  description?: string;
+  startDate: Date;
+  endDate: Date;
+  status: ProjectPhase['status'];
+  progress: number;
+  budget: number;
+  actualCost: number;
+  budgetPercentage: number;
+  tasks: Array<Partial<Task> & Pick<Task, 'id' | 'title' | 'status' | 'priority'>>;
+}
+
 // Define types for budget items
 export interface BudgetItem {
   id: string;
@@ -58,6 +84,9 @@ export interface ProjectWizardState {
   schedule: {
     milestones: ScheduleMilestone[];
   };
+  selectedTemplateId?: ProjectTemplateId;
+  phases: WizardProjectPhase[];
+  hasCustomizedPhases: boolean;
   budget: BudgetItem[];
   team: {
     members: TeamMember[];
@@ -66,15 +95,20 @@ export interface ProjectWizardState {
   completedSteps: Set<WizardStep>;
   isSubmitting: boolean;
   isSubmitted: boolean;
+  createdProjectId: string | null;
   error: string | null;
 }
 
 // Define action types
-type ActionType = 
+type ActionType =
   | { type: 'UPDATE_PROJECT_INFO'; payload: Partial<ProjectInfo> }
   | { type: 'ADD_SCHEDULE_MILESTONE'; payload: ScheduleMilestone }
   | { type: 'UPDATE_SCHEDULE_MILESTONE'; payload: { index: number; milestone: ScheduleMilestone } }
   | { type: 'REMOVE_SCHEDULE_MILESTONE'; payload: string }
+  | { type: 'APPLY_TEMPLATE'; payload: { templateId: ProjectTemplateId } }
+  | { type: 'ADD_PHASE'; payload: WizardProjectPhase }
+  | { type: 'UPDATE_PHASE'; payload: { id: string; updates: Partial<WizardProjectPhase> } }
+  | { type: 'REMOVE_PHASE'; payload: string }
   | { type: 'ADD_BUDGET_ITEM'; payload: BudgetItem }
   | { type: 'UPDATE_BUDGET_ITEM'; payload: { index: number; item: BudgetItem } }
   | { type: 'REMOVE_BUDGET_ITEM'; payload: string }
@@ -85,7 +119,7 @@ type ActionType =
   | { type: 'MARK_STEP_COMPLETE'; payload: WizardStep }
   | { type: 'MARK_STEP_INCOMPLETE'; payload: WizardStep }
   | { type: 'SUBMIT_PROJECT_START' }
-  | { type: 'SUBMIT_PROJECT_SUCCESS' }
+  | { type: 'SUBMIT_PROJECT_SUCCESS'; payload: { projectId: string } }
   | { type: 'SUBMIT_PROJECT_ERROR'; payload: string }
   | { type: 'RESET_WIZARD' }
   | { type: 'VALIDATE_STEP'; payload: WizardStep };
@@ -106,6 +140,9 @@ const initialState: ProjectWizardState = {
   schedule: {
     milestones: []
   },
+  selectedTemplateId: undefined,
+  phases: [],
+  hasCustomizedPhases: false,
   budget: [],
   team: {
     members: []
@@ -114,21 +151,136 @@ const initialState: ProjectWizardState = {
   completedSteps: new Set(),
   isSubmitting: false,
   isSubmitted: false,
+  createdProjectId: null,
   error: null,
+};
+
+const getWizardStartDate = (projectInfo: ProjectInfo): Date =>
+  projectInfo.estimatedStartDate || projectInfo.startDate || new Date();
+
+const getWizardEndDate = (projectInfo: ProjectInfo): Date => {
+  if (projectInfo.estimatedEndDate) return projectInfo.estimatedEndDate;
+  const startDate = getWizardStartDate(projectInfo);
+  return new Date(startDate.getTime() + 180 * 24 * 60 * 60 * 1000);
+};
+
+const applyTemplateToState = (
+  state: ProjectWizardState,
+  templateId: ProjectTemplateId
+): ProjectWizardState => {
+  const template = getProjectWizardTemplate(templateId);
+  const totalBudget =
+    state.projectInfo.totalBudget || getDefaultBudgetForSize(state.projectInfo.size);
+  const projectInfo = {
+    ...state.projectInfo,
+    projectType: state.projectInfo.projectType || template.projectType,
+    totalBudget,
+  };
+  const phases = buildTemplatePhases(
+    template,
+    getWizardStartDate(projectInfo),
+    getWizardEndDate(projectInfo),
+    totalBudget || 0
+  );
+
+  const completedSteps = new Set(state.completedSteps);
+  completedSteps.add('schedule');
+  if (phases.length > 0) {
+    completedSteps.add('budget');
+  }
+
+  return {
+    ...state,
+    projectInfo,
+    selectedTemplateId: template.id,
+    phases,
+    schedule: {
+      milestones: buildTemplateMilestones(template, phases),
+    },
+    budget: buildTemplateBudgetItems(phases),
+    completedSteps,
+  };
+};
+
+const rebalancePhaseBudgets = (
+  phases: WizardProjectPhase[],
+  totalBudget: number
+): WizardProjectPhase[] =>
+  phases.map(phase => ({
+    ...phase,
+    budget: Math.round(totalBudget * ((phase.budgetPercentage || 0) / 100)),
+  }));
+
+const refreshTemplateSchedule = (
+  state: ProjectWizardState,
+  projectInfo: ProjectInfo,
+  totalBudget: number
+): Pick<ProjectWizardState, 'phases' | 'schedule' | 'budget'> | null => {
+  if (!state.selectedTemplateId || state.hasCustomizedPhases) {
+    return null;
+  }
+
+  const template = getProjectWizardTemplate(state.selectedTemplateId);
+  const phases = buildTemplatePhases(
+    template,
+    getWizardStartDate(projectInfo),
+    getWizardEndDate(projectInfo),
+    totalBudget
+  );
+
+  return {
+    phases,
+    schedule: {
+      milestones: buildTemplateMilestones(template, phases),
+    },
+    budget: buildTemplateBudgetItems(phases),
+  };
 };
 
 // Reducer function
 const projectWizardReducer = (state: ProjectWizardState, action: ActionType): ProjectWizardState => {
   switch (action.type) {
     case 'UPDATE_PROJECT_INFO':
+    {
+      const nextProjectInfo = {
+        ...state.projectInfo,
+        ...action.payload,
+      };
+      const nextTotalBudget =
+        'totalBudget' in action.payload
+          ? action.payload.totalBudget || 0
+          : 'size' in action.payload && !state.projectInfo.totalBudget
+          ? getDefaultBudgetForSize(action.payload.size)
+          : nextProjectInfo.totalBudget || 0;
+      const projectInfo = {
+        ...nextProjectInfo,
+        totalBudget: nextTotalBudget,
+      };
+      const refreshedTemplate = refreshTemplateSchedule(state, projectInfo, nextTotalBudget);
+
+      if (refreshedTemplate) {
+        return {
+          ...state,
+          projectInfo,
+          ...refreshedTemplate,
+        };
+      }
+
+      const shouldRebalanceBudget = nextTotalBudget !== state.projectInfo.totalBudget;
+      const phases = shouldRebalanceBudget && !state.hasCustomizedPhases
+        ? rebalancePhaseBudgets(state.phases, nextTotalBudget)
+        : state.phases;
+
       return {
         ...state,
-        projectInfo: {
-          ...state.projectInfo,
-          ...action.payload,
-        },
+        projectInfo,
+        phases,
+        budget: shouldRebalanceBudget && !state.hasCustomizedPhases
+          ? buildTemplateBudgetItems(phases)
+          : state.budget,
       };
-    
+    }
+
     case 'ADD_SCHEDULE_MILESTONE':
       return {
         ...state,
@@ -137,18 +289,18 @@ const projectWizardReducer = (state: ProjectWizardState, action: ActionType): Pr
           milestones: [...state.schedule.milestones, action.payload]
         }
       };
-    
+
     case 'UPDATE_SCHEDULE_MILESTONE':
       return {
         ...state,
         schedule: {
           ...state.schedule,
-          milestones: state.schedule.milestones.map((milestone, index) => 
+          milestones: state.schedule.milestones.map((milestone, index) =>
             index === action.payload.index ? action.payload.milestone : milestone
           )
         }
       };
-    
+
     case 'REMOVE_SCHEDULE_MILESTONE':
       return {
         ...state,
@@ -157,27 +309,62 @@ const projectWizardReducer = (state: ProjectWizardState, action: ActionType): Pr
           milestones: state.schedule.milestones.filter(milestone => milestone.id !== action.payload)
         }
       };
-    
+
+    case 'APPLY_TEMPLATE':
+      return {
+        ...applyTemplateToState(state, action.payload.templateId),
+        hasCustomizedPhases: false,
+      };
+
+    case 'ADD_PHASE':
+      return {
+        ...state,
+        phases: [...state.phases, action.payload],
+        hasCustomizedPhases: true,
+      };
+
+    case 'UPDATE_PHASE': {
+      const phases = state.phases.map(phase =>
+        phase.id === action.payload.id ? { ...phase, ...action.payload.updates } : phase
+      );
+      return {
+        ...state,
+        phases,
+        hasCustomizedPhases: true,
+        budget: buildTemplateBudgetItems(phases),
+      };
+    }
+
+    case 'REMOVE_PHASE': {
+      const phases = state.phases.filter(phase => phase.id !== action.payload);
+      return {
+        ...state,
+        phases,
+        hasCustomizedPhases: true,
+        budget: buildTemplateBudgetItems(phases),
+      };
+    }
+
     case 'ADD_BUDGET_ITEM':
       return {
         ...state,
         budget: [...state.budget, action.payload],
       };
-    
+
     case 'UPDATE_BUDGET_ITEM':
       return {
         ...state,
-        budget: state.budget.map((item, index) => 
+        budget: state.budget.map((item, index) =>
           index === action.payload.index ? action.payload.item : item
         ),
       };
-    
+
     case 'REMOVE_BUDGET_ITEM':
       return {
         ...state,
         budget: state.budget.filter(item => item.id !== action.payload),
       };
-    
+
     case 'ADD_TEAM_MEMBER':
       return {
         ...state,
@@ -186,18 +373,18 @@ const projectWizardReducer = (state: ProjectWizardState, action: ActionType): Pr
           members: [...state.team.members, action.payload]
         }
       };
-    
+
     case 'UPDATE_TEAM_MEMBER':
       return {
         ...state,
         team: {
           ...state.team,
-          members: state.team.members.map((member, index) => 
+          members: state.team.members.map((member, index) =>
             index === action.payload.index ? action.payload.member : member
           )
         }
       };
-    
+
     case 'REMOVE_TEAM_MEMBER':
       return {
         ...state,
@@ -206,13 +393,13 @@ const projectWizardReducer = (state: ProjectWizardState, action: ActionType): Pr
           members: state.team.members.filter(member => member.id !== action.payload)
         }
       };
-    
+
     case 'SET_CURRENT_STEP':
       return {
         ...state,
         currentStep: action.payload,
       };
-    
+
     case 'MARK_STEP_COMPLETE': {
       const updatedCompletedSteps = new Set(state.completedSteps);
       updatedCompletedSteps.add(action.payload);
@@ -221,7 +408,7 @@ const projectWizardReducer = (state: ProjectWizardState, action: ActionType): Pr
         completedSteps: updatedCompletedSteps,
       };
     }
-    
+
     case 'MARK_STEP_INCOMPLETE': {
       const updatedCompletedSteps = new Set(state.completedSteps);
       updatedCompletedSteps.delete(action.payload);
@@ -238,20 +425,20 @@ const projectWizardReducer = (state: ProjectWizardState, action: ActionType): Pr
 
       switch (step) {
         case 'project_info':
-          isValid = !!state.projectInfo.name && 
-                   !!state.projectInfo.location && 
-                   !!state.projectInfo.projectType && 
+          isValid = !!state.projectInfo.name &&
+                   !!state.projectInfo.location &&
+                   !!state.projectInfo.projectType &&
                    !!state.projectInfo.size &&
                    !!state.projectInfo.description;
           break;
         case 'schedule':
-          isValid = state.schedule.milestones.length > 0;
+          isValid = state.phases.length > 0 || state.schedule.milestones.length > 0;
           break;
         case 'budget':
-          isValid = state.budget.length > 0;
+          isValid = state.phases.length > 0 || state.budget.length > 0;
           break;
         case 'team':
-          isValid = state.team.members.length > 0;
+          isValid = true;
           break;
         case 'review':
           isValid = true; // Review is always valid if we got here
@@ -270,31 +457,32 @@ const projectWizardReducer = (state: ProjectWizardState, action: ActionType): Pr
       }
       return state;
     }
-    
+
     case 'SUBMIT_PROJECT_START':
       return {
         ...state,
         isSubmitting: true,
         error: null,
       };
-    
+
     case 'SUBMIT_PROJECT_SUCCESS':
       return {
         ...state,
         isSubmitting: false,
         isSubmitted: true,
+        createdProjectId: action.payload.projectId,
       };
-    
+
     case 'SUBMIT_PROJECT_ERROR':
       return {
         ...state,
         isSubmitting: false,
         error: action.payload,
       };
-    
+
     case 'RESET_WIZARD':
       return initialState;
-    
+
     default:
       return state;
   }
@@ -308,6 +496,10 @@ type ProjectWizardContextType = {
   addMilestone: (milestone: ScheduleMilestone) => void;
   updateMilestone: (index: number, milestone: ScheduleMilestone) => void;
   removeMilestone: (id: string) => void;
+  applyTemplate: (templateId: ProjectTemplateId) => void;
+  addPhase: (phase?: Partial<WizardProjectPhase>) => void;
+  updatePhase: (id: string, updates: Partial<WizardProjectPhase>) => void;
+  removePhase: (id: string) => void;
   addBudgetItem: (item: BudgetItem) => void;
   updateBudgetItem: (index: number, item: BudgetItem) => void;
   removeBudgetItem: (id: string) => void;
@@ -329,10 +521,36 @@ const ProjectWizardContext = createContext<ProjectWizardContextType | undefined>
 // Provider component
 interface ProjectWizardProviderProps {
   children: ReactNode;
+  initialTemplateId?: ProjectTemplateId;
 }
 
-export const ProjectWizardProvider: React.FC<ProjectWizardProviderProps> = ({ children }) => {
+const createEmptyPhase = (index: number, projectInfo: ProjectInfo): WizardProjectPhase => {
+  const startDate = getWizardStartDate(projectInfo);
+  const phaseStartDate = new Date(startDate.getTime() + index * 14 * 24 * 60 * 60 * 1000);
+  return {
+    id: `custom-phase-${Date.now()}-${index + 1}`,
+    name: `Phase ${index + 1}`,
+    description: '',
+    startDate: phaseStartDate,
+    endDate: new Date(phaseStartDate.getTime() + 14 * 24 * 60 * 60 * 1000),
+    status: 'not_started',
+    progress: 0,
+    budget: 0,
+    actualCost: 0,
+    budgetPercentage: 0,
+    tasks: [],
+  };
+};
+
+export const ProjectWizardProvider: React.FC<ProjectWizardProviderProps> = ({ children, initialTemplateId }) => {
   const [state, dispatch] = useReducer(projectWizardReducer, initialState);
+  const { user } = useAuth();
+
+  useEffect(() => {
+    if (initialTemplateId) {
+      dispatch({ type: 'APPLY_TEMPLATE', payload: { templateId: initialTemplateId } });
+    }
+  }, [initialTemplateId]);
 
   // Helper functions to dispatch actions
   const updateProjectInfo = (info: Partial<ProjectInfo>) => {
@@ -349,6 +567,28 @@ export const ProjectWizardProvider: React.FC<ProjectWizardProviderProps> = ({ ch
 
   const removeMilestone = (id: string) => {
     dispatch({ type: 'REMOVE_SCHEDULE_MILESTONE', payload: id });
+  };
+
+  const applyTemplate = (templateId: ProjectTemplateId) => {
+    dispatch({ type: 'APPLY_TEMPLATE', payload: { templateId } });
+  };
+
+  const addPhase = (phase?: Partial<WizardProjectPhase>) => {
+    dispatch({
+      type: 'ADD_PHASE',
+      payload: {
+        ...createEmptyPhase(state.phases.length, state.projectInfo),
+        ...phase,
+      },
+    });
+  };
+
+  const updatePhase = (id: string, updates: Partial<WizardProjectPhase>) => {
+    dispatch({ type: 'UPDATE_PHASE', payload: { id, updates } });
+  };
+
+  const removePhase = (id: string) => {
+    dispatch({ type: 'REMOVE_PHASE', payload: id });
   };
 
   const addBudgetItem = (item: BudgetItem) => {
@@ -402,22 +642,89 @@ export const ProjectWizardProvider: React.FC<ProjectWizardProviderProps> = ({ ch
 
   // Function to check if the user can proceed to the next step
   const canProceedToNextStep = (): boolean => {
+    if (state.currentStep === 'review') {
+      return true;
+    }
+
     return isStepComplete(state.currentStep);
   };
 
-  // Submit function (to be implemented with API integration)
   const submitProject = async (): Promise<void> => {
     dispatch({ type: 'SUBMIT_PROJECT_START' });
-    
+
     try {
-      // Here you would make an API call to save the project
-      // For now, we'll simulate a successful submission after a delay
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      
-      dispatch({ type: 'SUBMIT_PROJECT_SUCCESS' });
+      if (!user?.uid) {
+        throw new Error('You must be signed in to create a project');
+      }
+
+      const startDate = getWizardStartDate(state.projectInfo);
+      const endDate = getWizardEndDate(state.projectInfo);
+      const totalBudget = state.projectInfo.totalBudget || 0;
+
+      const createdProject = await ProjectService.createProject(user.uid, {
+        name: state.projectInfo.name,
+        description: state.projectInfo.description || '',
+        status: 'planning',
+        priority: 'medium',
+        projectType: state.projectInfo.projectType,
+        startDate,
+        endDate,
+        location: state.projectInfo.location,
+        budget: {
+          total: totalBudget,
+          spent: 0,
+          remaining: totalBudget,
+        },
+        keyMilestones: state.schedule.milestones.map(milestone => ({
+          name: milestone.title,
+          date: milestone.dueDate,
+          description: milestone.description || '',
+        })),
+        team: state.team.members.map(member => member.name),
+        clientId: state.projectInfo.client,
+        progress: 0,
+      });
+
+      const projectPhases: ProjectPhase[] = state.phases.map((phase, index) => {
+        const phaseId = uuidv4();
+        return {
+          id: phaseId,
+          projectId: createdProject.id,
+          name: phase.name,
+          description: phase.description,
+          startDate: phase.startDate,
+          endDate: phase.endDate,
+          status: phase.status,
+          progress: phase.progress,
+          order: index + 1,
+          budget: phase.budget || 0,
+          actualCost: 0,
+          tasks: phase.tasks.map(task => ({
+            id: uuidv4(),
+            userId: user.uid,
+            projectId: createdProject.id,
+            phaseId,
+            phaseName: phase.name,
+            title: task.title,
+            status: task.status || 'todo',
+            priority: task.priority || 'medium',
+            createdAt: new Date(),
+            updatedAt: new Date(),
+          } as Task)),
+        };
+      });
+
+      if (projectPhases.length > 0) {
+        await ProjectService.updateProject(createdProject.id, {
+          phases: projectPhases,
+          tasks: projectPhases.flatMap(phase => phase.tasks || []),
+        });
+      }
+
+      dispatch({ type: 'SUBMIT_PROJECT_SUCCESS', payload: { projectId: createdProject.id } });
     } catch (error) {
-      dispatch({ 
-        type: 'SUBMIT_PROJECT_ERROR', 
+      dispatch({
+        type: 'SUBMIT_PROJECT_ERROR',
         payload: error instanceof Error ? error.message : 'An unknown error occurred'
       });
     }
@@ -432,6 +739,10 @@ export const ProjectWizardProvider: React.FC<ProjectWizardProviderProps> = ({ ch
         addMilestone,
         updateMilestone,
         removeMilestone,
+        applyTemplate,
+        addPhase,
+        updatePhase,
+        removePhase,
         addBudgetItem,
         updateBudgetItem,
         removeBudgetItem,
@@ -460,4 +771,4 @@ export const useProjectWizard = (): ProjectWizardContextType => {
     throw new Error('useProjectWizard must be used within a ProjectWizardProvider');
   }
   return context;
-}; 
+};

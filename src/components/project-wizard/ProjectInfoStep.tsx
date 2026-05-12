@@ -5,25 +5,19 @@ import {
   MenuItem,
   Grid,
   Typography,
-  Paper,
   FormControl,
   InputLabel,
   Select,
   SelectChangeEvent,
   FormHelperText,
-  useTheme,
-  alpha,
-  Chip,
-  Autocomplete,
-  Divider,
   Card,
   CardContent,
   Alert
 } from '@mui/material';
 import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns';
 import { LocalizationProvider, DatePicker } from '@mui/x-date-pickers';
-import { useProjectWizard, WizardStep } from '../../contexts/ProjectWizardContext';
-import { ProjectStatus, ProjectPriority } from '../../types/project.types';
+import { useProjectWizard } from '../../contexts/ProjectWizardContext';
+import { getTemplateIdForProjectType } from '../../data/projectWizardTemplates';
 
 // Project types
 const PROJECT_TYPES = [
@@ -35,16 +29,6 @@ const PROJECT_TYPES = [
   'Specialized Construction'
 ];
 
-// Project status options
-const PROJECT_STATUS = [
-  'Planning',
-  'Bidding',
-  'Pre-Construction',
-  'Active',
-  'On Hold',
-  'Completed'
-];
-
 const PROJECT_SIZES = [
   'Small (Under $50,000)',
   'Medium ($50,000 - $250,000)',
@@ -53,10 +37,9 @@ const PROJECT_SIZES = [
 ];
 
 const ProjectInfoStep: React.FC = () => {
-  const theme = useTheme();
-  const { state, updateProjectInfo, validateStep } = useProjectWizard();
+  const { state, updateProjectInfo, validateStep, applyTemplate } = useProjectWizard();
   const { projectInfo } = state;
-  
+
   // Validate on mount and when project info changes
   useEffect(() => {
     validateStep('project_info');
@@ -64,17 +47,29 @@ const ProjectInfoStep: React.FC = () => {
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
-    updateProjectInfo({ [name]: value });
+    updateProjectInfo({
+      [name]: name === 'totalBudget' ? Number(value) : value,
+    });
   };
 
   const handleSelectChange = (e: SelectChangeEvent<string>) => {
     const { name, value } = e.target;
     updateProjectInfo({ [name]: value });
+
+    if (name === 'projectType') {
+      const templateId = getTemplateIdForProjectType(value);
+      if (templateId) {
+        applyTemplate(templateId);
+      }
+    }
   };
 
   const handleDateChange = (name: string, date: Date | null) => {
     if (date) {
-      updateProjectInfo({ [name]: date });
+      updateProjectInfo({
+        [name]: date,
+        ...(name === 'estimatedStartDate' ? { startDate: date } : {}),
+      });
     }
   };
 
@@ -190,6 +185,51 @@ const ProjectInfoStep: React.FC = () => {
                   helperText="If applicable, enter the name of the client or property owner"
                 />
               </Grid>
+
+              <Grid item xs={12} md={4}>
+                <LocalizationProvider dateAdapter={AdapterDateFns}>
+                  <DatePicker
+                    label="Start Date"
+                    value={projectInfo.estimatedStartDate || projectInfo.startDate}
+                    onChange={(date) => handleDateChange('estimatedStartDate', date)}
+                    slotProps={{
+                      textField: {
+                        fullWidth: true,
+                        helperText: 'Used to lay out suggested phases',
+                      }
+                    }}
+                  />
+                </LocalizationProvider>
+              </Grid>
+
+              <Grid item xs={12} md={4}>
+                <LocalizationProvider dateAdapter={AdapterDateFns}>
+                  <DatePicker
+                    label="Target Completion"
+                    value={projectInfo.estimatedEndDate}
+                    onChange={(date) => handleDateChange('estimatedEndDate', date)}
+                    slotProps={{
+                      textField: {
+                        fullWidth: true,
+                        helperText: 'Optional; defaults from template',
+                      }
+                    }}
+                  />
+                </LocalizationProvider>
+              </Grid>
+
+              <Grid item xs={12} md={4}>
+                <TextField
+                  fullWidth
+                  label="Total Budget"
+                  name="totalBudget"
+                  type="number"
+                  value={projectInfo.totalBudget || ''}
+                  onChange={handleInputChange}
+                  helperText="Used to prefill phase budgets"
+                  inputProps={{ min: 0 }}
+                />
+              </Grid>
             </Grid>
           </CardContent>
         </Card>
@@ -204,4 +244,4 @@ const ProjectInfoStep: React.FC = () => {
   );
 };
 
-export default ProjectInfoStep; 
+export default ProjectInfoStep;
