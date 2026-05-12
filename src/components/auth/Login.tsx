@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { logger } from '../../utils/logger';
 import {
   Box,
@@ -20,8 +20,14 @@ const Login: React.FC = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
-  const { signIn, signInWithGoogle, error } = useAuth();
+  const { signIn, signInWithGoogle, error, isAuthenticated } = useAuth();
   const navigate = useNavigate();
+
+  useEffect(() => {
+    if (isAuthenticated) {
+      navigate('/', { replace: true });
+    }
+  }, [isAuthenticated, navigate]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -29,7 +35,6 @@ const Login: React.FC = () => {
 
     try {
       await signIn(email, password);
-      navigate('/');
     } catch (err) {
       logger.error('Login failed:', err);
     } finally {
@@ -42,7 +47,6 @@ const Login: React.FC = () => {
 
     try {
       await signInWithGoogle();
-      navigate('/');
     } catch (err) {
       logger.error('Google sign in failed:', err);
     } finally {

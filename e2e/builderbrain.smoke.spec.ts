@@ -431,13 +431,17 @@ test('settings notifications can be updated in dev auth bypass', async ({ page }
 
 test('dev auth boundaries redirect signed-out protected routes and allow local sign in', async ({ page }) => {
   await page.goto('/login');
+  await expect(page.getByRole('heading', { name: 'Dashboard' })).toBeVisible();
+
+  await page.getByRole('button', { name: 'Sign Out' }).click();
+  await expect(page).toHaveURL(/\/login$/);
   await expect(page.getByText('Development auth bypass is enabled.')).toBeVisible();
 
   await page.getByLabel('Email Address').fill('local-e2e@example.test');
   await page.getByLabel('Password').fill('local-dev-password');
   await page.getByRole('button', { name: 'Sign In' }).click();
 
-  await expect(page).toHaveURL(/\/$/);
+  await expect(page.getByRole('heading', { name: 'Dashboard' })).toBeVisible();
   await page.goto('/projects');
   await expect(page.getByRole('heading', { name: 'Projects' })).toBeVisible();
 

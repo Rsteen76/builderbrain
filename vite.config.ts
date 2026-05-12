@@ -75,6 +75,18 @@ export default defineConfig(({ command, mode }) => {
     server: {
       port,
       strictPort: true,
+      watch: {
+        ignored: [
+          '**/build/**',
+          '**/coverage/**',
+          '**/node_modules.broken/**',
+          '**/playwright-report/**',
+          '**/test-results/**',
+        ],
+      },
+    },
+    optimizeDeps: {
+      entries: ['index.html'],
     },
     build: {
       outDir: 'build',

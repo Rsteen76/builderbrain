@@ -29,6 +29,13 @@ jest.mock('../../utils/logger', () => ({
 const mockedUseAuth = useAuth as jest.MockedFunction<typeof useAuth>;
 const signUp = jest.fn();
 const signInWithGoogle = jest.fn();
+const authState = (overrides = {}) => ({
+  signUp,
+  signInWithGoogle,
+  error: null,
+  isAuthenticated: false,
+  ...overrides,
+} as unknown as ReturnType<typeof useAuth>);
 
 const renderSignUp = () =>
   render(
@@ -42,11 +49,7 @@ const passwordInput = () => document.querySelector('input[name="password"]') as 
 describe('SignUp', () => {
   beforeEach(() => {
     jest.clearAllMocks();
-    mockedUseAuth.mockReturnValue({
-      signUp,
-      signInWithGoogle,
-      error: null,
-    } as unknown as ReturnType<typeof useAuth>);
+    mockedUseAuth.mockReturnValue(authState());
   });
 
   test('blocks mismatched passwords with a visible error', async () => {
@@ -67,11 +70,11 @@ describe('SignUp', () => {
     expect(screen.queryByText('Passwords do not match.')).not.toBeInTheDocument();
   });
 
-  test('submits matching signup credentials and navigates home', async () => {
+  test('submits matching signup credentials, then navigates after auth state is ready', async () => {
     signUp.mockResolvedValue(undefined);
     const user = userEvent.setup();
 
-    renderSignUp();
+    const { rerender } = renderSignUp();
 
     await user.type(screen.getByLabelText(/email address/i), 'builder@example.com');
     await user.type(passwordInput(), 'matching-password');
@@ -79,22 +82,27 @@ describe('SignUp', () => {
     await user.click(screen.getByRole('button', { name: 'Sign Up' }));
 
     expect(signUp).toHaveBeenCalledWith('builder@example.com', 'matching-password');
-    expect(mockNavigate).toHaveBeenCalledWith('/');
+    expect(mockNavigate).not.toHaveBeenCalled();
+
+    mockedUseAuth.mockReturnValue(authState({ isAuthenticated: true }));
+    rerender(
+      <MemoryRouter future={{ v7_relativeSplatPath: true, v7_startTransition: true }}>
+        <SignUp />
+      </MemoryRouter>
+    );
+
+    expect(mockNavigate).toHaveBeenCalledWith('/', { replace: true });
   });
 
   test('shows authentication errors from context', () => {
-    mockedUseAuth.mockReturnValue({
-      signUp,
-      signInWithGoogle,
-      error: 'Email already in use',
-    } as unknown as ReturnType<typeof useAuth>);
+    mockedUseAuth.mockReturnValue(authState({ error: 'Email already in use' }));
 
     renderSignUp();
 
     expect(screen.getByText('Email already in use')).toBeInTheDocument();
   });
 
-  test('starts Google sign-in and navigates home', async () => {
+  test('starts Google sign-in and waits for auth state before navigating', async () => {
     signInWithGoogle.mockResolvedValue(undefined);
     const user = userEvent.setup();
 
@@ -103,6 +111,6 @@ describe('SignUp', () => {
     await user.click(screen.getByRole('button', { name: /continue with google/i }));
 
     expect(signInWithGoogle).toHaveBeenCalled();
-    expect(mockNavigate).toHaveBeenCalledWith('/');
+    expect(mockNavigate).not.toHaveBeenCalled();
   });
 });

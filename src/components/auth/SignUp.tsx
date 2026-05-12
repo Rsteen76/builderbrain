@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { logger } from '../../utils/logger';
 import {
   Box,
@@ -22,8 +22,14 @@ const SignUp: React.FC = () => {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
-  const { signUp, signInWithGoogle, error } = useAuth();
+  const { signUp, signInWithGoogle, error, isAuthenticated } = useAuth();
   const navigate = useNavigate();
+
+  useEffect(() => {
+    if (isAuthenticated) {
+      navigate('/', { replace: true });
+    }
+  }, [isAuthenticated, navigate]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -37,7 +43,6 @@ const SignUp: React.FC = () => {
 
     try {
       await signUp(email, password);
-      navigate('/');
     } catch (err) {
       logger.error('Sign up failed:', err);
     } finally {
@@ -50,7 +55,6 @@ const SignUp: React.FC = () => {
 
     try {
       await signInWithGoogle();
-      navigate('/');
     } catch (err) {
       logger.error('Google sign in failed:', err);
     } finally {

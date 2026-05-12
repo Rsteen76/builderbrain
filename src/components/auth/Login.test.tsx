@@ -29,6 +29,13 @@ jest.mock('../../utils/logger', () => ({
 const mockedUseAuth = useAuth as jest.MockedFunction<typeof useAuth>;
 const signIn = jest.fn();
 const signInWithGoogle = jest.fn();
+const authState = (overrides = {}) => ({
+  signIn,
+  signInWithGoogle,
+  error: null,
+  isAuthenticated: false,
+  ...overrides,
+} as unknown as ReturnType<typeof useAuth>);
 
 const renderLogin = () =>
   render(
@@ -40,40 +47,41 @@ const renderLogin = () =>
 describe('Login', () => {
   beforeEach(() => {
     jest.clearAllMocks();
-    mockedUseAuth.mockReturnValue({
-      signIn,
-      signInWithGoogle,
-      error: null,
-    } as unknown as ReturnType<typeof useAuth>);
+    mockedUseAuth.mockReturnValue(authState());
   });
 
-  test('submits email and password login and navigates home', async () => {
+  test('submits email and password login, then navigates after auth state is ready', async () => {
     signIn.mockResolvedValue(undefined);
     const user = userEvent.setup();
 
-    renderLogin();
+    const { rerender } = renderLogin();
 
     await user.type(screen.getByLabelText(/email address/i), 'builder@example.com');
     await user.type(screen.getByLabelText(/password/i), 'correct horse battery staple');
     await user.click(screen.getByRole('button', { name: 'Sign In' }));
 
     expect(signIn).toHaveBeenCalledWith('builder@example.com', 'correct horse battery staple');
-    expect(mockNavigate).toHaveBeenCalledWith('/');
+    expect(mockNavigate).not.toHaveBeenCalled();
+
+    mockedUseAuth.mockReturnValue(authState({ isAuthenticated: true }));
+    rerender(
+      <MemoryRouter future={{ v7_relativeSplatPath: true, v7_startTransition: true }}>
+        <Login />
+      </MemoryRouter>
+    );
+
+    expect(mockNavigate).toHaveBeenCalledWith('/', { replace: true });
   });
 
   test('shows authentication errors from context', () => {
-    mockedUseAuth.mockReturnValue({
-      signIn,
-      signInWithGoogle,
-      error: 'Invalid login credentials',
-    } as unknown as ReturnType<typeof useAuth>);
+    mockedUseAuth.mockReturnValue(authState({ error: 'Invalid login credentials' }));
 
     renderLogin();
 
     expect(screen.getByText('Invalid login credentials')).toBeInTheDocument();
   });
 
-  test('starts Google sign-in and navigates home', async () => {
+  test('starts Google sign-in and waits for auth state before navigating', async () => {
     signInWithGoogle.mockResolvedValue(undefined);
     const user = userEvent.setup();
 
@@ -82,6 +90,6 @@ describe('Login', () => {
     await user.click(screen.getByRole('button', { name: /continue with google/i }));
 
     expect(signInWithGoogle).toHaveBeenCalled();
-    expect(mockNavigate).toHaveBeenCalledWith('/');
+    expect(mockNavigate).not.toHaveBeenCalled();
   });
 });
