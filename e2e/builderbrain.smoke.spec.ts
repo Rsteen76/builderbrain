@@ -318,17 +318,26 @@ test('create project wizard reaches submit path', async ({ page }) => {
   await page.getByLabel('Project Name').fill('Playwright Smoke Project');
   await selectMuiOption(page, 'Project Type', 'Residential Construction');
   await selectMuiOption(page, 'Project Size', 'Medium ($50,000 - $250,000)');
+  await page.getByLabel('Start Date').fill('01/15/2026');
+  await page.getByLabel('Target Completion').fill('11/15/2026');
+  await page.getByLabel('Total Budget').fill('800000');
   await page.getByLabel('Location').fill('Denver, CO');
   await page
     .getByLabel('Project Description')
     .fill('Smoke test project created through the browser wizard.');
   await page.getByRole('button', { name: 'Next' }).click();
 
+  await expect(page.locator('input[value="Pre-Construction & Permits"]')).toBeVisible();
+  await expect(page.locator('input[value="Framing & Dry-In"]')).toBeVisible();
+  await expect(page.locator('input[value="Punch, Closeout & Warranty"]')).toBeVisible();
+  await expect(page.locator('input[value="2026-01-15"]')).toBeVisible();
+  await expect(page.locator('input[value="40000"]')).toBeVisible();
   await page.getByLabel('Milestone Title').fill('Foundation complete');
   await page.getByRole('button', { name: 'Add Milestone' }).click();
   await expect(page.getByText('Foundation complete')).toBeVisible();
   await page.getByRole('button', { name: 'Next' }).click();
 
+  await expect(page.getByRole('cell', { name: 'Phase Budget' }).first()).toBeVisible();
   await page.getByLabel('Item Description').fill('Concrete package');
   await selectMuiOption(page, 'Category', 'Materials');
   await page.getByLabel('Estimated Cost').fill('12000');
@@ -343,7 +352,21 @@ test('create project wizard reaches submit path', async ({ page }) => {
   await page.getByRole('button', { name: 'Next' }).click();
 
   await expect(page.getByRole('heading', { name: 'Project Review' })).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Submit Project' })).toBeVisible();
+  await page.getByRole('button', { name: 'Submit Project' }).click();
+  await expect(page.getByRole('heading', { name: 'Project Created Successfully!' })).toBeVisible();
+  await waitForDevDataState(
+    page,
+    (state) => {
+      const project = state.projects.find(
+        (item: { name: string }) => item.name === 'Playwright Smoke Project'
+      );
+      return Boolean(
+        project &&
+          project.phases?.some((phase: { name: string }) => phase.name === 'Framing & Dry-In') &&
+          project.keyMilestones?.some((milestone: { name: string }) => milestone.name === 'Foundation complete')
+      );
+    }
+  );
 });
 
 test('project expenses tab renders basic expense UI', async ({ page }) => {

@@ -29,6 +29,7 @@ import { useProjectWizard, BudgetItem } from '../../contexts/ProjectWizardContex
 
 // Budget categories
 const BUDGET_CATEGORIES = [
+  'Phase Budget',
   'Materials',
   'Labor',
   'Equipment',
@@ -93,7 +94,7 @@ const BudgetStep: React.FC = () => {
   const totalBudgeted = budget.reduce((sum: number, item: BudgetItem) => sum + item.estimatedCost, 0);
   const totalBudget = projectInfo.totalBudget || 0;
   const budgetPercentage = totalBudget > 0 ? (totalBudgeted / totalBudget) * 100 : 0;
-  
+
   // Get budget by category
   const budgetByCategory = budget.reduce((acc: Record<string, number>, item: BudgetItem) => {
     acc[item.category] = (acc[item.category] || 0) + item.estimatedCost;
@@ -118,7 +119,7 @@ const BudgetStep: React.FC = () => {
                 Total Budget: {projectInfo.currency || 'USD'} {totalBudget.toLocaleString()}
               </Typography>
               <Typography variant="subtitle1">
-                Allocated: {projectInfo.currency || 'USD'} {totalBudgeted.toLocaleString()} 
+                Allocated: {projectInfo.currency || 'USD'} {totalBudgeted.toLocaleString()}
                 ({budgetPercentage.toFixed(1)}%)
               </Typography>
               <Typography variant="subtitle1">
@@ -129,9 +130,9 @@ const BudgetStep: React.FC = () => {
               <Typography variant="body2" gutterBottom>
                 Budget Allocation Progress
               </Typography>
-              <LinearProgress 
-                variant="determinate" 
-                value={Math.min(budgetPercentage, 100)} 
+              <LinearProgress
+                variant="determinate"
+                value={Math.min(budgetPercentage, 100)}
                 color={budgetPercentage > 100 ? "error" : "primary"}
                 sx={{ height: 10, borderRadius: 5 }}
               />
@@ -160,7 +161,7 @@ const BudgetStep: React.FC = () => {
               variant="outlined"
             />
           </Grid>
-          
+
           <Grid item xs={12} md={3}>
             <FormControl fullWidth required>
               <InputLabel>Category</InputLabel>
@@ -176,7 +177,7 @@ const BudgetStep: React.FC = () => {
               </Select>
             </FormControl>
           </Grid>
-          
+
           <Grid item xs={12} md={3}>
             <TextField
               fullWidth
@@ -186,14 +187,14 @@ const BudgetStep: React.FC = () => {
               type="number"
               value={newBudgetItem.estimatedCost || ''}
               onChange={handleInputChange}
-              InputProps={{ 
+              InputProps={{
                 inputProps: { min: 0 },
                 startAdornment: <Typography variant="subtitle2" sx={{ mr: 1 }}>{projectInfo.currency || '$'}</Typography>
               }}
               variant="outlined"
             />
           </Grid>
-          
+
           <Grid item xs={12} md={2} sx={{ display: 'flex', alignItems: 'center' }}>
             <Button
               fullWidth
@@ -206,7 +207,7 @@ const BudgetStep: React.FC = () => {
               Add Item
             </Button>
           </Grid>
-          
+
           <Grid item xs={12}>
             <TextField
               fullWidth
@@ -217,7 +218,7 @@ const BudgetStep: React.FC = () => {
               onChange={handleInputChange}
               placeholder="Leave at 0 if not yet incurred"
               variant="outlined"
-              InputProps={{ 
+              InputProps={{
                 inputProps: { min: 0 },
                 startAdornment: <Typography variant="subtitle2" sx={{ mr: 1 }}>{projectInfo.currency || '$'}</Typography>
               }}
@@ -328,4 +329,4 @@ const BudgetStep: React.FC = () => {
   );
 };
 
-export default BudgetStep; 
+export default BudgetStep;
