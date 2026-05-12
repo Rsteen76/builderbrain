@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import {
   FormControl,
   InputLabel,
@@ -54,39 +54,29 @@ const CategorySelector: React.FC<CategorySelectorProps> = ({
   categorySystem,
 }) => {
   const theme = useTheme();
-  const [categories, setCategories] = useState<any[]>([]);
   const [selectedValue, setSelectedValue] = useState<string>(value || '');
   const [phaseRelevantCategories, setPhaseRelevantCategories] = useState<string[]>([]);
   
   // Use the provided system or get user preference
   const activeCategorySystem = categorySystem || getUserCategorySystemPreference();
-
-  useEffect(() => {
-    // Get all categories based on the active system
+  const categories = useMemo(() => {
     let allCategories = getCategoriesBySystem(activeCategorySystem);
-    
-    // Filter categories if a filter function is provided
+
     if (categoryFilter) {
       allCategories = allCategories.filter(cat => categoryFilter(cat.id));
     }
-    
-    // Filter out main categories if hideMainCategories is true
+
     if (hideMainCategories) {
       allCategories = allCategories.filter(cat => !!cat.parentId);
     }
-    
-    // Sort categories alphabetically by name within each level
-    allCategories.sort((a, b) => {
-      // First sort by parent (null parents come first)
+
+    return allCategories.sort((a, b) => {
       if ((!a.parentId && b.parentId) || (a.parentId && !b.parentId)) {
         return !a.parentId ? -1 : 1;
       }
-      
-      // If both have same parent status, sort by name
+
       return a.name.localeCompare(b.name);
     });
-    
-    setCategories(allCategories);
   }, [categoryFilter, hideMainCategories, activeCategorySystem]);
 
   // Handle value coming from parent component, convert if needed
@@ -295,31 +285,27 @@ const CategorySelector: React.FC<CategorySelectorProps> = ({
           </MenuItem>
         ))}
         
-        {mainCategories.map(mainCategory => {
-          const subCategories = groupedCategories[mainCategory.id] || [];
-          if (subCategories.length === 0) return null;
+        {Object.entries(groupedCategories).flatMap(([parentId, subCategories]) => {
+          const parentCategory = mainCategories.find(category => category.id === parentId);
+          if (subCategories.length === 0) return [];
           
-          return (
-            <React.Fragment key={`group-${mainCategory.id}`}>
-              {subCategories.map(subCategory => (
-                <MenuItem key={subCategory.id} value={subCategory.id} sx={{ pl: 4 }}>
-                  <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                    <Box 
-                      component="span" 
-                      sx={{ 
-                        width: 8, 
-                        height: 8, 
-                        borderRadius: '50%', 
-                        bgcolor: alpha(mainCategory.color || theme.palette.grey[500], 0.8), 
-                        mr: 1 
-                      }} 
-                    />
-                    <Typography variant="body2">{subCategory.name}</Typography>
-                  </Box>
-                </MenuItem>
-              ))}
-            </React.Fragment>
-          );
+          return subCategories.map(subCategory => (
+            <MenuItem key={subCategory.id} value={subCategory.id} sx={{ pl: 4 }}>
+              <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                <Box
+                  component="span"
+                  sx={{
+                    width: 8,
+                    height: 8,
+                    borderRadius: '50%',
+                    bgcolor: alpha(parentCategory?.color || theme.palette.grey[500], 0.8),
+                    mr: 1
+                  }}
+                />
+                <Typography variant="body2">{subCategory.name}</Typography>
+              </Box>
+            </MenuItem>
+          ));
         })}
       </Select>
     </FormControl>

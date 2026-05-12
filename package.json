@@ -71,10 +71,10 @@
     ],
     "coverageThreshold": {
       "global": {
-        "statements": 17,
-        "branches": 14,
-        "functions": 17,
-        "lines": 17
+        "statements": 18,
+        "branches": 16,
+        "functions": 18,
+        "lines": 18
       },
       "src/contexts/ProjectWizardContext.tsx": {
         "statements": 60,
@@ -87,6 +87,60 @@
         "branches": 30,
         "functions": 45,
         "lines": 50
+      },
+      "src/hooks/usePaymentTerms.ts": {
+        "statements": 85,
+        "branches": 62,
+        "functions": 95,
+        "lines": 85
+      },
+      "src/hooks/useExpensePayment.ts": {
+        "statements": 83,
+        "branches": 65,
+        "functions": 100,
+        "lines": 83
+      },
+      "src/services/category.service.ts": {
+        "statements": 89,
+        "branches": 87,
+        "functions": 100,
+        "lines": 89
+      },
+      "src/services/expense-transaction.ts": {
+        "statements": 81,
+        "branches": 61,
+        "functions": 100,
+        "lines": 81
+      },
+      "src/components/projects/detailTabs/ProjectOverviewTab.tsx": {
+        "statements": 86,
+        "branches": 68,
+        "functions": 93,
+        "lines": 93
+      },
+      "src/components/projects/detailTabs/ProjectPhasesTab.tsx": {
+        "statements": 74,
+        "branches": 51,
+        "functions": 80,
+        "lines": 78
+      },
+      "src/components/projects/budget/BudgetDashboard.tsx": {
+        "statements": 78,
+        "branches": 73,
+        "functions": 77,
+        "lines": 78
+      },
+      "src/components/common/SubcontractorSelector.tsx": {
+        "statements": 88,
+        "branches": 91,
+        "functions": 83,
+        "lines": 87
+      },
+      "src/components/common/VendorSelector.tsx": {
+        "statements": 65,
+        "branches": 59,
+        "functions": 72,
+        "lines": 67
       }
     }
   },
