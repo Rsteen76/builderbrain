@@ -19,6 +19,7 @@ import {
 } from '../config/devMode';
 import { ensureDevDataSeeded } from '../services/devDataStore';
 import { UserService, User, UserRole } from '../services/user';
+import { getAuthErrorCode, getAuthErrorMessage } from '../utils/authErrors';
 import { logger } from '../utils/logger';
 
 const PROFILE_AUTH_ERROR =
@@ -123,7 +124,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
       await signInWithEmailAndPassword(auth, email, password);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to sign in');
+      logger.warn('Firebase email sign-in failed', { code: getAuthErrorCode(err), error: err });
+      setError(getAuthErrorMessage(err, 'Unable to sign in. Please try again.'));
       throw err;
     }
   };
@@ -149,7 +151,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         role: 'team_member' 
       });
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to sign up');
+      logger.warn('Firebase email sign-up failed', { code: getAuthErrorCode(err), error: err });
+      setError(getAuthErrorMessage(err, 'Unable to create your account. Please try again.'));
       throw err;
     }
   };
@@ -171,7 +174,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         await UserService.createUser(userCredential.user);
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to sign in with Google');
+      logger.warn('Firebase Google sign-in failed', { code: getAuthErrorCode(err), error: err });
+      setError(getAuthErrorMessage(err, 'Unable to sign in with Google. Please try again.'));
       throw err;
     }
   };
@@ -186,7 +190,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
       await signOut(auth);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to sign out');
+      logger.warn('Firebase sign-out failed', { code: getAuthErrorCode(err), error: err });
+      setError(getAuthErrorMessage(err, 'Unable to sign out. Please try again.'));
       throw err;
     }
   };
@@ -230,7 +235,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       await reauthenticateWithCredential(user, credential);
       await updatePassword(user, newPassword);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to change password');
+      logger.warn('Firebase password change failed', { code: getAuthErrorCode(err), error: err });
+      setError(getAuthErrorMessage(err, 'Unable to change your password. Please try again.'));
       throw err;
     }
   };

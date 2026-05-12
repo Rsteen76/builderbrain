@@ -1,9 +1,9 @@
 import React from 'react';
-import { act, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { User as FirebaseUser } from 'firebase/auth';
 import { AuthProvider, useAuth } from './AuthContext';
 import { UserService, User } from '../services/user';
-import { onAuthStateChanged } from 'firebase/auth';
+import { onAuthStateChanged, signInWithEmailAndPassword } from 'firebase/auth';
 
 jest.mock('../config/firebase', () => ({
   auth: {},
@@ -37,6 +37,7 @@ jest.mock('../services/user', () => ({
 }));
 
 const mockedOnAuthStateChanged = onAuthStateChanged as jest.MockedFunction<typeof onAuthStateChanged>;
+const mockedSignInWithEmailAndPassword = signInWithEmailAndPassword as jest.MockedFunction<typeof signInWithEmailAndPassword>;
 const mockedUserService = UserService as jest.Mocked<typeof UserService>;
 
 let authStateCallback: ((user: FirebaseUser | null) => Promise<void>) | undefined;
@@ -73,10 +74,30 @@ const AuthStatus = () => {
   );
 };
 
+const SignInAction = () => {
+  const { error, signIn } = useAuth();
+
+  return (
+    <div>
+      <button onClick={() => signIn('builder@example.com', 'password').catch(() => {})}>
+        Sign In
+      </button>
+      <div data-testid="error">{error || 'none'}</div>
+    </div>
+  );
+};
+
 const renderAuthProvider = () =>
   render(
     <AuthProvider>
       <AuthStatus />
+    </AuthProvider>
+  );
+
+const renderAuthActionProvider = () =>
+  render(
+    <AuthProvider>
+      <SignInAction />
     </AuthProvider>
   );
 
@@ -149,6 +170,25 @@ describe('AuthProvider', () => {
     expect(screen.getByTestId('authenticated')).toHaveTextContent('false');
     expect(screen.getByTestId('error')).toHaveTextContent(
       'Unable to load your user profile. Please try signing in again. write failed'
+    );
+  });
+
+  test('shows a user-safe message for Firebase internal sign-in failures', async () => {
+    mockedSignInWithEmailAndPassword.mockRejectedValue(
+      Object.assign(new Error('Firebase: Error (auth/internal-error).'), {
+        code: 'auth/internal-error',
+      })
+    );
+
+    renderAuthActionProvider();
+    await sendAuthState(null);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Sign In' }));
+
+    await waitFor(() =>
+      expect(screen.getByTestId('error')).toHaveTextContent(
+        'Firebase Auth could not complete the request. Please try again. If it keeps happening, contact support with code auth/internal-error.'
+      )
     );
   });
 });
