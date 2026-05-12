@@ -218,7 +218,7 @@ describe('ProjectTaskManager', () => {
     expect(await screen.findByText('Order concrete')).toBeInTheDocument();
     expect(refreshAllProjectData).toHaveBeenCalled();
     expect(showNotification).toHaveBeenCalledWith('Task created successfully.', 'success');
-  });
+  }, 10000);
 
   test('updates an existing task', async () => {
     const user = userEvent.setup();

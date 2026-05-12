@@ -71,10 +71,22 @@
     ],
     "coverageThreshold": {
       "global": {
-        "statements": 8,
-        "branches": 6,
-        "functions": 8,
-        "lines": 8
+        "statements": 17,
+        "branches": 14,
+        "functions": 17,
+        "lines": 17
+      },
+      "src/contexts/ProjectWizardContext.tsx": {
+        "statements": 60,
+        "branches": 45,
+        "functions": 45,
+        "lines": 60
+      },
+      "src/components/project-wizard/ScheduleStep.tsx": {
+        "statements": 45,
+        "branches": 30,
+        "functions": 45,
+        "lines": 50
       }
     }
   },
