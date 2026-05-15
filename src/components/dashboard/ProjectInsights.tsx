@@ -43,7 +43,7 @@ interface ProjectInsightsProps {
     budgetVariance: number;
     materialsToOrder: number;
   };
-  onRefresh?: () => void;
+  onRefresh?: () => void | Promise<void>;
 }
 
 interface InsightCardProps {
@@ -232,15 +232,16 @@ const ProjectInsights: React.FC<ProjectInsightsProps> = ({ stats, onRefresh }) =
   const navigate = useNavigate();
   const [isRefreshing, setIsRefreshing] = useState(false);
   
-  const handleRefresh = () => {
-    if (onRefresh) {
-      setIsRefreshing(true);
-      
-      // Add slight delay to simulate loading
-      setTimeout(() => {
-        onRefresh();
-        setIsRefreshing(false);
-      }, 800);
+  const handleRefresh = async () => {
+    if (!onRefresh || isRefreshing) {
+      return;
+    }
+
+    setIsRefreshing(true);
+    try {
+      await onRefresh();
+    } finally {
+      setIsRefreshing(false);
     }
   };
   
@@ -251,18 +252,13 @@ const ProjectInsights: React.FC<ProjectInsightsProps> = ({ stats, onRefresh }) =
       icon: <AssessmentIcon />,
       color: theme.palette.primary.main,
       onClick: () => navigate('/projects?status=active'),
-      change: 8, // Example data - in real app get from API
-      positiveChangeIsGood: true,
     },
     {
       title: 'Total Budget',
       value: formatCurrency(stats.totalBudget),
       icon: <MoneyIcon />,
       color: theme.palette.success.main,
-      onClick: () => navigate('/finance'),
-      change: 12, // Example data - in real app get from API
-      positiveChangeIsGood: true,
-      suffix: '%',
+      onClick: () => navigate('/expenses'),
     },
     {
       title: 'Tasks Due Soon',
@@ -270,8 +266,6 @@ const ProjectInsights: React.FC<ProjectInsightsProps> = ({ stats, onRefresh }) =
       icon: <AssignmentIcon />,
       color: stats.tasksDue > 10 ? theme.palette.warning.main : theme.palette.secondary.main,
       onClick: () => navigate('/tasks?filter=upcoming'),
-      change: stats.tasksDue > 10 ? 15 : -5, // Example data - in real app get from API
-      positiveChangeIsGood: false,
     },
     {
       title: 'Next Milestone',
@@ -281,7 +275,7 @@ const ProjectInsights: React.FC<ProjectInsightsProps> = ({ stats, onRefresh }) =
       icon: <ScheduleIcon />,
       color: theme.palette.secondary.main,
       onClick: stats.nextMilestone?.projectId 
-        ? () => navigate(`/projects/${stats.nextMilestone.projectId}/milestones`)
+        ? () => navigate(`/projects/${stats.nextMilestone.projectId}`)
         : undefined,
     },
     {
@@ -289,17 +283,13 @@ const ProjectInsights: React.FC<ProjectInsightsProps> = ({ stats, onRefresh }) =
       value: formatCurrency(Math.abs(stats.budgetVariance)),
       icon: stats.budgetVariance >= 0 ? <TrendingUpIcon /> : <ArrowDownwardIcon />,
       color: stats.budgetVariance >= 0 ? theme.palette.success.main : theme.palette.error.main,
-      onClick: () => navigate('/finance/budget-analysis'),
-      change: stats.budgetVariance !== 0 ? Math.round((stats.budgetVariance / 1000) * 10) / 10 : undefined,
-      positiveChangeIsGood: false,
-      suffix: 'K',
+      onClick: () => navigate('/expenses'),
     },
     {
       title: 'Materials to Order',
       value: stats.materialsToOrder || 0,
       icon: <ShippingIcon />,
       color: stats.materialsToOrder > 10 ? theme.palette.warning.main : theme.palette.info.main,
-      onClick: () => navigate('/materials?status=to-order'),
     },
   ];
 

@@ -166,6 +166,7 @@ const App: React.FC = () => {
                   <Routes>
                     <Route path="/login" element={<Login />} />
                     <Route path="/signup" element={<SignUp />} />
+                    <Route path="/shared-reports/:shareId" element={<SharedReportView />} />
                     <Route path="/" element={<MainLayout />}>
                       <Route index element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
                       <Route path="dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
@@ -191,7 +192,6 @@ const App: React.FC = () => {
                       <Route path="templates" element={<ProtectedRoute><Navigate to={createProjectWizardRoute()} replace /></ProtectedRoute>} />
                       <Route path="timeline" element={<ProtectedRoute><Timeline /></ProtectedRoute>} />
                       <Route path="calendar" element={<ProtectedRoute><Calendar /></ProtectedRoute>} />
-                      <Route path="shared-reports/:shareId" element={<ProtectedRoute><SharedReportView /></ProtectedRoute>} />
                     </Route>
                   </Routes>
 

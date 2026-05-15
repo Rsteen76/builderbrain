@@ -20,7 +20,6 @@ import {
 import {
   Edit as EditIcon,
   ArrowBack as ArrowBackIcon,
-  FileCopy as DuplicateIcon,
   History as HistoryIcon,
   Print as PrintIcon,
   GetApp as DownloadIcon,
@@ -230,11 +229,6 @@ const BidDetails: React.FC = () => {
     }
   };
   
-  const handleDuplicate = () => {
-    if (!bid) return;
-    navigate('/bids/new', { state: { duplicate: bid } });
-  };
-  
   const handleBack = () => {
     navigate('/bids');
   };
@@ -304,14 +298,6 @@ const BidDetails: React.FC = () => {
               </>
             ) : (
               <>
-                <Button 
-                  variant="outlined" 
-                  startIcon={<DuplicateIcon />} 
-                  onClick={handleDuplicate}
-                  sx={{ mr: 1 }}
-                >
-                  Duplicate
-                </Button>
                 <Button 
                   variant="contained" 
                   startIcon={<EditIcon />} 

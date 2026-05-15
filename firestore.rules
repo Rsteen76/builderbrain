@@ -160,6 +160,40 @@ service cloud.firestore {
       allow update: if isOwner(resource.data.userId) && userIdNotModified();
       allow delete: if isOwner(resource.data.userId);
     }
+
+    // Shared reports are bearer-token style links. The shareId is the document id
+    // so public viewers can use direct gets while rules still enforce expiration.
+    match /shared_reports/{shareId} {
+      function sharedReportIsUnexpired() {
+        return request.time < resource.data.expiresAt;
+      }
+
+      allow get: if sharedReportIsUnexpired() || isOwner(resource.data.userId);
+      allow list: if isAuthenticated() && resource.data.userId == request.auth.uid;
+      allow create: if isAuthenticated() && userIdIsValid() &&
+                    request.resource.data.shareId == shareId &&
+                    hasRequiredFields([
+                      'projectId',
+                      'projectName',
+                      'userId',
+                      'createdAt',
+                      'expiresAt',
+                      'reportType',
+                      'shareId',
+                      'accessCount',
+                      'isPasswordProtected',
+                      'reportSnapshot'
+                    ]);
+      allow update: if (
+                      isOwner(resource.data.userId) && userIdNotModified()
+                    ) || (
+                      sharedReportIsUnexpired() &&
+                      request.resource.data.diff(resource.data).affectedKeys().hasOnly(['accessCount', 'lastAccessedAt']) &&
+                      request.resource.data.accessCount == resource.data.accessCount + 1 &&
+                      request.resource.data.lastAccessedAt == request.time
+                    );
+      allow delete: if isOwner(resource.data.userId);
+    }
     
     // Default rules - deny all other access
     match /{document=**} {

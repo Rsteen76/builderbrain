@@ -372,7 +372,7 @@ const UpcomingDeadlines: React.FC<UpcomingDeadlinesProps> = ({ nextMilestone, ta
                         <Button 
                           variant="outlined" 
                           size="small" 
-                          onClick={() => navigate(`/projects/${nextMilestone.projectId}/milestones`)}
+                          onClick={() => navigate(`/projects/${nextMilestone.projectId}`)}
                           sx={{ mt: 1, fontSize: '0.75rem' }}
                         >
                           View Details

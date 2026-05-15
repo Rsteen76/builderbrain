@@ -1,4 +1,16 @@
-import { collection, addDoc, query, where, getDocs, updateDoc, Timestamp, serverTimestamp, deleteField } from 'firebase/firestore';
+import {
+  collection,
+  deleteField,
+  doc,
+  getDoc,
+  getDocs,
+  query,
+  serverTimestamp,
+  setDoc,
+  Timestamp,
+  updateDoc,
+  where,
+} from 'firebase/firestore';
 import type { DocumentData, DocumentReference } from 'firebase/firestore';
 import { db } from '../config/firebase';
 import { hashReportPassword, verifyStoredReportPassword } from '../utils/reportPasswords';
@@ -147,8 +159,8 @@ export class ReportService {
         reportData.passwordHash = await hashReportPassword(password);
       }
       
-      // Add to Firestore
-      await addDoc(this.collection, reportData);
+      // Store by shareId so security rules can enforce direct public reads without public list queries.
+      await setDoc(doc(this.collection, shareId), reportData);
       
       return shareId;
     } catch (error) {
@@ -165,14 +177,13 @@ export class ReportService {
    */
   static async getSharedReportMetadata(shareId: string): Promise<SharedReportMetadata | null> {
     try {
-      const q = query(this.collection, where('shareId', '==', shareId));
-      const querySnapshot = await getDocs(q);
+      const reportSnapshot = await getDoc(doc(this.collection, shareId));
 
-      if (querySnapshot.empty) {
+      if (!reportSnapshot.exists()) {
         return null;
       }
 
-      const reportData = querySnapshot.docs[0].data() as StoredReportData;
+      const reportData = reportSnapshot.data() as StoredReportData;
 
       return {
         isPasswordProtected: reportData.isPasswordProtected,
@@ -186,16 +197,13 @@ export class ReportService {
 
   static async getSharedReport(shareId: string, password?: string): Promise<SharedReportData | null> {
     try {
-      // Query for the report with the given shareId
-      const q = query(this.collection, where('shareId', '==', shareId));
-      const querySnapshot = await getDocs(q);
-      
-      if (querySnapshot.empty) {
+      const reportSnapshot = await getDoc(doc(this.collection, shareId));
+
+      if (!reportSnapshot.exists()) {
         return null; // No matching report found
       }
-      
-      const reportDoc = querySnapshot.docs[0];
-      const reportData = reportDoc.data() as StoredReportData;
+
+      const reportData = reportSnapshot.data() as StoredReportData;
       
       // Check if the report has expired
       if (isReportExpired(reportData)) {
@@ -215,13 +223,13 @@ export class ReportService {
         }
 
         if (reportData.password && !reportData.passwordHash && password) {
-          await this.migrateLegacyPassword(reportDoc.ref, password);
+          await this.migrateLegacyPassword(reportSnapshot.ref, password);
         }
       }
       
       // Update access count and last accessed time
       try {
-        await updateDoc(reportDoc.ref, {
+        await updateDoc(reportSnapshot.ref, {
           accessCount: (reportData.accessCount || 0) + 1,
           lastAccessedAt: serverTimestamp()
         });
