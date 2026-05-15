@@ -1,4 +1,4 @@
-import { getAuthErrorCode, getAuthErrorMessage } from './authErrors';
+import { getAuthErrorCode, getAuthErrorMessage, getGoogleAuthErrorMessage } from './authErrors';
 
 const firebaseError = (code: string) => Object.assign(new Error(`Firebase: Error (${code}).`), { code });
 
@@ -19,7 +19,7 @@ describe('authErrors', () => {
 
   test('maps internal Firebase errors to an actionable support message', () => {
     expect(getAuthErrorMessage(firebaseError('auth/internal-error'), 'fallback')).toBe(
-      'Firebase Auth could not complete the request. Please try again. If it keeps happening, contact support with code auth/internal-error.'
+      'Firebase Auth could not complete email/password sign-in. Try Continue with Google, or reset your password if this account was not created with a password. Code: auth/internal-error.'
     );
   });
 
@@ -28,5 +28,14 @@ describe('authErrors', () => {
       'Authentication failed. Please try again. Code: auth/unexpected-new-code.'
     );
     expect(getAuthErrorMessage(new Error('raw firebase stack'), 'fallback')).toBe('fallback');
+  });
+
+  test('maps Google sign-in errors to Google-specific copy', () => {
+    expect(getGoogleAuthErrorMessage(firebaseError('auth/internal-error'))).toBe(
+      'Google sign-in could not complete in this browser. Refresh and try again, or use a different browser window. Code: auth/internal-error.'
+    );
+    expect(getGoogleAuthErrorMessage(firebaseError('auth/unauthorized-domain'))).toBe(
+      'This domain is not authorized for Google sign-in.'
+    );
   });
 });

@@ -100,7 +100,7 @@ import UpcomingDeadlines from './UpcomingDeadlines';
 import PriorityItems from './PriorityItems';
 import RecentProjects from './RecentProjects';
 import ProjectCard from '../projects/ProjectCard';
-import { PROJECT_WIZARD_ROUTE } from '../../constants/projectRoutes';
+import { createProjectWizardRoute, PROJECT_WIZARD_ROUTE } from '../../constants/projectRoutes';
 
 type DashboardTask = DashboardTaskSummary;
 type DashboardProject = DashboardProjectSummary;
@@ -408,10 +408,11 @@ const Dashboard: React.FC = () => {
   };
 
   const handleTemplateSelect = (template: typeof templates[0]) => {
+    const wizardRoute = createProjectWizardRoute();
     if (template.params) {
-      navigate(template.route, { state: template.params });
+      navigate(wizardRoute, { state: template.params });
     } else {
-      navigate(template.route);
+      navigate(wizardRoute);
     }
     handleNewProjectMenuClose();
   };

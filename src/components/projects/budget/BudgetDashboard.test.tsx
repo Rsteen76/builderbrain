@@ -147,7 +147,7 @@ describe('BudgetDashboard', () => {
   test('loads category mappings and renders dashboard sections', async () => {
     render(<BudgetDashboard />);
 
-    expect(screen.getByText('Loading budget data...')).toBeInTheDocument();
+    expect(screen.getByText(/Dashboard Header Hillside Build/i)).toBeInTheDocument();
 
     await act(async () => {
       jest.advanceTimersByTime(500);
@@ -155,7 +155,7 @@ describe('BudgetDashboard', () => {
       await Promise.resolve();
     });
 
-    await waitFor(() => expect(screen.getByText(/Dashboard Header Hillside Build/i)).toBeInTheDocument());
+    await waitFor(() => expect(mockedGetCategoryMappingsForProject).toHaveBeenCalledWith('project-1'));
     expect(mockedGetCategoryMappingsForProject).toHaveBeenCalledWith('project-1');
     expect(screen.getByText(/Budget Health/i)).toBeInTheDocument();
     expect(screen.getByText(/Budget Summary 100000/i)).toBeInTheDocument();

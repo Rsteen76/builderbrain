@@ -3,7 +3,7 @@ import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { User as FirebaseUser } from 'firebase/auth';
 import { AuthProvider, useAuth } from './AuthContext';
 import { UserService, User } from '../services/user';
-import { onAuthStateChanged, signInWithEmailAndPassword } from 'firebase/auth';
+import { getRedirectResult, onAuthStateChanged, signInWithEmailAndPassword, signInWithPopup, signInWithRedirect } from 'firebase/auth';
 
 jest.mock('../config/firebase', () => ({
   auth: {},
@@ -20,11 +20,16 @@ jest.mock('../services/devDataStore', () => ({
 }));
 
 jest.mock('firebase/auth', () => ({
-  GoogleAuthProvider: jest.fn(),
+  GoogleAuthProvider: jest.fn(() => ({
+    addScope: jest.fn(),
+    setCustomParameters: jest.fn(),
+  })),
   createUserWithEmailAndPassword: jest.fn(),
+  getRedirectResult: jest.fn(),
   onAuthStateChanged: jest.fn(),
   signInWithEmailAndPassword: jest.fn(),
   signInWithPopup: jest.fn(),
+  signInWithRedirect: jest.fn(),
   signOut: jest.fn(),
 }));
 
@@ -37,7 +42,10 @@ jest.mock('../services/user', () => ({
 }));
 
 const mockedOnAuthStateChanged = onAuthStateChanged as jest.MockedFunction<typeof onAuthStateChanged>;
+const mockedGetRedirectResult = getRedirectResult as jest.MockedFunction<typeof getRedirectResult>;
 const mockedSignInWithEmailAndPassword = signInWithEmailAndPassword as jest.MockedFunction<typeof signInWithEmailAndPassword>;
+const mockedSignInWithPopup = signInWithPopup as jest.MockedFunction<typeof signInWithPopup>;
+const mockedSignInWithRedirect = signInWithRedirect as jest.MockedFunction<typeof signInWithRedirect>;
 const mockedUserService = UserService as jest.Mocked<typeof UserService>;
 
 let authStateCallback: ((user: FirebaseUser | null) => Promise<void>) | undefined;
@@ -75,12 +83,15 @@ const AuthStatus = () => {
 };
 
 const SignInAction = () => {
-  const { error, signIn } = useAuth();
+  const { error, signIn, signInWithGoogle } = useAuth();
 
   return (
     <div>
       <button onClick={() => signIn('builder@example.com', 'password').catch(() => {})}>
         Sign In
+      </button>
+      <button onClick={() => signInWithGoogle().catch(() => {})}>
+        Google
       </button>
       <div data-testid="error">{error || 'none'}</div>
     </div>
@@ -116,6 +127,7 @@ describe('AuthProvider', () => {
     jest.clearAllMocks();
     authStateCallback = undefined;
     consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
+    mockedGetRedirectResult.mockResolvedValue(null);
     mockedOnAuthStateChanged.mockImplementation(((_auth, callback) => {
       authStateCallback = callback as typeof authStateCallback;
       return unsubscribe;
@@ -187,7 +199,62 @@ describe('AuthProvider', () => {
 
     await waitFor(() =>
       expect(screen.getByTestId('error')).toHaveTextContent(
-        'Firebase Auth could not complete the request. Please try again. If it keeps happening, contact support with code auth/internal-error.'
+        'Firebase Auth could not complete email/password sign-in. Try Continue with Google, or reset your password if this account was not created with a password. Code: auth/internal-error.'
+      )
+    );
+  });
+
+  test('falls back to redirect when Google popup sign-in hits an internal error', async () => {
+    mockedSignInWithPopup.mockRejectedValue(
+      Object.assign(new Error('Firebase: Error (auth/internal-error).'), {
+        code: 'auth/internal-error',
+      })
+    );
+    mockedSignInWithRedirect.mockResolvedValue(undefined as never);
+
+    renderAuthActionProvider();
+    await sendAuthState(null);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Google' }));
+
+    await waitFor(() => expect(mockedSignInWithRedirect).toHaveBeenCalled());
+    expect(screen.getByTestId('error')).toHaveTextContent('none');
+  });
+
+  test('lets the auth state listener hydrate the profile after Google popup sign-in succeeds', async () => {
+    mockedSignInWithPopup.mockResolvedValue({ user: firebaseUser } as never);
+
+    renderAuthActionProvider();
+    await sendAuthState(null);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Google' }));
+
+    await waitFor(() => expect(mockedSignInWithPopup).toHaveBeenCalled());
+    expect(mockedUserService.getUser).not.toHaveBeenCalled();
+    expect(mockedUserService.createUser).not.toHaveBeenCalled();
+    expect(screen.getByTestId('error')).toHaveTextContent('none');
+  });
+
+  test('shows a Google-specific message when redirect fallback also fails', async () => {
+    mockedSignInWithPopup.mockRejectedValue(
+      Object.assign(new Error('Firebase: Error (auth/internal-error).'), {
+        code: 'auth/internal-error',
+      })
+    );
+    mockedSignInWithRedirect.mockRejectedValue(
+      Object.assign(new Error('Firebase: Error (auth/unauthorized-domain).'), {
+        code: 'auth/unauthorized-domain',
+      })
+    );
+
+    renderAuthActionProvider();
+    await sendAuthState(null);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Google' }));
+
+    await waitFor(() =>
+      expect(screen.getByTestId('error')).toHaveTextContent(
+        'This domain is not authorized for Google sign-in.'
       )
     );
   });

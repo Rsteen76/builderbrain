@@ -25,6 +25,8 @@ import {
   ExpenseSortDirection,
   ExpenseSortField,
   formatExpenseCategory,
+  getExpenseAmount,
+  getExpenseText,
   getExpenseStatusPresentation,
   getRemainingExpenseAmount,
 } from './expenseListUtils';
@@ -53,6 +55,7 @@ export function ExpenseRow({
   onMenuOpen,
 }: ExpenseRowProps) {
   const theme = useTheme();
+  const amount = getExpenseAmount(expense);
   const amountPaid = expense.amountPaid || 0;
   const remainingAmount = getRemainingExpenseAmount(expense);
   const status = getExpenseStatusPresentation(expense.status);
@@ -77,7 +80,7 @@ export function ExpenseRow({
         <Box sx={{ display: 'flex', alignItems: 'center' }}>
           {getExpenseCategoryIcon(expense.category)}
           <Typography sx={{ ml: 1.5, fontWeight: 'medium' }}>
-            {expense.description}
+            {getExpenseText(expense.description, 'Untitled expense')}
           </Typography>
 
           {expense.tags && expense.tags.length > 0 && (
@@ -123,7 +126,7 @@ export function ExpenseRow({
           '&:hover': { color: theme.palette.primary.main },
         }}
       >
-        <Tooltip title={`Total: ${formatCurrency(expense.amount)}`}>
+        <Tooltip title={`Total: ${formatCurrency(amount)}`}>
           <Box sx={{ textAlign: 'right' }}>
             <Typography variant="body2" fontWeight="medium">
               {formatCurrency(remainingAmount)}

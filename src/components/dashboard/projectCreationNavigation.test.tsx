@@ -40,7 +40,9 @@ describe('project creation navigation', () => {
     fireEvent.click(screen.getByText('New Project'));
 
     await waitFor(() => {
-      expect(mockNavigate).toHaveBeenCalledWith(PROJECT_WIZARD_ROUTE);
+      expect(mockNavigate).toHaveBeenCalledWith(expect.stringMatching(
+        new RegExp(`^${PROJECT_WIZARD_ROUTE}\\?new=\\d+$`)
+      ));
     });
   });
 
@@ -49,6 +51,8 @@ describe('project creation navigation', () => {
 
     fireEvent.click(screen.getByRole('button', { name: /create new project/i }));
 
-    expect(mockNavigate).toHaveBeenCalledWith(PROJECT_WIZARD_ROUTE);
+    expect(mockNavigate).toHaveBeenCalledWith(expect.stringMatching(
+      new RegExp(`^${PROJECT_WIZARD_ROUTE}\\?new=\\d+$`)
+    ));
   });
 });

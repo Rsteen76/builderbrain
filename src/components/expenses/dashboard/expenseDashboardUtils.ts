@@ -1,5 +1,5 @@
 import { Expense, ExpenseCategory, ExpenseStatus } from '../../../types';
-import { formatExpenseCategory } from '../list/expenseListUtils';
+import { formatExpenseCategory, getExpenseAmount } from '../list/expenseListUtils';
 
 export const EXPENSE_STATUS_ORDER: ExpenseStatus[] = [
   'pending',
@@ -32,13 +32,13 @@ export interface StatusSummaryItem {
 }
 
 export function calculateTotalExpenseAmount(expenses: Expense[]): number {
-  return expenses.reduce((sum, expense) => sum + expense.amount, 0);
+  return expenses.reduce((sum, expense) => sum + getExpenseAmount(expense), 0);
 }
 
 export function getCategoryBreakdownItems(expenses: Expense[]): CategoryBreakdownItem[] {
   const total = calculateTotalExpenseAmount(expenses);
   const breakdown = expenses.reduce<Record<string, number>>((acc, expense) => {
-    acc[expense.category] = (acc[expense.category] || 0) + expense.amount;
+    acc[expense.category] = (acc[expense.category] || 0) + getExpenseAmount(expense);
     return acc;
   }, {});
 
@@ -54,7 +54,7 @@ export function getTopProjectExpenseItems(expenses: Expense[], limit = 5): TopPr
   const total = calculateTotalExpenseAmount(expenses);
   const projectTotals = expenses.reduce<Record<string, number>>((acc, expense) => {
     const projectName = expense.projectName || 'Unknown Project';
-    acc[projectName] = (acc[projectName] || 0) + expense.amount;
+    acc[projectName] = (acc[projectName] || 0) + getExpenseAmount(expense);
     return acc;
   }, {});
 
@@ -74,7 +74,7 @@ export function getStatusSummaryItems(expenses: Expense[]): StatusSummaryItem[] 
 
   return EXPENSE_STATUS_ORDER.map(status => {
     const matchingExpenses = expenses.filter(expense => expense.status === status);
-    const amount = matchingExpenses.reduce((sum, expense) => sum + expense.amount, 0);
+    const amount = matchingExpenses.reduce((sum, expense) => sum + getExpenseAmount(expense), 0);
     const percentage = total > 0 ? (amount / total) * 100 : 0;
     const item = {
       status,

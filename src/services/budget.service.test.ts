@@ -20,12 +20,13 @@ jest.mock('firebase/firestore', () => {
 
   return {
     doc: jest.fn((_db, collectionName, id) => `doc:${collectionName}:${id}`),
+    getDoc: jest.fn(),
     Timestamp: MockTimestamp,
     updateDoc: jest.fn(),
   };
 });
 
-import { doc, Timestamp, updateDoc } from 'firebase/firestore';
+import { doc, getDoc, Timestamp, updateDoc } from 'firebase/firestore';
 import {
   addProjectProjection,
   createBudgetProjection,
@@ -45,6 +46,17 @@ describe('BudgetService', () => {
     (doc as jest.Mock).mockImplementation((_db, collectionName, id) => `doc:${collectionName}:${id}`);
     (Timestamp.fromDate as jest.Mock).mockImplementation((date: Date) => new (Timestamp as any)(date));
     (Timestamp.now as jest.Mock).mockImplementation(() => new (Timestamp as any)(new Date('2026-05-08T12:00:00.000Z')));
+    (getDoc as jest.Mock).mockResolvedValue({
+      exists: () => true,
+      data: () => ({
+        budget: {
+          total: 100000,
+          spent: 25000,
+          remaining: 75000,
+          contingency: 5000,
+        },
+      }),
+    });
     (updateDoc as jest.Mock).mockResolvedValue(undefined);
   });
 
@@ -165,7 +177,12 @@ describe('BudgetService', () => {
     await updateProjectBudget('project-1', 125000);
 
     expect(updateDoc).toHaveBeenCalledWith('doc:projects:project-1', {
-      budget: 125000,
+      budget: {
+        total: 125000,
+        spent: 25000,
+        remaining: 100000,
+        contingency: 5000,
+      },
       updatedAt: expect.any(Timestamp),
     });
   });

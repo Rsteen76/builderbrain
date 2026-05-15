@@ -30,8 +30,29 @@ export const getAuthErrorMessage = (error: unknown, fallbackMessage: string): st
     case 'auth/popup-closed-by-user':
       return 'Google sign-in was closed before it completed.';
     case 'auth/internal-error':
-      return 'Firebase Auth could not complete the request. Please try again. If it keeps happening, contact support with code auth/internal-error.';
+      return 'Firebase Auth could not complete email/password sign-in. Try Continue with Google, or reset your password if this account was not created with a password. Code: auth/internal-error.';
     default:
       return code ? `Authentication failed. Please try again. Code: ${code}.` : fallbackMessage;
+  }
+};
+
+export const getGoogleAuthErrorMessage = (error: unknown): string => {
+  const code = getAuthErrorCode(error);
+
+  switch (code) {
+    case 'auth/internal-error':
+      return 'Google sign-in could not complete in this browser. Refresh and try again, or use a different browser window. Code: auth/internal-error.';
+    case 'auth/popup-blocked':
+      return 'Google sign-in popup was blocked. Allow popups for this site and try again.';
+    case 'auth/popup-closed-by-user':
+      return 'Google sign-in was closed before it completed.';
+    case 'auth/network-request-failed':
+      return 'Network error while contacting Firebase Auth. Check your connection and try again.';
+    case 'auth/unauthorized-domain':
+      return 'This domain is not authorized for Google sign-in.';
+    case 'auth/operation-not-allowed':
+      return 'Google sign-in is not enabled for this app.';
+    default:
+      return code ? `Google sign-in failed. Please try again. Code: ${code}.` : 'Unable to sign in with Google. Please try again.';
   }
 };

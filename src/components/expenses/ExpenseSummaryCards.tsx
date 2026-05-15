@@ -1,6 +1,7 @@
 import React from 'react';
 import { Card, CardContent, CardHeader, Grid, Skeleton, Typography } from '@mui/material';
 import { Expense } from '../../types';
+import { getExpenseAmount } from './list/expenseListUtils';
 
 interface ExpenseSummaryCardsProps {
   expenses: Expense[];
@@ -11,11 +12,13 @@ interface ExpenseSummaryCardsProps {
 const money = (value: number) => `$${value.toFixed(2)}`;
 
 const getPaidAmount = (expense: Expense) => {
+  const amount = getExpenseAmount(expense);
+
   if (typeof expense.amountPaid === 'number') {
-    return Math.min(Math.max(expense.amountPaid, 0), expense.amount);
+    return Math.min(Math.max(expense.amountPaid, 0), amount);
   }
 
-  return expense.status === 'paid' ? expense.amount : 0;
+  return expense.status === 'paid' ? amount : 0;
 };
 
 export function ExpenseSummaryCards({
@@ -23,18 +26,18 @@ export function ExpenseSummaryCards({
   loading,
   totalExpenses,
 }: ExpenseSummaryCardsProps) {
-  const totalAmount = expenses.reduce((acc, expense) => acc + expense.amount, 0);
+  const totalAmount = expenses.reduce((acc, expense) => acc + getExpenseAmount(expense), 0);
   const paidAmount = expenses.reduce((acc, expense) => acc + getPaidAmount(expense), 0);
   const approvedUnpaidAmount = expenses.reduce((acc, expense) => {
     if (!['approved', 'partially_paid'].includes(expense.status)) {
       return acc;
     }
 
-    return acc + Math.max(expense.amount - getPaidAmount(expense), 0);
+    return acc + Math.max(getExpenseAmount(expense) - getPaidAmount(expense), 0);
   }, 0);
   const pendingAmount = expenses
     .filter((expense) => expense.status === 'pending')
-    .reduce((acc, expense) => acc + expense.amount, 0);
+    .reduce((acc, expense) => acc + getExpenseAmount(expense), 0);
   const averageAmount = totalExpenses > 0 ? totalAmount / totalExpenses : 0;
 
   const cards = [

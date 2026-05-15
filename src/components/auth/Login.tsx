@@ -34,7 +34,7 @@ const Login: React.FC = () => {
     setLoading(true);
 
     try {
-      await signIn(email, password);
+      await signIn(email.trim(), password);
     } catch (err) {
       logger.error('Login failed:', err);
     } finally {
@@ -102,6 +102,7 @@ const Login: React.FC = () => {
               autoFocus
               value={email}
               onChange={(e) => setEmail(e.target.value)}
+              onBlur={() => setEmail((currentEmail) => currentEmail.trim())}
             />
             <TextField
               margin="normal"

@@ -23,6 +23,7 @@ import {
 } from '@mui/material';
 import { format } from 'date-fns';
 import { useProjectWizard, BudgetItem } from '../../contexts/ProjectWizardContext';
+import { getCostModelDescription } from '../../data/constructionCostModel';
 import EventIcon from '@mui/icons-material/Event';
 import AttachMoneyIcon from '@mui/icons-material/AttachMoney';
 import PersonIcon from '@mui/icons-material/Person';
@@ -36,6 +37,7 @@ const ReviewStep: React.FC = () => {
   const totalBudgeted = budget.reduce((sum: number, item: BudgetItem) => sum + item.estimatedCost, 0);
   const totalBudget = projectInfo.totalBudget || 0;
   const budgetPercentage = totalBudget > 0 ? (totalBudgeted / totalBudget) * 100 : 0;
+  const constructionBudget = Math.max(0, totalBudget - (projectInfo.landAcquisitionPrice || 0));
 
   return (
     <Box sx={{ mt: 2 }}>
@@ -85,6 +87,21 @@ const ReviewStep: React.FC = () => {
               <Typography variant="subtitle2">Budget:</Typography>
               <Typography variant="body1" gutterBottom>
                 {projectInfo.currency || 'USD'} {totalBudget.toLocaleString()}
+              </Typography>
+
+              <Typography variant="subtitle2">Land Acquisition:</Typography>
+              <Typography variant="body1" gutterBottom>
+                {projectInfo.currency || 'USD'} {(projectInfo.landAcquisitionPrice || 0).toLocaleString()}
+              </Typography>
+
+              <Typography variant="subtitle2">Construction Allocation:</Typography>
+              <Typography variant="body1" gutterBottom>
+                {projectInfo.currency || 'USD'} {constructionBudget.toLocaleString()}
+              </Typography>
+
+              <Typography variant="subtitle2">Cost Assumptions:</Typography>
+              <Typography variant="body1" gutterBottom>
+                {getCostModelDescription(projectInfo.costMarket, projectInfo.finishLevel)}
               </Typography>
             </Grid>
 

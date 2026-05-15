@@ -40,6 +40,31 @@ interface FirestoreUser extends Omit<User, 'createdAt' | 'updatedAt'> {
   updatedAt: Timestamp;
 }
 
+const removeUndefinedFields = <T>(value: T): T => {
+  if (value === undefined) {
+    return undefined as T;
+  }
+
+  if (value === null || value instanceof Date || value instanceof Timestamp) {
+    return value;
+  }
+
+  if (Array.isArray(value)) {
+    return value.map(item => removeUndefinedFields(item)) as T;
+  }
+
+  if (typeof value === 'object') {
+    return Object.entries(value as Record<string, unknown>).reduce((cleaned, [key, entryValue]) => {
+      if (entryValue !== undefined) {
+        cleaned[key] = removeUndefinedFields(entryValue);
+      }
+      return cleaned;
+    }, {} as Record<string, unknown>) as T;
+  }
+
+  return value;
+};
+
 export class UserService {
   private static collection = collection(db, 'users');
 
@@ -62,7 +87,7 @@ export class UserService {
 
     // Using setDoc with user UID as the document ID to ensure consistency
     const userRef = doc(this.collection, user.uid);
-    await setDoc(userRef, userData);
+    await setDoc(userRef, removeUndefinedFields(userData));
 
     return {
       ...userData,

@@ -18,6 +18,7 @@ import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns';
 import { LocalizationProvider, DatePicker } from '@mui/x-date-pickers';
 import { useProjectWizard } from '../../contexts/ProjectWizardContext';
 import { getTemplateIdForProjectType } from '../../data/projectWizardTemplates';
+import { FINISH_LEVELS, REGIONAL_COST_MARKETS } from '../../data/constructionCostModel';
 
 // Project types
 const PROJECT_TYPES = [
@@ -27,13 +28,6 @@ const PROJECT_TYPES = [
   'Infrastructure',
   'Industrial',
   'Specialized Construction'
-];
-
-const PROJECT_SIZES = [
-  'Small (Under $50,000)',
-  'Medium ($50,000 - $250,000)',
-  'Large ($250,000 - $1,000,000)',
-  'Major (Over $1,000,000)'
 ];
 
 const ProjectInfoStep: React.FC = () => {
@@ -48,7 +42,7 @@ const ProjectInfoStep: React.FC = () => {
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
     updateProjectInfo({
-      [name]: name === 'totalBudget' ? Number(value) : value,
+      [name]: name === 'totalBudget' || name === 'landAcquisitionPrice' ? Number(value) : value,
     });
   };
 
@@ -129,23 +123,23 @@ const ProjectInfoStep: React.FC = () => {
               </Grid>
 
               <Grid item xs={12} md={6}>
-                <FormControl fullWidth required>
-                  <InputLabel id="project-size-label">Project Size</InputLabel>
+                <FormControl fullWidth>
+                  <InputLabel id="cost-market-label">Regional Cost Market</InputLabel>
                   <Select
-                    labelId="project-size-label"
-                    id="project-size"
-                    name="size"
-                    value={projectInfo.size || ''}
+                    labelId="cost-market-label"
+                    id="cost-market"
+                    name="costMarket"
+                    value={projectInfo.costMarket || 'national-average'}
                     onChange={handleSelectChange}
-                    label="Project Size"
+                    label="Regional Cost Market"
                   >
-                    {PROJECT_SIZES.map((size) => (
-                      <MenuItem key={size} value={size}>
-                        {size}
+                    {REGIONAL_COST_MARKETS.map((market) => (
+                      <MenuItem key={market.id} value={market.id}>
+                        {market.label}
                       </MenuItem>
                     ))}
                   </Select>
-                  <FormHelperText>Select the approximate budget range</FormHelperText>
+                  <FormHelperText>Used to weight phase budgets from regional cost assumptions</FormHelperText>
                 </FormControl>
               </Grid>
 
@@ -186,7 +180,7 @@ const ProjectInfoStep: React.FC = () => {
                 />
               </Grid>
 
-              <Grid item xs={12} md={4}>
+              <Grid item xs={12} md={6}>
                 <LocalizationProvider dateAdapter={AdapterDateFns}>
                   <DatePicker
                     label="Start Date"
@@ -202,7 +196,7 @@ const ProjectInfoStep: React.FC = () => {
                 </LocalizationProvider>
               </Grid>
 
-              <Grid item xs={12} md={4}>
+              <Grid item xs={12} md={6}>
                 <LocalizationProvider dateAdapter={AdapterDateFns}>
                   <DatePicker
                     label="Target Completion"
@@ -218,17 +212,51 @@ const ProjectInfoStep: React.FC = () => {
                 </LocalizationProvider>
               </Grid>
 
-              <Grid item xs={12} md={4}>
+              <Grid item xs={12} md={6}>
                 <TextField
                   fullWidth
-                  label="Total Budget"
+                  label="Estimated Total Project Cost"
                   name="totalBudget"
                   type="number"
                   value={projectInfo.totalBudget || ''}
                   onChange={handleInputChange}
-                  helperText="Used to prefill phase budgets"
+                  helperText="All-in starting estimate; land is separated before phase allocation"
                   inputProps={{ min: 0 }}
                 />
+              </Grid>
+
+              <Grid item xs={12} md={6}>
+                <TextField
+                  fullWidth
+                  label="Land Acquisition Price"
+                  name="landAcquisitionPrice"
+                  type="number"
+                  value={projectInfo.landAcquisitionPrice || ''}
+                  onChange={handleInputChange}
+                  helperText="Tracked separately from construction phase budgets"
+                  inputProps={{ min: 0 }}
+                />
+              </Grid>
+
+              <Grid item xs={12} md={6}>
+                <FormControl fullWidth>
+                  <InputLabel id="finish-level-label">Finish Level</InputLabel>
+                  <Select
+                    labelId="finish-level-label"
+                    id="finish-level"
+                    name="finishLevel"
+                    value={projectInfo.finishLevel || 'standard'}
+                    onChange={handleSelectChange}
+                    label="Finish Level"
+                  >
+                    {FINISH_LEVELS.map((level) => (
+                      <MenuItem key={level.id} value={level.id}>
+                        {level.label}
+                      </MenuItem>
+                    ))}
+                  </Select>
+                  <FormHelperText>Adjusts finish-sensitive phases like interiors, trim-out, and fixtures</FormHelperText>
+                </FormControl>
               </Grid>
             </Grid>
           </CardContent>

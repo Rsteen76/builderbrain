@@ -7,6 +7,15 @@ export type ExpenseGroupBy = 'none' | 'project' | 'category' | 'vendor' | 'subco
 
 export const ALL_EXPENSES_GROUP_NAME = 'All Expenses';
 
+export function getExpenseAmount(expense: Pick<Expense, 'amount'>): number {
+  const amount = typeof expense.amount === 'number' ? expense.amount : Number(expense.amount);
+  return Number.isFinite(amount) ? amount : 0;
+}
+
+export function getExpenseText(value: unknown, fallback = ''): string {
+  return typeof value === 'string' ? value : fallback;
+}
+
 export function buildExpenseHookFilters(
   tabValue: number,
   categoryFilter: string | null,
@@ -53,10 +62,10 @@ export function filterExpensesBySearch(expenses: Expense[], searchTerm: string):
   if (!normalizedSearchTerm) return expenses;
 
   return expenses.filter(expense => (
-    expense.description.toLowerCase().includes(normalizedSearchTerm) ||
-    expense.vendor?.toLowerCase().includes(normalizedSearchTerm) ||
-    expense.projectName?.toLowerCase().includes(normalizedSearchTerm) ||
-    expense.subcontractorName?.toLowerCase().includes(normalizedSearchTerm)
+    getExpenseText(expense.description).toLowerCase().includes(normalizedSearchTerm) ||
+    getExpenseText(expense.vendor).toLowerCase().includes(normalizedSearchTerm) ||
+    getExpenseText(expense.projectName).toLowerCase().includes(normalizedSearchTerm) ||
+    getExpenseText(expense.subcontractorName).toLowerCase().includes(normalizedSearchTerm)
   ));
 }
 
@@ -69,14 +78,18 @@ export function sortExpenses(
 
   return [...expenses].sort((a, b) => {
     if (sortField === 'amount') {
-      return sortDirection === 'asc' ? a.amount - b.amount : b.amount - a.amount;
+      const amountA = getExpenseAmount(a);
+      const amountB = getExpenseAmount(b);
+      return sortDirection === 'asc' ? amountA - amountB : amountB - amountA;
     }
 
     const dateA = new Date(a.date);
     const dateB = new Date(b.date);
+    const timeA = Number.isFinite(dateA.getTime()) ? dateA.getTime() : 0;
+    const timeB = Number.isFinite(dateB.getTime()) ? dateB.getTime() : 0;
     return sortDirection === 'asc'
-      ? dateA.getTime() - dateB.getTime()
-      : dateB.getTime() - dateA.getTime();
+      ? timeA - timeB
+      : timeB - timeA;
   });
 }
 
@@ -95,7 +108,7 @@ export function groupExpenses(expenses: Expense[], groupBy: ExpenseGroupBy): Rec
 
 export function calculateGroupTotals(groupedExpenses: Record<string, Expense[]>): Record<string, number> {
   return Object.entries(groupedExpenses).reduce<Record<string, number>>((totals, [groupName, expenses]) => {
-    totals[groupName] = expenses.reduce((sum, expense) => sum + expense.amount, 0);
+    totals[groupName] = expenses.reduce((sum, expense) => sum + getExpenseAmount(expense), 0);
     return totals;
   }, {});
 }
@@ -117,7 +130,8 @@ export function getNextSortState(
 
 export function getRemainingExpenseAmount(expense: Expense): number {
   const amountPaid = expense.amountPaid || 0;
-  return expense.status === 'paid' ? expense.amount : expense.amount - amountPaid;
+  const amount = getExpenseAmount(expense);
+  return expense.status === 'paid' ? amount : amount - amountPaid;
 }
 
 export function getExpenseStatusPresentation(status: ExpenseStatus): {

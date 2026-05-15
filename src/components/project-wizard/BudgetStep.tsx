@@ -26,9 +26,11 @@ import {
 import DeleteIcon from '@mui/icons-material/Delete';
 import AddIcon from '@mui/icons-material/Add';
 import { useProjectWizard, BudgetItem } from '../../contexts/ProjectWizardContext';
+import { getCostModelDescription } from '../../data/constructionCostModel';
 
 // Budget categories
 const BUDGET_CATEGORIES = [
+  'Land Acquisition',
   'Phase Budget',
   'Materials',
   'Labor',
@@ -93,6 +95,8 @@ const BudgetStep: React.FC = () => {
   // Calculate total budget
   const totalBudgeted = budget.reduce((sum: number, item: BudgetItem) => sum + item.estimatedCost, 0);
   const totalBudget = projectInfo.totalBudget || 0;
+  const landAcquisitionPrice = projectInfo.landAcquisitionPrice || 0;
+  const constructionBudget = Math.max(0, totalBudget - landAcquisitionPrice);
   const budgetPercentage = totalBudget > 0 ? (totalBudgeted / totalBudget) * 100 : 0;
 
   // Get budget by category
@@ -116,11 +120,17 @@ const BudgetStep: React.FC = () => {
           <Grid container spacing={2} alignItems="center">
             <Grid item xs={12} md={6}>
               <Typography variant="subtitle1">
-                Total Budget: {projectInfo.currency || 'USD'} {totalBudget.toLocaleString()}
+                Total Cost: {projectInfo.currency || 'USD'} {totalBudget.toLocaleString()}
+              </Typography>
+              <Typography variant="subtitle1">
+                Construction Allocation: {projectInfo.currency || 'USD'} {constructionBudget.toLocaleString()}
               </Typography>
               <Typography variant="subtitle1">
                 Allocated: {projectInfo.currency || 'USD'} {totalBudgeted.toLocaleString()}
                 ({budgetPercentage.toFixed(1)}%)
+              </Typography>
+              <Typography variant="body2" color="text.secondary">
+                {getCostModelDescription(projectInfo.costMarket, projectInfo.finishLevel)}
               </Typography>
               <Typography variant="subtitle1">
                 Remaining: {projectInfo.currency || 'USD'} {(totalBudget - totalBudgeted).toLocaleString()}

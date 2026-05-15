@@ -73,6 +73,19 @@ describe('Login', () => {
     expect(mockNavigate).toHaveBeenCalledWith('/', { replace: true });
   });
 
+  test('trims email before submitting password login', async () => {
+    signIn.mockResolvedValue(undefined);
+    const user = userEvent.setup();
+
+    renderLogin();
+
+    await user.type(screen.getByLabelText(/email address/i), '  builder@example.com  ');
+    await user.type(screen.getByLabelText(/password/i), 'correct horse battery staple');
+    await user.click(screen.getByRole('button', { name: 'Sign In' }));
+
+    expect(signIn).toHaveBeenCalledWith('builder@example.com', 'correct horse battery staple');
+  });
+
   test('shows authentication errors from context', () => {
     mockedUseAuth.mockReturnValue(authState({ error: 'Invalid login credentials' }));
 

@@ -141,7 +141,10 @@ describe('ProjectService', () => {
   test('creates projects with Firestore-safe budget, location, and date values', async () => {
     (addDoc as jest.Mock).mockResolvedValue({ id: 'project-1' });
 
-    const input = createProject();
+    const input = createProject({
+      clientId: undefined,
+      contractorId: undefined,
+    });
     const result = await service.create(input);
 
     expect(addDoc).toHaveBeenCalledWith('collection:projects', expect.objectContaining({
@@ -159,6 +162,8 @@ describe('ProjectService', () => {
     expect(firestoreProject.phases[0].startDate.toDate()).toEqual(input.phases?.[0].startDate);
     expect(firestoreProject.phases[0].endDate.toDate()).toEqual(new Date('2024-02-07T00:00:00.000Z'));
     expect(firestoreProject.keyMilestones[0].date.toDate()).toEqual(new Date('2024-02-15T00:00:00.000Z'));
+    expect(firestoreProject).not.toHaveProperty('clientId');
+    expect(firestoreProject).not.toHaveProperty('contractorId');
 
     expect(result).toEqual({
       data: expect.objectContaining({ id: 'project-1', name: 'Kitchen Remodel' }),

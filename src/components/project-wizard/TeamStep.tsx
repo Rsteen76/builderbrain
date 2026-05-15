@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   Box,
   TextField,
@@ -45,6 +45,12 @@ const TEAM_ROLES = [
 const TeamStep: React.FC = () => {
   const { state, addTeamMember, removeTeamMember, validateStep } = useProjectWizard();
   const { team } = state;
+
+  useEffect(() => {
+    validateStep('team');
+    // Team members are optional, so landing on this step is enough to proceed.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const [newMember, setNewMember] = useState<Partial<TeamMember>>({
     name: '',
@@ -315,4 +321,4 @@ const TeamStep: React.FC = () => {
   );
 };
 
-export default TeamStep; 
+export default TeamStep;

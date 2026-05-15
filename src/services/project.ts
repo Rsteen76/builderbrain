@@ -31,6 +31,31 @@ import { logger } from '../utils/logger';
 
 export type { FirestoreProject } from './project/types';
 
+const removeUndefinedFields = <T>(value: T): T => {
+  if (value === undefined) {
+    return undefined as T;
+  }
+
+  if (value === null || value instanceof Date || value instanceof Timestamp) {
+    return value;
+  }
+
+  if (Array.isArray(value)) {
+    return value.map(item => removeUndefinedFields(item)) as T;
+  }
+
+  if (typeof value === 'object') {
+    return Object.entries(value as Record<string, unknown>).reduce((cleaned, [key, entryValue]) => {
+      if (entryValue !== undefined) {
+        cleaned[key] = removeUndefinedFields(entryValue);
+      }
+      return cleaned;
+    }, {} as Record<string, unknown>) as T;
+  }
+
+  return value;
+};
+
 // Define as a non-export class here
 class ProjectService {
   // Collection reference
@@ -86,7 +111,7 @@ class ProjectService {
 
     try {
       // Add user ID and required fields to project data
-      const completeProjectData: Partial<FirestoreProject> = {
+      const completeProjectData = removeUndefinedFields<Partial<FirestoreProject>>({
         ...projectData,
         userId,
         name: projectData.name || '',
@@ -114,7 +139,7 @@ class ProjectService {
         keyMilestones: projectData.keyMilestones || [],
         projections: projectData.projections || [],
         progress: projectData.progress || 0
-      };
+      });
 
       // Add document to Firestore
       const docRef = await addDoc(this.collection, completeProjectData);
@@ -240,14 +265,10 @@ class ProjectService {
         } : projectData.location;
       }
 
-      Object.keys(updatedData).forEach((key) => {
-        if (updatedData[key as keyof FirestoreProject] === undefined) {
-          delete updatedData[key as keyof FirestoreProject];
-        }
-      });
+      const sanitizedUpdateData = removeUndefinedFields(updatedData);
 
       // Update document in Firestore
-      await updateDoc(projectRef, updatedData);
+      await updateDoc(projectRef, sanitizedUpdateData);
 
       // Convert Firestore data back to Project type
       const project = await this.getProjectById(projectId);

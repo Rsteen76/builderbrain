@@ -98,6 +98,7 @@ const BudgetDashboard: React.FC<BudgetDashboardProps> = () => {
       loading: contextLoading, 
       error: contextError, 
       projectId,
+      refreshAllProjectData,
   } = useProjectDetail();
 
   const project = contextProject;
@@ -111,7 +112,7 @@ const BudgetDashboard: React.FC<BudgetDashboardProps> = () => {
   ), [contextProject?.projections]);
   
   const [categoryMappings, setCategoryMappings] = useState<Record<string, string>>({});
-  const [mappingsLoading, setMappingsLoading] = useState<boolean>(true);
+  const [mappingsLoading, setMappingsLoading] = useState<boolean>(false);
   const [snackbar, setSnackbar] = useState<{ open: boolean, message: string, severity: 'success' | 'error' | 'info' }>({ open: false, message: '', severity: 'success' });
   const [localProjections, setLocalProjections] = useState<BudgetProjection[]>([]);
   const [categoryDisplay, setCategoryDisplay] = useState<'summary' | 'detailed'>('summary');
@@ -184,7 +185,7 @@ const BudgetDashboard: React.FC<BudgetDashboardProps> = () => {
     };
   }, [budgetSummary, project, theme.palette]);
 
-  if (loading || mappingsLoading) {
+  if (loading) {
     return (
       <Box
         sx={{
@@ -257,6 +258,7 @@ const BudgetDashboard: React.FC<BudgetDashboardProps> = () => {
           phases={phases}
           allowEdit={true}
           isEmbedded={false}
+          onBudgetUpdated={refreshAllProjectData}
         />
       </div>
 

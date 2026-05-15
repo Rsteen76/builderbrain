@@ -26,6 +26,31 @@ test.beforeEach(async ({ page }) => {
   await installSmokeTestGuards(page);
 });
 
+test('main authenticated routes render without the global error boundary', async ({ page }) => {
+  const routes = [
+    { path: '/dashboard', heading: 'Dashboard' },
+    { path: '/projects', heading: 'Projects' },
+    { path: '/expenses', heading: 'Expenses & Payments' },
+    { path: '/bids', text: /Filters|Add New Bid|Bid Management/i },
+    { path: '/tasks', heading: 'Tasks' },
+    { path: '/payments', heading: 'Payments' },
+    { path: '/subcontractors', heading: 'Subcontractors' },
+    { path: '/settings', heading: 'Settings' },
+  ];
+
+  for (const route of routes) {
+    await page.goto(route.path);
+    await expect(page.getByText('The app hit an unexpected error.')).toHaveCount(0);
+    await expect(page.getByText('Something went wrong')).toHaveCount(0);
+
+    if ('heading' in route) {
+      await expect(page.getByRole('heading', { name: route.heading, exact: true }).first()).toBeVisible();
+    } else {
+      await expect(page.locator('main').getByText(route.text).first()).toBeVisible();
+    }
+  }
+});
+
 test('projects page loads seeded projects with dev auth bypass', async ({ page }) => {
   await page.goto('/projects');
 
@@ -317,10 +342,11 @@ test('create project wizard reaches submit path', async ({ page }) => {
 
   await page.getByLabel('Project Name').fill('Playwright Smoke Project');
   await selectMuiOption(page, 'Project Type', 'Residential Construction');
-  await selectMuiOption(page, 'Project Size', 'Medium ($50,000 - $250,000)');
+  await selectMuiOption(page, 'Regional Cost Market', 'High-cost metro');
+  await selectMuiOption(page, 'Finish Level', 'Premium');
   await page.getByLabel('Start Date').fill('01/15/2026');
   await page.getByLabel('Target Completion').fill('11/15/2026');
-  await page.getByLabel('Total Budget').fill('800000');
+  await page.getByLabel('Estimated Total Project Cost').fill('800000');
   await page.getByLabel('Location').fill('Denver, CO');
   await page
     .getByLabel('Project Description')
@@ -331,7 +357,7 @@ test('create project wizard reaches submit path', async ({ page }) => {
   await expect(page.locator('input[value="Framing & Dry-In"]')).toBeVisible();
   await expect(page.locator('input[value="Punch, Closeout & Warranty"]')).toBeVisible();
   await expect(page.locator('input[value="2026-01-15"]')).toBeVisible();
-  await expect(page.locator('input[value="40000"]')).toBeVisible();
+  await expect(page.locator('input[type="number"]').first()).toHaveValue(/[1-9]\d*/);
   await page.getByLabel('Milestone Title').fill('Foundation complete');
   await page.getByRole('button', { name: 'Add Milestone' }).click();
   await expect(page.getByText('Foundation complete')).toBeVisible();
