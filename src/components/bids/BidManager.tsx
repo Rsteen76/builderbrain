@@ -288,7 +288,7 @@ const BidManager: React.FC = () => {
   };
 
   const handleEditBid = (bid: Bid) => {
-    navigate(`/bids/${bid.id}/edit`);
+    navigate(`/bids/${bid.id}`);
   };
 
   const handleConvertToProject = (bid: Bid) => {
@@ -664,4 +664,4 @@ const BidManager: React.FC = () => {
   );
 };
 
-export default BidManager; 
+export default BidManager;

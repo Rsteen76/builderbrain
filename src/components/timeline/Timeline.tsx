@@ -34,6 +34,7 @@ import { formatDate } from '../../utils/formatters';
 import { useAuth } from '../../contexts/AuthContext';
 import { useTimelineData } from '../../hooks/use-calendar-timeline';
 import { TimelineEvent } from '../../services/calendar-timeline';
+import { getEventNavigationPath } from '../../utils/eventNavigation';
 
 interface TimelineFilter {
   startDate: Date | null;
@@ -111,27 +112,8 @@ const TimelineItem: React.FC<{ event: TimelineEvent }> = ({ event }) => {
   
   const statusColor = getStatusColor();
   
-  // Determine navigation based on event type
   const handleClick = () => {
-    switch (event.type) {
-      case 'milestone':
-        navigate(`/projects/${event.projectId}/milestones`);
-        break;
-      case 'task':
-        navigate(`/tasks/${event.id}`);
-        break;
-      case 'payment':
-        navigate(`/finance/payments/${event.id}`);
-        break;
-      case 'delivery':
-        navigate(`/materials/deliveries/${event.id}`);
-        break;
-      case 'meeting':
-        navigate(`/calendar?event=${event.id}`);
-        break;
-      default:
-        navigate(`/projects/${event.projectId}`);
-    }
+    navigate(getEventNavigationPath(event));
   };
   
   return (

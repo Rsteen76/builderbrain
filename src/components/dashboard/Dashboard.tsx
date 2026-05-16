@@ -300,7 +300,7 @@ const Dashboard: React.FC = () => {
   }, [user?.uid]);
 
   const refreshData = () => {
-    loadDashboardData(true);
+    return loadDashboardData(true);
   };
   
   // Format project data for display

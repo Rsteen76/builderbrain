@@ -22,11 +22,11 @@ import {
   Assignment as TaskIcon,
   AttachMoney as PaymentIcon,
   LocalShipping as DeliveryIcon,
-  Add as AddIcon,
 } from '@mui/icons-material';
 import { useAuth } from '../../contexts/AuthContext';
 import { useCalendarEvents } from '../../hooks/use-calendar-timeline';
 import { useNavigate } from 'react-router-dom';
+import { getEventNavigationPath } from '../../utils/eventNavigation';
 
 const Calendar: React.FC = () => {
   const theme = useTheme();
@@ -222,28 +222,7 @@ const Calendar: React.FC = () => {
                       bgcolor: alpha(getEventColor(event.type), 0.2),
                     },
                   }}
-                  onClick={() => {
-                    // Navigate based on event type
-                    switch (event.type) {
-                      case 'milestone':
-                        navigate(`/projects/${event.projectId}/milestones`);
-                        break;
-                      case 'task':
-                        navigate(`/tasks/${event.id}`);
-                        break;
-                      case 'payment':
-                        navigate(`/payments/${event.id}`);
-                        break;
-                      case 'meeting':
-                        navigate(`/calendar?event=${event.id}`);
-                        break;
-                      case 'delivery':
-                        navigate(`/materials/deliveries/${event.id}`);
-                        break;
-                      default:
-                        navigate(`/projects/${event.projectId}`);
-                    }
-                  }}
+                  onClick={() => navigate(getEventNavigationPath(event))}
                 >
                   {getEventIcon(event.type)}
                   <Typography 
@@ -353,13 +332,13 @@ const Calendar: React.FC = () => {
             </IconButton>
             
             <Button
-              variant="contained"
+              variant="outlined"
               color="primary"
-              startIcon={<AddIcon />}
-              onClick={() => navigate('/events/new')}
+              startIcon={<EventIcon />}
+              onClick={() => navigate('/timeline')}
               sx={{ ml: 1 }}
             >
-              Add Event
+              View Timeline
             </Button>
           </Box>
         </Box>

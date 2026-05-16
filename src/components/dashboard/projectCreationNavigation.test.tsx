@@ -46,6 +46,16 @@ describe('project creation navigation', () => {
     });
   });
 
+  test('QuickActions task and team actions route to existing screens', () => {
+    render(<QuickActions />);
+
+    fireEvent.click(screen.getByText('Create Task'));
+    expect(mockNavigate).toHaveBeenCalledWith('/tasks');
+
+    fireEvent.click(screen.getByText('Add Team Member'));
+    expect(mockNavigate).toHaveBeenCalledWith('/subcontractors/new');
+  });
+
   test('RecentProjects empty state create action routes to the project wizard', () => {
     render(<RecentProjects projects={[]} />);
 

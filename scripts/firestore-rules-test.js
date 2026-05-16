@@ -6,11 +6,16 @@ const {
   initializeTestEnvironment,
 } = require('@firebase/rules-unit-testing');
 const {
+  collection,
   deleteDoc,
   doc,
   getDoc,
+  getDocs,
+  query,
+  serverTimestamp,
   setDoc,
   updateDoc,
+  where,
 } = require('firebase/firestore');
 const {
   deleteObject,
@@ -118,6 +123,26 @@ const fixtures = {
     createdAt: now(),
     updatedAt: now(),
   }),
+  shared_reports: (userId, shareId = 'share-active', expiresAt = new Date('2099-01-01T00:00:00.000Z')) => ({
+    userId,
+    projectId: 'project-1',
+    projectName: 'Test Project',
+    createdAt: now(),
+    expiresAt,
+    reportType: 'budget',
+    shareId,
+    accessCount: 0,
+    isPasswordProtected: false,
+    reportSnapshot: {
+      budgetSummary: {},
+      expensesByCategory: [],
+      metadata: {
+        expenseCount: 0,
+        projectionCount: 0,
+        generatedOn: now(),
+      },
+    },
+  }),
 };
 
 async function runCase(name, testFn) {
@@ -212,6 +237,63 @@ async function main() {
         await assertFails(setDoc(doc(unauthDb, `${collectionName}/${collectionName}-3`), payload));
         await assertFails(setDoc(doc(ownerDb, `${collectionName}/${collectionName}-4`), missingRequiredPayload));
       }
+    });
+
+    await testEnv.clearFirestore();
+
+    await runCase('shared reports allow unexpired public gets and owner management', async () => {
+      await testEnv.withSecurityRulesDisabled(async (context) => {
+        await setDoc(
+          doc(context.firestore(), 'shared_reports/share-active'),
+          fixtures.shared_reports('user-1', 'share-active')
+        );
+        await setDoc(
+          doc(context.firestore(), 'shared_reports/share-expired'),
+          fixtures.shared_reports('user-1', 'share-expired', new Date('2000-01-01T00:00:00.000Z'))
+        );
+      });
+
+      const ownerDb = testEnv.authenticatedContext('user-1').firestore();
+      const otherDb = testEnv.authenticatedContext('user-2').firestore();
+      const unauthDb = testEnv.unauthenticatedContext().firestore();
+
+      await assertSucceeds(getDoc(doc(unauthDb, 'shared_reports/share-active')));
+      await assertFails(getDoc(doc(unauthDb, 'shared_reports/share-expired')));
+      await assertSucceeds(getDoc(doc(ownerDb, 'shared_reports/share-expired')));
+
+      await assertSucceeds(updateDoc(doc(unauthDb, 'shared_reports/share-active'), {
+        accessCount: 1,
+        lastAccessedAt: serverTimestamp(),
+      }));
+      await assertFails(updateDoc(doc(unauthDb, 'shared_reports/share-active'), {
+        projectName: 'Changed by public viewer',
+      }));
+
+      await assertSucceeds(setDoc(
+        doc(ownerDb, 'shared_reports/share-owner-created'),
+        fixtures.shared_reports('user-1', 'share-owner-created')
+      ));
+      await assertFails(setDoc(
+        doc(ownerDb, 'shared_reports/share-mismatch'),
+        fixtures.shared_reports('user-1', 'different-share-id')
+      ));
+      await assertFails(setDoc(
+        doc(otherDb, 'shared_reports/share-other-owner'),
+        fixtures.shared_reports('user-1', 'share-other-owner')
+      ));
+
+      await assertSucceeds(getDocs(query(
+        collection(ownerDb, 'shared_reports'),
+        where('userId', '==', 'user-1')
+      )));
+      await assertFails(getDocs(query(
+        collection(otherDb, 'shared_reports'),
+        where('userId', '==', 'user-1')
+      )));
+      await assertFails(getDocs(query(
+        collection(unauthDb, 'shared_reports'),
+        where('shareId', '==', 'share-active')
+      )));
     });
 
     await testEnv.clearFirestore();
