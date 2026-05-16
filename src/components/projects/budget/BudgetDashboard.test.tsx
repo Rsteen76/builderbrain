@@ -163,6 +163,40 @@ describe('BudgetDashboard', () => {
     expect(screen.getByText('Budget Allocation Tracker project-1')).toBeInTheDocument();
   });
 
+  test.each([
+    ['Critical', 121000],
+    ['At Risk', 111000],
+    ['Caution', 101000],
+    ['Near Limit', 91000],
+    ['On Track', 61000],
+  ])('renders %s budget health from projected spend', (expectedStatus, projectionAmount) => {
+    mockedUseProjectDetail.mockReturnValue(makeProjectDetail({
+      project: {
+        id: 'project-1',
+        name: 'Hillside Build',
+        budget: {
+          total: 100000,
+          spent: 0,
+          remaining: 100000,
+        },
+        projections: [
+          {
+            id: `projection-${expectedStatus}`,
+            category: 'Materials',
+            amount: projectionAmount,
+            notes: '',
+          },
+        ],
+      },
+      expenses: [],
+    }) as unknown as ReturnType<typeof useProjectDetail>);
+
+    const { unmount } = render(<BudgetDashboard />);
+
+    expect(screen.getByText(`Budget Health ${expectedStatus}`)).toBeInTheDocument();
+    unmount();
+  });
+
   test('renders loading, error, and missing project states', () => {
     mockedUseProjectDetail.mockReturnValue(makeProjectDetail({ loading: true }) as unknown as ReturnType<typeof useProjectDetail>);
     const loadingRender = render(<BudgetDashboard />);
