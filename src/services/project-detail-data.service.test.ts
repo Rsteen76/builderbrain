@@ -172,4 +172,26 @@ describe('ProjectDetailDataService', () => {
     expect(detail.phases[0].startDate).toBeInstanceOf(Date);
     expect(detail.phases[0].endDate).toBeInstanceOf(Date);
   });
+
+  test('returns project data when optional bid loading fails', async () => {
+    (BidService.getBids as jest.Mock).mockRejectedValue(new Error('Bids unavailable'));
+
+    const detail = await ProjectDetailDataService.getProjectDetailData('user-1', 'project-1');
+
+    expect(detail.project?.id).toBe('project-1');
+    expect(detail.phases).toHaveLength(1);
+    expect(detail.bids).toEqual([]);
+    expect(detail.expenses).toHaveLength(1);
+  });
+
+  test('returns project data when referenced subcontractor loading fails', async () => {
+    (SubcontractorService.getSubcontractor as jest.Mock).mockRejectedValue(new Error('Subcontractor unavailable'));
+
+    const detail = await ProjectDetailDataService.getProjectDetailData('user-1', 'project-1');
+
+    expect(detail.project?.id).toBe('project-1');
+    expect(detail.bids).toHaveLength(1);
+    expect(detail.expenses).toHaveLength(1);
+    expect(detail.subcontractors).toEqual([]);
+  });
 });

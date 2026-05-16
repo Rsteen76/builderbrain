@@ -1,4 +1,4 @@
-import React, { Suspense, lazy } from 'react';
+import React, { Suspense } from 'react';
 import { BrowserRouter as Router, Navigate, Routes, Route, useLocation } from 'react-router-dom';
 import { ThemeProvider, CssBaseline, GlobalStyles } from '@mui/material';
 import { LocalizationProvider } from '@mui/x-date-pickers';
@@ -12,26 +12,27 @@ import ProjectDetailPage from './pages/ProjectDetailPage';
 import BidDeletePortal from './components/dialogs/BidDeletePortal';
 import SharedReportView from './pages/SharedReportView';
 import ProjectWizard from './components/project-wizard/ProjectWizard';
-import { PROJECT_WIZARD_ROUTE } from './constants/projectRoutes';
+import { createProjectWizardRoute, PROJECT_WIZARD_ROUTE } from './constants/projectRoutes';
 import ErrorBoundary from './components/common/ErrorBoundary';
+import { lazyWithReload } from './utils/lazyWithReload';
 
 // Lazy load components
-const Dashboard = lazy(() => import('./components/dashboard/Dashboard'));
-const Projects = lazy(() => import('./components/projects/Projects'));
-const ProjectForm = lazy(() => import('./components/projects/ProjectForm'));
-const Tasks = lazy(() => import('./components/tasks/Tasks'));
-const Expenses = lazy(() => import('./components/expenses/Expenses'));
-const Bids = lazy(() => import('./components/bids/Bids'));
-const BidDetails = lazy(() => import('./components/bids/BidDetails'));
-const Subcontractors = lazy(() => import('./components/subcontractors/Subcontractors'));
-const SubcontractorForm = lazy(() => import('./components/subcontractors/SubcontractorForm'));
-const SubcontractorDetails = lazy(() => import('./components/subcontractors/SubcontractorDetails'));
-const Settings = lazy(() => import('./components/settings/Settings'));
-const Login = lazy(() => import('./components/auth/Login'));
-const SignUp = lazy(() => import('./components/auth/SignUp'));
-const Payments = lazy(() => import('./components/payments/Payments'));
-const Timeline = lazy(() => import('./components/timeline/Timeline'));
-const Calendar = lazy(() => import('./components/calendar/Calendar'));
+const Dashboard = lazyWithReload(() => import('./components/dashboard/Dashboard'));
+const Projects = lazyWithReload(() => import('./components/projects/Projects'));
+const ProjectForm = lazyWithReload(() => import('./components/projects/ProjectForm'));
+const Tasks = lazyWithReload(() => import('./components/tasks/Tasks'));
+const Expenses = lazyWithReload(() => import('./components/expenses/Expenses'));
+const Bids = lazyWithReload(() => import('./components/bids/Bids'));
+const BidDetails = lazyWithReload(() => import('./components/bids/BidDetails'));
+const Subcontractors = lazyWithReload(() => import('./components/subcontractors/Subcontractors'));
+const SubcontractorForm = lazyWithReload(() => import('./components/subcontractors/SubcontractorForm'));
+const SubcontractorDetails = lazyWithReload(() => import('./components/subcontractors/SubcontractorDetails'));
+const Settings = lazyWithReload(() => import('./components/settings/Settings'));
+const Login = lazyWithReload(() => import('./components/auth/Login'));
+const SignUp = lazyWithReload(() => import('./components/auth/SignUp'));
+const Payments = lazyWithReload(() => import('./components/payments/Payments'));
+const Timeline = lazyWithReload(() => import('./components/timeline/Timeline'));
+const Calendar = lazyWithReload(() => import('./components/calendar/Calendar'));
 
 const RouteErrorBoundary: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const location = useLocation();
@@ -165,14 +166,15 @@ const App: React.FC = () => {
                   <Routes>
                     <Route path="/login" element={<Login />} />
                     <Route path="/signup" element={<SignUp />} />
+                    <Route path="/shared-reports/:shareId" element={<SharedReportView />} />
                     <Route path="/" element={<MainLayout />}>
                       <Route index element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
                       <Route path="dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
                       <Route path="projects" element={<ProtectedRoute><Projects /></ProtectedRoute>} />
-                      <Route path="projects/new" element={<ProtectedRoute><Navigate to={PROJECT_WIZARD_ROUTE} replace /></ProtectedRoute>} />
-                      <Route path="projects/new-custom" element={<ProtectedRoute><Navigate to={PROJECT_WIZARD_ROUTE} replace /></ProtectedRoute>} />
-                      <Route path="projects/new-residential" element={<ProtectedRoute><Navigate to={PROJECT_WIZARD_ROUTE} replace /></ProtectedRoute>} />
-                      <Route path="projects/residential-template" element={<ProtectedRoute><Navigate to={PROJECT_WIZARD_ROUTE} replace /></ProtectedRoute>} />
+                      <Route path="projects/new" element={<ProtectedRoute><Navigate to={createProjectWizardRoute()} replace /></ProtectedRoute>} />
+                      <Route path="projects/new-custom" element={<ProtectedRoute><Navigate to={createProjectWizardRoute()} replace /></ProtectedRoute>} />
+                      <Route path="projects/new-residential" element={<ProtectedRoute><Navigate to={createProjectWizardRoute()} replace /></ProtectedRoute>} />
+                      <Route path="projects/residential-template" element={<ProtectedRoute><Navigate to={createProjectWizardRoute()} replace /></ProtectedRoute>} />
                       <Route path="projects/wizard" element={<ProtectedRoute><ProjectWizard /></ProtectedRoute>} />
                       <Route path="projects/:id/edit" element={<ProtectedRoute><ProjectForm /></ProtectedRoute>} />
                       <Route path="projects/:projectId" element={<ProtectedRoute><ProjectDetailPage /></ProtectedRoute>} />
@@ -187,10 +189,9 @@ const App: React.FC = () => {
                       <Route path="subcontractors/:id" element={<ProtectedRoute><SubcontractorDetails /></ProtectedRoute>} />
                       <Route path="subcontractors/:id/edit" element={<ProtectedRoute><SubcontractorForm /></ProtectedRoute>} />
                       <Route path="settings" element={<ProtectedRoute><Settings /></ProtectedRoute>} />
-                      <Route path="templates" element={<ProtectedRoute><Navigate to={PROJECT_WIZARD_ROUTE} replace /></ProtectedRoute>} />
+                      <Route path="templates" element={<ProtectedRoute><Navigate to={createProjectWizardRoute()} replace /></ProtectedRoute>} />
                       <Route path="timeline" element={<ProtectedRoute><Timeline /></ProtectedRoute>} />
                       <Route path="calendar" element={<ProtectedRoute><Calendar /></ProtectedRoute>} />
-                      <Route path="shared-reports/:shareId" element={<ProtectedRoute><SharedReportView /></ProtectedRoute>} />
                     </Route>
                   </Routes>
 

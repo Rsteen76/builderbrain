@@ -7,10 +7,16 @@ import {
   buildTemplateBudgetItems,
   buildTemplateMilestones,
   buildTemplatePhases,
-  getDefaultBudgetForSize,
   getProjectWizardTemplate,
   type ProjectTemplateId,
 } from '../data/projectWizardTemplates';
+import {
+  allocateConstructionPhaseBudgets,
+  DEFAULT_COST_MARKET_ID,
+  DEFAULT_FINISH_LEVEL_ID,
+  type CostMarketId,
+  type FinishLevelId,
+} from '../data/constructionCostModel';
 
 // Define types for the project info
 export interface ProjectInfo {
@@ -21,6 +27,9 @@ export interface ProjectInfo {
   projectType: string;
   size?: string;
   totalBudget?: number;
+  landAcquisitionPrice?: number;
+  costMarket?: CostMarketId;
+  finishLevel?: FinishLevelId;
   currency?: string;
   status?: string;
   client?: string;
@@ -124,14 +133,16 @@ type ActionType =
   | { type: 'RESET_WIZARD' }
   | { type: 'VALIDATE_STEP'; payload: WizardStep };
 
-// Initial state
-const initialState: ProjectWizardState = {
+const createInitialState = (): ProjectWizardState => ({
   projectInfo: {
     name: '',
     location: '',
     projectType: '',
     size: '',
     totalBudget: 0,
+    landAcquisitionPrice: 0,
+    costMarket: DEFAULT_COST_MARKET_ID,
+    finishLevel: DEFAULT_FINISH_LEVEL_ID,
     currency: 'USD',
     startDate: null,
     estimatedStartDate: null,
@@ -153,7 +164,10 @@ const initialState: ProjectWizardState = {
   isSubmitted: false,
   createdProjectId: null,
   error: null,
-};
+});
+
+// Initial state
+const initialState: ProjectWizardState = createInitialState();
 
 const getWizardStartDate = (projectInfo: ProjectInfo): Date =>
   projectInfo.estimatedStartDate || projectInfo.startDate || new Date();
@@ -164,23 +178,68 @@ const getWizardEndDate = (projectInfo: ProjectInfo): Date => {
   return new Date(startDate.getTime() + 180 * 24 * 60 * 60 * 1000);
 };
 
+const LAND_ACQUISITION_BUDGET_ITEM_ID = 'land-acquisition-budget-item';
+const LAND_ACQUISITION_CATEGORY_ID = 'acquisition-purchase';
+
+const getConstructionBudget = (projectInfo: ProjectInfo, totalBudget: number): number =>
+  Math.max(0, totalBudget - (projectInfo.landAcquisitionPrice || 0));
+
+const applyCostModelToPhases = (
+  phases: WizardProjectPhase[],
+  projectInfo: ProjectInfo,
+  constructionBudget: number
+): WizardProjectPhase[] =>
+  allocateConstructionPhaseBudgets(
+    phases,
+    constructionBudget,
+    projectInfo.costMarket,
+    projectInfo.finishLevel
+  );
+
+const withLandAcquisitionBudgetItem = (
+  budget: BudgetItem[],
+  projectInfo: ProjectInfo
+): BudgetItem[] => {
+  const landAcquisitionPrice = projectInfo.landAcquisitionPrice || 0;
+  const budgetWithoutLand = budget.filter(item => item.id !== LAND_ACQUISITION_BUDGET_ITEM_ID);
+
+  if (landAcquisitionPrice <= 0) {
+    return budgetWithoutLand;
+  }
+
+  return [
+    {
+      id: LAND_ACQUISITION_BUDGET_ITEM_ID,
+      category: 'Land Acquisition',
+      description: 'Land acquisition price',
+      estimatedCost: landAcquisitionPrice,
+      actualCost: 0,
+    },
+    ...budgetWithoutLand,
+  ];
+};
+
 const applyTemplateToState = (
   state: ProjectWizardState,
   templateId: ProjectTemplateId
 ): ProjectWizardState => {
   const template = getProjectWizardTemplate(templateId);
-  const totalBudget =
-    state.projectInfo.totalBudget || getDefaultBudgetForSize(state.projectInfo.size);
+  const totalBudget = state.projectInfo.totalBudget || 0;
   const projectInfo = {
     ...state.projectInfo,
     projectType: state.projectInfo.projectType || template.projectType,
     totalBudget,
   };
-  const phases = buildTemplatePhases(
-    template,
-    getWizardStartDate(projectInfo),
-    getWizardEndDate(projectInfo),
-    totalBudget || 0
+  const constructionBudget = getConstructionBudget(projectInfo, totalBudget || 0);
+  const phases = applyCostModelToPhases(
+    buildTemplatePhases(
+      template,
+      getWizardStartDate(projectInfo),
+      getWizardEndDate(projectInfo),
+      constructionBudget
+    ),
+    projectInfo,
+    constructionBudget
   );
 
   const completedSteps = new Set(state.completedSteps);
@@ -197,7 +256,7 @@ const applyTemplateToState = (
     schedule: {
       milestones: buildTemplateMilestones(template, phases),
     },
-    budget: buildTemplateBudgetItems(phases),
+    budget: withLandAcquisitionBudgetItem(buildTemplateBudgetItems(phases), projectInfo),
     completedSteps,
   };
 };
@@ -221,11 +280,16 @@ const refreshTemplateSchedule = (
   }
 
   const template = getProjectWizardTemplate(state.selectedTemplateId);
-  const phases = buildTemplatePhases(
-    template,
-    getWizardStartDate(projectInfo),
-    getWizardEndDate(projectInfo),
-    totalBudget
+  const constructionBudget = getConstructionBudget(projectInfo, totalBudget);
+  const phases = applyCostModelToPhases(
+    buildTemplatePhases(
+      template,
+      getWizardStartDate(projectInfo),
+      getWizardEndDate(projectInfo),
+      constructionBudget
+    ),
+    projectInfo,
+    constructionBudget
   );
 
   return {
@@ -233,7 +297,7 @@ const refreshTemplateSchedule = (
     schedule: {
       milestones: buildTemplateMilestones(template, phases),
     },
-    budget: buildTemplateBudgetItems(phases),
+    budget: withLandAcquisitionBudgetItem(buildTemplateBudgetItems(phases), projectInfo),
   };
 };
 
@@ -249,8 +313,6 @@ const projectWizardReducer = (state: ProjectWizardState, action: ActionType): Pr
       const nextTotalBudget =
         'totalBudget' in action.payload
           ? action.payload.totalBudget || 0
-          : 'size' in action.payload && !state.projectInfo.totalBudget
-          ? getDefaultBudgetForSize(action.payload.size)
           : nextProjectInfo.totalBudget || 0;
       const projectInfo = {
         ...nextProjectInfo,
@@ -266,18 +328,28 @@ const projectWizardReducer = (state: ProjectWizardState, action: ActionType): Pr
         };
       }
 
-      const shouldRebalanceBudget = nextTotalBudget !== state.projectInfo.totalBudget;
+      const shouldRebalanceBudget =
+        nextTotalBudget !== state.projectInfo.totalBudget ||
+        projectInfo.landAcquisitionPrice !== state.projectInfo.landAcquisitionPrice ||
+        projectInfo.costMarket !== state.projectInfo.costMarket ||
+        projectInfo.finishLevel !== state.projectInfo.finishLevel;
+      const constructionBudget = getConstructionBudget(projectInfo, nextTotalBudget);
       const phases = shouldRebalanceBudget && !state.hasCustomizedPhases
-        ? rebalancePhaseBudgets(state.phases, nextTotalBudget)
+        ? applyCostModelToPhases(
+            rebalancePhaseBudgets(state.phases, constructionBudget),
+            projectInfo,
+            constructionBudget
+          )
         : state.phases;
+      const budget = shouldRebalanceBudget && !state.hasCustomizedPhases
+        ? buildTemplateBudgetItems(phases)
+        : state.budget;
 
       return {
         ...state,
         projectInfo,
         phases,
-        budget: shouldRebalanceBudget && !state.hasCustomizedPhases
-          ? buildTemplateBudgetItems(phases)
-          : state.budget,
+        budget: withLandAcquisitionBudgetItem(budget, projectInfo),
       };
     }
 
@@ -331,7 +403,7 @@ const projectWizardReducer = (state: ProjectWizardState, action: ActionType): Pr
         ...state,
         phases,
         hasCustomizedPhases: true,
-        budget: buildTemplateBudgetItems(phases),
+        budget: withLandAcquisitionBudgetItem(buildTemplateBudgetItems(phases), state.projectInfo),
       };
     }
 
@@ -341,7 +413,7 @@ const projectWizardReducer = (state: ProjectWizardState, action: ActionType): Pr
         ...state,
         phases,
         hasCustomizedPhases: true,
-        budget: buildTemplateBudgetItems(phases),
+        budget: withLandAcquisitionBudgetItem(buildTemplateBudgetItems(phases), state.projectInfo),
       };
     }
 
@@ -428,7 +500,6 @@ const projectWizardReducer = (state: ProjectWizardState, action: ActionType): Pr
           isValid = !!state.projectInfo.name &&
                    !!state.projectInfo.location &&
                    !!state.projectInfo.projectType &&
-                   !!state.projectInfo.size &&
                    !!state.projectInfo.description;
           break;
         case 'schedule':
@@ -481,7 +552,7 @@ const projectWizardReducer = (state: ProjectWizardState, action: ActionType): Pr
       };
 
     case 'RESET_WIZARD':
-      return initialState;
+      return createInitialState();
 
     default:
       return state;
@@ -660,6 +731,7 @@ export const ProjectWizardProvider: React.FC<ProjectWizardProviderProps> = ({ ch
       const startDate = getWizardStartDate(state.projectInfo);
       const endDate = getWizardEndDate(state.projectInfo);
       const totalBudget = state.projectInfo.totalBudget || 0;
+      const landAcquisitionPrice = state.projectInfo.landAcquisitionPrice || 0;
 
       const createdProject = await ProjectService.createProject(user.uid, {
         name: state.projectInfo.name,
@@ -714,10 +786,31 @@ export const ProjectWizardProvider: React.FC<ProjectWizardProviderProps> = ({ ch
         };
       });
 
+      const projectUpdate: Partial<Awaited<ReturnType<typeof ProjectService.createProject>>> = {};
+
       if (projectPhases.length > 0) {
+        projectUpdate.phases = projectPhases;
+        projectUpdate.tasks = projectPhases.flatMap(phase => phase.tasks || []);
+      }
+
+      if (landAcquisitionPrice > 0) {
+        projectUpdate.projections = [
+          ...(createdProject.projections || []),
+          {
+            id: LAND_ACQUISITION_BUDGET_ITEM_ID,
+            categoryId: LAND_ACQUISITION_CATEGORY_ID,
+            amount: landAcquisitionPrice,
+            notes: 'Land acquisition price',
+            createdAt: new Date(),
+            userId: user.uid,
+            projectId: createdProject.id,
+          },
+        ];
+      }
+
+      if (Object.keys(projectUpdate).length > 0) {
         await ProjectService.updateProject(createdProject.id, {
-          phases: projectPhases,
-          tasks: projectPhases.flatMap(phase => phase.tasks || []),
+          ...projectUpdate,
         });
       }
 

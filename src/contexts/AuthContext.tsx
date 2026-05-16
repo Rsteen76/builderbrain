@@ -7,6 +7,8 @@ import {
   onAuthStateChanged,
   GoogleAuthProvider,
   signInWithPopup,
+  signInWithRedirect,
+  getRedirectResult,
   EmailAuthProvider,
   reauthenticateWithCredential,
   updatePassword,
@@ -19,10 +21,19 @@ import {
 } from '../config/devMode';
 import { ensureDevDataSeeded } from '../services/devDataStore';
 import { UserService, User, UserRole } from '../services/user';
+import { getAuthErrorCode, getAuthErrorMessage, getGoogleAuthErrorMessage } from '../utils/authErrors';
 import { logger } from '../utils/logger';
 
 const PROFILE_AUTH_ERROR =
   'Unable to load your user profile. Please try signing in again.';
+
+const createGoogleProvider = () => {
+  const provider = new GoogleAuthProvider();
+  provider.addScope('email');
+  provider.addScope('profile');
+  provider.setCustomParameters({ prompt: 'select_account' });
+  return provider;
+};
 
 interface AuthContextType {
   user: FirebaseUser | null;
@@ -72,6 +83,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       return () => {};
     }
 
+    getRedirectResult(auth).catch((err) => {
+      logger.warn('Firebase Google redirect result failed', { code: getAuthErrorCode(err), error: err });
+      setError(getGoogleAuthErrorMessage(err));
+    });
+
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
       logger.debug('Auth state changed', { signedIn: Boolean(firebaseUser), uid: firebaseUser?.uid });
       setLoading(true);
@@ -112,18 +128,20 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const signIn = async (email: string, password: string) => {
     try {
       setError(null);
+      const normalizedEmail = email.trim();
       if (isDevAuthBypassEnabled) {
         setUser(devBypassFirebaseUser);
         setUserData({
           ...devBypassAppUser,
-          email: email || devBypassAppUser.email,
+          email: normalizedEmail || devBypassAppUser.email,
           updatedAt: new Date(),
         });
         return;
       }
-      await signInWithEmailAndPassword(auth, email, password);
+      await signInWithEmailAndPassword(auth, normalizedEmail, password);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to sign in');
+      logger.warn('Firebase email sign-in failed', { code: getAuthErrorCode(err), error: err });
+      setError(getAuthErrorMessage(err, 'Unable to sign in. Please try again.'));
       throw err;
     }
   };
@@ -149,7 +167,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         role: 'team_member' 
       });
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to sign up');
+      logger.warn('Firebase email sign-up failed', { code: getAuthErrorCode(err), error: err });
+      setError(getAuthErrorMessage(err, 'Unable to create your account. Please try again.'));
       throw err;
     }
   };
@@ -162,16 +181,26 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setUserData(devBypassAppUser);
         return;
       }
-      const provider = new GoogleAuthProvider();
-      const userCredential = await signInWithPopup(auth, provider);
-      
-      // Check if user exists, if not create a document
-      const existingUser = await UserService.getUser(userCredential.user.uid);
-      if (!existingUser) {
-        await UserService.createUser(userCredential.user);
-      }
+      await signInWithPopup(auth, createGoogleProvider());
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to sign in with Google');
+      logger.warn('Firebase Google sign-in failed', { code: getAuthErrorCode(err), error: err });
+      const code = getAuthErrorCode(err);
+
+      if (code === 'auth/internal-error' || code === 'auth/popup-blocked') {
+        try {
+          await signInWithRedirect(auth, createGoogleProvider());
+          return;
+        } catch (redirectErr) {
+          logger.warn('Firebase Google redirect sign-in failed', {
+            code: getAuthErrorCode(redirectErr),
+            error: redirectErr,
+          });
+          setError(getGoogleAuthErrorMessage(redirectErr));
+          throw redirectErr;
+        }
+      }
+
+      setError(getGoogleAuthErrorMessage(err));
       throw err;
     }
   };
@@ -186,7 +215,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
       await signOut(auth);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to sign out');
+      logger.warn('Firebase sign-out failed', { code: getAuthErrorCode(err), error: err });
+      setError(getAuthErrorMessage(err, 'Unable to sign out. Please try again.'));
       throw err;
     }
   };
@@ -230,7 +260,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       await reauthenticateWithCredential(user, credential);
       await updatePassword(user, newPassword);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to change password');
+      logger.warn('Firebase password change failed', { code: getAuthErrorCode(err), error: err });
+      setError(getAuthErrorMessage(err, 'Unable to change your password. Please try again.'));
       throw err;
     }
   };
@@ -240,7 +271,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     userData,
     loading,
     error,
-    isAuthenticated: !!user && !!userData && !error,
+    isAuthenticated: !!user && !!userData,
     role: userData?.role || 'team_member',
     signIn,
     signUp,

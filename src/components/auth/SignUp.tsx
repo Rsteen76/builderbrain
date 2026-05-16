@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { logger } from '../../utils/logger';
 import {
   Box,
@@ -21,20 +21,28 @@ const SignUp: React.FC = () => {
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [loading, setLoading] = useState(false);
-  const { signUp, signInWithGoogle, error } = useAuth();
+  const [formError, setFormError] = useState<string | null>(null);
+  const { signUp, signInWithGoogle, error, isAuthenticated } = useAuth();
   const navigate = useNavigate();
+
+  useEffect(() => {
+    if (isAuthenticated) {
+      navigate('/', { replace: true });
+    }
+  }, [isAuthenticated, navigate]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (password !== confirmPassword) {
+      setFormError('Passwords do not match.');
       return;
     }
 
+    setFormError(null);
     setLoading(true);
 
     try {
       await signUp(email, password);
-      navigate('/');
     } catch (err) {
       logger.error('Sign up failed:', err);
     } finally {
@@ -47,7 +55,6 @@ const SignUp: React.FC = () => {
 
     try {
       await signInWithGoogle();
-      navigate('/');
     } catch (err) {
       logger.error('Google sign in failed:', err);
     } finally {
@@ -85,6 +92,12 @@ const SignUp: React.FC = () => {
             </Alert>
           )}
 
+          {formError && (
+            <Alert severity="error" sx={{ width: '100%', mb: 2 }}>
+              {formError}
+            </Alert>
+          )}
+
           {isDevAuthBypassEnabled && (
             <Alert severity="info" sx={{ width: '100%', mb: 2 }}>
               Development auth bypass is enabled. Create any local session here without hitting Firebase Auth.
@@ -102,7 +115,10 @@ const SignUp: React.FC = () => {
               autoComplete="email"
               autoFocus
               value={email}
-              onChange={(e) => setEmail(e.target.value)}
+              onChange={(e) => {
+                setFormError(null);
+                setEmail(e.target.value);
+              }}
             />
             <TextField
               margin="normal"
@@ -114,7 +130,10 @@ const SignUp: React.FC = () => {
               id="password"
               autoComplete="new-password"
               value={password}
-              onChange={(e) => setPassword(e.target.value)}
+              onChange={(e) => {
+                setFormError(null);
+                setPassword(e.target.value);
+              }}
             />
             <TextField
               margin="normal"
@@ -125,7 +144,10 @@ const SignUp: React.FC = () => {
               type="password"
               id="confirmPassword"
               value={confirmPassword}
-              onChange={(e) => setConfirmPassword(e.target.value)}
+              onChange={(e) => {
+                setFormError(null);
+                setConfirmPassword(e.target.value);
+              }}
             />
             <Button
               type="submit"

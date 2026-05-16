@@ -43,7 +43,7 @@ interface ProjectInsightsProps {
     budgetVariance: number;
     materialsToOrder: number;
   };
-  onRefresh?: () => void;
+  onRefresh?: () => void | Promise<void>;
 }
 
 interface InsightCardProps {
@@ -71,7 +71,7 @@ const InsightCard: React.FC<InsightCardProps> = ({
 }) => {
   const theme = useTheme();
   const [isHovered, setIsHovered] = useState(false);
-  const navigate = useNavigate();
+  const isInteractive = Boolean(onClick);
   
   const isPositiveChange = change && change > 0;
   const isChangeGood = isPositiveChange ? positiveChangeIsGood : !positiveChangeIsGood;
@@ -80,40 +80,49 @@ const InsightCard: React.FC<InsightCardProps> = ({
   const formattedChange = change 
     ? `${isPositiveChange ? '+' : ''}${change}${suffix || '%'}`
     : undefined;
+  const displayValue = String(value);
+  const valueFontSize =
+    displayValue.length > 14
+      ? '0.7rem'
+      : displayValue.length > 11
+        ? '0.78rem'
+        : displayValue.length > 8
+          ? '1.05rem'
+          : '1.45rem';
     
   return (
     <Zoom in={true} style={{ transformOrigin: '0 0 0' }} timeout={500 + index * 100}>
       <Card
-        elevation={isHovered ? 2 : 0}
+        elevation={isInteractive && isHovered ? 2 : 0}
         sx={{
-          p: 1.75,
+          p: 1.25,
           height: '100%',
-          cursor: onClick ? 'pointer' : 'default',
+          cursor: isInteractive ? 'pointer' : 'default',
           transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
           borderRadius: 2.5,
           border: '1px solid',
-          borderColor: isHovered 
+          borderColor: isInteractive && isHovered
             ? alpha(color, 0.5) 
             : alpha(theme.palette.divider, 0.08),
-          background: isHovered
+          background: isInteractive && isHovered
             ? `linear-gradient(135deg, ${alpha(color, 0.04)} 0%, ${alpha(theme.palette.background.paper, 1)} 100%)`
             : theme.palette.background.paper,
           position: 'relative',
           overflow: 'hidden',
-          transform: isHovered ? 'translateY(-4px)' : 'none',
+          transform: isInteractive && isHovered ? 'translateY(-4px)' : 'none',
           '&::before': {
             content: '""',
             position: 'absolute',
             top: 0,
             left: 0,
             right: 0,
-            height: isHovered ? '3px' : '0',
+            height: isInteractive && isHovered ? '3px' : '0',
             background: color,
             transition: 'height 0.2s ease',
           },
         }}
         onClick={onClick}
-        onMouseEnter={() => setIsHovered(true)}
+        onMouseEnter={() => isInteractive && setIsHovered(true)}
         onMouseLeave={() => setIsHovered(false)}
       >
         <Box sx={{ position: 'relative' }}>
@@ -121,23 +130,23 @@ const InsightCard: React.FC<InsightCardProps> = ({
             display: 'flex', 
             alignItems: 'center',
             justifyContent: 'space-between',
-            mb: 1.5
+            mb: 1.25
           }}>
             <Box
               sx={{
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-                width: 36,
-                height: 36,
+                width: 32,
+                height: 32,
                 borderRadius: 1.5,
                 background: alpha(color, 0.12),
                 color: color,
                 transition: 'all 0.3s ease',
-                transform: isHovered ? 'scale(1.05)' : 'scale(1)',
+                transform: isInteractive && isHovered ? 'scale(1.05)' : 'scale(1)',
               }}
             >
-              {React.cloneElement(icon as React.ReactElement, { sx: { fontSize: 20 } })}
+              {React.cloneElement(icon as React.ReactElement, { sx: { fontSize: 18 } })}
             </Box>
             
             {formattedChange && (
@@ -152,10 +161,11 @@ const InsightCard: React.FC<InsightCardProps> = ({
                   backgroundColor: alpha(changeColor, 0.15),
                   color: changeColor,
                   fontWeight: 600,
-                  fontSize: '0.65rem',
-                  height: 22,
+                  fontSize: '0.6rem',
+                  height: 20,
+                  maxWidth: 54,
                   '.MuiChip-icon': {
-                    fontSize: '0.7rem',
+                    fontSize: '0.65rem',
                     color: 'inherit',
                   }
                 }}
@@ -167,11 +177,17 @@ const InsightCard: React.FC<InsightCardProps> = ({
             variant="h4" 
             component="div" 
             sx={{
-              fontSize: '1.5rem',
+              fontSize: valueFontSize,
               fontWeight: 700,
               mb: 0.25,
-              color: isHovered ? color : theme.palette.text.primary,
+              color: isInteractive && isHovered ? color : theme.palette.text.primary,
               transition: 'color 0.2s ease',
+              lineHeight: 1.1,
+              maxWidth: '100%',
+              minWidth: 0,
+              overflowWrap: 'anywhere',
+              wordBreak: 'break-word',
+              whiteSpace: 'nowrap',
             }}
           >
             {value}
@@ -181,7 +197,8 @@ const InsightCard: React.FC<InsightCardProps> = ({
             variant="body2" 
             sx={{ 
               color: theme.palette.text.secondary,
-              fontSize: '0.75rem',
+              fontSize: '0.7rem',
+              lineHeight: 1.2,
             }}
           >
             {title}
@@ -198,8 +215,8 @@ const InsightCard: React.FC<InsightCardProps> = ({
                   transform: 'rotate(-15deg)',
                 }}
               >
-                {icon && React.cloneElement(icon as React.ReactElement, { 
-                  sx: { fontSize: 60 } 
+                {icon && React.cloneElement(icon as React.ReactElement, {
+                  sx: { fontSize: 52 }
                 })}
               </Box>
             </Fade>
@@ -215,15 +232,16 @@ const ProjectInsights: React.FC<ProjectInsightsProps> = ({ stats, onRefresh }) =
   const navigate = useNavigate();
   const [isRefreshing, setIsRefreshing] = useState(false);
   
-  const handleRefresh = () => {
-    if (onRefresh) {
-      setIsRefreshing(true);
-      
-      // Add slight delay to simulate loading
-      setTimeout(() => {
-        onRefresh();
-        setIsRefreshing(false);
-      }, 800);
+  const handleRefresh = async () => {
+    if (!onRefresh || isRefreshing) {
+      return;
+    }
+
+    setIsRefreshing(true);
+    try {
+      await onRefresh();
+    } finally {
+      setIsRefreshing(false);
     }
   };
   
@@ -234,18 +252,13 @@ const ProjectInsights: React.FC<ProjectInsightsProps> = ({ stats, onRefresh }) =
       icon: <AssessmentIcon />,
       color: theme.palette.primary.main,
       onClick: () => navigate('/projects?status=active'),
-      change: 8, // Example data - in real app get from API
-      positiveChangeIsGood: true,
     },
     {
       title: 'Total Budget',
       value: formatCurrency(stats.totalBudget),
       icon: <MoneyIcon />,
       color: theme.palette.success.main,
-      onClick: () => navigate('/finance'),
-      change: 12, // Example data - in real app get from API
-      positiveChangeIsGood: true,
-      suffix: '%',
+      onClick: () => navigate('/expenses'),
     },
     {
       title: 'Tasks Due Soon',
@@ -253,8 +266,6 @@ const ProjectInsights: React.FC<ProjectInsightsProps> = ({ stats, onRefresh }) =
       icon: <AssignmentIcon />,
       color: stats.tasksDue > 10 ? theme.palette.warning.main : theme.palette.secondary.main,
       onClick: () => navigate('/tasks?filter=upcoming'),
-      change: stats.tasksDue > 10 ? 15 : -5, // Example data - in real app get from API
-      positiveChangeIsGood: false,
     },
     {
       title: 'Next Milestone',
@@ -264,7 +275,7 @@ const ProjectInsights: React.FC<ProjectInsightsProps> = ({ stats, onRefresh }) =
       icon: <ScheduleIcon />,
       color: theme.palette.secondary.main,
       onClick: stats.nextMilestone?.projectId 
-        ? () => navigate(`/projects/${stats.nextMilestone.projectId}/milestones`)
+        ? () => navigate(`/projects/${stats.nextMilestone.projectId}`)
         : undefined,
     },
     {
@@ -272,17 +283,13 @@ const ProjectInsights: React.FC<ProjectInsightsProps> = ({ stats, onRefresh }) =
       value: formatCurrency(Math.abs(stats.budgetVariance)),
       icon: stats.budgetVariance >= 0 ? <TrendingUpIcon /> : <ArrowDownwardIcon />,
       color: stats.budgetVariance >= 0 ? theme.palette.success.main : theme.palette.error.main,
-      onClick: () => navigate('/finance/budget-analysis'),
-      change: stats.budgetVariance !== 0 ? Math.round((stats.budgetVariance / 1000) * 10) / 10 : undefined,
-      positiveChangeIsGood: false,
-      suffix: 'K',
+      onClick: () => navigate('/expenses'),
     },
     {
       title: 'Materials to Order',
       value: stats.materialsToOrder || 0,
       icon: <ShippingIcon />,
       color: stats.materialsToOrder > 10 ? theme.palette.warning.main : theme.palette.info.main,
-      onClick: () => navigate('/materials?status=to-order'),
     },
   ];
 
@@ -364,7 +371,7 @@ const ProjectInsights: React.FC<ProjectInsightsProps> = ({ stats, onRefresh }) =
 
           <Grid container spacing={1.5}>
             {insights.map((insight, index) => (
-              <Grid item xs={6} sm={4} md={4} lg={2} key={index}>
+              <Grid item xs={12} sm={6} md={4} lg={2} key={index}>
                 <InsightCard {...insight} index={index} />
               </Grid>
             ))}

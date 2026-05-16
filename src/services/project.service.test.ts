@@ -55,7 +55,7 @@ jest.mock('firebase/firestore', () => {
   };
 });
 
-import { collection, doc, getDoc, getDocs, query, Timestamp, updateDoc, where, writeBatch } from 'firebase/firestore';
+import { addDoc, collection, doc, getDoc, getDocs, query, Timestamp, updateDoc, where, writeBatch } from 'firebase/firestore';
 import { ProjectService } from './project';
 import { StorageService } from './storage';
 
@@ -98,6 +98,32 @@ describe('legacy ProjectService', () => {
       exists: () => true,
       id: 'project-1',
       data: () => firestoreProject(),
+    });
+    (addDoc as jest.Mock).mockResolvedValue({ id: 'project-1' });
+  });
+
+  test('createProject strips undefined optional fields before writing to Firestore', async () => {
+    await ProjectService.createProject('user-1', {
+      name: 'Kitchen Remodel',
+      clientId: undefined,
+      endDate: undefined,
+      location: {
+        address: '123 Main',
+        city: undefined as unknown as string,
+        state: 'TX',
+        zipCode: '78701',
+      },
+    });
+
+    expect(addDoc).toHaveBeenCalledTimes(1);
+    const createPayload = (addDoc as jest.Mock).mock.calls[0][1];
+
+    expect(createPayload).not.toHaveProperty('clientId');
+    expect(createPayload).not.toHaveProperty('endDate');
+    expect(createPayload.location).toEqual({
+      address: '123 Main',
+      state: 'TX',
+      zipCode: '78701',
     });
   });
 

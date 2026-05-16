@@ -39,6 +39,22 @@ describe('expenseDashboardUtils', () => {
     ]);
   });
 
+  test('ignores non-numeric legacy amounts when building totals', () => {
+    const items = getCategoryBreakdownItems([
+      expense({ category: 'materials', amount: 'bad' as unknown as number }),
+      expense({ category: 'labor', amount: 300 }),
+    ]);
+
+    expect(calculateTotalExpenseAmount([
+      expense({ amount: 'bad' as unknown as number }),
+      expense({ amount: 300 }),
+    ])).toBe(300);
+    expect(items).toEqual([
+      { category: 'materials', label: 'Materials', amount: 0, percentage: 0 },
+      { category: 'labor', label: 'Labor', amount: 300, percentage: 100 },
+    ]);
+  });
+
   test('returns top project totals in descending order with a limit', () => {
     const items = getTopProjectExpenseItems([
       expense({ projectName: 'Project One', amount: 50 }),

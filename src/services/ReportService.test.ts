@@ -18,19 +18,21 @@ jest.mock('firebase/firestore', () => {
   }
 
   return {
-    addDoc: jest.fn(),
     collection: jest.fn((_db, path) => `collection:${path}`),
     deleteField: jest.fn(() => 'deleted-field'),
+    doc: jest.fn((_collectionRef, id) => `doc:shared_reports:${id}`),
+    getDoc: jest.fn(),
     getDocs: jest.fn(),
     query: jest.fn((base, ...constraints) => ({ base, constraints })),
     serverTimestamp: jest.fn(() => 'server-timestamp'),
+    setDoc: jest.fn(),
     Timestamp: MockTimestamp,
     updateDoc: jest.fn(),
     where: jest.fn((field, op, value) => ({ field, op, value })),
   };
 });
 
-import { addDoc } from 'firebase/firestore';
+import { doc, setDoc } from 'firebase/firestore';
 import { ReportService } from './ReportService';
 
 describe('ReportService', () => {
@@ -72,7 +74,7 @@ describe('ReportService', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
-    (addDoc as jest.Mock).mockResolvedValue({ id: 'shared-report-doc' });
+    (setDoc as jest.Mock).mockResolvedValue(undefined);
   });
 
   afterEach(() => {
@@ -99,7 +101,8 @@ describe('ReportService', () => {
     expect(getRandomValues).toHaveBeenCalledTimes(2);
     expect(mathRandomSpy).not.toHaveBeenCalled();
 
-    const firstStoredReport = (addDoc as jest.Mock).mock.calls[0][1];
+    expect(doc).toHaveBeenCalledWith('collection:shared_reports', firstShareId);
+    const firstStoredReport = (setDoc as jest.Mock).mock.calls[0][1];
     expect(firstStoredReport.shareId).toBe(firstShareId);
   });
 

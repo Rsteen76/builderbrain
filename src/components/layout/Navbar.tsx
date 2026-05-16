@@ -82,7 +82,7 @@ const Navbar: React.FC<NavbarProps> = ({ open, toggleDrawer }) => {
             transformOrigin={{ horizontal: 'right', vertical: 'top' }}
             anchorOrigin={{ horizontal: 'right', vertical: 'bottom' }}
           >
-            <MenuItem onClick={() => navigate('/profile')}>
+            <MenuItem onClick={() => navigate('/settings')}>
               <PersonIcon sx={{ mr: 1 }} />
               Profile
             </MenuItem>
@@ -97,4 +97,4 @@ const Navbar: React.FC<NavbarProps> = ({ open, toggleDrawer }) => {
   );
 };
 
-export default Navbar; 
+export default Navbar;

@@ -166,6 +166,7 @@ describe('ProjectWizardProvider', () => {
         projectType: 'Residential Construction',
         size: 'Large ($250,000 - $1,000,000)',
         totalBudget: 800000,
+        landAcquisitionPrice: 200000,
         estimatedStartDate: new Date('2026-01-15T00:00:00'),
         estimatedEndDate: new Date('2026-11-15T00:00:00'),
         client: 'Owner One',
@@ -209,7 +210,7 @@ describe('ProjectWizardProvider', () => {
           projectId: 'project-1',
           name: 'Pre-Construction & Permits',
           order: 1,
-          budget: 40000,
+          budget: 30000,
           tasks: expect.arrayContaining([
             expect.objectContaining({
               userId: 'user-1',
@@ -226,6 +227,16 @@ describe('ProjectWizardProvider', () => {
           userId: 'user-1',
           projectId: 'project-1',
           title: 'Confirm approved drawings and specifications',
+        }),
+      ]),
+      projections: expect.arrayContaining([
+        expect.objectContaining({
+          id: 'land-acquisition-budget-item',
+          categoryId: 'acquisition-purchase',
+          amount: 200000,
+          notes: 'Land acquisition price',
+          userId: 'user-1',
+          projectId: 'project-1',
         }),
       ]),
     }));
@@ -251,5 +262,33 @@ describe('ProjectWizardProvider', () => {
     expect(mockedProjectService.updateProject).not.toHaveBeenCalled();
     expect(wizard.context.state.isSubmitted).toBe(false);
     expect(wizard.context.state.error).toBe('You must be signed in to create a project');
+  });
+
+  test('resetWizard returns an abandoned project back to the first blank step', () => {
+    const wizard = renderWizard();
+
+    act(() => {
+      wizard.context.updateProjectInfo({
+        name: 'Abandoned Draft',
+        description: 'Started but not submitted.',
+        location: 'Bend, OR',
+        projectType: 'Residential Construction',
+      });
+      wizard.context.validateStep('project_info');
+      wizard.context.setCurrentStep('budget');
+    });
+
+    expect(wizard.context.state.currentStep).toBe('budget');
+    expect(wizard.context.state.projectInfo.name).toBe('Abandoned Draft');
+    expect(wizard.context.isStepComplete('project_info')).toBe(true);
+
+    act(() => {
+      wizard.context.resetWizard();
+    });
+
+    expect(wizard.context.state.currentStep).toBe('project_info');
+    expect(wizard.context.state.projectInfo.name).toBe('');
+    expect(wizard.context.state.projectInfo.location).toBe('');
+    expect(wizard.context.isStepComplete('project_info')).toBe(false);
   });
 });

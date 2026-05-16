@@ -69,6 +69,16 @@ describe('expenseListUtils', () => {
     expect(filterExpensesBySearch(expenses, '   ')).toBe(expenses);
   });
 
+  test('filters tolerate legacy records with missing text fields', () => {
+    const expenses = [
+      expense({ id: 'bad-description', description: undefined as unknown as string }),
+      expense({ id: 'good', description: 'Permit fee' }),
+    ];
+
+    expect(filterExpensesBySearch(expenses, 'permit').map(item => item.id)).toEqual(['good']);
+    expect(() => filterExpensesBySearch(expenses, 'missing')).not.toThrow();
+  });
+
   test('sorts by amount or date without mutating the input array', () => {
     const expenses = [
       expense({ id: 'middle', amount: 20, date: new Date('2026-02-01') }),
@@ -80,6 +90,18 @@ describe('expenseListUtils', () => {
     expect(sortExpenses(expenses, 'date', 'desc').map(item => item.id)).toEqual(['high', 'middle', 'low']);
     expect(expenses.map(item => item.id)).toEqual(['middle', 'high', 'low']);
     expect(sortExpenses(expenses, null, 'desc')).toBe(expenses);
+  });
+
+  test('sorts and totals tolerate non-numeric legacy amounts', () => {
+    const expenses = [
+      expense({ id: 'bad', amount: 'not-a-number' as unknown as number }),
+      expense({ id: 'good', amount: 25 }),
+    ];
+
+    expect(sortExpenses(expenses, 'amount', 'desc').map(item => item.id)).toEqual(['good', 'bad']);
+    expect(calculateGroupTotals(groupExpenses(expenses, 'category'))).toEqual({
+      Materials: 25,
+    });
   });
 
   test('groups expenses and calculates totals', () => {

@@ -36,6 +36,7 @@ import {
   getProjectTabCounts,
   type ProjectListFilterOptions,
 } from './list/projectListUtils';
+import { createProjectWizardRoute } from '../../constants/projectRoutes';
 
 // Main Projects Component with enhanced UI
 const Projects: React.FC = () => {
@@ -169,10 +170,11 @@ const Projects: React.FC = () => {
   };
 
   const handleTemplateSelect = (template: ProjectTemplateOption) => {
+    const wizardRoute = createProjectWizardRoute();
     if (template.params) {
-      navigate(template.route, { state: template.params });
+      navigate(wizardRoute, { state: template.params });
     } else {
-      navigate(template.route);
+      navigate(wizardRoute);
     }
     handleNewProjectMenuClose();
   };

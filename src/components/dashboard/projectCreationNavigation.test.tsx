@@ -40,8 +40,20 @@ describe('project creation navigation', () => {
     fireEvent.click(screen.getByText('New Project'));
 
     await waitFor(() => {
-      expect(mockNavigate).toHaveBeenCalledWith(PROJECT_WIZARD_ROUTE);
+      expect(mockNavigate).toHaveBeenCalledWith(expect.stringMatching(
+        new RegExp(`^${PROJECT_WIZARD_ROUTE}\\?new=\\d+$`)
+      ));
     });
+  });
+
+  test('QuickActions task and team actions route to existing screens', () => {
+    render(<QuickActions />);
+
+    fireEvent.click(screen.getByText('Create Task'));
+    expect(mockNavigate).toHaveBeenCalledWith('/tasks');
+
+    fireEvent.click(screen.getByText('Add Team Member'));
+    expect(mockNavigate).toHaveBeenCalledWith('/subcontractors/new');
   });
 
   test('RecentProjects empty state create action routes to the project wizard', () => {
@@ -49,6 +61,8 @@ describe('project creation navigation', () => {
 
     fireEvent.click(screen.getByRole('button', { name: /create new project/i }));
 
-    expect(mockNavigate).toHaveBeenCalledWith(PROJECT_WIZARD_ROUTE);
+    expect(mockNavigate).toHaveBeenCalledWith(expect.stringMatching(
+      new RegExp(`^${PROJECT_WIZARD_ROUTE}\\?new=\\d+$`)
+    ));
   });
 });

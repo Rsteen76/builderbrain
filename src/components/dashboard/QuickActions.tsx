@@ -4,19 +4,13 @@ import {
   Paper,
   Stack,
   Typography,
-  Button,
   useTheme,
   alpha,
   Grid,
   Box,
-  Tooltip,
   Grow,
-  useMediaQuery,
   IconButton,
   Zoom,
-  Card,
-  CardActionArea,
-  Avatar,
 } from '@mui/material';
 import {
   Construction as ConstructionIcon,
@@ -30,14 +24,13 @@ import {
   People as TeamIcon,
   ReceiptLong as ExpenseIcon,
   CalendarToday as CalendarIcon,
-  Build as BuildIcon,
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { ProjectService } from '../../services/project';
 import { ExpenseService } from '../../services/expense';
 import ExpenseFormModal from '../expenses/ExpenseFormModal';
-import { PROJECT_WIZARD_ROUTE } from '../../constants/projectRoutes';
+import { createProjectWizardRoute } from '../../constants/projectRoutes';
 
 interface ActionCardProps {
   title: string;
@@ -64,7 +57,6 @@ const ActionCard: React.FC<ActionCardProps> = ({
   const theme = useTheme();
   const navigate = useNavigate();
   const [isHovered, setIsHovered] = useState(false);
-  const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
   
   const handleClick = (event: React.MouseEvent<HTMLElement>) => {
     if (onClick) {
@@ -210,7 +202,6 @@ const QuickActions: React.FC<QuickActionsProps> = ({ onNewProjectClick }) => {
   const theme = useTheme();
   const navigate = useNavigate();
   const { user } = useAuth();
-  const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
   const [expenseModalOpen, setExpenseModalOpen] = useState(false);
   const [projects, setProjects] = useState<any[]>([]);
 
@@ -251,7 +242,7 @@ const QuickActions: React.FC<QuickActionsProps> = ({ onNewProjectClick }) => {
       description: 'Start planning a new construction project',
       icon: <AddIcon sx={{ fontSize: 24 }} />,
       primaryIcon: <ProjectIcon sx={{ fontSize: 24 }} />,
-      path: PROJECT_WIZARD_ROUTE,
+      path: createProjectWizardRoute(),
       color: theme.palette.primary.main,
       delay: 0,
       // Wrap onNewProjectClick to match the optional event signature
@@ -272,9 +263,6 @@ const QuickActions: React.FC<QuickActionsProps> = ({ onNewProjectClick }) => {
       path: '/tasks',
       color: theme.palette.success.main,
       delay: 1,
-      // Ensure other simple navigates also match the optional signature if needed
-      // but () => void is assignable to (event?: T) => void
-      onClick: () => navigate('/tasks/new'), 
     },
     {
       title: 'Calendar',
@@ -291,10 +279,9 @@ const QuickActions: React.FC<QuickActionsProps> = ({ onNewProjectClick }) => {
       description: 'Invite contractors or employees',
       icon: <GroupIcon sx={{ fontSize: 24 }} />,
       primaryIcon: <TeamIcon sx={{ fontSize: 24 }} />,
-      path: '/team',
+      path: '/subcontractors/new',
       color: theme.palette.warning.main,
       delay: 3,
-      onClick: () => navigate('/team'),
     },
     {
       title: 'Add Expense',
@@ -350,25 +337,6 @@ const QuickActions: React.FC<QuickActionsProps> = ({ onNewProjectClick }) => {
           </Typography>
         </Stack>
         
-        <Tooltip title="View all actions" arrow>
-          <Button
-            variant="text"
-            size="small"
-            endIcon={<ArrowForwardIcon fontSize="small" />}
-            onClick={() => navigate('/actions')}
-            sx={{
-              fontSize: '0.75rem',
-              fontWeight: 500,
-              color: theme.palette.text.secondary,
-              '&:hover': {
-                bgcolor: 'transparent',
-                color: theme.palette.primary.main,
-              }
-            }}
-          >
-            View All
-          </Button>
-        </Tooltip>
       </Box>
 
       <Grid container spacing={2}>

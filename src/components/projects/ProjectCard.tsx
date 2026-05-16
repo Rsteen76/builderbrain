@@ -156,6 +156,13 @@ const ProjectCard: React.FC<ProjectCardProps> = (props) => {
 
   const statusColor = getStatusColor();
   const progressColor = getProgressColor();
+  const budgetText = String(budget);
+  const budgetFontSize =
+    budgetText.length > 14
+      ? '0.72rem'
+      : budgetText.length > 11
+        ? '0.8rem'
+        : '0.9rem';
 
   const getStatusIcon = () => {
     switch (status) {
@@ -407,7 +414,15 @@ const ProjectCard: React.FC<ProjectCardProps> = (props) => {
                 <Typography 
                   variant="h6" 
                   color="text.primary" 
-                  sx={{ fontSize: '0.9rem', fontWeight: 700, lineHeight: 1.2 }}
+                  sx={{
+                    fontSize: budgetFontSize,
+                    fontWeight: 700,
+                    lineHeight: 1.15,
+                    maxWidth: '100%',
+                    minWidth: 0,
+                    overflowWrap: 'anywhere',
+                    wordBreak: 'break-word',
+                  }}
                 >
                   {budget}
                 </Typography>

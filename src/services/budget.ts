@@ -1,4 +1,4 @@
-import { doc, Timestamp, updateDoc } from 'firebase/firestore';
+import { doc, getDoc, Timestamp, updateDoc } from 'firebase/firestore';
 import { db } from '../config/firebase';
 import { BudgetProjection } from '../types';
 
@@ -84,8 +84,25 @@ export const updateProjectBudget = async (
   projectId: string,
   budget: number | null,
 ): Promise<void> => {
-  await updateDoc(doc(db, 'projects', projectId), {
-    budget,
+  const projectRef = doc(db, 'projects', projectId);
+  const projectSnapshot = await getDoc(projectRef);
+  const existingBudget = projectSnapshot.exists() ? projectSnapshot.data().budget : null;
+  const spent = typeof existingBudget === 'object' && existingBudget !== null && typeof existingBudget.spent === 'number'
+    ? existingBudget.spent
+    : 0;
+  const contingency = typeof existingBudget === 'object' && existingBudget !== null && typeof existingBudget.contingency === 'number'
+    ? existingBudget.contingency
+    : undefined;
+
+  await updateDoc(projectRef, {
+    budget: budget === null
+      ? null
+      : {
+        total: budget,
+        spent,
+        remaining: budget - spent,
+        ...(contingency !== undefined ? { contingency } : {}),
+      },
     updatedAt: Timestamp.now(),
   });
 };

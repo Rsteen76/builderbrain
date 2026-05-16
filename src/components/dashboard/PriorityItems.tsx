@@ -131,7 +131,7 @@ const TaskCard: React.FC<{ task: DashboardTask }> = ({ task }) => {
         overflow: 'hidden',
         cursor: 'pointer',
       }}
-      onClick={() => navigate(`/tasks/${task.id}`)}
+      onClick={() => navigate(task.projectId ? `/projects/${task.projectId}` : '/tasks')}
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
     >
@@ -230,7 +230,7 @@ const PaymentCard: React.FC<{ payment: Payment }> = ({ payment }) => {
         cursor: 'pointer',
         backgroundColor: alpha(theme.palette.error.main, isHovered ? 0.04 : 0),
       }}
-      onClick={() => navigate(`/finance/payments/${payment.id}`)}
+      onClick={() => navigate('/payments')}
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
     >
@@ -422,7 +422,7 @@ const PriorityItems: React.FC<PriorityItemsProps> = ({ upcomingTasks, overduePay
                 variant="text"
                 size="small"
                 endIcon={<ArrowForwardIcon fontSize="small" />}
-                onClick={() => navigate(activeTab === 0 ? '/tasks' : '/finance/payments')}
+                onClick={() => navigate(activeTab === 0 ? '/tasks' : '/payments')}
                 sx={{
                   fontSize: '0.75rem',
                   fontWeight: 500,
@@ -507,7 +507,7 @@ const PriorityItems: React.FC<PriorityItemsProps> = ({ upcomingTasks, overduePay
               {activeTab === 0 && (
                 <Box>
                   {upcomingTasks.length > 0 ? (
-                    upcomingTasks
+                    [...upcomingTasks]
                       .sort((a, b) => {
                         // Sort by priority first
                         const priorityOrder = { urgent: 0, high: 1, medium: 2, low: 3 };
@@ -530,7 +530,7 @@ const PriorityItems: React.FC<PriorityItemsProps> = ({ upcomingTasks, overduePay
                         variant="outlined"
                         size="small"
                         sx={{ mt: 2 }}
-                        onClick={() => navigate('/tasks/new')}
+                        onClick={() => navigate('/tasks')}
                       >
                         Create New Task
                       </Button>
@@ -542,7 +542,7 @@ const PriorityItems: React.FC<PriorityItemsProps> = ({ upcomingTasks, overduePay
               {activeTab === 1 && (
                 <Box>
                   {overduePayments.length > 0 ? (
-                    overduePayments
+                    [...overduePayments]
                       .sort((a, b) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime())
                       .map((payment, index) => (
                         <PaymentCard key={payment.id} payment={payment} />

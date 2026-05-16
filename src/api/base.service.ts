@@ -25,6 +25,31 @@ export type FirestoreConverter<T> = {
   fromFirestore: (data: DocumentData) => T;
 };
 
+const removeUndefinedFields = <T>(value: T): T => {
+  if (value === undefined) {
+    return undefined as T;
+  }
+
+  if (value === null || value instanceof Date || value instanceof Timestamp) {
+    return value;
+  }
+
+  if (Array.isArray(value)) {
+    return value.map(item => removeUndefinedFields(item)) as T;
+  }
+
+  if (typeof value === 'object') {
+    return Object.entries(value as Record<string, unknown>).reduce((cleaned, [key, entryValue]) => {
+      if (entryValue !== undefined) {
+        cleaned[key] = removeUndefinedFields(entryValue);
+      }
+      return cleaned;
+    }, {} as Record<string, unknown>) as T;
+  }
+
+  return value;
+};
+
 export abstract class BaseService<T extends { id?: string }> {
   protected collectionName: string;
   protected collectionRef: CollectionReference;
@@ -70,8 +95,9 @@ export abstract class BaseService<T extends { id?: string }> {
    */
   async create(data: Omit<T, 'id'>): Promise<ApiResponse<T>> {
     try {
+      const firestoreData = this.converter ? this.converter.toFirestore(data as T) : data;
       const docRef = await addDoc(this.collectionRef, 
-        this.converter ? this.converter.toFirestore(data as T) : data);
+        removeUndefinedFields(firestoreData));
       
       const newItem = {
         ...data,
@@ -95,7 +121,7 @@ export abstract class BaseService<T extends { id?: string }> {
       const docRef = doc(this.collectionRef, id);
       const updateData = this.converter ? this.converter.toFirestore(data as T) : data;
       
-      await updateDoc(docRef, updateData);
+      await updateDoc(docRef, removeUndefinedFields(updateData));
       
       return {
         status: 'success',

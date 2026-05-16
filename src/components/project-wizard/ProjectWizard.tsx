@@ -1,15 +1,15 @@
-import React, { useState } from 'react';
+import React from 'react';
 import {
   Box,
   Paper,
   Stepper,
   Step,
-  StepLabel,
+  StepButton,
   Button,
   Typography,
   Container
 } from '@mui/material';
-import { useLocation } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import {
   ProjectWizardProvider,
   useProjectWizard,
@@ -35,9 +35,10 @@ const steps = [
 export const ProjectWizard: React.FC = () => {
   const location = useLocation();
   const initialTemplateId = (location.state as { template?: ProjectTemplateId } | null)?.template;
+  const wizardInstanceKey = `${location.pathname}:${location.search}:${initialTemplateId || 'blank'}`;
 
   return (
-    <ProjectWizardProvider initialTemplateId={initialTemplateId}>
+    <ProjectWizardProvider key={wizardInstanceKey} initialTemplateId={initialTemplateId}>
       <ProjectWizardContent />
     </ProjectWizardProvider>
   );
@@ -48,10 +49,12 @@ const ProjectWizardContent: React.FC = () => {
   const {
     state,
     setCurrentStep,
+    resetWizard,
     isStepComplete,
     canProceedToNextStep,
     submitProject
   } = useProjectWizard();
+  const navigate = useNavigate();
 
   const { currentStep, isSubmitting, isSubmitted, error } = state;
 
@@ -76,8 +79,26 @@ const ProjectWizardContent: React.FC = () => {
     await submitProject();
   };
 
+  const handleCancel = () => {
+    resetWizard();
+    navigate('/projects', { replace: true });
+  };
+
+  const handleStartOver = () => {
+    resetWizard();
+  };
+
   // Determine the active step index
   const activeStepIndex = steps.findIndex(step => step.value === currentStep);
+
+  const canOpenStep = (step: WizardStep, index: number) =>
+    index <= activeStepIndex || isStepComplete(step);
+
+  const handleStepClick = (step: WizardStep, index: number) => {
+    if (canOpenStep(step, index)) {
+      setCurrentStep(step);
+    }
+  };
 
   // Render the current step content
   const getStepContent = (step: WizardStep) => {
@@ -131,7 +152,12 @@ const ProjectWizardContent: React.FC = () => {
         <Stepper activeStep={activeStepIndex} alternativeLabel sx={{ mb: 4, mt: 2 }}>
           {steps.map((step, index) => (
             <Step key={step.value} completed={isStepComplete(step.value)}>
-              <StepLabel>{step.label}</StepLabel>
+              <StepButton
+                onClick={() => handleStepClick(step.value, index)}
+                disabled={!canOpenStep(step.value, index)}
+              >
+                {step.label}
+              </StepButton>
             </Step>
           ))}
         </Stepper>
@@ -146,15 +172,33 @@ const ProjectWizardContent: React.FC = () => {
           </Typography>
         )}
 
-        <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 3 }}>
-          <Button
-            variant="outlined"
-            color="primary"
-            disabled={activeStepIndex === 0}
-            onClick={handleBack}
-          >
-            Back
-          </Button>
+        <Box sx={{ display: 'flex', justifyContent: 'space-between', gap: 2, mt: 3 }}>
+          <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
+            <Button
+              variant="outlined"
+              color="inherit"
+              onClick={handleCancel}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="outlined"
+              color="primary"
+              disabled={activeStepIndex === 0}
+              onClick={handleBack}
+            >
+              Back
+            </Button>
+            {activeStepIndex > 0 && (
+              <Button
+                variant="text"
+                color="primary"
+                onClick={handleStartOver}
+              >
+                Start Over
+              </Button>
+            )}
+          </Box>
 
           <Box>
             {activeStepIndex === steps.length - 1 ? (
