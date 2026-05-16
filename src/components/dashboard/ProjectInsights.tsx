@@ -71,7 +71,7 @@ const InsightCard: React.FC<InsightCardProps> = ({
 }) => {
   const theme = useTheme();
   const [isHovered, setIsHovered] = useState(false);
-  const navigate = useNavigate();
+  const isInteractive = Boolean(onClick);
   
   const isPositiveChange = change && change > 0;
   const isChangeGood = isPositiveChange ? positiveChangeIsGood : !positiveChangeIsGood;
@@ -93,36 +93,36 @@ const InsightCard: React.FC<InsightCardProps> = ({
   return (
     <Zoom in={true} style={{ transformOrigin: '0 0 0' }} timeout={500 + index * 100}>
       <Card
-        elevation={isHovered ? 2 : 0}
+        elevation={isInteractive && isHovered ? 2 : 0}
         sx={{
           p: 1.25,
           height: '100%',
-          cursor: onClick ? 'pointer' : 'default',
+          cursor: isInteractive ? 'pointer' : 'default',
           transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
           borderRadius: 2.5,
           border: '1px solid',
-          borderColor: isHovered 
+          borderColor: isInteractive && isHovered
             ? alpha(color, 0.5) 
             : alpha(theme.palette.divider, 0.08),
-          background: isHovered
+          background: isInteractive && isHovered
             ? `linear-gradient(135deg, ${alpha(color, 0.04)} 0%, ${alpha(theme.palette.background.paper, 1)} 100%)`
             : theme.palette.background.paper,
           position: 'relative',
           overflow: 'hidden',
-          transform: isHovered ? 'translateY(-4px)' : 'none',
+          transform: isInteractive && isHovered ? 'translateY(-4px)' : 'none',
           '&::before': {
             content: '""',
             position: 'absolute',
             top: 0,
             left: 0,
             right: 0,
-            height: isHovered ? '3px' : '0',
+            height: isInteractive && isHovered ? '3px' : '0',
             background: color,
             transition: 'height 0.2s ease',
           },
         }}
         onClick={onClick}
-        onMouseEnter={() => setIsHovered(true)}
+        onMouseEnter={() => isInteractive && setIsHovered(true)}
         onMouseLeave={() => setIsHovered(false)}
       >
         <Box sx={{ position: 'relative' }}>
@@ -143,7 +143,7 @@ const InsightCard: React.FC<InsightCardProps> = ({
                 background: alpha(color, 0.12),
                 color: color,
                 transition: 'all 0.3s ease',
-                transform: isHovered ? 'scale(1.05)' : 'scale(1)',
+                transform: isInteractive && isHovered ? 'scale(1.05)' : 'scale(1)',
               }}
             >
               {React.cloneElement(icon as React.ReactElement, { sx: { fontSize: 18 } })}
@@ -180,7 +180,7 @@ const InsightCard: React.FC<InsightCardProps> = ({
               fontSize: valueFontSize,
               fontWeight: 700,
               mb: 0.25,
-              color: isHovered ? color : theme.palette.text.primary,
+              color: isInteractive && isHovered ? color : theme.palette.text.primary,
               transition: 'color 0.2s ease',
               lineHeight: 1.1,
               maxWidth: '100%',
