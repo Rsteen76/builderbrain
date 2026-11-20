@@ -1,4 +1,5 @@
 import { getDevProjectById } from './devDataStore';
+import { calculateProjectHealth } from '../utils/projectHealth';
 import { clearDevDataMemoryState } from './devDataStore/storage';
 
 describe('seeded dev data', () => {
@@ -7,7 +8,7 @@ describe('seeded dev data', () => {
     clearDevDataMemoryState();
   });
 
-  it('counts only paid and approved expenses as spent', () => {
+  it('counts approved and paid expenses as spent, not pending ones', () => {
     const kitchen = getDevProjectById('proj-kitchen');
     const budget = kitchen?.budget as { total: number; spent: number; remaining: number };
 
@@ -21,5 +22,30 @@ describe('seeded dev data', () => {
     const budget = hillside?.budget as { total: number; spent: number; remaining: number };
 
     expect(budget).toMatchObject({ total: 850000, spent: 85800, remaining: 764200 });
+  });
+
+  it('shows the kitchen install phase no actual cost, since its $15,000 expense is only pending', () => {
+    const install = getDevProjectById('proj-kitchen')?.phases?.find((phase) => phase.id === 'phase-kitchen-install');
+
+    // The Budget tab phase table uses the same calculateSpent, so it shows $0 here too.
+    expect(install?.actualCost).toBe(0);
+  });
+
+  it.each([
+    ['proj-hillside', 'Hillside'],
+    ['proj-kitchen', 'kitchen'],
+    ['proj-tenant', 'completed tenant'],
+  ])('reads the seeded %s project (%s) as on track', (projectId) => {
+    const project = getDevProjectById(projectId);
+    const budget = project?.budget as { total: number; spent: number };
+
+    expect(
+      calculateProjectHealth({
+        spent: budget.spent,
+        budget: budget.total,
+        status: project?.status ?? '',
+        phases: project?.phases ?? [],
+      })
+    ).toBe('on_track');
   });
 });
