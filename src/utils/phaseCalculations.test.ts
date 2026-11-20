@@ -4,6 +4,7 @@ import {
   calculatePhaseProposedCosts,
   calculateProjectProgress,
   countCompletedPhases,
+  getProjectProgress,
 } from './phaseCalculations';
 import { Bid, Expense, ProjectPhase } from '../types';
 
@@ -126,5 +127,22 @@ describe('phase actual costs', () => {
     ]);
 
     expect(actual['phase-foundation']).toBe(19100);
+  });
+});
+
+describe('getProjectProgress', () => {
+  const phases = [{ status: 'completed' }, { status: 'planning' }];
+
+  it('is the share of phases completed', () => {
+    expect(getProjectProgress({ status: 'active', phases })).toBe(50);
+  });
+
+  it('is 100 for a completed project even with unfinished phases', () => {
+    expect(getProjectProgress({ status: 'completed', phases })).toBe(100);
+    expect(getProjectProgress({ status: 'completed' })).toBe(100);
+  });
+
+  it('is undefined when there are no phases to work from and the project is not completed', () => {
+    expect(getProjectProgress({ status: 'active' })).toBeUndefined();
   });
 });

@@ -134,6 +134,24 @@ export const calculateProjectProgress = (
   return Math.round((completed / total) * 100);
 };
 
+interface ProgressSource {
+  status: string;
+  phases?: ReadonlyArray<{ status: string }>;
+}
+
+/**
+ * Progress shown for a project on the detail page, cards and list rows.
+ * A project whose status is completed is 100%, even if some phases were never marked
+ * complete. Otherwise it is the share of phases completed. Returns undefined only when
+ * the project has no phase list to work from (the caller then shows no progress).
+ */
+export function getProjectProgress(project: ProgressSource & { phases: ReadonlyArray<{ status: string }> }): number;
+export function getProjectProgress(project: ProgressSource): number | undefined;
+export function getProjectProgress(project: ProgressSource): number | undefined {
+  if (project.status === 'completed') return 100;
+  return project.phases ? calculateProjectProgress(project.phases) : undefined;
+}
+
 /**
  * Retrieves all payment schedule entries associated with a specific phase ID from a list of bids.
  * Includes synthetic payments for bids linked via top-level phaseId for legacy support.

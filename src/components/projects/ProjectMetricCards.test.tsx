@@ -25,13 +25,29 @@ const project: Project = {
 
 const expenses = (...amounts: number[]): Expense[] => amounts.map((amount) => ({ amount, status: 'paid' } as Expense));
 
-const renderCards = (spent: number[] = [47300, 38500]) =>
+interface RenderOptions {
+  spent?: number[];
+  status?: Project['status'];
+  progress?: number;
+  phaseCounts?: { completed: number; total: number };
+  elapsedDays?: number;
+  totalDays?: number;
+}
+
+const renderCards = ({
+  spent = [47300, 38500],
+  status = 'active',
+  progress = 20,
+  phaseCounts = { completed: 1, total: 5 },
+  elapsedDays = 42,
+  totalDays = 252,
+}: RenderOptions = {}) =>
   render(
     <ThemeProvider theme={theme}>
       <ProjectMetricCards
-        project={project}
-        projectProgress={20}
-        phaseCounts={{ completed: 1, total: 5 }}
+        project={{ ...project, status }}
+        projectProgress={progress}
+        phaseCounts={phaseCounts}
         budgetData={calculateBudgetData(project, expenses(...spent))}
         expenseBreakdown={{
           paid: 47300,
@@ -42,13 +58,11 @@ const renderCards = (spent: number[] = [47300, 38500]) =>
         timeline={{
           startDate: new Date('2026-03-26'),
           endDate: new Date('2026-12-03'),
-          elapsedDays: 42,
-          totalDays: 252,
-          percentComplete: 17,
+          elapsedDays,
+          totalDays,
+          percentComplete: Math.round((elapsedDays / totalDays) * 100),
         }}
         theme={theme}
-        getStatusIcon={() => <span />}
-        getStatusColor={() => theme.palette.success.main}
         formatCurrency={formatCurrency}
         formatPercentage={formatPercentage}
       />
@@ -81,7 +95,7 @@ describe('ProjectMetricCards', () => {
   });
 
   it('shows an over-budget project above 100% with a full, capped bar', () => {
-    renderCards([1020000]);
+    renderCards({ spent: [1020000] });
 
     expect(screen.getByText('120% of budget used')).toBeInTheDocument();
     expect(screen.getByText('-$170,000.00')).toBeInTheDocument();
@@ -90,5 +104,55 @@ describe('ProjectMetricCards', () => {
       .getAllByRole('progressbar')
       .find((bar) => bar.getAttribute('aria-valuenow') === '100');
     expect(budgetBar).toBeDefined();
+  });
+
+  it('reads the seeded Hillside project as on track', () => {
+    renderCards();
+
+    expect(screen.getByText('Project Health:')).toHaveTextContent('Project Health: On track');
+  });
+
+  it('reads an over-budget project as over budget', () => {
+    renderCards({ spent: [900000] });
+
+    expect(screen.getByText('Project Health:')).toHaveTextContent('Project Health: Over budget');
+  });
+
+  it('reads a project whose phases trail the clock by more than 10 points as behind schedule', () => {
+    renderCards({ progress: 20, phaseCounts: { completed: 1, total: 5 }, elapsedDays: 31, totalDays: 100 });
+
+    expect(screen.getByText('Project Health:')).toHaveTextContent('Project Health: Behind schedule');
+  });
+
+  it('reads a gap of exactly 10 points as on track', () => {
+    renderCards({ progress: 20, elapsedDays: 30, totalDays: 100 });
+
+    expect(screen.getByText('Project Health:')).toHaveTextContent('Project Health: On track');
+  });
+
+  it.each([
+    ['planning', 'PLANNING'],
+    ['active', 'ACTIVE'],
+    ['on_hold', 'ON HOLD'],
+    ['cancelled', 'CANCELLED'],
+    ['completed', 'COMPLETED'],
+  ])('shows a %s project with a %s chip', (status, label) => {
+    renderCards({ status: status as Project['status'] });
+
+    expect(screen.getByText(label)).toBeInTheDocument();
+  });
+
+  it('shows the active chip with its own icon, not the question-mark fallback', () => {
+    renderCards({ status: 'active' });
+
+    expect(screen.queryByTestId('HelpOutlineIcon')).not.toBeInTheDocument();
+    expect(screen.getByTestId('PlayCircleOutlineIcon')).toBeInTheDocument();
+  });
+
+  it('says so when a completed project shows 100% with unfinished phases', () => {
+    renderCards({ status: 'completed', progress: 100, phaseCounts: { completed: 2, total: 3 } });
+
+    expect(screen.getByText('100%')).toBeInTheDocument();
+    expect(screen.getByText('Project marked completed (2 of 3 phases marked)')).toBeInTheDocument();
   });
 });

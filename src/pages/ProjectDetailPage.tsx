@@ -5,7 +5,6 @@ import {
   Container, CircularProgress, Alert, Box,
 } from '@mui/material';
 import { useTheme } from '@mui/material/styles';
-import { CheckCircle, ErrorOutline, Schedule, PlayCircleOutline, Block, HelpOutline } from '@mui/icons-material';
 
 import { ProjectDetailProvider, useProjectDetail } from '../contexts/ProjectDetailContext';
 
@@ -24,7 +23,7 @@ import {
 import { ExpenseBreakdown } from '../types';
 import { calculateBudgetData } from '../utils/projectMetrics';
 import { calculateExpenseBreakdown } from '../utils/expenseAnalytics';
-import { calculateProjectProgress, countCompletedPhases } from '../utils/phaseCalculations';
+import { getProjectProgress, countCompletedPhases } from '../utils/phaseCalculations';
 import { calculateTimelineData, TimelineData } from '../utils/timelineUtils';
 import { formatCurrency, formatPercentage } from '../utils/formatters';
 
@@ -54,10 +53,10 @@ const ProjectDetailContent: React.FC = () => {
     return calculateBudgetData(project, expenses);
   }, [project, expenses]);
 
-  const projectProgress = useMemo(() => {
-    if (!phases || phases.length === 0) return 0;
-    return calculateProjectProgress(phases);
-  }, [phases]);
+  const projectProgress = useMemo(
+    () => getProjectProgress({ status: project?.status ?? '', phases: phases || [] }),
+    [project?.status, phases]
+  );
 
   const phaseCounts = useMemo(() => countCompletedPhases(phases || []), [phases]);
   
@@ -107,21 +106,6 @@ const ProjectDetailContent: React.FC = () => {
           theme={theme}
           formatCurrency={formatCurrency}
           formatPercentage={formatPercentage}
-        getStatusColor={(status: string) => {
-          if (status?.includes('complete')) return theme.palette.success.main;
-          if (status?.includes('progress')) return theme.palette.info.main;
-          if (status?.includes('delayed') || status?.includes('hold')) return theme.palette.warning.main;
-          if (status?.includes('reject') || status?.includes('cancel')) return theme.palette.error.main;
-          return theme.palette.grey[500]; // Default
-        }}
-        getStatusIcon={(status: string) => {
-          if (status?.includes('complete')) return <CheckCircle fontSize="small" />;
-          if (status?.includes('progress')) return <PlayCircleOutline fontSize="small" />;
-          if (status?.includes('planning')) return <Schedule fontSize="small" />;
-          if (status?.includes('delayed') || status?.includes('hold')) return <Block fontSize="small" />;
-          if (status?.includes('reject') || status?.includes('cancel')) return <ErrorOutline fontSize="small" />;
-          return <HelpOutline fontSize="small" />; // Default
-        }}
       />
       <TabNavigation tabValue={tabValue} onTabChange={handleTabChange} /> 
       <TabContent tabValue={tabValue} />
