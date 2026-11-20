@@ -53,7 +53,6 @@ const fixtures = {
     userId,
     projects: [],
     upcomingTasks: [],
-    overduePayments: [],
     recentActivity: [],
     stats: {
       totalProjects: 0,
@@ -64,8 +63,6 @@ const fixtures = {
       tasksDue: 0,
       projectsAtRisk: 0,
       nextMilestone: { name: '', date: '', projectId: '' },
-      budgetVariance: 0,
-      materialsToOrder: 0,
     },
     generatedAt: now(),
   }),
