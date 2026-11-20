@@ -1,11 +1,11 @@
 import React from 'react';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import BudgetAllocationTracker from './BudgetAllocationTracker';
 import { useAuth } from '../../../contexts/AuthContext';
 import { getCategoryMappingsForProject } from '../../../services/category.service';
 import { updateProjectBudget } from '../../../services/budget';
 import { getProjectById, updateProject } from '../../../services/project';
-import type { ProjectPhase } from '../../../types';
+import type { Expense, ProjectPhase } from '../../../types';
 
 jest.mock('../../../contexts/AuthContext', () => ({
   useAuth: jest.fn(),
@@ -134,5 +134,29 @@ describe('BudgetAllocationTracker', () => {
     }));
     await waitFor(() => expect(onBudgetUpdated).toHaveBeenCalled());
     await waitFor(() => expect(screen.getAllByText('$25,000.00').length).toBeGreaterThan(0));
+  });
+
+  test('shows the same spent figure on the Budget tab and in the phase table', async () => {
+    const phaseExpense = (id: string, status: Expense['status'], amount: number, extra: Partial<Expense> = {}) =>
+      ({ id, phaseId: 'phase-1', status, amount, ...extra } as Expense);
+
+    render(
+      <BudgetAllocationTracker
+        projectId="project-1"
+        phases={phases}
+        expenses={[
+          phaseExpense('e1', 'approved', 10000),
+          phaseExpense('e2', 'partially_paid', 5000),
+          phaseExpense('p1', 'paid', 2000, { originalExpenseId: 'e2', tags: ['payment_record'] }),
+          phaseExpense('e3', 'pending', 7000),
+        ]}
+      />
+    );
+
+    const foundationRow = (await screen.findByText('Foundation')).closest('tr') as HTMLElement;
+    expect(within(foundationRow).getByText('$15,000.00')).toBeInTheDocument();
+    const totalsRow = screen.getByText('Totals').closest('tr') as HTMLElement;
+    expect(within(totalsRow).getByText('$15,000.00')).toBeInTheDocument();
+    expect(screen.getAllByText('$15,000.00').length).toBeGreaterThan(2);
   });
 });

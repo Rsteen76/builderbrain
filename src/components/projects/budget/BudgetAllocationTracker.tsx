@@ -110,6 +110,7 @@ import {
 import { Category, CategoryWithChildren } from '../../../types/category.types';
 
 import { BudgetItem } from '../../../types/budget.types';
+import { calculateSpent } from '../../../utils/expenseAnalytics';
 
 interface BudgetAllocationTrackerProps {
   projectId: string;
@@ -179,15 +180,13 @@ const BudgetAllocationTracker: React.FC<BudgetAllocationTrackerProps> = ({
   }, [phases]);
 
   const actualExpenseTotal = useMemo(
-    () => countedExpenses
-      .filter(expense => expense.status === 'paid' || expense.status === 'approved')
-      .reduce((sum, expense) => sum + (typeof expense.amount === 'number' ? expense.amount : 0), 0),
+    () => calculateSpent(countedExpenses),
     [countedExpenses]
   );
 
   const pendingExpenseTotal = useMemo(
     () => countedExpenses
-      .filter(expense => expense.status === 'pending' || expense.status === 'partially_paid')
+      .filter(expense => expense.status === 'pending')
       .reduce((sum, expense) => sum + (typeof expense.amount === 'number' ? expense.amount : 0), 0),
     [countedExpenses]
   );
@@ -213,11 +212,7 @@ const BudgetAllocationTracker: React.FC<BudgetAllocationTrackerProps> = ({
 
   const phaseRows = useMemo(
     () => budgetPhases.map((phase, index) => {
-      const phaseExpenses = countedExpenses.filter(expense => expense.phaseId === phase.id);
-      const actualCost = phaseExpenses.reduce(
-        (sum, expense) => sum + (typeof expense.amount === 'number' ? expense.amount : 0),
-        0
-      );
+      const actualCost = calculateSpent(countedExpenses.filter(expense => expense.phaseId === phase.id));
       const budget = typeof phase.budget === 'number' ? phase.budget : 0;
 
       return {
@@ -232,6 +227,8 @@ const BudgetAllocationTracker: React.FC<BudgetAllocationTrackerProps> = ({
     }).sort((a, b) => a.order - b.order),
     [budgetPhases, countedExpenses]
   );
+
+  const phaseActualTotal = phaseRows.reduce((sum, phase) => sum + phase.actualCost, 0);
 
   const expenseStatusRows = useMemo(() => {
     const statuses: ExpenseStatus[] = ['pending', 'approved', 'partially_paid', 'paid', 'rejected'];
@@ -701,8 +698,8 @@ const BudgetAllocationTracker: React.FC<BudgetAllocationTrackerProps> = ({
                         <TableRow>
                           <TableCell><Typography fontWeight={700}>Totals</Typography></TableCell>
                           <TableCell align="right"><Typography fontWeight={700}>{formatCurrency(phaseBudgetTotal)}</Typography></TableCell>
-                          <TableCell align="right"><Typography fontWeight={700}>{formatCurrency(actualExpenseTotal + pendingExpenseTotal)}</Typography></TableCell>
-                          <TableCell align="right"><Typography fontWeight={700}>{formatCurrency(phaseBudgetTotal - actualExpenseTotal - pendingExpenseTotal)}</Typography></TableCell>
+                          <TableCell align="right"><Typography fontWeight={700}>{formatCurrency(phaseActualTotal)}</Typography></TableCell>
+                          <TableCell align="right"><Typography fontWeight={700}>{formatCurrency(phaseBudgetTotal - phaseActualTotal)}</Typography></TableCell>
                           <TableCell />
                         </TableRow>
                       </TableFooter>

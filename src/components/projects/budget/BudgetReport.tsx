@@ -85,6 +85,7 @@ import {
   mapSimpleToDetailedCategory 
 } from '../../../data/hierarchicalCategories';
 import { Category, CategoryMapping } from '../../../types/category.types';
+import { calculateSpent, countsAsSpent } from '../../../utils/expenseAnalytics';
 
 // Props interface
 interface BudgetReportProps {
@@ -159,9 +160,7 @@ const BudgetReport: React.FC<BudgetReportProps> = ({
       ? project.budget 
       : project.budget?.total || 0;
     
-    const totalSpent = expenses
-      .filter(expense => expense.status === 'paid' || expense.status === 'approved')
-      .reduce((sum, expense) => sum + expense.amount, 0);
+    const totalSpent = calculateSpent(expenses);
     
     // Calculate pending expenses (submitted but not approved/paid)
     const pendingTotal = expenses
@@ -270,7 +269,7 @@ const BudgetReport: React.FC<BudgetReportProps> = ({
       const group = categoryMap.get(mainCategoryId)!;
       group.items.push(expense);
       if (expense.amount) {
-        if (expense.status === 'paid' || expense.status === 'approved') {
+        if (countsAsSpent(expense)) {
           group.spent += expense.amount;
         } else if (expense.status === 'pending') {
           group.pending += expense.amount;
