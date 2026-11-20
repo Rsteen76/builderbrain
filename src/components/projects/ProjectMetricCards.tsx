@@ -44,6 +44,7 @@ import TeamCard from './cards/TeamCard';
 interface ProjectMetricCardsProps {
   project: Project | null;
   projectProgress: number;
+  phaseCounts: { completed: number; total: number };
   budgetData: {
     totalBudget: number;
     totalActual: number;
@@ -73,6 +74,7 @@ interface ProjectMetricCardsProps {
 const ProjectMetricCards: React.FC<ProjectMetricCardsProps> = ({
   project,
   projectProgress,
+  phaseCounts,
   budgetData,
   expenseBreakdown,
   timeline,
@@ -216,7 +218,7 @@ const ProjectMetricCards: React.FC<ProjectMetricCardsProps> = ({
                   <AssignmentIcon sx={{ color: 'primary.main', mr: 1 }} />
                   <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>Progress</Typography>
                 </Box>
-                <Tooltip title="Project completion based on phase progress">
+                <Tooltip title="Share of the project's phases marked completed">
                   <IconButton size="small">
                     <InfoIcon fontSize="small" sx={{ color: 'text.secondary' }} />
                   </IconButton>
@@ -244,7 +246,9 @@ const ProjectMetricCards: React.FC<ProjectMetricCardsProps> = ({
               </Box>
 
               <Typography variant="body2" sx={{ color: 'text.secondary', mt: 1 }}>
-                {safeTimeline.elapsedDays} of {safeTimeline.totalDays} days elapsed
+                {phaseCounts.total > 0
+                  ? `${phaseCounts.completed} of ${phaseCounts.total} phases complete`
+                  : 'No phases yet'}
               </Typography>
             </CardContent>
           </Card>

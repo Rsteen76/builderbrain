@@ -109,16 +109,28 @@ export const calculatePhaseActualCosts = (
 };
 
 /**
- * Calculates the overall project progress based on completed phases.
- *
- * @param phases An array of project phase objects.
- * @returns A number representing the percentage of completed phases (0-100).
+ * Counts how many phases are marked completed, and how many there are.
  */
-export const calculateProjectProgress = (phases: ProjectPhase[]): number => {
-  const totalPhases = phases.length;
-  if (totalPhases === 0) return 0;
-  const completedPhases = phases.filter((p: ProjectPhase) => p.status === 'completed').length;
-  return Math.round((completedPhases / totalPhases) * 100);
+export const countCompletedPhases = (
+  phases: ReadonlyArray<{ status: string }>
+): { completed: number; total: number } => ({
+  completed: phases.filter((p) => p.status === 'completed').length,
+  total: phases.length,
+});
+
+/**
+ * Calculates the overall project progress: the percentage of phases marked completed (0-100).
+ * Every screen that shows a project's progress uses this one rule.
+ *
+ * @param phases The project's phases (only their status is read).
+ * @returns A whole number from 0 to 100.
+ */
+export const calculateProjectProgress = (
+  phases: ReadonlyArray<{ status: string }>
+): number => {
+  const { completed, total } = countCompletedPhases(phases);
+  if (total === 0) return 0;
+  return Math.round((completed / total) * 100);
 };
 
 /**

@@ -1,6 +1,8 @@
 import {
   calculatePhaseCommittedCosts,
   calculatePhaseProposedCosts,
+  calculateProjectProgress,
+  countCompletedPhases,
 } from './phaseCalculations';
 import { Bid, ProjectPhase } from '../types';
 
@@ -90,5 +92,22 @@ describe('phase cost calculations', () => {
       'phase-foundation': 8000,
       'phase-framing': 0,
     });
+  });
+});
+
+describe('project progress', () => {
+  const statuses = (...list: string[]) => list.map((status) => ({ status }));
+
+  it('counts completed phases out of all phases', () => {
+    const list = statuses('completed', 'in_progress', 'planning', 'planning', 'planning');
+
+    expect(countCompletedPhases(list)).toEqual({ completed: 1, total: 5 });
+    expect(calculateProjectProgress(list)).toBe(20);
+  });
+
+  it('is 100 when every phase is completed and 0 with no phases', () => {
+    expect(calculateProjectProgress(statuses('completed', 'completed', 'completed'))).toBe(100);
+    expect(calculateProjectProgress([])).toBe(0);
+    expect(countCompletedPhases([])).toEqual({ completed: 0, total: 0 });
   });
 });

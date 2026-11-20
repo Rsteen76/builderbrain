@@ -24,7 +24,7 @@ import {
 import { ExpenseBreakdown } from '../types';
 import { calculateBudgetData } from '../utils/projectMetrics';
 import { calculateExpenseBreakdown } from '../utils/expenseAnalytics';
-import { calculateProjectProgress } from '../utils/phaseCalculations';
+import { calculateProjectProgress, countCompletedPhases } from '../utils/phaseCalculations';
 import { calculateTimelineData, TimelineData } from '../utils/timelineUtils';
 import { formatCurrency, formatPercentage } from '../utils/formatters';
 
@@ -58,6 +58,8 @@ const ProjectDetailContent: React.FC = () => {
     if (!phases || phases.length === 0) return 0;
     return calculateProjectProgress(phases);
   }, [phases]);
+
+  const phaseCounts = useMemo(() => countCompletedPhases(phases || []), [phases]);
   
   const expenseBreakdownData: ExpenseBreakdown = useMemo(() => {
     if (!expenses) return { pending: 0, approved: 0, paid: 0, rejected: 0 };
@@ -99,6 +101,7 @@ const ProjectDetailContent: React.FC = () => {
           project={project}
           budgetData={budgetData}
         projectProgress={projectProgress}
+        phaseCounts={phaseCounts}
         expenseBreakdown={expenseBreakdownData}
         timeline={timelineData}
           theme={theme}
