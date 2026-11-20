@@ -1,10 +1,11 @@
 import {
+  calculatePhaseActualCosts,
   calculatePhaseCommittedCosts,
   calculatePhaseProposedCosts,
   calculateProjectProgress,
   countCompletedPhases,
 } from './phaseCalculations';
-import { Bid, ProjectPhase } from '../types';
+import { Bid, Expense, ProjectPhase } from '../types';
 
 const phases: ProjectPhase[] = [
   {
@@ -109,5 +110,21 @@ describe('project progress', () => {
     expect(calculateProjectProgress(statuses('completed', 'completed', 'completed'))).toBe(100);
     expect(calculateProjectProgress([])).toBe(0);
     expect(countCompletedPhases([])).toEqual({ completed: 0, total: 0 });
+  });
+});
+
+describe('phase actual costs', () => {
+  it('count paid and approved expenses, not pending or rejected ones', () => {
+    const expense = (status: Expense['status'], amount: number) =>
+      ({ phaseId: 'phase-foundation', status, amount } as Expense);
+
+    const actual = calculatePhaseActualCosts(phases, [
+      expense('paid', 12900),
+      expense('approved', 6200),
+      expense('pending', 15000),
+      expense('rejected', 700),
+    ]);
+
+    expect(actual['phase-foundation']).toBe(19100);
   });
 });

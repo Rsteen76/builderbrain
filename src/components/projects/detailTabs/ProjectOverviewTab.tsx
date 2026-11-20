@@ -121,7 +121,7 @@ const ProjectOverviewTab: React.FC = () => {
 
   const expensesByCategory = React.useMemo(() => {
     if (!expenses) return {};
-    return expenses.reduce((acc, exp) => {
+    return expenses.filter(exp => exp.status !== 'rejected').reduce((acc, exp) => {
       if (!acc[exp.category]) acc[exp.category] = 0;
       acc[exp.category] += exp.amount;
       return acc;
@@ -150,10 +150,11 @@ const ProjectOverviewTab: React.FC = () => {
 
   const expenseTotals = React.useMemo(() => {
     if (!expenses) return { totalExpenses: 0, pendingExpenses: 0, approvedExpenses: 0, paidExpenses: 0 };
-    const totalExpenses = expenses.reduce((sum, exp) => sum + exp.amount, 0);
     const pendingExpenses = expenses.filter(e => e.status === 'pending').reduce((sum, exp) => sum + exp.amount, 0);
     const approvedExpenses = expenses.filter(e => e.status === 'approved').reduce((sum, exp) => sum + exp.amount, 0);
     const paidExpenses = expenses.filter(e => e.status === 'paid').reduce((sum, exp) => sum + exp.amount, 0);
+    // Rejected expenses count nowhere.
+    const totalExpenses = paidExpenses + approvedExpenses + pendingExpenses;
     return { totalExpenses, pendingExpenses, approvedExpenses, paidExpenses };
   }, [expenses]);
 

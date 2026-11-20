@@ -23,7 +23,7 @@ const project: Project = {
   progress: 20,
 };
 
-const expenses = (...amounts: number[]): Expense[] => amounts.map((amount) => ({ amount } as Expense));
+const expenses = (...amounts: number[]): Expense[] => amounts.map((amount) => ({ amount, status: 'paid' } as Expense));
 
 const renderCards = (spent: number[] = [47300, 38500]) =>
   render(

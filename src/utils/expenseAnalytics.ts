@@ -86,4 +86,17 @@ export const calculateExpenseBreakdown = (expenses: Expense[]): ExpenseBreakdown
     }
   });
   return breakdown;
-}; 
+};
+
+/**
+ * Whether an expense counts as money spent: paid or approved. Pending expenses are
+ * shown on their own, and rejected ones count nowhere. This is the one rule for "spent".
+ */
+export const countsAsSpent = (expense: Pick<Expense, 'status'>): boolean =>
+  expense.status === 'paid' || expense.status === 'approved';
+
+/**
+ * Total spent on a set of expenses (paid plus approved).
+ */
+export const calculateSpent = (expenses: Array<Pick<Expense, 'status' | 'amount'>>): number =>
+  expenses.reduce((sum, expense) => (countsAsSpent(expense) ? sum + (expense.amount || 0) : sum), 0);

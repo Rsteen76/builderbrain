@@ -1,5 +1,6 @@
 // import React from 'react'; // Added for getStatusIcon
 import { ProjectPhase, Bid, Expense } from '../types'; // Adjust path if needed
+import { countsAsSpent } from './expenseAnalytics';
 // import {
 //   Done as DoneIcon,
 //   Pending as PendingIcon,
@@ -83,7 +84,7 @@ export const calculatePhaseCommittedCosts = (
 };
 
 /**
- * Calculates the total actual costs (sum of expenses) for each phase.
+ * Calculates the actual cost of each phase: its paid and approved expenses.
  *
  * @param phases An array of project phase objects.
  * @param expenses An array of expense objects for the project.
@@ -100,7 +101,7 @@ export const calculatePhaseActualCosts = (
   });
 
   expenses.forEach((expense: Expense) => {
-    if (expense.phaseId) {
+    if (expense.phaseId && countsAsSpent(expense)) {
       actualCosts[expense.phaseId] = (actualCosts[expense.phaseId] || 0) + (expense.amount || 0);
     }
   });

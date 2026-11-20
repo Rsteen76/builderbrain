@@ -1,10 +1,11 @@
 import { Project, Expense } from '../types'; // Adjust path if needed
+import { calculateSpent } from './expenseAnalytics';
 
 /**
  * Calculates budget summary data for a project.
  * 
  * @param project The project object (or null).
- * @param expenses An array of expense objects for the project.
+ * @param expenses An array of expense objects for the project. Only paid and approved ones count as spent.
  * @returns An object containing totalBudget, totalActual, difference, and percentUsed.
  * percentUsed is the exact share of budget spent (10.09 means 10.09%). It is not capped,
  * so an over-budget project reports more than 100; callers cap the progress bar themselves.
@@ -23,7 +24,7 @@ export const calculateBudgetData = (
     }
   }
   
-  const totalActual = expenses.reduce((sum, e) => sum + (e.amount || 0), 0); // Ensure amount is treated as number
+  const totalActual = calculateSpent(expenses);
   const difference = numericBudget - totalActual;
   const percentUsed = numericBudget > 0 ? Math.max(0, (totalActual / numericBudget) * 100) : 0;
   

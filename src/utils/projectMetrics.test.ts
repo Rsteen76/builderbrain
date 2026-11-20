@@ -17,7 +17,8 @@ const makeProject = (budget: Project['budget']): Project => ({
   progress: 0,
 });
 
-const expense = (amount: number): Expense => ({ amount } as Expense);
+const expense = (amount: number, status: Expense['status'] = 'paid'): Expense =>
+  ({ amount, status } as Expense);
 
 describe('calculateBudgetData', () => {
   it('reports $85,800 spent of $850,000 as 10.09 percent used, not 1,000', () => {
@@ -49,5 +50,17 @@ describe('calculateBudgetData', () => {
   it('reports 0 percent when there is no budget or no project', () => {
     expect(calculateBudgetData(makeProject(0), [expense(100)]).percentUsed).toBe(0);
     expect(calculateBudgetData(null, []).percentUsed).toBe(0);
+  });
+
+  it('counts paid and approved as spent, and leaves pending and rejected out', () => {
+    const data = calculateBudgetData(makeProject(145000), [
+      expense(12900, 'paid'),
+      expense(6200, 'approved'),
+      expense(15000, 'pending'),
+      expense(4000, 'rejected'),
+    ]);
+
+    expect(data.totalActual).toBe(19100);
+    expect(data.difference).toBe(125900);
   });
 });
