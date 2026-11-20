@@ -188,5 +188,10 @@
     "jest": "30.4.0",
     "jest-environment-jsdom": "30.4.0",
     "vite": "8.0.11"
+  },
+  "overrides": {
+    "firebase": {
+      "@grpc/grpc-js": "1.13.6"
+    }
   }
 }
