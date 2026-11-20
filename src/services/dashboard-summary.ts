@@ -180,6 +180,7 @@ export const deriveDashboardSummary = (
   let nextMilestone = { name: 'No upcoming milestones', date: '', projectId: '' };
   let earliestMilestoneDate = new Date(today);
   earliestMilestoneDate.setFullYear(earliestMilestoneDate.getFullYear() + 1);
+  // Budget minus spent, added up over all projects: positive is under budget, negative is over.
   let budgetVariance = 0;
 
   dashboardProjects.forEach(project => {
@@ -218,9 +219,7 @@ export const deriveDashboardSummary = (
     });
 
     if (project.budget && typeof project.budget === 'object') {
-      const actual = project.budget.spent || 0;
-      const planned = project.budget.planned ?? project.budget.total - (project.budget.remaining || 0);
-      budgetVariance += actual - planned;
+      budgetVariance += (project.budget.total || 0) - (project.budget.spent || 0);
     }
   });
 
@@ -251,8 +250,9 @@ export const deriveDashboardSummary = (
     recentActivity: [],
     stats: {
       totalProjects: dashboardProjects.length,
+      // Same rule as the Projects page's Active tab; planning projects are not counted.
       activeProjects: dashboardProjects.filter(project =>
-        project.status === 'in_progress' || project.status === 'planning' || project.status === 'active'
+        project.status === 'in_progress' || project.status === 'active'
       ).length,
       completedProjects: dashboardProjects.filter(project => project.status === 'completed').length,
       totalBudget,

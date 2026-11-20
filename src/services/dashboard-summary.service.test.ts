@@ -212,6 +212,28 @@ describe('deriveDashboardSummary', () => {
     expect(summary.stats.nextMilestone.name).toBe('Rough Inspection');
   });
 
+  test('budget variance is budget minus spent, and shows over-budget as negative', () => {
+    const summary = deriveDashboardSummary('user-1', [
+      project({ budget: { total: 850000, spent: 85800, remaining: 764200 } }),
+      project({ id: 'project-2', budget: { total: 100000, spent: 120000, remaining: -20000 } }),
+    ], now);
+
+    expect(summary.stats.totalBudget).toBe(950000);
+    expect(summary.stats.budgetVariance).toBe(764200 - 20000);
+  });
+
+  test('active projects match the Projects page: active or in progress, not planning or completed', () => {
+    const summary = deriveDashboardSummary('user-1', [
+      project({ id: 'a', status: 'active' }),
+      project({ id: 'b', status: 'in_progress' }),
+      project({ id: 'c', status: 'planning' }),
+      project({ id: 'd', status: 'completed' }),
+    ], now);
+
+    expect(summary.stats.activeProjects).toBe(2);
+    expect(summary.stats.totalProjects).toBe(4);
+  });
+
   test('keeps each phase status so project cards can show real progress', () => {
     const phase = (status: string) => ({ status } as Project['phases'][number]);
     const summary = deriveDashboardSummary('user-1', [

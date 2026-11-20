@@ -254,8 +254,8 @@ const ProjectInsights: React.FC<ProjectInsightsProps> = ({ stats, onRefresh }) =
       onClick: () => navigate('/projects?status=active'),
     },
     {
-      title: 'Total Budget',
-      value: formatCurrency(stats.totalBudget),
+      title: 'Budget, All Projects',
+      value: formatCurrency(stats.totalBudget, 0),
       icon: <MoneyIcon />,
       color: theme.palette.success.main,
       onClick: () => navigate('/expenses'),
@@ -279,8 +279,8 @@ const ProjectInsights: React.FC<ProjectInsightsProps> = ({ stats, onRefresh }) =
         : undefined,
     },
     {
-      title: 'Budget Variance',
-      value: formatCurrency(Math.abs(stats.budgetVariance)),
+      title: stats.budgetVariance >= 0 ? 'Remaining, All Projects' : 'Over Budget, All Projects',
+      value: formatCurrency(Math.abs(stats.budgetVariance), 0),
       icon: stats.budgetVariance >= 0 ? <TrendingUpIcon /> : <ArrowDownwardIcon />,
       color: stats.budgetVariance >= 0 ? theme.palette.success.main : theme.palette.error.main,
       onClick: () => navigate('/expenses'),
