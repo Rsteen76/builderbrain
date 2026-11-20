@@ -33,7 +33,7 @@ import {
   Speed as SpeedIcon,
   Info as InfoIcon,
 } from '@mui/icons-material';
-import { Project } from '../../types';
+import { Phase, Project } from '../../types';
 import { calculateProjectHealth, ProjectHealth, PROJECT_HEALTH_LABELS } from '../../utils/projectHealth';
 import { getStatusType } from './list/projectListUtils';
 import { useProjectListThemeUtils } from './list/useProjectListThemeUtils';
@@ -48,6 +48,8 @@ interface ProjectMetricCardsProps {
   project: Project | null;
   projectProgress: number;
   phaseCounts: { completed: number; total: number };
+  /** The project's phases; their status and end dates decide the schedule verdict. */
+  phases: Array<{ status: string; endDate?: Phase['endDate'] }>;
   budgetData: {
     totalBudget: number;
     totalActual: number;
@@ -76,6 +78,7 @@ const ProjectMetricCards: React.FC<ProjectMetricCardsProps> = ({
   project,
   projectProgress,
   phaseCounts,
+  phases,
   budgetData,
   expenseBreakdown,
   timeline,
@@ -114,9 +117,8 @@ const ProjectMetricCards: React.FC<ProjectMetricCardsProps> = ({
   const healthKey = calculateProjectHealth({
     spent: safeBudgetData.totalActual,
     budget: safeBudgetData.totalBudget,
-    progressPercent: safeProgress,
-    elapsedDays: safeTimeline.elapsedDays,
-    totalDays: safeTimeline.totalDays,
+    status: project?.status ?? '',
+    phases: phases || [],
   });
   const healthStyles: Record<ProjectHealth, { color: string; icon: JSX.Element }> = {
     over_budget: { color: theme.palette.error.main, icon: <PriorityHighIcon /> },

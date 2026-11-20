@@ -101,6 +101,7 @@ const ProjectDetailContent: React.FC = () => {
           budgetData={budgetData}
         projectProgress={projectProgress}
         phaseCounts={phaseCounts}
+        phases={phases || []}
         expenseBreakdown={expenseBreakdownData}
         timeline={timelineData}
           theme={theme}

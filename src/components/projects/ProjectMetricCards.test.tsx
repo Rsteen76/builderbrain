@@ -30,15 +30,30 @@ interface RenderOptions {
   status?: Project['status'];
   progress?: number;
   phaseCounts?: { completed: number; total: number };
+  phases?: Array<{ status: string; endDate?: Date }>;
   elapsedDays?: number;
   totalDays?: number;
 }
+
+const daysFromNow = (days: number) => {
+  const date = new Date();
+  date.setDate(date.getDate() + days);
+  return date;
+};
+
+// One phase finished and the only one that has ended, as in the seeded Hillside project.
+const hillsidePhases = [
+  { status: 'completed', endDate: daysFromNow(-22) },
+  { status: 'in_progress', endDate: daysFromNow(14) },
+  { status: 'planning', endDate: daysFromNow(58) },
+];
 
 const renderCards = ({
   spent = [47300, 38500],
   status = 'active',
   progress = 20,
   phaseCounts = { completed: 1, total: 5 },
+  phases = hillsidePhases,
   elapsedDays = 42,
   totalDays = 252,
 }: RenderOptions = {}) =>
@@ -48,6 +63,7 @@ const renderCards = ({
         project={{ ...project, status }}
         projectProgress={progress}
         phaseCounts={phaseCounts}
+        phases={phases}
         budgetData={calculateBudgetData(project, expenses(...spent))}
         expenseBreakdown={{
           paid: 47300,
@@ -118,16 +134,30 @@ describe('ProjectMetricCards', () => {
     expect(screen.getByText('Project Health:')).toHaveTextContent('Project Health: Over budget');
   });
 
-  it('reads a project whose phases trail the clock by more than 10 points as behind schedule', () => {
-    renderCards({ progress: 20, phaseCounts: { completed: 1, total: 5 }, elapsedDays: 31, totalDays: 100 });
+  it('reads a project where a phase ended yesterday and is not complete as behind schedule', () => {
+    renderCards({
+      phases: [{ status: 'completed', endDate: daysFromNow(-22) }, { status: 'in_progress', endDate: daysFromNow(-1) }],
+    });
 
     expect(screen.getByText('Project Health:')).toHaveTextContent('Project Health: Behind schedule');
   });
 
-  it('reads a gap of exactly 10 points as on track', () => {
-    renderCards({ progress: 20, elapsedDays: 30, totalDays: 100 });
+  it('reads a phase that ends tomorrow as on track', () => {
+    renderCards({ phases: [{ status: 'in_progress', endDate: daysFromNow(1) }] });
 
     expect(screen.getByText('Project Health:')).toHaveTextContent('Project Health: On track');
+  });
+
+  it('gives a project with no phases only a budget verdict', () => {
+    renderCards({ phases: [], phaseCounts: { completed: 0, total: 0 }, progress: 0 });
+    expect(screen.getByText('Project Health:')).toHaveTextContent('Project Health: On track');
+    expect(screen.queryByText(/behind schedule/i)).not.toBeInTheDocument();
+  });
+
+  it('calls a project with no phases over budget when spent exceeds the budget', () => {
+    renderCards({ phases: [], phaseCounts: { completed: 0, total: 0 }, progress: 0, spent: [900000] });
+
+    expect(screen.getByText('Project Health:')).toHaveTextContent('Project Health: Over budget');
   });
 
   it.each([
