@@ -48,6 +48,8 @@ export interface DashboardProjectSummary {
     quantity: number;
   }>;
   payments?: DashboardPaymentSummary[];
+  /** Only each phase's status is kept, for the progress figure on project cards. */
+  phases?: Array<{ status: string }>;
 }
 
 export interface DashboardPaymentSummary {
@@ -142,6 +144,7 @@ export const convertToDashboardProject = (project: Project): DashboardProjectSum
   })),
   materials: [],
   payments: [],
+  phases: (project.phases || []).map(phase => ({ status: phase.status })),
 });
 
 export const deriveDashboardSummary = (

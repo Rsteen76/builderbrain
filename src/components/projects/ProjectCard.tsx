@@ -36,6 +36,7 @@ import {
   AccountBalance as AccountBalanceIcon,
   ChevronRight as ChevronRightIcon,
 } from '@mui/icons-material';
+import { calculateProjectProgress } from '../../utils/phaseCalculations';
 
 // Project object interface that matches how it's used in Projects.tsx
 interface Project {
@@ -45,7 +46,9 @@ interface Project {
   dueDate?: string | Date;
   endDate?: Date | null;  // Add endDate as an alternative to dueDate
   budget?: number | { total: number; spent: number; remaining: number };
-  teamMembers?: any[];
+  team?: string[];
+  /** Only each phase's status is read, to work out progress. */
+  phases?: Array<{ status: string }>;
   location?: string | { address: string; city: string; state: string; zipCode?: string };
 }
 
@@ -110,14 +113,15 @@ const ProjectCard: React.FC<ProjectCardProps> = (props) => {
     ? (props.project.budget ? formatCurrency(props.project.budget) : 'Not set') 
     : props.budget;
   const team = hasProjectObject 
-    ? (props.project.teamMembers?.length || 0) 
+    ? (props.project.team?.length || 0) 
     : props.team;
   const location = hasProjectObject 
     ? formatLocation(props.project.location || 'No location') 
     : props.location;
   const index = props.index || 0;
+  // Undefined when the project has no phase list to work from; the bar is then left out.
   const progress = hasProjectObject 
-    ? calculateProgress(props.project) 
+    ? (props.project.phases ? calculateProjectProgress(props.project.phases) : undefined)
     : props.progress;
   const onClick = hasProjectObject 
     ? props.onClick || (() => {}) 
@@ -149,6 +153,7 @@ const ProjectCard: React.FC<ProjectCardProps> = (props) => {
   };
 
   const getProgressColor = () => {
+    if (progress === undefined) return theme.palette.grey[500];
     if (progress > 75) return theme.palette.success.main;
     if (progress > 40) return theme.palette.primary.main;
     return theme.palette.warning.main;
@@ -214,15 +219,6 @@ const ProjectCard: React.FC<ProjectCardProps> = (props) => {
   function formatLocation(location: string | { address: string; city: string; state: string; zipCode?: string }): string {
     if (typeof location === 'string') return location;
     return `${location.city}, ${location.state}`;
-  }
-
-  function calculateProgress(project: Project): number {
-    if (project.status === 'completed') return 100;
-    
-    // In a real app, this would be calculated from tasks or milestones
-    // For demo purposes, we'll use a deterministic random value based on the project name
-    const hash = project.name.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
-    return Math.max(10, Math.min(95, hash % 100));
   }
 
   return (
@@ -432,40 +428,42 @@ const ProjectCard: React.FC<ProjectCardProps> = (props) => {
           </Grid>
 
           {/* Progress indicator */}
-          <Box 
-            sx={{ 
-              width: '100%', 
-              mt: 1,
-              mb: 1.5,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between'
-            }}
-          >
-            <Box sx={{ flexGrow: 1, mr: 1 }}>
-              <LinearProgress
-                variant="determinate"
-                value={Math.min(progress, 100)}
-                sx={{
-                  height: 6,
-                  borderRadius: 3,
-                  backgroundColor: alpha(progressColor, 0.1),
-                  '& .MuiLinearProgress-bar': {
-                    borderRadius: 3,
-                    backgroundColor: progressColor,
-                  },
-                }}
-              />
-            </Box>
-            <Typography
-              variant="body2"
-              fontWeight="bold"
-              color={progressColor}
-              sx={{ lineHeight: 1.2, whiteSpace: 'nowrap' }}
+          {progress !== undefined && (
+            <Box 
+              sx={{ 
+                width: '100%', 
+                mt: 1,
+                mb: 1.5,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between'
+              }}
             >
-              {progress}%
-            </Typography>
-          </Box>
+              <Box sx={{ flexGrow: 1, mr: 1 }}>
+                <LinearProgress
+                  variant="determinate"
+                  value={Math.min(progress, 100)}
+                  sx={{
+                    height: 6,
+                    borderRadius: 3,
+                    backgroundColor: alpha(progressColor, 0.1),
+                    '& .MuiLinearProgress-bar': {
+                      borderRadius: 3,
+                      backgroundColor: progressColor,
+                    },
+                  }}
+                />
+              </Box>
+              <Typography
+                variant="body2"
+                fontWeight="bold"
+                color={progressColor}
+                sx={{ lineHeight: 1.2, whiteSpace: 'nowrap' }}
+              >
+                {progress}%
+              </Typography>
+            </Box>
+          )}
 
           {/* Project metrics visualization */}
           <Stack spacing={1.5} sx={{ mt: 1, mb: 1.5 }}>

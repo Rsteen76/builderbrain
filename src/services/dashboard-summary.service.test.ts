@@ -211,4 +211,13 @@ describe('deriveDashboardSummary', () => {
     });
     expect(summary.stats.nextMilestone.name).toBe('Rough Inspection');
   });
+
+  test('keeps each phase status so project cards can show real progress', () => {
+    const phase = (status: string) => ({ status } as Project['phases'][number]);
+    const summary = deriveDashboardSummary('user-1', [
+      project({ phases: [phase('completed'), phase('planning')] }),
+    ], now);
+
+    expect(summary.projects[0].phases).toEqual([{ status: 'completed' }, { status: 'planning' }]);
+  });
 });

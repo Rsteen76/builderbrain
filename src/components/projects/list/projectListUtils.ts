@@ -1,4 +1,5 @@
 import type { Project } from '../../../types';
+import { calculateProjectProgress as calculatePhaseProgress } from '../../../utils/phaseCalculations';
 
 export type DisplayStatus = 'Planning' | 'Active' | 'Completed' | 'On Hold' | 'Cancelled';
 
@@ -39,13 +40,9 @@ export const getStatusType = (status: string): DisplayStatus => {
   return statusMap[status.toLowerCase()] || 'Planning';
 };
 
-export const calculateProjectProgress = (project: Project): number => {
-  if (project.status === 'completed') return 100;
-
-  const id = project.id || '';
-  const hash = id.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
-  return Math.max(10, Math.min(95, hash % 100));
-};
+/** Share of the project's phases marked completed, the same rule as the project detail page. */
+export const calculateProjectProgress = (project: Project): number =>
+  calculatePhaseProgress(project.phases || []);
 
 export const formatProjectLocation = (
   location: string | { address: string; city: string; state: string; zipCode: string }
