@@ -73,7 +73,6 @@ describe('DashboardSummaryService', () => {
         userId: 'user-1',
         projects: [],
         upcomingTasks: [],
-        overduePayments: [],
         recentActivity: [],
         stats: {
           totalProjects: 1,
@@ -84,8 +83,6 @@ describe('DashboardSummaryService', () => {
           tasksDue: 0,
           projectsAtRisk: 0,
           nextMilestone: { name: '', date: '', projectId: '' },
-          budgetVariance: 0,
-          materialsToOrder: 0,
         },
         generatedAt: new Date('2026-05-07T11:58:00.000Z'),
       }),
@@ -134,7 +131,6 @@ describe('DashboardSummaryService', () => {
         userId: 'user-1',
         projects: [],
         upcomingTasks: [],
-        overduePayments: [],
         recentActivity: [],
         stats: { totalProjects: 99 },
         generatedAt: now,
@@ -157,7 +153,6 @@ describe('DashboardSummaryService', () => {
         userId: 'user-1',
         projects: [],
         upcomingTasks: [],
-        overduePayments: [],
         recentActivity: [],
         stats: { totalProjects: 99 },
         generatedAt: new Date('2026-05-07T11:00:00.000Z'),
@@ -212,16 +207,6 @@ describe('deriveDashboardSummary', () => {
     expect(summary.stats.nextMilestone.name).toBe('Rough Inspection');
   });
 
-  test('budget variance is budget minus spent, and shows over-budget as negative', () => {
-    const summary = deriveDashboardSummary('user-1', [
-      project({ budget: { total: 850000, spent: 85800, remaining: 764200 } }),
-      project({ id: 'project-2', budget: { total: 100000, spent: 120000, remaining: -20000 } }),
-    ], now);
-
-    expect(summary.stats.totalBudget).toBe(950000);
-    expect(summary.stats.budgetVariance).toBe(764200 - 20000);
-  });
-
   test('active projects match the Projects page: active or in progress, not planning or completed', () => {
     const summary = deriveDashboardSummary('user-1', [
       project({ id: 'a', status: 'active' }),
@@ -241,5 +226,13 @@ describe('deriveDashboardSummary', () => {
     ], now);
 
     expect(summary.projects[0].phases).toEqual([{ status: 'completed' }, { status: 'planning' }]);
+  });
+
+  test('has no figures that cannot be known: no variance, materials or overdue payments', () => {
+    const summary = deriveDashboardSummary('user-1', [project()], now);
+
+    expect(summary).not.toHaveProperty('overduePayments');
+    expect(summary.stats).not.toHaveProperty('budgetVariance');
+    expect(summary.stats).not.toHaveProperty('materialsToOrder');
   });
 });

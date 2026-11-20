@@ -41,25 +41,8 @@ export interface DashboardProjectSummary {
     date: string;
     completed: boolean;
   }>;
-  materials?: Array<{
-    id: string;
-    name: string;
-    status: string;
-    quantity: number;
-  }>;
-  payments?: DashboardPaymentSummary[];
   /** Only each phase's status is kept, for the progress figure on project cards. */
   phases?: Array<{ status: string }>;
-}
-
-export interface DashboardPaymentSummary {
-  id: string;
-  amount: number;
-  dueDate: string;
-  description: string;
-  status: string;
-  projectId: string;
-  projectName: string;
 }
 
 export interface DashboardRecentActivity {
@@ -76,15 +59,12 @@ export interface DashboardStatsSummary {
   tasksDue: number;
   projectsAtRisk: number;
   nextMilestone: { name: string; date: string; projectId: string };
-  budgetVariance: number;
-  materialsToOrder: number;
 }
 
 export interface DashboardSummaryData {
   userId: string;
   projects: DashboardProjectSummary[];
   upcomingTasks: DashboardTaskSummary[];
-  overduePayments: DashboardPaymentSummary[];
   recentActivity: DashboardRecentActivity[];
   stats: DashboardStatsSummary;
   generatedAt: Date;
@@ -142,8 +122,6 @@ export const convertToDashboardProject = (project: Project): DashboardProjectSum
     date: safeDateToString(milestone.date),
     completed: false,
   })),
-  materials: [],
-  payments: [],
   phases: (project.phases || []).map(phase => ({ status: phase.status })),
 });
 
@@ -180,8 +158,6 @@ export const deriveDashboardSummary = (
   let nextMilestone = { name: 'No upcoming milestones', date: '', projectId: '' };
   let earliestMilestoneDate = new Date(today);
   earliestMilestoneDate.setFullYear(earliestMilestoneDate.getFullYear() + 1);
-  // Budget minus spent, added up over all projects: positive is under budget, negative is over.
-  let budgetVariance = 0;
 
   dashboardProjects.forEach(project => {
     project.team.forEach(member => uniqueTeamMembers.add(member));
@@ -218,9 +194,6 @@ export const deriveDashboardSummary = (
       }
     });
 
-    if (project.budget && typeof project.budget === 'object') {
-      budgetVariance += (project.budget.total || 0) - (project.budget.spent || 0);
-    }
   });
 
   upcomingTasks.sort((a, b) => {
@@ -246,7 +219,6 @@ export const deriveDashboardSummary = (
     userId,
     projects: dashboardProjects,
     upcomingTasks,
-    overduePayments: [],
     recentActivity: [],
     stats: {
       totalProjects: dashboardProjects.length,
@@ -260,8 +232,6 @@ export const deriveDashboardSummary = (
       tasksDue,
       projectsAtRisk,
       nextMilestone,
-      budgetVariance,
-      materialsToOrder: 0,
     },
     generatedAt: now,
     source: 'derived',

@@ -40,8 +40,6 @@ interface ProjectInsightsProps {
     tasksDue: number;
     projectsAtRisk: number;
     nextMilestone: { name: string; date: string; projectId: string };
-    budgetVariance: number;
-    materialsToOrder: number;
   };
   onRefresh?: () => void | Promise<void>;
 }
@@ -247,7 +245,7 @@ const ProjectInsights: React.FC<ProjectInsightsProps> = ({ stats, onRefresh }) =
   
   const insights = [
     {
-      title: 'Active Projects',
+      title: stats.activeProjects === 1 ? 'Active Project' : 'Active Projects',
       value: stats.activeProjects,
       icon: <AssessmentIcon />,
       color: theme.palette.primary.main,
@@ -277,19 +275,6 @@ const ProjectInsights: React.FC<ProjectInsightsProps> = ({ stats, onRefresh }) =
       onClick: stats.nextMilestone?.projectId 
         ? () => navigate(`/projects/${stats.nextMilestone.projectId}`)
         : undefined,
-    },
-    {
-      title: stats.budgetVariance >= 0 ? 'Remaining, All Projects' : 'Over Budget, All Projects',
-      value: formatCurrency(Math.abs(stats.budgetVariance), 0),
-      icon: stats.budgetVariance >= 0 ? <TrendingUpIcon /> : <ArrowDownwardIcon />,
-      color: stats.budgetVariance >= 0 ? theme.palette.success.main : theme.palette.error.main,
-      onClick: () => navigate('/expenses'),
-    },
-    {
-      title: 'Materials to Order',
-      value: stats.materialsToOrder || 0,
-      icon: <ShippingIcon />,
-      color: stats.materialsToOrder > 10 ? theme.palette.warning.main : theme.palette.info.main,
     },
   ];
 
@@ -371,7 +356,7 @@ const ProjectInsights: React.FC<ProjectInsightsProps> = ({ stats, onRefresh }) =
 
           <Grid container spacing={1.5}>
             {insights.map((insight, index) => (
-              <Grid item xs={12} sm={6} md={4} lg={2} key={index}>
+              <Grid item xs={12} sm={6} md={3} key={index}>
                 <InsightCard {...insight} index={index} />
               </Grid>
             ))}
