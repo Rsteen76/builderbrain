@@ -86,7 +86,6 @@ import {
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import {
-  DashboardPaymentSummary,
   DashboardProjectSummary,
   DashboardRecentActivity,
   DashboardSummaryService,
@@ -99,12 +98,10 @@ import ProjectInsights from './ProjectInsights';
 import UpcomingDeadlines from './UpcomingDeadlines';
 import PriorityItems from './PriorityItems';
 import RecentProjects from './RecentProjects';
-import ProjectCard from '../projects/ProjectCard';
 import { createProjectWizardRoute, PROJECT_WIZARD_ROUTE } from '../../constants/projectRoutes';
 
 type DashboardTask = DashboardTaskSummary;
 type DashboardProject = DashboardProjectSummary;
-type Payment = DashboardPaymentSummary;
 
 interface StatCardProps {
   title: string;
@@ -242,7 +239,6 @@ const Dashboard: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [projects, setProjects] = useState<DashboardProject[]>([]);
   const [upcomingTasks, setUpcomingTasks] = useState<DashboardTask[]>([]);
-  const [overduePayments, setOverduePayments] = useState<Payment[]>([]);
   const [recentActivity, setRecentActivity] = useState<RecentActivity[]>([]);
   const [activeTab, setActiveTab] = useState(0);
   const [stats, setStats] = useState({
@@ -254,8 +250,6 @@ const Dashboard: React.FC = () => {
     tasksDue: 0,
     projectsAtRisk: 0,
     nextMilestone: { name: '', date: '', projectId: '' },
-    budgetVariance: 0,
-    materialsToOrder: 0
   });
 
   // State for the New Project dropdown menu
@@ -264,7 +258,6 @@ const Dashboard: React.FC = () => {
   const applyDashboardData = (data: Awaited<ReturnType<typeof DashboardSummaryService.getDashboardData>>) => {
     setProjects(data.projects);
     setUpcomingTasks(data.upcomingTasks);
-    setOverduePayments(data.overduePayments);
     setStats(data.stats);
     setRecentActivity(data.recentActivity.map(activity => ({
       ...activity,
@@ -303,52 +296,6 @@ const Dashboard: React.FC = () => {
     return loadDashboardData(true);
   };
   
-  // Format project data for display
-  const formatProjectForDisplay = (project: DashboardProject) => {
-    // Determine project status
-    let status: 'on-track' | 'at-risk' | 'completed' = 'on-track';
-    
-    if (project.status === 'completed') {
-      status = 'completed';
-    } else if (project.status === 'on_hold' || project.status === 'cancelled') {
-      status = 'at-risk';
-    } else {
-      // Check if project is at risk based on end date
-      if (project.endDate) {
-        const endDate = new Date(project.endDate);
-        const today = new Date();
-        const oneWeekFromNow = new Date();
-        oneWeekFromNow.setDate(today.getDate() + 7);
-        
-        if (endDate < today) {
-          status = 'at-risk'; // Past due date
-        } else if (endDate <= oneWeekFromNow) {
-          status = 'at-risk'; // Due within a week
-        }
-      }
-    }
-    
-    // Calculate progress as percentage of completed tasks
-    let progress = 0;
-    if (project.tasks && project.tasks.length > 0) {
-      const completedTasks = project.tasks.filter(t => t.status === 'completed').length;
-      progress = Math.round((completedTasks / project.tasks.length) * 100);
-    }
-    
-    return {
-      title: project.name,
-      progress,
-      status,
-      dueDate: project.endDate ? formatDate(project.endDate) : 'No due date',
-      budget: formatCurrency(typeof project.budget === 'object' ? project.budget.total : (project.budget || 0)),
-      team: project.team?.length || 0,
-      projectId: project.id,
-      location: typeof project.location === 'string' 
-                ? project.location 
-                : project.location?.address || `${project.location?.city || ''}, ${project.location?.state || ''}` || 'No location'
-    };
-  };
-
   // Define templates for the New Project dropdown
   const templates = useMemo(() => [
     {
@@ -536,7 +483,6 @@ const Dashboard: React.FC = () => {
         {/* Priority Items Section */}
         <PriorityItems 
           upcomingTasks={upcomingTasks}
-          overduePayments={overduePayments}
         />
         
         {/* Recent Projects Section */}

@@ -1,5 +1,6 @@
 import type { BudgetProjection, Expense, Project, ProjectPhase } from "../../../../types";
 import { logger } from '../../../../utils/logger';
+import { calculateSpent } from "../../../../utils/expenseAnalytics";
 import {
   getCategoryById,
   getParentCategory,
@@ -90,7 +91,6 @@ export const EMPTY_BUDGET_SUMMARY: BudgetSummary = {
 };
 
 const COUNTED_EXPENSE_STATUSES = new Set(["paid", "approved", "pending"]);
-const SPENT_EXPENSE_STATUSES = new Set(["paid", "approved"]);
 
 export function getProjectBudgetTotal(project: Pick<Project, "budget"> | null | undefined): number {
   if (!project) {
@@ -112,9 +112,7 @@ export function calculateBudgetSummary(
   }
 
   const totalBudget = getProjectBudgetTotal(project);
-  const totalSpent = expenses
-    .filter((expense) => SPENT_EXPENSE_STATUSES.has(expense.status))
-    .reduce((sum, expense) => sum + expense.amount, 0);
+  const totalSpent = calculateSpent(expenses);
   const pendingTotal = expenses
     .filter((expense) => expense.status === "pending")
     .reduce((sum, expense) => sum + expense.amount, 0);
@@ -305,8 +303,7 @@ export function buildPhaseAllocation(
 ): PhaseAllocationItem[] {
   return phases
     .map((phase, index) => {
-      const phaseExpenses = expenses.filter((expense) => expense.phaseId === phase.id);
-      const actualCost = phaseExpenses.reduce((sum, expense) => sum + expense.amount, 0);
+      const actualCost = calculateSpent(expenses.filter((expense) => expense.phaseId === phase.id));
       const budget = phase.budget || 0;
 
       return {

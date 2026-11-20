@@ -1,6 +1,13 @@
 import React from 'react';
 import { useTheme } from '@mui/material';
-import { FlagCircle as FlagIcon } from '@mui/icons-material';
+import {
+  Block as BlockIcon,
+  CheckCircle as CheckCircleIcon,
+  ErrorOutline as CancelledIcon,
+  FlagCircle as FlagIcon,
+  PlayCircleOutline as ActiveIcon,
+  Schedule as PlanningIcon,
+} from '@mui/icons-material';
 import { getStatusType, type DisplayStatus } from './projectListUtils';
 
 export const useProjectListThemeUtils = () => {
@@ -17,6 +24,18 @@ export const useProjectListThemeUtils = () => {
     };
 
     return colorMap[statusType];
+  };
+
+  const getStatusIcon = (status: string) => {
+    const iconMap: Record<DisplayStatus, JSX.Element> = {
+      Planning: <PlanningIcon fontSize="small" />,
+      Active: <ActiveIcon fontSize="small" />,
+      Completed: <CheckCircleIcon fontSize="small" />,
+      'On Hold': <BlockIcon fontSize="small" />,
+      Cancelled: <CancelledIcon fontSize="small" />,
+    };
+
+    return iconMap[getStatusType(status)];
   };
 
   const getPriorityColor = (priority?: string): string => {
@@ -51,6 +70,7 @@ export const useProjectListThemeUtils = () => {
 
   return {
     getStatusColor,
+    getStatusIcon,
     getPriorityColor,
     getPriorityIcon,
   };

@@ -241,7 +241,7 @@ Required GitHub Actions repository variables:
 - `REACT_APP_FIREBASE_MESSAGING_SENDER_ID`
 - `REACT_APP_FIREBASE_STORAGE_BUCKET`
 
-See [RELEASE_CHECKLIST.md](./RELEASE_CHECKLIST.md) for release and rollback steps.
+See [docs/engineering/RELEASE_CHECKLIST.md](./docs/engineering/RELEASE_CHECKLIST.md) for release and rollback steps.
 
 Rules and indexes are also described in Firebase config, but deploy them deliberately:
 
@@ -253,9 +253,9 @@ npx firebase deploy --only firestore:rules,firestore:indexes,storage
 
 The repository also contains active refactoring notes:
 
-- [REFACTORING_README.md](./REFACTORING_README.md)
-- [REFACTORING_PLAN.md](./REFACTORING_PLAN.md)
-- [REFACTORING_PROGRESS.md](./REFACTORING_PROGRESS.md)
+- [docs/engineering/REFACTORING_README.md](./docs/engineering/REFACTORING_README.md)
+- [docs/engineering/REFACTORING_PLAN.md](./docs/engineering/REFACTORING_PLAN.md)
+- [docs/engineering/REFACTORING_PROGRESS.md](./docs/engineering/REFACTORING_PROGRESS.md)
 - [docs/refactoring/ProjectDetailPageRefactorPlan.md](./docs/refactoring/ProjectDetailPageRefactorPlan.md)
 - [docs/refactoring/ComponentModularizationPlan.md](./docs/refactoring/ComponentModularizationPlan.md)
 

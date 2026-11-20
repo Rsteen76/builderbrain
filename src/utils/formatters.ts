@@ -1,14 +1,16 @@
 import { logger } from './logger';
 /**
  * Format a number as currency (USD)
- * @param value The number to format
- * @param options Formatting options
+ * @param amount The number to format
+ * @param fractionDigits Digits after the decimal point (default 2; use 0 for a narrow tile)
  * @returns Formatted currency string
  */
-export const formatCurrency = (amount: number): string => {
+export const formatCurrency = (amount: number, fractionDigits = 2): string => {
   return new Intl.NumberFormat('en-US', {
     style: 'currency',
     currency: 'USD',
+    minimumFractionDigits: fractionDigits,
+    maximumFractionDigits: fractionDigits,
   }).format(amount);
 };
 

@@ -185,4 +185,27 @@ describe("budgetDashboardUtils", () => {
       { month: "2026-08", projected: 50, cumulative: 100 },
     ]);
   });
+
+  test("counts a partly paid expense at its full amount once, and its payment record not at all", () => {
+    const expenses = [
+      expense({ id: "expense-1", amount: 10000, status: "partially_paid", phaseId: "phase-1" }),
+      expense({
+        id: "expense-2",
+        amount: 4000,
+        status: "paid",
+        phaseId: "phase-1",
+        originalExpenseId: "expense-1",
+        tags: ["payment_record"],
+      }),
+      expense({ id: "expense-3", amount: 900, status: "pending", phaseId: "phase-1" }),
+    ];
+
+    const summary = calculateBudgetSummary({ budget: 50000 }, expenses);
+    expect(summary.totalSpent).toBe(10000);
+    expect(summary.pendingTotal).toBe(900);
+
+    const [row] = buildPhaseAllocation([phase({ id: "phase-1", budget: 20000 })], expenses, ["red"]);
+    expect(row.spent).toBe(10000);
+    expect(row.remaining).toBe(10000);
+  });
 });

@@ -33,7 +33,10 @@ import {
   Speed as SpeedIcon,
   Info as InfoIcon,
 } from '@mui/icons-material';
-import { Project } from '../../types';
+import { Phase, Project } from '../../types';
+import { calculateProjectHealth, ProjectHealth, PROJECT_HEALTH_LABELS } from '../../utils/projectHealth';
+import { getStatusType } from './list/projectListUtils';
+import { useProjectListThemeUtils } from './list/useProjectListThemeUtils';
 
 // Import the card components
 import StatusCard from './cards/StatusCard';
@@ -44,6 +47,9 @@ import TeamCard from './cards/TeamCard';
 interface ProjectMetricCardsProps {
   project: Project | null;
   projectProgress: number;
+  phaseCounts: { completed: number; total: number };
+  /** The project's phases; their status and end dates decide the schedule verdict. */
+  phases: Array<{ status: string; endDate?: Phase['endDate'] }>;
   budgetData: {
     totalBudget: number;
     totalActual: number;
@@ -64,8 +70,6 @@ interface ProjectMetricCardsProps {
     percentComplete: number;
   };
   theme: any;
-  getStatusIcon: (status: string) => JSX.Element;
-  getStatusColor: (status: string) => string;
   formatCurrency: (amount: number) => string;
   formatPercentage: (value: number) => string;
 }
@@ -73,15 +77,16 @@ interface ProjectMetricCardsProps {
 const ProjectMetricCards: React.FC<ProjectMetricCardsProps> = ({
   project,
   projectProgress,
+  phaseCounts,
+  phases,
   budgetData,
   expenseBreakdown,
   timeline,
   theme,
-  getStatusIcon,
-  getStatusColor,
   formatCurrency,
   formatPercentage,
 }) => {
+  const { getStatusColor, getStatusIcon } = useProjectListThemeUtils();
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
   const isSmall = useMediaQuery(theme.breakpoints.down('sm'));
 
@@ -108,35 +113,20 @@ const ProjectMetricCards: React.FC<ProjectMetricCardsProps> = ({
     ? { icon: <TrendingUpIcon sx={{ color: 'success.main' }} />, label: 'Under Budget', color: 'success.main' }
     : { icon: <TrendingDownIcon sx={{ color: 'error.main' }} />, label: 'Over Budget', color: 'error.main' };
 
-  // Project health calculation based on budget and timeline
-  const calculateProjectHealth = () => {
-    const budgetRatio = safeBudgetData.totalActual / safeBudgetData.totalBudget;
-    const timeRatio = safeTimeline.elapsedDays / safeTimeline.totalDays;
-
-    // If data is missing, default to Fair status
-    if (isNaN(budgetRatio) || isNaN(timeRatio) || !isFinite(budgetRatio) || !isFinite(timeRatio)) {
-      return { status: 'Fair', color: theme.palette.warning.main, icon: <FlagIcon /> };
-    }
-
-    // Over budget and behind schedule
-    if (budgetRatio > 1 && timeRatio > safeTimeline.percentComplete / 100) {
-      return { status: 'At Risk', color: theme.palette.error.main, icon: <PriorityHighIcon /> };
-    }
-    // Under budget and ahead of schedule
-    else if (budgetRatio < 0.9 && timeRatio < safeTimeline.percentComplete / 100) {
-      return { status: 'Excellent', color: theme.palette.success.dark, icon: <CheckCircleIcon /> };
-    }
-    // Slightly over budget or slightly behind schedule
-    else if (budgetRatio <= 1.1 && timeRatio <= 1.1) {
-      return { status: 'Good', color: theme.palette.success.main, icon: <CheckCircleIcon /> };
-    }
-    // Other cases
-    else {
-      return { status: 'Fair', color: theme.palette.warning.main, icon: <FlagIcon /> };
-    }
+  // Project health: over budget, behind schedule, or on track (see utils/projectHealth.ts).
+  const healthKey = calculateProjectHealth({
+    spent: safeBudgetData.totalActual,
+    budget: safeBudgetData.totalBudget,
+    status: project?.status ?? '',
+    phases: phases || [],
+  });
+  const healthStyles: Record<ProjectHealth, { color: string; icon: JSX.Element }> = {
+    over_budget: { color: theme.palette.error.main, icon: <PriorityHighIcon /> },
+    behind_schedule: { color: theme.palette.warning.main, icon: <FlagIcon /> },
+    on_track: { color: theme.palette.success.main, icon: <CheckCircleIcon /> },
   };
+  const projectHealth = { status: PROJECT_HEALTH_LABELS[healthKey], ...healthStyles[healthKey] };
 
-  const projectHealth = calculateProjectHealth();
 
   if (!project) {
     // Optionally return null or a placeholder if project data is essential
@@ -183,7 +173,7 @@ const ProjectMetricCards: React.FC<ProjectMetricCardsProps> = ({
         </Box>
 
         <Chip
-          label={project.status.replace('_', ' ').toUpperCase()}
+          label={getStatusType(project.status).toUpperCase()}
           icon={getStatusIcon(project.status)}
           sx={{
             backgroundColor: alpha(getStatusColor(project.status), 0.1),
@@ -216,7 +206,7 @@ const ProjectMetricCards: React.FC<ProjectMetricCardsProps> = ({
                   <AssignmentIcon sx={{ color: 'primary.main', mr: 1 }} />
                   <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>Progress</Typography>
                 </Box>
-                <Tooltip title="Project completion based on phase progress">
+                <Tooltip title="Share of the project's phases marked completed. A project marked completed reads 100%.">
                   <IconButton size="small">
                     <InfoIcon fontSize="small" sx={{ color: 'text.secondary' }} />
                   </IconButton>
@@ -244,7 +234,11 @@ const ProjectMetricCards: React.FC<ProjectMetricCardsProps> = ({
               </Box>
 
               <Typography variant="body2" sx={{ color: 'text.secondary', mt: 1 }}>
-                {safeTimeline.elapsedDays} of {safeTimeline.totalDays} days elapsed
+                {phaseCounts.total === 0
+                  ? 'No phases yet'
+                  : project.status === 'completed' && phaseCounts.completed < phaseCounts.total
+                    ? `Project marked completed (${phaseCounts.completed} of ${phaseCounts.total} phases marked)`
+                    : `${phaseCounts.completed} of ${phaseCounts.total} phases complete`}
               </Typography>
             </CardContent>
           </Card>

@@ -41,23 +41,8 @@ export interface DashboardProjectSummary {
     date: string;
     completed: boolean;
   }>;
-  materials?: Array<{
-    id: string;
-    name: string;
-    status: string;
-    quantity: number;
-  }>;
-  payments?: DashboardPaymentSummary[];
-}
-
-export interface DashboardPaymentSummary {
-  id: string;
-  amount: number;
-  dueDate: string;
-  description: string;
-  status: string;
-  projectId: string;
-  projectName: string;
+  /** Only each phase's status is kept, for the progress figure on project cards. */
+  phases?: Array<{ status: string }>;
 }
 
 export interface DashboardRecentActivity {
@@ -74,15 +59,12 @@ export interface DashboardStatsSummary {
   tasksDue: number;
   projectsAtRisk: number;
   nextMilestone: { name: string; date: string; projectId: string };
-  budgetVariance: number;
-  materialsToOrder: number;
 }
 
 export interface DashboardSummaryData {
   userId: string;
   projects: DashboardProjectSummary[];
   upcomingTasks: DashboardTaskSummary[];
-  overduePayments: DashboardPaymentSummary[];
   recentActivity: DashboardRecentActivity[];
   stats: DashboardStatsSummary;
   generatedAt: Date;
@@ -140,8 +122,7 @@ export const convertToDashboardProject = (project: Project): DashboardProjectSum
     date: safeDateToString(milestone.date),
     completed: false,
   })),
-  materials: [],
-  payments: [],
+  phases: (project.phases || []).map(phase => ({ status: phase.status })),
 });
 
 export const deriveDashboardSummary = (
@@ -177,7 +158,6 @@ export const deriveDashboardSummary = (
   let nextMilestone = { name: 'No upcoming milestones', date: '', projectId: '' };
   let earliestMilestoneDate = new Date(today);
   earliestMilestoneDate.setFullYear(earliestMilestoneDate.getFullYear() + 1);
-  let budgetVariance = 0;
 
   dashboardProjects.forEach(project => {
     project.team.forEach(member => uniqueTeamMembers.add(member));
@@ -214,11 +194,6 @@ export const deriveDashboardSummary = (
       }
     });
 
-    if (project.budget && typeof project.budget === 'object') {
-      const actual = project.budget.spent || 0;
-      const planned = project.budget.planned ?? project.budget.total - (project.budget.remaining || 0);
-      budgetVariance += actual - planned;
-    }
   });
 
   upcomingTasks.sort((a, b) => {
@@ -244,12 +219,12 @@ export const deriveDashboardSummary = (
     userId,
     projects: dashboardProjects,
     upcomingTasks,
-    overduePayments: [],
     recentActivity: [],
     stats: {
       totalProjects: dashboardProjects.length,
+      // Same rule as the Projects page's Active tab; planning projects are not counted.
       activeProjects: dashboardProjects.filter(project =>
-        project.status === 'in_progress' || project.status === 'planning' || project.status === 'active'
+        project.status === 'in_progress' || project.status === 'active'
       ).length,
       completedProjects: dashboardProjects.filter(project => project.status === 'completed').length,
       totalBudget,
@@ -257,8 +232,6 @@ export const deriveDashboardSummary = (
       tasksDue,
       projectsAtRisk,
       nextMilestone,
-      budgetVariance,
-      materialsToOrder: 0,
     },
     generatedAt: now,
     source: 'derived',

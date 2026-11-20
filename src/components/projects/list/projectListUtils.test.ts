@@ -37,9 +37,31 @@ describe('projectListUtils', () => {
     expect(getStatusType('unknown')).toBe('Planning');
   });
 
-  it('calculates deterministic progress and treats completed projects as complete', () => {
-    expect(calculateProjectProgress(makeProject({ id: 'abc' }))).toBe(94);
-    expect(calculateProjectProgress(makeProject({ status: 'completed' }))).toBe(100);
+  it('calculates progress as the share of phases marked completed', () => {
+    const phases = (...statuses: string[]) =>
+      statuses.map((status, index) => ({ id: `phase-${index}`, status })) as Project['phases'];
+
+    expect(calculateProjectProgress(makeProject({
+      phases: phases('completed', 'in_progress', 'planning', 'planning', 'planning'),
+    }))).toBe(20);
+    expect(calculateProjectProgress(makeProject({
+      phases: phases('completed', 'completed', 'completed'),
+    }))).toBe(100);
+    expect(calculateProjectProgress(makeProject({ phases: [] }))).toBe(0);
+  });
+
+  it('treats a completed project as 100% even when some phases were never marked complete', () => {
+    const phases = [{ id: 'a', status: 'completed' }, { id: 'b', status: 'planning' }] as Project['phases'];
+
+    expect(calculateProjectProgress(makeProject({ status: 'completed', phases }))).toBe(100);
+    expect(calculateProjectProgress(makeProject({ status: 'on_hold', phases }))).toBe(50);
+  });
+
+  it('gives the same progress to two projects with different names and ids', () => {
+    const phases = [{ id: 'a', status: 'completed' }, { id: 'b', status: 'planning' }] as Project['phases'];
+
+    expect(calculateProjectProgress(makeProject({ id: 'abc', name: 'One', phases }))).toBe(50);
+    expect(calculateProjectProgress(makeProject({ id: 'xyz', name: 'Two', phases }))).toBe(50);
   });
 
   it('formats string and structured locations like the list item expects', () => {

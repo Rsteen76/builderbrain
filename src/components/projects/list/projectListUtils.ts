@@ -1,4 +1,5 @@
 import type { Project } from '../../../types';
+import { getProjectProgress } from '../../../utils/phaseCalculations';
 
 export type DisplayStatus = 'Planning' | 'Active' | 'Completed' | 'On Hold' | 'Cancelled';
 
@@ -39,13 +40,9 @@ export const getStatusType = (status: string): DisplayStatus => {
   return statusMap[status.toLowerCase()] || 'Planning';
 };
 
-export const calculateProjectProgress = (project: Project): number => {
-  if (project.status === 'completed') return 100;
-
-  const id = project.id || '';
-  const hash = id.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
-  return Math.max(10, Math.min(95, hash % 100));
-};
+/** Share of phases completed, or 100 for a completed project; the same rule as every other screen. */
+export const calculateProjectProgress = (project: Project): number =>
+  getProjectProgress({ status: project.status, phases: project.phases || [] });
 
 export const formatProjectLocation = (
   location: string | { address: string; city: string; state: string; zipCode: string }

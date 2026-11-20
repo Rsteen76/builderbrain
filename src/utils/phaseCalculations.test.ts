@@ -1,8 +1,12 @@
 import {
+  calculatePhaseActualCosts,
   calculatePhaseCommittedCosts,
   calculatePhaseProposedCosts,
+  calculateProjectProgress,
+  countCompletedPhases,
+  getProjectProgress,
 } from './phaseCalculations';
-import { Bid, ProjectPhase } from '../types';
+import { Bid, Expense, ProjectPhase } from '../types';
 
 const phases: ProjectPhase[] = [
   {
@@ -90,5 +94,55 @@ describe('phase cost calculations', () => {
       'phase-foundation': 8000,
       'phase-framing': 0,
     });
+  });
+});
+
+describe('project progress', () => {
+  const statuses = (...list: string[]) => list.map((status) => ({ status }));
+
+  it('counts completed phases out of all phases', () => {
+    const list = statuses('completed', 'in_progress', 'planning', 'planning', 'planning');
+
+    expect(countCompletedPhases(list)).toEqual({ completed: 1, total: 5 });
+    expect(calculateProjectProgress(list)).toBe(20);
+  });
+
+  it('is 100 when every phase is completed and 0 with no phases', () => {
+    expect(calculateProjectProgress(statuses('completed', 'completed', 'completed'))).toBe(100);
+    expect(calculateProjectProgress([])).toBe(0);
+    expect(countCompletedPhases([])).toEqual({ completed: 0, total: 0 });
+  });
+});
+
+describe('phase actual costs', () => {
+  it('count paid and approved expenses, not pending or rejected ones', () => {
+    const expense = (status: Expense['status'], amount: number) =>
+      ({ phaseId: 'phase-foundation', status, amount } as Expense);
+
+    const actual = calculatePhaseActualCosts(phases, [
+      expense('paid', 12900),
+      expense('approved', 6200),
+      expense('pending', 15000),
+      expense('rejected', 700),
+    ]);
+
+    expect(actual['phase-foundation']).toBe(19100);
+  });
+});
+
+describe('getProjectProgress', () => {
+  const phases = [{ status: 'completed' }, { status: 'planning' }];
+
+  it('is the share of phases completed', () => {
+    expect(getProjectProgress({ status: 'active', phases })).toBe(50);
+  });
+
+  it('is 100 for a completed project even with unfinished phases', () => {
+    expect(getProjectProgress({ status: 'completed', phases })).toBe(100);
+    expect(getProjectProgress({ status: 'completed' })).toBe(100);
+  });
+
+  it('is undefined when there are no phases to work from and the project is not completed', () => {
+    expect(getProjectProgress({ status: 'active' })).toBeUndefined();
   });
 });

@@ -86,4 +86,32 @@ export const calculateExpenseBreakdown = (expenses: Expense[]): ExpenseBreakdown
     }
   });
   return breakdown;
-}; 
+};
+
+/**
+ * A payment-record expense is the separate entry made when a payment is recorded against
+ * another expense (it points back at it, or is tagged payment_record). It repeats money that
+ * the original expense already holds, so it never counts as spent on its own.
+ */
+export const isPaymentRecordExpense = (
+  expense: Pick<Expense, 'originalExpenseId' | 'tags'>
+): boolean => !!expense.originalExpenseId || (expense.tags || []).includes('payment_record');
+
+/**
+ * Whether an expense counts as money spent, at its full amount: it is approved, partially
+ * paid or paid, and is not a payment record. Pending expenses are shown on their own, and
+ * rejected ones count nowhere. This is the one rule for "spent".
+ */
+export const countsAsSpent = (
+  expense: Pick<Expense, 'status' | 'originalExpenseId' | 'tags'>
+): boolean =>
+  !isPaymentRecordExpense(expense) &&
+  (expense.status === 'approved' || expense.status === 'partially_paid' || expense.status === 'paid');
+
+/**
+ * Total spent on a set of expenses (see countsAsSpent).
+ */
+export const calculateSpent = (
+  expenses: Array<Pick<Expense, 'status' | 'amount' | 'originalExpenseId' | 'tags'>>
+): number =>
+  expenses.reduce((sum, expense) => (countsAsSpent(expense) ? sum + (expense.amount || 0) : sum), 0);

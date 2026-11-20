@@ -51,19 +51,8 @@ interface DashboardTask {
   projectName: string;
 }
 
-interface Payment {
-  id: string;
-  amount: number;
-  dueDate: string;
-  description: string;
-  status: string;
-  projectId: string;
-  projectName: string;
-}
-
 interface PriorityItemsProps {
   upcomingTasks: DashboardTask[];
-  overduePayments: Payment[];
 }
 
 // Priority badge component for task cards
@@ -206,145 +195,12 @@ const TaskCard: React.FC<{ task: DashboardTask }> = ({ task }) => {
   );
 };
 
-// Payment card component
-const PaymentCard: React.FC<{ payment: Payment }> = ({ payment }) => {
+const PriorityItems: React.FC<PriorityItemsProps> = ({ upcomingTasks }) => {
   const theme = useTheme();
   const navigate = useNavigate();
-  const [isHovered, setIsHovered] = useState(false);
-  
-  return (
-    <Paper
-      elevation={isHovered ? 2 : 0}
-      sx={{
-        p: 2,
-        mb: 1.5,
-        borderRadius: 2,
-        border: '1px solid',
-        borderColor: isHovered 
-          ? alpha(theme.palette.error.main, 0.3)
-          : alpha(theme.palette.divider, 0.08),
-        transition: 'all 0.2s ease-in-out',
-        transform: isHovered ? 'translateX(4px)' : 'none',
-        position: 'relative',
-        overflow: 'hidden',
-        cursor: 'pointer',
-        backgroundColor: alpha(theme.palette.error.main, isHovered ? 0.04 : 0),
-      }}
-      onClick={() => navigate('/payments')}
-      onMouseEnter={() => setIsHovered(true)}
-      onMouseLeave={() => setIsHovered(false)}
-    >
-      {/* Colored left border */}
-      <Box
-        sx={{
-          position: 'absolute',
-          left: 0,
-          top: 0,
-          bottom: 0,
-          bgcolor: theme.palette.error.main,
-          transition: 'all 0.2s ease',
-          width: isHovered ? '6px' : '4px',
-        }}
-      />
-      
-      <Box sx={{ pl: 0.5 }}>
-        <Box sx={{ 
-          display: 'flex', 
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          mb: 1
-        }}>
-          <Chip
-            icon={<ErrorIcon sx={{ fontSize: '0.75rem !important' }} />}
-            label="Overdue"
-            size="small"
-            sx={{
-              backgroundColor: alpha(theme.palette.error.main, 0.12),
-              color: theme.palette.error.main,
-              fontWeight: 600,
-              fontSize: '0.6875rem',
-              height: 22,
-              '& .MuiChip-icon': {
-                color: 'inherit',
-              }
-            }}
-          />
-          
-          <Typography 
-            variant="caption" 
-            sx={{ 
-              color: theme.palette.error.main,
-              fontWeight: 500,
-              display: 'flex',
-              alignItems: 'center',
-              gap: 0.5
-            }}
-          >
-            <ScheduleIcon sx={{ fontSize: '0.9rem' }} />
-            {payment.dueDate}
-          </Typography>
-        </Box>
-        
-        <Typography 
-          variant="subtitle2" 
-          sx={{ 
-            fontWeight: 600,
-            mb: 0.5,
-            display: 'flex',
-            alignItems: 'center',
-            gap: 1,
-            transition: 'color 0.2s ease',
-            color: isHovered ? theme.palette.error.main : theme.palette.text.primary,
-          }}
-        >
-          <AttachMoneyIcon sx={{ fontSize: '1.1rem' }} />
-          {formatCurrency(payment.amount)}
-        </Typography>
-        
-        <Typography 
-          variant="caption" 
-          sx={{ 
-            color: theme.palette.text.secondary,
-            display: 'block',
-          }}
-        >
-          {payment.description}
-        </Typography>
-        
-        <Typography variant="caption" color="text.secondary">
-          {payment.projectName}
-        </Typography>
-        
-        {isHovered && (
-          <Box
-            sx={{
-              position: 'absolute',
-              right: '12px',
-              bottom: '50%',
-              transform: 'translateY(50%)',
-              color: alpha(theme.palette.error.main, 0.5),
-              transition: 'right 0.2s ease',
-            }}
-          >
-            <KeyboardArrowRightIcon />
-          </Box>
-        )}
-      </Box>
-    </Paper>
-  );
-};
-
-const PriorityItems: React.FC<PriorityItemsProps> = ({ upcomingTasks, overduePayments }) => {
-  const theme = useTheme();
-  const navigate = useNavigate();
-  const [activeTab, setActiveTab] = useState(0);
   const [expanded, setExpanded] = useState(true);
 
-  const handleChangeTab = (event: React.SyntheticEvent, newValue: number) => {
-    setActiveTab(newValue);
-  };
-  
-  const totalPriorityItems = upcomingTasks.length + overduePayments.length;
+  const totalPriorityItems = upcomingTasks.length;
 
   return (
     <Box sx={{ mb: 4 }}>
@@ -422,7 +278,7 @@ const PriorityItems: React.FC<PriorityItemsProps> = ({ upcomingTasks, overduePay
                 variant="text"
                 size="small"
                 endIcon={<ArrowForwardIcon fontSize="small" />}
-                onClick={() => navigate(activeTab === 0 ? '/tasks' : '/payments')}
+                onClick={() => navigate('/tasks')}
                 sx={{
                   fontSize: '0.75rem',
                   fontWeight: 500,
@@ -439,124 +295,39 @@ const PriorityItems: React.FC<PriorityItemsProps> = ({ upcomingTasks, overduePay
           </Box>
           
           <Collapse in={expanded}>
-            <Box sx={{ borderBottom: 1, borderColor: 'divider' }}>
-              <Tabs 
-                value={activeTab} 
-                onChange={handleChangeTab}
-                variant="fullWidth"
-                sx={{
-                  '& .MuiTab-root': {
-                    minHeight: 56,
-                    fontWeight: 600,
-                  },
-                  '& .MuiTabs-indicator': {
-                    height: 3,
-                  }
-                }}
-              >
-                <Tab 
-                  icon={
-                    <Badge 
-                      badgeContent={upcomingTasks.length} 
-                      color="error"
-                      sx={{ 
-                        '& .MuiBadge-badge': { 
-                          fontSize: '0.65rem', 
-                          height: '16px', 
-                          minWidth: '16px',
-                        } 
-                      }}
-                    >
-                      <AssignmentIcon />
-                    </Badge>
-                  } 
-                  label="Upcoming Tasks" 
-                  iconPosition="start"
-                  sx={{ 
-                    fontSize: '0.825rem',
-                    textTransform: 'none',
-                  }}
-                />
-                <Tab 
-                  icon={
-                    <Badge 
-                      badgeContent={overduePayments.length} 
-                      color="error"
-                      sx={{ 
-                        '& .MuiBadge-badge': { 
-                          fontSize: '0.65rem', 
-                          height: '16px', 
-                          minWidth: '16px',
-                        } 
-                      }}
-                    >
-                      <MoneyIcon />
-                    </Badge>
-                  } 
-                  label="Overdue Payments" 
-                  iconPosition="start"
-                  sx={{ 
-                    fontSize: '0.825rem',
-                    textTransform: 'none',
-                  }}
-                />
-              </Tabs>
-            </Box>
-            
             <Box sx={{ p: 2.5, maxHeight: '400px', overflowY: 'auto' }}>
-              {activeTab === 0 && (
-                <Box>
-                  {upcomingTasks.length > 0 ? (
-                    [...upcomingTasks]
-                      .sort((a, b) => {
-                        // Sort by priority first
-                        const priorityOrder = { urgent: 0, high: 1, medium: 2, low: 3 };
-                        if (priorityOrder[a.priority] !== priorityOrder[b.priority]) {
-                          return priorityOrder[a.priority] - priorityOrder[b.priority];
-                        }
-                        // Then by due date
-                        return new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime();
-                      })
-                      .map((task, index) => (
-                        <TaskCard key={task.id} task={task} />
-                      ))
-                  ) : (
-                    <Box sx={{ textAlign: 'center', py: 4 }}>
-                      <CheckCircleIcon color="success" sx={{ fontSize: 48, mb: 1, opacity: 0.6 }} />
-                      <Typography variant="body1" color="text.secondary">
-                        No upcoming tasks. You're all caught up!
-                      </Typography>
-                      <Button
-                        variant="outlined"
-                        size="small"
-                        sx={{ mt: 2 }}
-                        onClick={() => navigate('/tasks')}
-                      >
-                        Create New Task
-                      </Button>
-                    </Box>
-                  )}
-                </Box>
-              )}
-              
-              {activeTab === 1 && (
-                <Box>
-                  {overduePayments.length > 0 ? (
-                    [...overduePayments]
-                      .sort((a, b) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime())
-                      .map((payment, index) => (
-                        <PaymentCard key={payment.id} payment={payment} />
-                      ))
-                  ) : (
-                    <Box sx={{ textAlign: 'center', py: 4 }}>
-                      <CheckCircleIcon color="success" sx={{ fontSize: 48, mb: 1, opacity: 0.6 }} />
-                      <Typography variant="body1" color="text.secondary">
-                        No overdue payments. Everything is up to date!
-                      </Typography>
-                    </Box>
-                  )}
-                </Box>
-              )}
+              <Box>
+                {upcomingTasks.length > 0 ? (
+                  [...upcomingTasks]
+                    .sort((a, b) => {
+                      // Sort by priority first
+                      const priorityOrder = { urgent: 0, high: 1, medium: 2, low: 3 };
+                      if (priorityOrder[a.priority] !== priorityOrder[b.priority]) {
+                        return priorityOrder[a.priority] - priorityOrder[b.priority];
+                      }
+                      // Then by due date
+                      return new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime();
+                    })
+                    .map((task, index) => (
+                      <TaskCard key={task.id} task={task} />
+                    ))
+                ) : (
+                  <Box sx={{ textAlign: 'center', py: 4 }}>
+                    <CheckCircleIcon color="success" sx={{ fontSize: 48, mb: 1, opacity: 0.6 }} />
+                    <Typography variant="body1" color="text.secondary">
+                      No upcoming tasks. You're all caught up!
+                    </Typography>
+                    <Button
+                      variant="outlined"
+                      size="small"
+                      sx={{ mt: 2 }}
+                      onClick={() => navigate('/tasks')}
+                    >
+                      Create New Task
+                    </Button>
+                  </Box>
+                )}
+              </Box>
             </Box>
           </Collapse>
         </Box>

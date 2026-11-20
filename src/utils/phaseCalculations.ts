@@ -1,5 +1,6 @@
 // import React from 'react'; // Added for getStatusIcon
 import { ProjectPhase, Bid, Expense } from '../types'; // Adjust path if needed
+import { countsAsSpent } from './expenseAnalytics';
 // import {
 //   Done as DoneIcon,
 //   Pending as PendingIcon,
@@ -83,7 +84,7 @@ export const calculatePhaseCommittedCosts = (
 };
 
 /**
- * Calculates the total actual costs (sum of expenses) for each phase.
+ * Calculates the actual cost of each phase: its paid and approved expenses.
  *
  * @param phases An array of project phase objects.
  * @param expenses An array of expense objects for the project.
@@ -100,7 +101,7 @@ export const calculatePhaseActualCosts = (
   });
 
   expenses.forEach((expense: Expense) => {
-    if (expense.phaseId) {
+    if (expense.phaseId && countsAsSpent(expense)) {
       actualCosts[expense.phaseId] = (actualCosts[expense.phaseId] || 0) + (expense.amount || 0);
     }
   });
@@ -109,17 +110,47 @@ export const calculatePhaseActualCosts = (
 };
 
 /**
- * Calculates the overall project progress based on completed phases.
- *
- * @param phases An array of project phase objects.
- * @returns A number representing the percentage of completed phases (0-100).
+ * Counts how many phases are marked completed, and how many there are.
  */
-export const calculateProjectProgress = (phases: ProjectPhase[]): number => {
-  const totalPhases = phases.length;
-  if (totalPhases === 0) return 0;
-  const completedPhases = phases.filter((p: ProjectPhase) => p.status === 'completed').length;
-  return Math.round((completedPhases / totalPhases) * 100);
+export const countCompletedPhases = (
+  phases: ReadonlyArray<{ status: string }>
+): { completed: number; total: number } => ({
+  completed: phases.filter((p) => p.status === 'completed').length,
+  total: phases.length,
+});
+
+/**
+ * Calculates the overall project progress: the percentage of phases marked completed (0-100).
+ * Every screen that shows a project's progress uses this one rule.
+ *
+ * @param phases The project's phases (only their status is read).
+ * @returns A whole number from 0 to 100.
+ */
+export const calculateProjectProgress = (
+  phases: ReadonlyArray<{ status: string }>
+): number => {
+  const { completed, total } = countCompletedPhases(phases);
+  if (total === 0) return 0;
+  return Math.round((completed / total) * 100);
 };
+
+interface ProgressSource {
+  status: string;
+  phases?: ReadonlyArray<{ status: string }>;
+}
+
+/**
+ * Progress shown for a project on the detail page, cards and list rows.
+ * A project whose status is completed is 100%, even if some phases were never marked
+ * complete. Otherwise it is the share of phases completed. Returns undefined only when
+ * the project has no phase list to work from (the caller then shows no progress).
+ */
+export function getProjectProgress(project: ProgressSource & { phases: ReadonlyArray<{ status: string }> }): number;
+export function getProjectProgress(project: ProgressSource): number | undefined;
+export function getProjectProgress(project: ProgressSource): number | undefined {
+  if (project.status === 'completed') return 100;
+  return project.phases ? calculateProjectProgress(project.phases) : undefined;
+}
 
 /**
  * Retrieves all payment schedule entries associated with a specific phase ID from a list of bids.

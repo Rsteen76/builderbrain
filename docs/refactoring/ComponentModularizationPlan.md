@@ -5,7 +5,7 @@
 
 ## Overview
 
-This document outlines a detailed plan for modularizing overgrown components in the Construction Management App. It builds upon the existing [REFACTORING_PLAN.md](../../REFACTORING_PLAN.md) and [ProjectDetailPageRefactorPlan.md](./ProjectDetailPageRefactorPlan.md), focusing specifically on breaking down large components into manageable, maintainable units.
+This document outlines a detailed plan for modularizing overgrown components in the Construction Management App. It builds upon the existing [REFACTORING_PLAN.md](../engineering/REFACTORING_PLAN.md) and [ProjectDetailPageRefactorPlan.md](./ProjectDetailPageRefactorPlan.md), focusing specifically on breaking down large components into manageable, maintainable units.
 
 ## Identified Overgrown Components
 

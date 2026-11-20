@@ -14,6 +14,7 @@ import type { BidFilter, BidSort } from './bid';
 import { withPaymentProgress } from './devDataStore/paymentProgress';
 import { loadDevDataState, saveDevDataState } from './devDataStore/storage';
 import type { DevDataState } from './devDataStore/types';
+import { calculateSpent } from '../utils/expenseAnalytics';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const addDays = (date: Date, days: number) =>
@@ -139,7 +140,7 @@ const getHydratedState = (): DevDataState => {
       expenses.filter((expense) => expense.projectId === hydratedProject.id),
       (expense) => asDate(expense.date)
     );
-    const spent = projectExpenses.reduce((sum, expense) => sum + (expense.amount || 0), 0);
+    const spent = calculateSpent(projectExpenses);
     const totalBudget =
       typeof hydratedProject.budget === 'number'
         ? hydratedProject.budget
@@ -156,7 +157,7 @@ const getHydratedState = (): DevDataState => {
       return {
         ...phase,
         tasks: phaseTasks,
-        actualCost: phaseExpenses.reduce((sum, expense) => sum + (expense.amount || 0), 0),
+        actualCost: calculateSpent(phaseExpenses),
         progress,
       };
     });

@@ -314,10 +314,10 @@ const BidCard: React.FC<BidCardProps> = ({
                   </TableRow>
                   <TableRow>
                     <TableCell component="th" sx={{ fontWeight: 500, width: '40%', py: 1, borderBottom: 'none' }}>
-                      Submission Date
+                      Submission Deadline
                     </TableCell>
                     <TableCell sx={{ py: 1, borderBottom: 'none' }}>
-                      {safeFormatDate((bid as any).submissionDate || new Date().toISOString())}
+                      {safeFormatDate(bid.submissionDeadline)}
                     </TableCell>
                   </TableRow>
                   {(bid as any).approvalDate && (

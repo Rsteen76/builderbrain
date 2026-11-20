@@ -44,6 +44,8 @@ import { useProjectDetail } from '../../../contexts/ProjectDetailContext';
 import { PieChart, Pie, ResponsiveContainer, Cell, Tooltip as RechartsTooltip } from 'recharts';
 import { calculateBudgetData } from '../../../utils/projectMetrics';
 import { ProjectPhase } from '../../../types';
+import { getStatusType } from '../list/projectListUtils';
+import { useProjectListThemeUtils } from '../list/useProjectListThemeUtils';
 
 const ProjectOverviewTab: React.FC = () => {
   const {
@@ -59,6 +61,7 @@ const ProjectOverviewTab: React.FC = () => {
   } = useProjectDetail();
 
   const theme = useTheme();
+  const { getStatusColor } = useProjectListThemeUtils();
 
   const budgetData = React.useMemo(() => {
     if (!project || !expenses) return { totalBudget: 0, totalActual: 0, difference: 0, percentUsed: 0 };
@@ -99,29 +102,16 @@ const ProjectOverviewTab: React.FC = () => {
     }
   }, [totalBudget, totalSpent, theme]);
 
-  const getProjectStatus = React.useCallback(() => {
-    if (!project) return { label: 'Unknown', color: theme.palette.grey[500] };
-    const statusMap: Record<string, {label: string, color: string}> = {
-      'draft': { label: 'Draft', color: theme.palette.info.main },
-      'estimate': { label: 'Estimate', color: theme.palette.info.main },
-      'planning': { label: 'Planning', color: theme.palette.primary.main },
-      'in_progress': { label: 'In Progress', color: theme.palette.warning.main },
-      'on_hold': { label: 'On Hold', color: theme.palette.error.main },
-      'completed': { label: 'Completed', color: theme.palette.success.main },
-      'cancelled': { label: 'Cancelled', color: theme.palette.error.main },
-      'active': { label: 'Active', color: theme.palette.warning.main },
-    };
-
-    const status = project.status.toLowerCase();
-    return statusMap[status] || { label: 'Unknown', color: theme.palette.grey[500] };
-  }, [project, theme]);
+  // Same label and colour as the status chip at the top of the page.
+  const projectStatus = project
+    ? { label: getStatusType(project.status), color: getStatusColor(project.status) }
+    : { label: 'Unknown', color: theme.palette.grey[500] };
 
   const budgetStatus = getBudgetStatus();
-  const projectStatus = getProjectStatus();
 
   const expensesByCategory = React.useMemo(() => {
     if (!expenses) return {};
-    return expenses.reduce((acc, exp) => {
+    return expenses.filter(exp => exp.status !== 'rejected').reduce((acc, exp) => {
       if (!acc[exp.category]) acc[exp.category] = 0;
       acc[exp.category] += exp.amount;
       return acc;
@@ -150,10 +140,11 @@ const ProjectOverviewTab: React.FC = () => {
 
   const expenseTotals = React.useMemo(() => {
     if (!expenses) return { totalExpenses: 0, pendingExpenses: 0, approvedExpenses: 0, paidExpenses: 0 };
-    const totalExpenses = expenses.reduce((sum, exp) => sum + exp.amount, 0);
     const pendingExpenses = expenses.filter(e => e.status === 'pending').reduce((sum, exp) => sum + exp.amount, 0);
     const approvedExpenses = expenses.filter(e => e.status === 'approved').reduce((sum, exp) => sum + exp.amount, 0);
     const paidExpenses = expenses.filter(e => e.status === 'paid').reduce((sum, exp) => sum + exp.amount, 0);
+    // Rejected expenses count nowhere.
+    const totalExpenses = paidExpenses + approvedExpenses + pendingExpenses;
     return { totalExpenses, pendingExpenses, approvedExpenses, paidExpenses };
   }, [expenses]);
 

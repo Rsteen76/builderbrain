@@ -1,8 +1,9 @@
 import { render, screen } from '@testing-library/react';
 import { ThemeProvider, createTheme } from '@mui/material/styles';
 import ProjectMetricCards from './ProjectMetricCards';
-import { Project } from '../../types';
+import { Expense, Project } from '../../types';
 import { formatCurrency, formatPercentage } from '../../utils/formatters';
+import { calculateBudgetData } from '../../utils/projectMetrics';
 
 const theme = createTheme();
 
@@ -22,18 +23,48 @@ const project: Project = {
   progress: 20,
 };
 
-const renderCards = () =>
+const expenses = (...amounts: number[]): Expense[] => amounts.map((amount) => ({ amount, status: 'paid' } as Expense));
+
+interface RenderOptions {
+  spent?: number[];
+  status?: Project['status'];
+  progress?: number;
+  phaseCounts?: { completed: number; total: number };
+  phases?: Array<{ status: string; endDate?: Date }>;
+  elapsedDays?: number;
+  totalDays?: number;
+}
+
+const daysFromNow = (days: number) => {
+  const date = new Date();
+  date.setDate(date.getDate() + days);
+  return date;
+};
+
+// One phase finished and the only one that has ended, as in the seeded Hillside project.
+const hillsidePhases = [
+  { status: 'completed', endDate: daysFromNow(-22) },
+  { status: 'in_progress', endDate: daysFromNow(14) },
+  { status: 'planning', endDate: daysFromNow(58) },
+];
+
+const renderCards = ({
+  spent = [47300, 38500],
+  status = 'active',
+  progress = 20,
+  phaseCounts = { completed: 1, total: 5 },
+  phases = hillsidePhases,
+  elapsedDays = 42,
+  totalDays = 252,
+}: RenderOptions = {}) =>
   render(
     <ThemeProvider theme={theme}>
       <ProjectMetricCards
-        project={project}
-        projectProgress={20}
-        budgetData={{
-          totalBudget: 850000,
-          totalActual: 85800,
-          difference: 764200,
-          percentUsed: 10,
-        }}
+        project={{ ...project, status }}
+        projectProgress={progress}
+        phaseCounts={phaseCounts}
+        phases={phases}
+        budgetData={calculateBudgetData(project, expenses(...spent))}
         expenseBreakdown={{
           paid: 47300,
           approved: 38500,
@@ -43,13 +74,11 @@ const renderCards = () =>
         timeline={{
           startDate: new Date('2026-03-26'),
           endDate: new Date('2026-12-03'),
-          elapsedDays: 42,
-          totalDays: 252,
-          percentComplete: 17,
+          elapsedDays,
+          totalDays,
+          percentComplete: Math.round((elapsedDays / totalDays) * 100),
         }}
         theme={theme}
-        getStatusIcon={() => <span />}
-        getStatusColor={() => theme.palette.success.main}
         formatCurrency={formatCurrency}
         formatPercentage={formatPercentage}
       />
@@ -57,12 +86,103 @@ const renderCards = () =>
   );
 
 describe('ProjectMetricCards', () => {
-  it('displays whole-number metric percentages as normal percentages', () => {
+  it('shows $85,800 of $850,000 as 10.1% of budget used', () => {
     renderCards();
 
-    expect(screen.getByText('10% of budget used')).toBeInTheDocument();
-    expect(screen.getByText('42 days elapsed (17%)')).toBeInTheDocument();
+    expect(screen.getByText('$850,000.00')).toBeInTheDocument();
+    expect(screen.getAllByText('$85,800.00').length).toBeGreaterThan(0);
+    expect(screen.getByText('10.1% of budget used')).toBeInTheDocument();
     expect(screen.queryByText(/1,000%/)).not.toBeInTheDocument();
+  });
+
+  it('shows timeline percentages as normal percentages', () => {
+    renderCards();
+
+    expect(screen.getByText('42 days elapsed (17%)')).toBeInTheDocument();
     expect(screen.queryByText(/1,700%/)).not.toBeInTheDocument();
+  });
+
+  it('describes the progress number by phases, not by days', () => {
+    renderCards();
+
+    expect(screen.getByText('20%')).toBeInTheDocument();
+    expect(screen.getByText('1 of 5 phases complete')).toBeInTheDocument();
+    expect(screen.queryByText('42 of 252 days elapsed')).not.toBeInTheDocument();
+  });
+
+  it('shows an over-budget project above 100% with a full, capped bar', () => {
+    renderCards({ spent: [1020000] });
+
+    expect(screen.getByText('120% of budget used')).toBeInTheDocument();
+    expect(screen.getByText('-$170,000.00')).toBeInTheDocument();
+
+    const budgetBar = screen
+      .getAllByRole('progressbar')
+      .find((bar) => bar.getAttribute('aria-valuenow') === '100');
+    expect(budgetBar).toBeDefined();
+  });
+
+  it('reads the seeded Hillside project as on track', () => {
+    renderCards();
+
+    expect(screen.getByText('Project Health:')).toHaveTextContent('Project Health: On track');
+  });
+
+  it('reads an over-budget project as over budget', () => {
+    renderCards({ spent: [900000] });
+
+    expect(screen.getByText('Project Health:')).toHaveTextContent('Project Health: Over budget');
+  });
+
+  it('reads a project where a phase ended yesterday and is not complete as behind schedule', () => {
+    renderCards({
+      phases: [{ status: 'completed', endDate: daysFromNow(-22) }, { status: 'in_progress', endDate: daysFromNow(-1) }],
+    });
+
+    expect(screen.getByText('Project Health:')).toHaveTextContent('Project Health: Behind schedule');
+  });
+
+  it('reads a phase that ends tomorrow as on track', () => {
+    renderCards({ phases: [{ status: 'in_progress', endDate: daysFromNow(1) }] });
+
+    expect(screen.getByText('Project Health:')).toHaveTextContent('Project Health: On track');
+  });
+
+  it('gives a project with no phases only a budget verdict', () => {
+    renderCards({ phases: [], phaseCounts: { completed: 0, total: 0 }, progress: 0 });
+    expect(screen.getByText('Project Health:')).toHaveTextContent('Project Health: On track');
+    expect(screen.queryByText(/behind schedule/i)).not.toBeInTheDocument();
+  });
+
+  it('calls a project with no phases over budget when spent exceeds the budget', () => {
+    renderCards({ phases: [], phaseCounts: { completed: 0, total: 0 }, progress: 0, spent: [900000] });
+
+    expect(screen.getByText('Project Health:')).toHaveTextContent('Project Health: Over budget');
+  });
+
+  it.each([
+    ['planning', 'PLANNING'],
+    ['active', 'ACTIVE'],
+    ['on_hold', 'ON HOLD'],
+    ['cancelled', 'CANCELLED'],
+    ['completed', 'COMPLETED'],
+  ])('shows a %s project with a %s chip', (status, label) => {
+    renderCards({ status: status as Project['status'] });
+
+    expect(screen.getByText(label)).toBeInTheDocument();
+  });
+
+  it('shows the active chip with its own icon, not the question-mark fallback', () => {
+    renderCards({ status: 'active' });
+
+    expect(screen.queryByTestId('HelpOutlineIcon')).not.toBeInTheDocument();
+    expect(screen.getByTestId('PlayCircleOutlineIcon')).toBeInTheDocument();
+  });
+
+  it('says so when a completed project shows 100% with unfinished phases', () => {
+    renderCards({ status: 'completed', progress: 100, phaseCounts: { completed: 2, total: 3 } });
+
+    expect(screen.getByText('100%')).toBeInTheDocument();
+    expect(screen.getByText('Project marked completed (2 of 3 phases marked)')).toBeInTheDocument();
   });
 });

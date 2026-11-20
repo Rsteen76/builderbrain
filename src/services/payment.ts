@@ -3,6 +3,7 @@ import { AccountingService } from './accounting';
 import { ExpenseService } from './expense';
 import { ExpenseTransactionService } from './expense-transaction';
 import { logger } from '../utils/logger';
+import { isPaymentRecordExpense } from '../utils/expenseAnalytics';
 
 export type PaymentStatus = 'paid' | 'pending' | 'overdue';
 
@@ -55,9 +56,6 @@ const normalizeMethod = (method?: string | PaymentMethod): string => {
     .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
     .join(' ');
 };
-
-const isPaymentRecordExpense = (expense: Expense): boolean =>
-  !!expense.originalExpenseId || (expense.tags || []).includes('payment_record');
 
 const getPaidAmount = (expense: Expense): number => {
   if (isPaymentRecordExpense(expense)) {

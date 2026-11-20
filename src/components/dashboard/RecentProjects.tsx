@@ -35,7 +35,6 @@ import {
   Edit as EditIcon,
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
-import { formatCurrency, formatDate } from '../../utils/formatters';
 import ProjectCard from '../projects/ProjectCard';
 import { createProjectWizardRoute } from '../../constants/projectRoutes';
 
@@ -56,6 +55,8 @@ interface DashboardProject {
     dueDate: string;
     priority: 'urgent' | 'high' | 'medium' | 'low';
   }>;
+  /** Absent on summaries saved before phases were stored; the card then shows no progress bar. */
+  phases?: Array<{ status: string }>;
 }
 
 interface RecentProjectsProps {
@@ -65,58 +66,6 @@ interface RecentProjectsProps {
 const RecentProjects: React.FC<RecentProjectsProps> = ({ projects }) => {
   const theme = useTheme();
   const navigate = useNavigate();
-  
-  // Helper function to format project for display
-  const formatProjectForDisplay = (project: DashboardProject, index: number) => {
-    // Transform the project data for the ProjectCard component
-    return {
-      id: project.id,
-      name: project.name,
-      status: getProjectStatusForCard(project.status),
-      progress: calculateProgress(project),
-      dueDate: project.endDate ? formatDate(project.endDate) : 'No due date',
-      budget: typeof project.budget === 'number' 
-        ? formatCurrency(project.budget) 
-        : formatCurrency(project.budget?.total || 0),
-      team: project.team?.length || 0,
-      location: typeof project.location === 'string' 
-        ? project.location 
-        : `${project.location.address}, ${project.location.city}`,
-      completedTasks: project.tasks?.filter(t => t.status === 'completed').length || 0,
-      totalTasks: project.tasks?.length || 0,
-    };
-  };
-
-  // Helper function to map project status to card status
-  const getProjectStatusForCard = (status: string): 'on-track' | 'at-risk' | 'completed' => {
-    const statusMap: Record<string, 'on-track' | 'at-risk' | 'completed'> = {
-      'planning': 'on-track',
-      'estimate': 'on-track',
-      'draft': 'on-track',
-      'active': 'on-track',
-      'in_progress': 'on-track',
-      'on_hold': 'at-risk',
-      'cancelled': 'at-risk',
-      'completed': 'completed',
-    };
-    return statusMap[status.toLowerCase()] || 'on-track';
-  };
-
-  // Calculate progress for a project
-  const calculateProgress = (project: DashboardProject): number => {
-    if (project.status === 'completed') return 100;
-    
-    const completedTasks = project.tasks?.filter(t => t.status === 'completed').length || 0;
-    const totalTasks = project.tasks?.length || 0;
-    
-    if (totalTasks === 0) {
-      // If no tasks, use a deterministic random value based on the project name
-      const hash = project.name.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
-      return Math.max(10, Math.min(95, hash % 100));
-    }
-    
-    return Math.round((completedTasks / totalTasks) * 100);
-  };
   
   // Show up to 6 most recent projects
   const recentProjects = projects
@@ -226,10 +175,11 @@ const RecentProjects: React.FC<RecentProjectsProps> = ({ projects }) => {
                     project={{
                       id: project.id,
                       name: project.name,
-                      status: getProjectStatusForCard(project.status),
+                      status: project.status,
                       dueDate: project.endDate,
                       budget: project.budget,
-                      teamMembers: project.team,
+                      team: project.team,
+                      phases: project.phases,
                       location: project.location
                     }}
                     onClick={() => navigate(`/projects/${project.id}`)}
