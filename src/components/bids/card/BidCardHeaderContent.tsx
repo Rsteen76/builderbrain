@@ -125,7 +125,7 @@ const BidCardHeaderContent: React.FC<BidCardHeaderContentProps> = ({
               <LocalOfferIcon fontSize="inherit" sx={{ mr: 0.5 }} />
               {formatCurrency(bid.totalAmount)} •
               <AccessTimeIcon fontSize="inherit" sx={{ mx: 0.5 }} />
-              {safeFormatDate((bid as any).submissionDate || new Date().toISOString())}
+              {safeFormatDate(bid.submissionDeadline)}
               {bid.subcontractorName && (
                 <>
                   <BusinessIcon fontSize="inherit" sx={{ mx: 0.5 }} />
