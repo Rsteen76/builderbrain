@@ -35,12 +35,12 @@ describe('BidCardHeaderContent', () => {
   it("shows the bid's own submission deadline, not today's date", () => {
     renderHeader({ submissionDeadline: new Date('2026-11-26T12:00:00.000Z') });
 
-    expect(screen.getByText(/Nov 26, 2026/)).toBeInTheDocument();
+    expect(screen.getByText(/Submission deadline: Nov 26, 2026/)).toBeInTheDocument();
   });
 
   it('says N/A when the bid has no deadline instead of filling in today', () => {
     renderHeader({ submissionDeadline: undefined });
 
-    expect(screen.getByText(/N\/A/)).toBeInTheDocument();
+    expect(screen.getByText(/Submission deadline: N\/A/)).toBeInTheDocument();
   });
 });
