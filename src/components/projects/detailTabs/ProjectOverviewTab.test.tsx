@@ -194,4 +194,28 @@ describe('ProjectOverviewTab', () => {
     rerender(<ProjectOverviewTab />);
     expect(screen.getByText('Project data not available.')).toBeInTheDocument();
   });
+
+  test('shows the same status name as the top chip, mapped once', () => {
+    render(<ProjectOverviewTab />);
+
+    // The test project is "in_progress", which the app calls Active everywhere.
+    expect(screen.getByText('Active')).toBeInTheDocument();
+    expect(screen.queryByText('In Progress')).not.toBeInTheDocument();
+  });
+
+  test('total expenses leave rejected expenses out and keep pending ones visible', () => {
+    const base = makeContext();
+    mockedUseProjectDetail.mockReturnValue(makeContext({
+      expenses: [
+        ...base.expenses,
+        { id: 'expense-4', category: 'Materials', amount: 4000, status: 'rejected' },
+      ],
+    }) as unknown as ReturnType<typeof useProjectDetail>);
+    render(<ProjectOverviewTab />);
+
+    // 7,000 paid + 2,500 approved + 500 pending; the 4,000 rejected is not counted.
+    const totalLabel = screen.getByText('Total Expenses');
+    expect(totalLabel.parentElement).toHaveTextContent('$10,000.00');
+    expect(screen.getByText('$500.00')).toBeInTheDocument();
+  });
 });

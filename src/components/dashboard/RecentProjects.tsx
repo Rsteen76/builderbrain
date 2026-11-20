@@ -35,7 +35,6 @@ import {
   Edit as EditIcon,
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
-import { formatCurrency, formatDate } from '../../utils/formatters';
 import ProjectCard from '../projects/ProjectCard';
 import { createProjectWizardRoute } from '../../constants/projectRoutes';
 
@@ -68,21 +67,6 @@ const RecentProjects: React.FC<RecentProjectsProps> = ({ projects }) => {
   const theme = useTheme();
   const navigate = useNavigate();
   
-  // Helper function to map project status to card status
-  const getProjectStatusForCard = (status: string): 'on-track' | 'at-risk' | 'completed' => {
-    const statusMap: Record<string, 'on-track' | 'at-risk' | 'completed'> = {
-      'planning': 'on-track',
-      'estimate': 'on-track',
-      'draft': 'on-track',
-      'active': 'on-track',
-      'in_progress': 'on-track',
-      'on_hold': 'at-risk',
-      'cancelled': 'at-risk',
-      'completed': 'completed',
-    };
-    return statusMap[status.toLowerCase()] || 'on-track';
-  };
-
   // Show up to 6 most recent projects
   const recentProjects = projects
     .sort((a, b) => {
@@ -191,7 +175,7 @@ const RecentProjects: React.FC<RecentProjectsProps> = ({ projects }) => {
                     project={{
                       id: project.id,
                       name: project.name,
-                      status: getProjectStatusForCard(project.status),
+                      status: project.status,
                       dueDate: project.endDate,
                       budget: project.budget,
                       team: project.team,
