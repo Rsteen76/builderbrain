@@ -190,7 +190,7 @@
     "vite": "8.0.11"
   },
   "overrides": {
-    "firebase": {
+    "@firebase/firestore": {
       "@grpc/grpc-js": "1.13.6"
     }
   }
