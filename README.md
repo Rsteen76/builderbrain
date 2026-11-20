@@ -171,7 +171,7 @@ npx playwright install --with-deps chromium
 npm run test:e2e
 ```
 
-CI uses Node 20 and Java 21, then runs the same coverage, typecheck, rules, build, and e2e gates. Pull requests run CI; pushes run CI on `simplification` and `codex/**` branches.
+CI uses Node 20 and Java 21, then runs the same coverage, typecheck, rules, build, and e2e gates. Pull requests run CI; pushes run CI on `main` and `codex/**` branches.
 
 ## App Structure
 
@@ -227,7 +227,7 @@ npm run build
 npx firebase deploy --only hosting
 ```
 
-Automated Hosting deploys run through GitHub Actions. After a push to `simplification` passes the existing `CI` workflow, the `Deploy Firebase Hosting` workflow checks out that tested commit, rebuilds the existing `build/` output, and deploys it to the live Hosting channel for `constructionbrain-9ff10`.
+Automated Hosting deploys run through GitHub Actions. After a push to `main` passes the existing `CI` workflow, the `Deploy Firebase Hosting` workflow checks out that tested commit, rebuilds the existing `build/` output, and deploys it to the live Hosting channel for `constructionbrain-9ff10`.
 
 Required GitHub repository secret:
 
