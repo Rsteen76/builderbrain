@@ -218,4 +218,19 @@ describe('ProjectOverviewTab', () => {
     expect(totalLabel.parentElement).toHaveTextContent('$10,000.00');
     expect(screen.getByText('$500.00')).toBeInTheDocument();
   });
+
+  test.each([
+    ['paid', 120000, 'Over Budget'],
+    ['approved', 90000, 'Near Budget'],
+    ['paid', 50000, 'Under Budget'],
+    ['pending', 200000, 'Under Budget'],
+    ['rejected', 200000, 'Under Budget'],
+  ])('budget status for a %s expense of %i is %s', (status, amount, label) => {
+    mockedUseProjectDetail.mockReturnValue(makeContext({
+      expenses: [{ id: 'expense-1', category: 'Materials', amount, status }],
+    }) as unknown as ReturnType<typeof useProjectDetail>);
+    render(<ProjectOverviewTab />);
+
+    expect(screen.getByText(label)).toBeInTheDocument();
+  });
 });
