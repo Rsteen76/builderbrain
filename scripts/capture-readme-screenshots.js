@@ -11,18 +11,46 @@ const outputDir = path.resolve(
   'screenshots'
 );
 
-// Heights are picked so no number or label is cut off at the bottom edge of a picture.
-const DEFAULT_HEIGHT = 1064;
+const WIDTH = 1440;
+const TALL_VIEWPORT_HEIGHT = 2400;
+const BOTTOM_PADDING = 24;
 
 const ensureDir = (dir) => {
   fs.mkdirSync(dir, { recursive: true });
 };
 
-const capture = async (page, route, fileName, waitForMs = 1800, height = DEFAULT_HEIGHT) => {
+/**
+ * Bottom edge (in page pixels) of the outermost card or panel that contains the given text.
+ * Each picture ends here, so no card, button or row is sliced at the bottom edge.
+ */
+const sectionBottom = (page, text) =>
+  page.evaluate((needle) => {
+    const heading = [...document.querySelectorAll('*')].find(
+      (el) => el.children.length === 0 && el.textContent.trim() === needle
+    );
+    if (!heading) return null;
+    let bottom = null;
+    for (let el = heading.parentElement; el; el = el.parentElement) {
+      if (el.matches('.MuiPaper-root, .MuiCard-root')) {
+        bottom = el.getBoundingClientRect().bottom + window.scrollY;
+      }
+    }
+    return bottom;
+  }, text);
+
+const capture = async (page, route, fileName, { endAfter, waitForMs = 1800 }) => {
   console.log(`Capturing ${route} -> ${fileName}`);
-  await page.setViewportSize({ width: 1440, height });
+  await page.setViewportSize({ width: WIDTH, height: TALL_VIEWPORT_HEIGHT });
   await page.goto(`${baseUrl}${route}`, { waitUntil: 'domcontentloaded' });
   await page.waitForTimeout(waitForMs);
+  const bottom = await sectionBottom(page, endAfter);
+  if (!bottom) {
+    throw new Error(`Could not find "${endAfter}" on ${route} to end the picture after it`);
+  }
+  const height = Math.ceil(bottom + BOTTOM_PADDING);
+  console.log(`  ends after "${endAfter}" at ${height}px`);
+  await page.setViewportSize({ width: WIDTH, height });
+  await page.waitForTimeout(400);
   await page.screenshot({
     path: path.join(outputDir, fileName),
     fullPage: false,
@@ -38,7 +66,7 @@ const capture = async (page, route, fileName, waitForMs = 1800, height = DEFAULT
     channel: process.env.PLAYWRIGHT_CHANNEL || undefined,
   });
   const page = await browser.newPage({
-    viewport: { width: 1440, height: DEFAULT_HEIGHT },
+    viewport: { width: WIDTH, height: TALL_VIEWPORT_HEIGHT },
     deviceScaleFactor: 1,
   });
   page.setDefaultTimeout(15000);
@@ -59,10 +87,13 @@ const capture = async (page, route, fileName, waitForMs = 1800, height = DEFAULT
     }
     await page.waitForTimeout(2000);
 
-    await capture(page, '/', 'dashboard.png');
-    await capture(page, '/projects', 'projects.png');
-    await capture(page, '/projects/proj-hillside', 'project-detail.png', 2400);
-    await capture(page, '/bids', 'bids.png', 1800, 1150);
+    await capture(page, '/', 'dashboard.png', { endAfter: 'Upcoming Deadlines' });
+    await capture(page, '/projects', 'projects.png', { endAfter: 'Riverside Retail Tenant Improvement' });
+    await capture(page, '/projects/proj-hillside', 'project-detail.png', {
+      endAfter: 'Financial Overview',
+      waitForMs: 2400,
+    });
+    await capture(page, '/bids', 'bids.png', { endAfter: 'HVAC modification and balance' });
 
     console.log(`Screenshots saved to ${outputDir}`);
   } catch (error) {
