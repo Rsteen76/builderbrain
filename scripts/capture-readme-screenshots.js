@@ -11,12 +11,16 @@ const outputDir = path.resolve(
   'screenshots'
 );
 
+// Heights are picked so no number or label is cut off at the bottom edge of a picture.
+const DEFAULT_HEIGHT = 1064;
+
 const ensureDir = (dir) => {
   fs.mkdirSync(dir, { recursive: true });
 };
 
-const capture = async (page, route, fileName, waitForMs = 1800) => {
+const capture = async (page, route, fileName, waitForMs = 1800, height = DEFAULT_HEIGHT) => {
   console.log(`Capturing ${route} -> ${fileName}`);
+  await page.setViewportSize({ width: 1440, height });
   await page.goto(`${baseUrl}${route}`, { waitUntil: 'domcontentloaded' });
   await page.waitForTimeout(waitForMs);
   await page.screenshot({
@@ -28,32 +32,37 @@ const capture = async (page, route, fileName, waitForMs = 1800) => {
 (async () => {
   ensureDir(outputDir);
 
-  const browser = await chromium.launch({ headless: true });
+  // PLAYWRIGHT_CHANNEL=chrome uses an installed Chrome when Playwright's own browser is not downloaded.
+  const browser = await chromium.launch({
+    headless: true,
+    channel: process.env.PLAYWRIGHT_CHANNEL || undefined,
+  });
   const page = await browser.newPage({
-    viewport: { width: 1440, height: 1024 },
+    viewport: { width: 1440, height: DEFAULT_HEIGHT },
     deviceScaleFactor: 1,
   });
   page.setDefaultTimeout(15000);
   page.setDefaultNavigationTimeout(15000);
 
   try {
-    console.log('Opening login page');
-    await page.goto(`${baseUrl}/login`, { waitUntil: 'domcontentloaded' });
-    await page.waitForSelector('text=Sign in', { timeout: 30000 });
-    await page.waitForSelector('input[name="email"]', { timeout: 30000 });
-    await page.fill('input[name="email"]', 'demo@builderbrain.local');
-    await page.fill('input[name="password"]', 'demo-password');
-    console.log('Signing in with dev bypass');
-    await page.click('button[type="submit"]');
-    await page.waitForURL((url) => !url.pathname.endsWith('/login'), {
-      timeout: 15000,
-    });
+    // Dev auth bypass signs in on its own, so only fill the form if it still shows.
+    console.log('Opening app with dev auth bypass');
+    await page.goto(`${baseUrl}/`, { waitUntil: 'domcontentloaded' });
+    await page.waitForTimeout(2500);
+    if (new URL(page.url()).pathname.endsWith('/login')) {
+      await page.fill('input[name="email"]', 'demo@builderbrain.local');
+      await page.fill('input[name="password"]', 'demo-password');
+      await page.click('button[type="submit"]');
+      await page.waitForURL((url) => !url.pathname.endsWith('/login'), {
+        timeout: 15000,
+      });
+    }
     await page.waitForTimeout(2000);
 
     await capture(page, '/', 'dashboard.png');
     await capture(page, '/projects', 'projects.png');
     await capture(page, '/projects/proj-hillside', 'project-detail.png', 2400);
-    await capture(page, '/bids', 'bids.png');
+    await capture(page, '/bids', 'bids.png', 1800, 1150);
 
     console.log(`Screenshots saved to ${outputDir}`);
   } catch (error) {
